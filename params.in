@@ -1,0 +1,14 @@
+
+!Time step information
+iti	0
+itmax	50000
+imean	100
+ihst	10
+itape	5000
+itstr	1
+it_his	1
+it_viz	1
+i_viz	5000
+
+
+ncpu_s = 8

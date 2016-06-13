@@ -1,9 +1,9 @@
 c     ----------------------------------------------------------------------
       module pars
 c     ----------------------------------------------------------------------
-      integer, parameter :: 
-     +     iti=0000000,itmax=0050000, imean=00100, ihst=010,itape=05000,
-     +     itstr=0000001, it_his=0000001, it_viz=0000001, i_viz=05000   !change u.le if iti >0
+!      integer, parameter :: 
+!     +     iti=0000000,itmax=0050000, imean=00100, ihst=010,itape=05000,
+!     +     itstr=0000001, it_his=0000001, it_viz=0000001, i_viz=05000   !change u.le if iti >0
       integer, parameter ::
      +     noalis=1, ismlt=0, ifree=0, isfc=1, iradup=0,
      +     iupwnd=0, ibuoy=0, ifilt=0, itcut=1, isubs=0, ibrcl=0,
@@ -532,11 +532,14 @@ c
       if(idebug .eq. 1) l_debug = .true.
 c
       ts_mpi = mpi_wtime()
+
+!----- Read the input file for all necessary parameters
+      call read_input_file
+
 c
 c -------- set number of x-y slab cpus
 c
-      !ncpu_s = 16
-      ncpu_s = 8
+!      ncpu_s = 8
 c
       itn      = 00
       case_inp = 'cou'
@@ -12210,6 +12213,18 @@ c      brc_r = 4*(nnz+2)*3*2 !Brian 7/14/14
 
       call mpi_file_close(fh,ierr)
       end subroutine particle_test
+
+      subroutine read_input_file
+      use pars
+      use particles
+      implicit none
+
+
+      
+
+
+      end subroutine read_input_file
+
       function ran2(idum)
       integer :: idum,IM1,IM2,IMM1,IA1,IA2,IQ1,IQ2,IR1,IR2,NTAB,NDIV
       real :: ran2,AM,EPS,RNMX
