@@ -10,5 +10,18 @@ it_his	1
 it_viz	1
 i_viz	5000
 
+!Grid information
+ncpu_s	8
 
-ncpu_s = 8
+
+!Path information
+path_seed	"/scratch365/drichte2/input_test/"
+path_part	"/scratch365/drichte2/input_test/part.le.cou000"
+path_res	"/scratch365/drichte2/input_test/u.le.cou000"
+path_sav	"/scratch365/drichte2/input_test/"
+path_his	"/scratch365/drichte2/input_test/"
+path_viz_xy	"/scratch365/drichte2/input_test/"
+path_viz_xz	"/scratch365/drichte2/input_test/"
+path_viz_yz	"/scratch365/drichte2/input_test/"
+path_stuf	"/scratch365/drichte2/input_test/"
+path_ran	"/scratch365/drichte2/input_test/u.le.cou000"

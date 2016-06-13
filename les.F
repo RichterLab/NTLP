@@ -82,7 +82,7 @@ c     ----------------------------------------------------------------------
      +     ucfl, vcfl, wcfl
 c     ----------------------------------------------------------------------
       character*80  path_res, path_sav, path_his, path_prt,
-     +     path_hp, path_sav_hp, path_part,
+     +     path_hp, path_sav_hp, path_part, path_ran,
      +     path_v, path_c, path_p, path_h,
      +     path_sav_v, path_sav_c,
      +     path_sav_p, path_sav_h, path_sav_part,
@@ -550,7 +550,7 @@ c
       call get_units
       call gridd
       call setcon
-      call set_paths
+      !call set_paths
 c
 c -------------- scratch run
 c
@@ -6581,14 +6581,13 @@ c
       integer(kind=mpi_offset_kind) :: offset, disp
       integer(kind=k8)              :: nsize, nsize2
       real, allocatable, dimension(:,:,:) :: temp
-      character*80 path_ran
       logical there
 c
       allocate(temp(nvar,nnx,iys:iye))
 c
 c ---------- input file to read from
 c
-      path_ran = 'XXXXXXXXX/u.le.cou000'
+!      path_ran = 'XXXXXXXXX/u.le.cou000'
 c
 c --------------------- get restart file from local directory
 c                       reuse unit number
@@ -12174,7 +12173,7 @@ c      brc_r = 4*(nnz+2)*3*2 !Brian 7/14/14
 
 
       !As a first cut, the params.in file must be a very specific format
-      open(12, file="params.in", status="old")
+      open(12, file="../params.in", status="old")
       read(12,*) 
       read(12,*) !First two lines don't have content
       read(12,*) label, iti
@@ -12204,9 +12203,28 @@ c      brc_r = 4*(nnz+2)*3*2 !Brian 7/14/14
       read(12,*) label, i_viz
       if (myid==0) write(*,*) 'i_viz = ',i_viz
       
-      read(12,*) !Now start reading grid data
+      read(12,*)
+      read(12,*) label !Grid information
       read(12,*) label, ncpu_s
       if (myid==0) write(*,*) 'ncpu_s = ',ncpu_s
+
+      read(12,*)
+      read(12,*)
+      read(12,*)  !Path information
+      
+      read(12,*) label, path_seed
+      if (myid==0) write(*,*) 'path_seed = ',path_seed
+      read(12,*) label, path_part
+      read(12,*) label, path_res
+      read(12,*) label, path_sav
+      read(12,*) label, path_his
+      if (myid==0) write(*,*) 'path_his = ',path_his
+      read(12,*) label, path_viz_xy
+      read(12,*) label, path_viz_xz
+      read(12,*) label, path_viz_yz
+      read(12,*) label, path_stuf
+      read(12,*) label, path_ran
+
 
       close(12)
 
