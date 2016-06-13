@@ -4,6 +4,9 @@ c     ----------------------------------------------------------------------
 !      integer, parameter :: 
 !     +     iti=0000000,itmax=0050000, imean=00100, ihst=010,itape=05000,
 !     +     itstr=0000001, it_his=0000001, it_viz=0000001, i_viz=05000   !change u.le if iti >0
+      integer :: iti,itmax,imean,ihst,itape
+      integer :: itstr,it_his,it_viz,i_viz
+
       integer, parameter ::
      +     noalis=1, ismlt=0, ifree=0, isfc=1, iradup=0,
      +     iupwnd=0, ibuoy=0, ifilt=0, itcut=1, isubs=0, ibrcl=0,
@@ -12161,67 +12164,51 @@ c      brc_r = 4*(nnz+2)*3*2 !Brian 7/14/14
 !      end do
 
       end subroutine particle_coupling_update
-      subroutine particle_test
-      use particles
-      use pars
-      implicit none
-      include 'mpif.h'
-
-      integer :: istatus(mpi_status_size), ierr, fh
-      integer(kind=mpi_offset_kind) :: zoffset,offset
-      integer :: iproc,i
-      type(particle) :: writebuf(2),readbuf
-      character*80 :: filename
-    
-
-      !filename = '/ptmp/drichter/data/sp1/part_test'
-      filename = '/ptmp/drichter/data/pc2/particle_res.sp1001'
-!      call mpi_file_open(mpi_comm_world,filename,
-!     +                   mpi_mode_create+mpi_mode_rdwr,
-!     +                   mpi_info_null,fh,ierr)
-!
-!      if (myid==4) then
-!      writebuf(1) = first_particle
-!      writebuf(2) = first_particle
-!      offset = 0
-!      
-!      call mpi_file_write_at(fh,offset,writebuf,2,
-!     +                       particletype,istatus,ierr)
-!      write(*,'a30,i') 'wrote writebuf%pidx = ',writebuf(1)%pidx
-!      write(*,'a30,3e15.6') 'wrote writebuf(1)%vp =',writebuf(1)%vp(1:3)
-!      write(*,'a30,3e15.6') 'wrote writebuf(1)%xp =',writebuf(1)%xp(1:3)
-!
-!      end if
-!
-!      call mpi_file_close(fh,ierr)
-!      call mpi_barrier(mpi_comm_world,ierr)
-      call mpi_file_open(mpi_comm_world,filename,
-     +                   mpi_mode_rdonly,
-     +                   mpi_info_null,fh,ierr)
-
-      offset = 0
-      do i = 1,1
-      call mpi_file_read_at(fh,offset,readbuf,1,
-     +                       particletype,istatus,ierr)
-      offset = offset + sizeof(readbuf)-4
-      write(*,'(a30,i,i)') 'read i,readbuf%pidx = ',i,readbuf%pidx
-      write(*,'(a30,i,3e15.6)') 'read i,readbuf(1)%vp =',
-     +         i,readbuf%vp(1:3)
-      write(*,'(a30,i,3e15.6)') 'read i,readbuf(1)%xp =',
-     +         i,readbuf%xp(1:3)
-      end do
-
-      call mpi_file_close(fh,ierr)
-      end subroutine particle_test
 
       subroutine read_input_file
       use pars
       use particles
       implicit none
 
+      character(48) :: label
 
+
+      !As a first cut, the params.in file must be a very specific format
+      open(12, file="params.in", status="old")
+      read(12,*) 
+      read(12,*) !First two lines don't have content
+      read(12,*) label, iti
+      if (myid==0) write(*,*) 'iti = ',iti
+
+      read(12,*) label, itmax
+      if (myid==0) write(*,*) 'itmax = ',itmax
+
+      read(12,*) label, imean
+      if (myid==0) write(*,*) 'imean = ',imean
+  
+      read(12,*) label, ihst
+      if (myid==0) write(*,*) 'ihst = ',ihst
+
+      read(12,*) label, itape
+      if (myid==0) write(*,*) 'itape = ',itape
+
+      read(12,*) label, itstr
+      if (myid==0) write(*,*) 'itstr = ',itstr
+
+      read(12,*) label, it_his
+      if (myid==0) write(*,*) 'it_his = ',it_his
+
+      read(12,*) label, it_viz
+      if (myid==0) write(*,*) 'it_viz = ',it_viz
+
+      read(12,*) label, i_viz
+      if (myid==0) write(*,*) 'i_viz = ',i_viz
       
+      read(12,*) !Now start reading grid data
+      read(12,*) label, ncpu_s
+      if (myid==0) write(*,*) 'ncpu_s = ',ncpu_s
 
+      close(12)
 
       end subroutine read_input_file
 
