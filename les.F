@@ -1,19 +1,13 @@
 c     ----------------------------------------------------------------------
       module pars
 c     ----------------------------------------------------------------------
-!      integer, parameter :: 
-!     +     iti=0000000,itmax=0050000, imean=00100, ihst=010,itape=05000,
-!     +     itstr=0000001, it_his=0000001, it_viz=0000001, i_viz=05000   !change u.le if iti >0
       integer :: iti,itmax,imean,ihst,itape
       integer :: itstr,it_his,it_viz,i_viz
 
-      integer, parameter ::
-     +     noalis=1, ismlt=0, ifree=0, isfc=1, iradup=0,
-     +     iupwnd=0, ibuoy=0, ifilt=0, itcut=1, isubs=0, ibrcl=0,
-     +     iocean=0, method=3, idebug=1, iz_space=1,
-     +     ivis0=0, ifix_dt = 0, new_vis=-1,
-     +     ispray=1,icouple=1,iTcouple=1, 
-     +     iHcouple=1,ievap=1 !iHcouple also controls TEcouple
+      integer :: noalis,ismlt,ifree,isfc,iradup,
+     +     iupwnd,ibuoy,ifilt,itcut,isubs,ibrcl,iocean,method,
+     +     idebug,iz_space,ivis0,ifix_dt,new_vis,ispray,
+     +     icouple,iTcouple,iHcouple,ievap
 
 ! Set the scalar boundary condition based on isfc
 c            isfc = 0, specified surface heat flux (through wtsfc)
@@ -24,19 +18,14 @@ c     -------- j_recl = record length in "bytes" for history file
 c     k8     = kind parameter for integers in mpi_io routines
 c     
       integer, parameter :: j_recl=4, k8=8
-c     
-c     -------- number of vars, size of problem in (x,y,z), max size, max processors
-c     
+
       integer, parameter :: nscl = 2, nvar = (4+nscl)
-      integer, parameter :: nxg1  = 128, nyg1  = 256, nzg1  = 128
-      integer, parameter :: maxnx = 128, maxny = 256, maxnz = 128
+      integer, parameter :: maxnx=128,maxny=256,maxnz=128
+      integer, parameter :: maxnz1=maxnz+1,
+     + maxnz2=maxnz+2,maxnx2=maxnx+2,maxny2=maxny+2
 c     
 c     ------------ leave following definitions as is
 c     
-      integer, parameter :: maxnz1 = maxnz + 1, 
-     +     maxnz2 = maxnz + 2,
-     +     maxnx2 = maxnx + 2,
-     +     maxny2 = maxny + 2
 c     ----------------------------------------------------------------------
       integer ::    nnx, nny, nnz, nxy, ncx, nnxp1, nnyp1, ncy,
      +     nnxp2, nnyp2, nnzp1, ivis, nnzm1, isize, krec,
@@ -135,15 +124,15 @@ c     ----------------------------------------------------------------------
       real :: residual(rbins)
       real :: Rep_avg,part_grav
 
-      real :: radius_init,radius_mass,rhow,nuf  !Brian 7/14/14
-      real :: CpaCpp,Cpa,Cpp,Pra,Sc,Mw,Ru,rhoa !Brian 7/29/14
-      real :: m_s,Sal,Ms,delta_vis !Brian 8/14/14
+      real :: radius_init,radius_mass,rhow,nuf 
+      real :: CpaCpp,Cpa,Cpp,Pra,Sc,Mw,Ru,rhoa
+      real :: m_s,Sal,Ms,delta_vis
       
       !REMEMBER: IF ADDING ANYTHING, MUST UPDATE MPI DATATYPE!
       type :: particle
       integer :: pidx,procidx
-      real :: vp(3),xp(3),uf(3),xrhs(3),vrhs(3),Tp,Tprhs_s !Brian 7/29/14
-      real :: Tprhs_L, Tf,radius,radrhs,qinf,qstar !Brian 7/29/14
+      real :: vp(3),xp(3),uf(3),xrhs(3),vrhs(3),Tp,Tprhs_s
+      real :: Tprhs_L, Tf,radius,radrhs,qinf,qstar
       type(particle), pointer :: prev,next
       end type particle
 
@@ -557,7 +546,6 @@ c
       if (iti.eq.0)  then
          igrdr = 2
          case = case_inp
-         call thermal_and_part_prop
          call init(Cpa,rhoa,Mw,Ru)
          call setup(it)
 
@@ -585,7 +573,6 @@ c
       else
          igrdr = 3
          call restart
-         call thermal_and_part_prop
 c         call dns_vis
 c         call get_max
          call setup(it)
@@ -7977,8 +7964,6 @@ c
       call fill_cc
       call fill_cs
 c
-      write(6,5001) isize
- 5001 format(' size of stats array = ',i8)
 c
 c ---------------- debug for arrays
 c
@@ -7986,9 +7971,9 @@ c
 c
 c ---------------- setup grid
 c
-      nnx = nxg1
-      nny = nyg1
-      nnz = nzg1
+      nnx = maxnx
+      nny = maxny
+      nnz = maxnz
 c     izs = 1
 c     ize = nnz
 c
@@ -11455,38 +11440,6 @@ c      brc_r = 4*(nnz+2)*3*2 !Brian 7/14/14
       end subroutine particle_init
 
 
-
-      subroutine thermal_and_part_prop
-      use particles
-      use pars
-      implicit none 
-
-      rhoa = 1.1 !kg/m^3 mixture ** Might want to consider 1.1 (26C, 970hPa) -> mu?   http://www.baranidesign.com/air-density/air-density.htm
-      rhow = 1000.0 !kg/m^3
-      part_grav = 0.0
-      nuf  = 1.537e-5 !m^2/s
-
-      !Thermal stuff:
-      Cpa = 1006.0 !http://www.mhtl.uwaterloo.ca/old/onlinetools/airprop/airprop.html
-      Cpp = 4179.0 !J/kg-K
-      CpaCpp = Cpa/Cpp
-      Pra = 0.715 !nuf/2.1145E-5 !0.71
-      Sc = 0.615 !nuf/0.000024992 !Brian 7/29/14  (@25degC: Dm =0.000025 = 25E-6m2/s)
-      Mw = 0.018015 !kg/mol !Brian 7/29/14 
-      Ru = 8.3144621 !m^3*Pa/K/mol !Brian 7/29/14
-      Ms = 0.05844  !kg/mol
-
-      delta_vis = 0.000163 !Bounce at viscous length
-      radius_init = 40.0e-6 !m
-      radius_mass = 40.0e-6 !m
-      Sal = 34.0 !PSU ~=gNaCl/kgH2O
-
-      end subroutine  thermal_and_part_prop
-
-
-
-
-
       subroutine particle_setup
 
       use particles
@@ -12170,63 +12123,44 @@ c      brc_r = 4*(nnz+2)*3*2 !Brian 7/14/14
       implicit none
 
       character(48) :: label
+      namelist /step_params/ iti,itmax,imean,ihst,itape,
+     +                       itstr,it_his,it_viz,i_viz
 
+      namelist /grid_params/ ncpu_s
+
+      namelist /path_names/ path_seed,path_part,path_res,
+     +         path_sav,path_his,path_viz_xy,path_viz_xz,
+     +         path_viz_yz,path_stuf,path_ran
+
+      namelist /flags/ noalis,ismlt,ifree,isfc,iradup,
+     +         iupwnd,ibuoy,ifilt,itcut,isubs,ibrcl,iocean,
+     +         method,idebug,iz_space,ivis0,ifix_dt,new_vis,
+     +         ispray,icouple,iTcouple,iHcouple,ievap
+
+      namelist /fluid_properties/ rhoa,rhow,part_grav,
+     +         nuf,Cpa,Cpp,Pra,Sc,Mw,Ru,Ms,
+     +         delta_vis,radius_init,radius_mass,Sal
 
       !As a first cut, the params.in file must be a very specific format
       open(12, file="../params.in", status="old")
-      read(12,*) 
-      read(12,*) !First two lines don't have content
-      read(12,*) label, iti
-      if (myid==0) write(*,*) 'iti = ',iti
 
-      read(12,*) label, itmax
-      if (myid==0) write(*,*) 'itmax = ',itmax
+      read(12,nml=step_params)
+      if (myid==0) print step_params
 
-      read(12,*) label, imean
-      if (myid==0) write(*,*) 'imean = ',imean
-  
-      read(12,*) label, ihst
-      if (myid==0) write(*,*) 'ihst = ',ihst
+      read(12,nml=flags)
+      if (myid==0) print flags
 
-      read(12,*) label, itape
-      if (myid==0) write(*,*) 'itape = ',itape
+      read(12,nml=grid_params)
+      if (myid==0) print grid_params
 
-      read(12,*) label, itstr
-      if (myid==0) write(*,*) 'itstr = ',itstr
+      read(12,nml=path_names)
+      if (myid==0) print path_names
 
-      read(12,*) label, it_his
-      if (myid==0) write(*,*) 'it_his = ',it_his
-
-      read(12,*) label, it_viz
-      if (myid==0) write(*,*) 'it_viz = ',it_viz
-
-      read(12,*) label, i_viz
-      if (myid==0) write(*,*) 'i_viz = ',i_viz
-      
-      read(12,*)
-      read(12,*) label !Grid information
-      read(12,*) label, ncpu_s
-      if (myid==0) write(*,*) 'ncpu_s = ',ncpu_s
-
-      read(12,*)
-      read(12,*)
-      read(12,*)  !Path information
-      
-      read(12,*) label, path_seed
-      if (myid==0) write(*,*) 'path_seed = ',path_seed
-      read(12,*) label, path_part
-      read(12,*) label, path_res
-      read(12,*) label, path_sav
-      read(12,*) label, path_his
-      if (myid==0) write(*,*) 'path_his = ',path_his
-      read(12,*) label, path_viz_xy
-      read(12,*) label, path_viz_xz
-      read(12,*) label, path_viz_yz
-      read(12,*) label, path_stuf
-      read(12,*) label, path_ran
+      read(12,nml=fluid_properties)
+      if (myid==0) print fluid_properties
+      CpaCpp = Cpa/Cpp
 
 
-      close(12)
 
       end subroutine read_input_file
 
