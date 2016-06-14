@@ -8,11 +8,6 @@ c     ----------------------------------------------------------------------
      +     iupwnd,ibuoy,ifilt,itcut,isubs,ibrcl,iocean,method,
      +     idebug,iz_space,ivis0,ifix_dt,new_vis,ispray,
      +     icouple,iTcouple,iHcouple,ievap
-
-! Set the scalar boundary condition based on isfc
-c            isfc = 0, specified surface heat flux (through wtsfc)
-c                 = 1, specified surface temperature (tsfcc) 
-
 c     
 c     -------- j_recl = record length in "bytes" for history file
 c     k8     = kind parameter for integers in mpi_io routines
@@ -126,7 +121,7 @@ c     ----------------------------------------------------------------------
 
       real :: radius_init,radius_mass,rhow,nuf 
       real :: CpaCpp,Cpa,Cpp,Pra,Sc,Mw,Ru,rhoa
-      real :: m_s,Sal,Ms,delta_vis
+      real :: m_s,Sal,Ms,delta_vis,Gam,Ion,Os
       
       !REMEMBER: IF ADDING ANYTHING, MUST UPDATE MPI DATATYPE!
       type :: particle
@@ -533,13 +528,11 @@ c -------- set number of x-y slab cpus
 c
 !      ncpu_s = 8
 c
-      itn      = 00
       case_inp = 'cou'
 c
       call get_units
       call gridd
       call setcon
-      !call set_paths
 c
 c -------------- scratch run
 c
@@ -569,12 +562,10 @@ c
          endif
          call dns_vis
          call get_max
-!!!!!!!!!!!!Restart Below!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
       else
+
          igrdr = 3
          call restart
-c         call dns_vis
-c         call get_max
          call setup(it)
          call dns_vis
          call get_max
@@ -1090,38 +1081,7 @@ c
       return
 c
       end
-      subroutine set_paths
-c
-c ------------- set file path for RESTART, and
-c               directories for saving, history, and viz files
-c
-c     path_res  --- the path and file name of the velocity restart file
-c     path_sav  --- the path where the new 3d volumes are to be saved
-c     path_his  --- the path where the new history files are to be saved
-c     path_viz  --- the path where xy, xz, or yz planes of data will be stored
-c     path_stuf --- the path where fun facts about the viz planes of 
-c                   data will be stored
-c     path_seed --- seed name
-c
-      use pars
-c
-c
-      !REPLACE XXXXXXXX WITH YOUR DATA DIRECTORY
-      !Example: path_part = '/pscratch/drichte2/tutorial/part.le.cou000'
-      path_seed   = 'XXXXXXXX'
-      path_part   = 'XXXXXXXX/part.le.cou000'
-      path_res    = 'XXXXXXXX/u.le.cou000'
-      path_sav    = 'XXXXXXXX'
-      path_his    = 'XXXXXXXX'
-      path_viz_xy = 'XXXXXXXX'
-      path_viz_xz = 'XXXXXXXX'
-      path_viz_yz = 'XXXXXXXX'
-      path_stuf   = 'XXXXXXXX'
 
-c
-
-      return
-      end
       subroutine setup(it)
 c
       use pars
@@ -5486,10 +5446,10 @@ c
          fcor_h  = 0.0
 
          Uo = 1.59
-         Ttop(1) = 300.15  !http://www.nasa.gov/centers/goddard/images/content/148071main_Katrina_SSHeights.jpg 
+         Ttop(1) = 300.15
          Tbot(1) = 300.15
 c
-	 topC=(Ttop(1)-273.15)
+         topC=(Ttop(1)-273.15)
          botC=(Tbot(1)-273.15)  
          
          RHT = 95.0/100.0
@@ -5515,16 +5475,7 @@ c
          zo      = 0.1
          ugcont  = 0.01 
          vgcont  = 0.0
-!         zi      = 1000.0
-!         xl      = 5120.0
-!         yl      = 5120.0
-!         zl      = 2048.0
          
-         !zi = 12.0
-         !xl = 12.0
-         !yl = 12.0
-         !zl = 12.0
-
          !Particle channel:
          zi = 0.04
          xl      = pi2*0.04
@@ -9973,15 +9924,14 @@ c
 
       integer :: istage,ierr,it
       real :: g(3)
-      !real :: g(3) = (/0.0, 0.0, 0.0/)
       real :: denom,dtl,sigma,ttest
       integer :: ix,iy,iz
       real :: Rep,diff(3),diffnorm,corrfac,myRep_avg
       real :: xtmp(3),vtmp(3),Tptmp,radiustmp
-      real :: Nup,Shp,rhop,taup_i,estar,einf !Brian 7/29/14-3
+      real :: Nup,Shp,rhop,taup_i,estar,einf
       real :: myphip_sum,myphiw_sum,myphiv_sum,Volp      
-      real :: TfC,TpC,Lv,Eff_C,Eff_S,Gam,Ion,Os
-      real :: t_s,t_f,t_s1,t_f1!,qq
+      real :: TfC,TpC,Lv,Eff_C,Eff_S
+      real :: t_s,t_f,t_s1,t_f1
 
       g(1:3) = (/0.0, 0.0, part_grav/)
 
@@ -10001,8 +9951,8 @@ c
       qfsum_t = 0.0
       radsum_t = 0.0  
       rad2sum_t = 0.0  
-      mpsum_t = 0.0  !Brian 9/29/14
-      mwsum_t = 0.0  !Brian 9/29/14
+      mpsum_t = 0.0
+      mwsum_t = 0.0
       Tpsqrsum_t = 0.0
       wpTpsum_t = 0.0
       myRep_avg = 0.0
@@ -10013,13 +9963,6 @@ c
 
       !t_s = mpi_wtime()
 
-
-         !Temporarily Here? Not actually constant?
-         Gam = 7.28*10.0**(-2) !N/m
-         Ion = 2.0
-         Os = 1.093
-            
-c         pcount = 0
 
       !Loop over the linked list of particles:
       part => first_particle
@@ -10043,8 +9986,7 @@ c         pcount = 0
          Rep = 2.0*part%radius*diffnorm/nuf  
          Volp = pi2*2.0/3.0*part%radius**3
          rhop = (m_s+Volp*rhow)/Volp
-         taup_i = 18.0*rhoa*nuf/rhop/(2.0*part%radius)**2 !Brian 8/4/14
-         !/Intermediate Values 
+         taup_i = 18.0*rhoa*nuf/rhop/(2.0*part%radius)**2 
 
          myRep_avg = myRep_avg + Rep
          corrfac = (1.0 + 0.15*Rep**(0.687))
@@ -10056,86 +9998,49 @@ c         pcount = 0
          !Compute Nusselt number for particle:
          !Ranz-Marshall relation
          Nup = 2.0 + 0.6*Rep**(1.0/2.0)*Pra**(1.0/3.0)
-	 Shp = 2.0 + 0.6*Rep**(1.0/2.0)*Sc**(1.0/3.0) !Brian 7/18/14
+         Shp = 2.0 + 0.6*Rep**(1.0/2.0)*Sc**(1.0/3.0)
 
 
-
-
-
-
-
-	 !Mass Transfer calculations
+         !Mass Transfer calculations
          TfC = part%Tf-273.15
-	 einf = 610.94*EXP(17.6257*TfC/(TfC+243.04)) !Brian 7/29/14-3
+         einf = 610.94*EXP(17.6257*TfC/(TfC+243.04))
          TpC = part%Tp-273.15
-         Lv =(25.0 - 0.02274*26.0)*10.0**5  !search 0.02274 http://www.lnu.edu.ua/faculty/geology/phis_geo/fourman/library-Earth/An%20Introduction%20to%20Atmospheric%20Physics.pdf
+         Lv =(25.0 - 0.02274*26.0)*10.0**5
 
          Eff_C = 2.0*Mw*Gam/(Ru*rhow*part%radius*part%Tp)
          Eff_S = Ion*Os*m_s*Mw/Ms/(Volp*rhop-m_s)
          estar = einf*exp(Mw*Lv/Ru*(1.0/part%Tf-1.0/part%Tp)
-     +                                           +Eff_C-Eff_S) !Brian 8/14/14-3
-	 part%qstar = Mw/Ru*estar/part%Tp/rhoa
+     +                                           +Eff_C-Eff_S)
+         part%qstar = Mw/Ru*estar/part%Tp/rhoa
 
   
          xtmp(1:3) = part%xp(1:3) + dt*zetas(istage)*part%xrhs(1:3)
          vtmp(1:3) = part%vp(1:3) + dt*zetas(istage)*part%vrhs(1:3) 
          Tptmp = part%Tp + dt*zetas(istage)*part%Tprhs_s
          Tptmp = Tptmp + dt*zetas(istage)*part%Tprhs_L
-	 radiustmp = part%radius + dt*zetas(istage)*part%radrhs !Brian 7/18/14 
+         radiustmp = part%radius + dt*zetas(istage)*part%radrhs
 
-            part%xrhs(1:3) = part%vp(1:3)
-            part%vrhs(1:3) = corrfac*taup_i*(part%uf(1:3)-part%vp(1:3))
-     +                                  - g(1:3)
+         part%xrhs(1:3) = part%vp(1:3)
+         part%vrhs(1:3) = corrfac*taup_i*(part%uf(1:3)-part%vp(1:3))
+     +                               - g(1:3)
 
-            if (ievap .EQ. 1) then      
+         if (ievap .EQ. 1) then      
             part%radrhs = Shp/9.0/Sc*rhop/rhow*part%radius*
-     +                       taup_i*(part%qinf-part%qstar) !Brian 7/18/14: assumes qinf=rhov/rhoa rather than rhov/rhom
-            else
+     +                       taup_i*(part%qinf-part%qstar) !assumes qinf=rhov/rhoa rather than rhov/rhom
+         else
             part%radrhs = 0.0
-            end if
+         end if
 
 
-            part%Tprhs_s = -Nup/3.0/Pra*CpaCpp*
-     +                        rhop/rhow*taup_i*(part%Tp-part%Tf)
-            part%Tprhs_L = 3.0*Lv/Cpp/part%radius*part%radrhs !rhs at (this) new timestep
+         part%Tprhs_s = -Nup/3.0/Pra*CpaCpp*
+     +                     rhop/rhow*taup_i*(part%Tp-part%Tf)
+         part%Tprhs_L = 3.0*Lv/Cpp/part%radius*part%radrhs
   
-            part%xp(1:3) = xtmp(1:3) + dt*gama(istage)*part%xrhs(1:3)
-            part%vp(1:3) = vtmp(1:3) + dt*gama(istage)*part%vrhs(1:3)
-            part%Tp = Tptmp + dt*gama(istage)*part%Tprhs_s
-            part%Tp = part%Tp + dt*gama(istage)*part%Tprhs_L
-	    part%radius = radiustmp + dt*gama(istage)*part%radrhs !Brian 7/22/14
-
-c          end if
-
-
-c      qq=rhostar/rhoa
-c      if (istage ==3 .and. part%procidx == 0 
-c     +                         .and. part%pidx == 6250 ) then
-c!      if (part%pidx == 1) then !Brian 8/13/14
-c!      write(*,*) 'proc',myid,'writing this'
-c      write(*,'(a7,4e15.6)') 'xp2:  ',time,part%xp(1:3)  !Brian 7/16/14 a4 ->a6
-c      !write(*,'(a7,4e15.6)') 'vp2:  ',time,part%vp(1:3)
-c      write(*,'(a7,4e15.6)') 'Tp2:  ',time,part%Tp
-c      write(*,'(a7,4e15.6)') 'Tf2:  ',time,part%Tf
-c      write(*,'(a7,4e15.6)') 'rad2: ',time,part%radius !Brian 7/9/14
-c      write(*,'(a7,4e15.6)') 'qinf2:',time,part%qinf !Brian 7/14/14
-c      write(*,'(a7,4e15.6)') 'rhs2: ',time,part%radrhs !Brian 7/9/14
-c      write(*,'(a7,4e15.6)') 'qq2:  ',time,qq !Brian 7/9/14
-c      end if
-
-c      if (part%procidx == 0 .and. part%pidx == 6250 ) then
-cc      if (part%pidx == 1) then !Brian 8/13/14
-c!      write(*,*) 'proc',myid,'writing this'
-c      write(*,'(a7,4e15.6)') 'xp3:  ',time,part%xp(1:3)  !Brian 7/16/14 a4 ->a6
-c      !write(*,'(a7,4e15.6)') 'vp3:  ',time,part%vp(1:3)
-c      write(*,'(a7,4e15.6)') 'Tp3:  ',time,part%Tp
-c      write(*,'(a7,4e15.6)') 'Tf3:  ',time,part%Tf
-c      write(*,'(a7,4e15.6)') 'rad3: ',time,part%radius !Brian 7/9/14
-c      write(*,'(a7,4e15.6)') 'qinf3:',time,part%qinf !Brian 7/14/14
-c      write(*,'(a7,4e15.6)') 'rhs3: ',time,part%radrhs !Brian 7/9/14
-c      write(*,'(a7,4e15.6)') 'qq3:  ',time,qq !Brian 7/9/14
-c      end if
-
+         part%xp(1:3) = xtmp(1:3) + dt*gama(istage)*part%xrhs(1:3)
+         part%vp(1:3) = vtmp(1:3) + dt*gama(istage)*part%vrhs(1:3)
+         part%Tp = Tptmp + dt*gama(istage)*part%Tprhs_s
+         part%Tp = part%Tp + dt*gama(istage)*part%Tprhs_L
+         part%radius = radiustmp + dt*gama(istage)*part%radrhs
 
 
         part => part%next
@@ -12124,7 +12029,7 @@ c      brc_r = 4*(nnz+2)*3*2 !Brian 7/14/14
 
       character(48) :: label
       namelist /step_params/ iti,itmax,imean,ihst,itape,
-     +                       itstr,it_his,it_viz,i_viz
+     +                       itstr,it_his,it_viz,i_viz,itn
 
       namelist /grid_params/ ncpu_s
 
@@ -12137,11 +12042,15 @@ c      brc_r = 4*(nnz+2)*3*2 !Brian 7/14/14
      +         method,idebug,iz_space,ivis0,ifix_dt,new_vis,
      +         ispray,icouple,iTcouple,iHcouple,ievap
 
-      namelist /fluid_properties/ rhoa,rhow,part_grav,
-     +         nuf,Cpa,Cpp,Pra,Sc,Mw,Ru,Ms,
-     +         delta_vis,radius_init,radius_mass,Sal
+      namelist /fluid_properties/ rhoa,
+     +         nuf,Cpa,Pra,Sc
 
-      !As a first cut, the params.in file must be a very specific format
+      namelist /part_properties/ rhow,part_grav,
+     +         Cpp,Mw,Ms,Ru,Gam,Ion,Os,Sal,
+     +         radius_init,radius_mass,delta_vis
+
+
+      !params.in contains namelists to read
       open(12, file="../params.in", status="old")
 
       read(12,nml=step_params)
@@ -12158,6 +12067,9 @@ c      brc_r = 4*(nnz+2)*3*2 !Brian 7/14/14
 
       read(12,nml=fluid_properties)
       if (myid==0) print fluid_properties
+
+      read(12,nml=part_properties)
+      if (myid==0) print part_properties
       CpaCpp = Cpa/Cpp
 
 

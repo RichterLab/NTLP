@@ -10,8 +10,10 @@ itstr=1
 it_his=1
 it_viz=1
 i_viz=5000
+itn = 0
 /
 
+!Flags for various features
 &flags
 noalis=1, ismlt=0, ifree=0, isfc=1, iradup=0, iupwnd=0
 ibuoy=0, ifilt=0, itcut=1, isubs=0, ibrcl=0, iocean=0
@@ -23,10 +25,12 @@ iHcouple=1  !iHcouple also controls TE couple
 ievap=1
 /
 
+!Grid parameters
 &grid_params
 ncpu_s=8
 /
 
+!Set the paths for code I/O. Must be on the scratch directory, not AFS!
 &path_names
 path_seed="/scratch365/drichte2/input_test/"
 path_part="/scratch365/drichte2/input_test/part.le.cou000"
@@ -40,16 +44,22 @@ path_stuf="/scratch365/drichte2/input_test/"
 path_ran="/scratch365/drichte2/input_test/u.le.cou000"
 /
 
+
 !Material properties
 &fluid_properties
 rhoa=1.1
-rhow=1000.0  !kg/m^3
-part_grav=0.0
 nuf=1.537e-5  !m^2/s
 Cpa=1006.0  !J/kg-K
-Cpp=4179.0  !J/kg-K
 Pra = 0.715
 Sc = 0.615
+/
+
+
+!Particle properties
+&part_properties
+rhow=1000.0  !kg/m^3
+part_grav=0.0
+Cpp=4179.0  !J/kg-K
 Mw = 0.018015  !kg/mol
 Ru = 8.3144
 Ms = 0.05844  !kg/mol: molecular weight of salt
@@ -57,6 +67,7 @@ delta_vis=0.000163 !Bounce-back distance from wall
 radius_init=40.0e-6
 radius_mass=40.0e-6
 Sal = 34.0
+Gam = 7.28e-2
+Ion = 2.0
+Os = 1.093
 /
-
-
