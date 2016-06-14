@@ -18,6 +18,7 @@ itn = 0
 noalis=1, ismlt=0, ifree=0, isfc=1, iradup=0, iupwnd=0
 ibuoy=0, ifilt=0, itcut=1, isubs=0, ibrcl=0, iocean=0
 method=3, idebug=1, iz_space=1, ivis0=0, ifix_dt=0, new_vis=-1
+iDNS = 0
 ispray=1
 icouple=1
 iTcouple=1

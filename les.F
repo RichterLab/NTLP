@@ -6,7 +6,7 @@ c     ----------------------------------------------------------------------
 
       integer :: noalis,ismlt,ifree,isfc,iradup,
      +     iupwnd,ibuoy,ifilt,itcut,isubs,ibrcl,iocean,method,
-     +     idebug,iz_space,ivis0,ifix_dt,new_vis,ispray,
+     +     idebug,iz_space,ivis0,ifix_dt,new_vis,iDNS,ispray,
      +     icouple,iTcouple,iHcouple,ievap
 c     
 c     -------- j_recl = record length in "bytes" for history file
@@ -460,6 +460,10 @@ c
 c
 c ------------- definition of internal flags
 c
+c
+c       iDNS    = 0; call the subgrid computation of vis_m and vis_s
+c               = 1; call the molecular viscosity and diffusivity
+c
 c       igrdr   =  3; data comes from restart file
 c               =  2; data comes from initialization (random)
 c               =  1; data comes from coarser grid (or otherwise)
@@ -556,10 +560,8 @@ c
          else
             call get_fields
 c            call random   
-
-
-c
          endif
+         !Call dns_vis even when doing LES since vis_m needs to be initialized with something
          call dns_vis
          call get_max
       else
@@ -567,6 +569,8 @@ c
          igrdr = 3
          call restart
          call setup(it)
+
+         !Call dns_vis even when doing LES since vis_m needs to be initialized with something
          call dns_vis
          call get_max
 
@@ -581,7 +585,6 @@ c
 c
 c --------------- time loop ------------
 c
-      !time = 0.37083609E+02
       tzero = time
       call get_dt
  9000 continue
@@ -595,9 +598,7 @@ c
       part => first_particle
       do while (associated(part))
       if (part%pidx == 1 .and. part%procidx == 0) then
-c      if (part%pidx == 1) then !Brian 8/13/14
-!      write(*,*) 'proc',myid,'writing this'
-      write(*,'(a7,4e15.6)') 'xp1:  ',time,part%xp(1:3)  !Brian 7/16/14 a4 ->a6
+      write(*,'(a7,4e15.6)') 'xp1:  ',time,part%xp(1:3)
       write(*,'(a7,4e15.6)') 'vp1:  ',time,part%vp(1:3)
       write(*,'(a7,4e15.6)') 'uf1:  ',time,part%uf(1:3)
       write(*,'(a7,4e15.6)') 'Tp1:  ',time,part%Tp
@@ -606,25 +607,16 @@ c      if (part%pidx == 1) then !Brian 8/13/14
       write(*,'(a7,4e15.6)') 'qinf1:',time,part%qinf 
       write(*,'(a7,4e15.6)') 'qstr1:',time,part%qstar 
 
-!      else if (part%pidx == 2) then
-!      write(*,*) 'proc',myid,'writing this'
-!      write(*,'a4,4e15.6') 'xp2:',time,part%xp(1:3)
-!      write(*,'a4,4e15.6') 'vp2:',time,part%vp(1:3)
       end if
 
       part => part%next
+
       if (it == 1) numpart = numpart + 1
       end do
-!      write(*,*) 'proc',myid,'has numpart:',numpart
       if (myid==0) write(*,*) 'time,tnumpart:',time,tnumpart
       end if
 
-c
-c --------- specially designed surface cooling routine
-c           for gabls run
-c
-c     call forcing
-c
+
       if(it .ge. new_vis .and. ivis0 .eq. 1) then
           ivis = 1
       else
@@ -649,19 +641,24 @@ c
 
       call get_derv
 
-
 c
 c --------- new eddy viscosity, and bcs
 c
       if(iss .eq. 0 .and. ifree .eq. 0) then
-         !call lower(it)
-         call lower_dns(it)
+         if (iDNS .eq. 1) then
+            call lower_dns(it)
+         else
+            call lower(it)
+         end if
       elseif(ifree .eq. 1) then
          call lower_free(it)
       endif
       if(ise .eq. numprocs-1) then
-         !call upper
-         call upper_dns
+         if (iDNS .eq. 1) then
+            call upper_dns
+         else
+            call upper
+         end if
       endif
       call bcast_pbc
       call get_means(istage)
@@ -813,9 +810,7 @@ c
            v_xy = amax1(v_xy,abs(v(ix,iy,iz)))
            w_xy = amax1(w_xy,abs(w(ix,iy,iz)))
            vis_xym = amax1(vis_xym,vis_m(ix,iy,iz))
-        do iscl=1,nscl !6/4/14
-           vis_xys = amax1(vis_xys,vis_s(ix,iy,iscl,iz))
-        enddo !6/4/14
+           vis_xys = amax1(vis_xys,vis_s(ix,iy,1,iz))
            vis_xy = amax1(vis_xys,vis_xym)
         enddo
         enddo
@@ -1625,16 +1620,22 @@ c
 c --------- get viscosity and rhs of (e,u,v,w)-equations
 c           at next step
 c
-!      call tke_vis(istep)   ! WARNING: this has not been checked for iscl=2
-!      call rhs_uvw(istep)   ! WARNING: this has not been checked for iscl=2
-      call dns_vis
-      call rhs_uvw_DNS(istep)
+      if (iDNS .eq. 1) then
+         call dns_vis
+         call rhs_uvw_DNS(istep)
+      else
+         call tke_vis(istep)   ! WARNING: this has not been checked for iscl=2
+         call rhs_uvw(istep)   ! WARNING: this has not been checked for iscl=2
+      end if
 c
 c -------- evaluate rhs of scalar equations
 c
       do l=1,nscl
-         !call rhs_scl(istep,l,it) 
-         call rhs_scl_dns(istep,l,it) 
+         if (iDNS .eq. 0) then
+            call rhs_scl_dns(istep,l,it) 
+         else
+            call rhs_scl(istep,l,it) 
+         end if
       enddo
 c
 c ---------- gather stat sums on root processor
@@ -2872,17 +2873,11 @@ c
 !     Also, to make the rest of code work, set the rhs of e equation to 0
 
       !Both for air at the moment:
-      !vis_m(1:nnx,iys:iye,izs-1:ize+1) = nuf  
-       vis_m = nuf 
+      vis_m = nuf 
+
       !Use Prantdl number for thermal diffusivity:
       vis_s(1:nnx,iys:iye,1,izs-1:ize+1) = nuf/Pra   ! alpha=nu/Prandtl   
-      vis_s(1:nnx,iys:iye,2,izs-1:ize+1) = nuf/Sc  !Brian 7/29/14-3   !Dv =nu/Sc
-
-
-
-
-
-
+      vis_s(1:nnx,iys:iye,2,izs-1:ize+1) = nuf/Sc    !Dv =nu/Sc
       r5 = 0.0
       e = 0.0
 
@@ -2929,10 +2924,6 @@ c
          do j=iys,iye
          do i=1,nnx
             alk(i,j,iz) = dslk
-c     CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
-c     CCCCCCCCNot In iscl loop?CCCCCCCCCCCCCC
-c     CCCCCCCCCCCNot Currently CalledCCCCCCCC
-c     CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
             stab = batag*(t(i,j,1,izp1) - t(i,j,1,iz))*dzu_i(izp1)
             if(stab.gt.stabmin) then
               als = stab_c*sqrt(e(i,j,iz)/stab)
@@ -2941,30 +2932,23 @@ c     CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
             alk(i,j,iz)  = amax1(almin,alk(i,j,iz))
          enddo
          enddo
-c     CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
       endif
-      do iscl=1,nscl !added 6/4/14
       do j=iys,iye
       do i=1,nnx
          vis_m(i,j,iz) = ck*alk(i,j,iz)*sqrt(e(i,j,iz))*dfack
-         vis_s(i,j,iscl,iz) = (1.+2.*alk(i,j,iz)/dslk)*vis_m(i,j,iz) 
-	!6/4/14 may not work
+         vis_s(i,j,1:nscl,iz) = (1.+2.*alk(i,j,iz)/dslk)*vis_m(i,j,iz) 
       enddo
       enddo
-      enddo ! added 6/4/14
 c
 c -------------- special case for iz = 1
 c
       if(iz.eq.1 .and. ibcl .eq. 0) then
-	 do iscl=1,nscl !added 6/4/14
          do iy=iys,iye
          do ix=1,nnx
             vis_m(ix,iy,iz-1) = vis_m(ix,iy,iz)
-            vis_s(ix,iy,iscl,iz-1) = vis_s(ix,iy,iscl,iz)
-         !6/4/14 may not work 
+            vis_s(ix,iy,1:nscl,iz-1) = vis_s(ix,iy,1:nscl,iz)
          enddo
          enddo
-         enddo !added 6/4/14
       endif
 c
 c -------------- end z loop
@@ -12039,7 +12023,7 @@ c      brc_r = 4*(nnz+2)*3*2 !Brian 7/14/14
 
       namelist /flags/ noalis,ismlt,ifree,isfc,iradup,
      +         iupwnd,ibuoy,ifilt,itcut,isubs,ibrcl,iocean,
-     +         method,idebug,iz_space,ivis0,ifix_dt,new_vis,
+     +         method,idebug,iz_space,ivis0,ifix_dt,new_vis,iDNS,
      +         ispray,icouple,iTcouple,iHcouple,ievap
 
       namelist /fluid_properties/ rhoa,
