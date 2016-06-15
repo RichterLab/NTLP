@@ -18,6 +18,9 @@ c
       integer, parameter :: maxnx=128,maxny=256,maxnz=128
       integer, parameter :: maxnz1=maxnz+1,
      + maxnz2=maxnz+2,maxnx2=maxnx+2,maxny2=maxny+2
+
+      !Boundary conditions
+      real :: Uo, Ttop(nscl), Tbot(nscl)
 c     
 c     ------------ leave following definitions as is
 c     
@@ -115,8 +118,6 @@ c     ----------------------------------------------------------------------
       integer :: particletype,pad_diff
       integer :: numpart,tnumpart,ngidx
       integer :: iseed
-      integer,parameter :: rbins=4
-      real :: residual(rbins)
       real :: Rep_avg,part_grav
 
       real :: radius_init,radius_mass,rhow,nuf 
@@ -165,7 +166,7 @@ c     ----------------------------------------------------------------------
      +     time, zody, zody74, tsfcc(nscl),
      +     utau, qstar(nscl), wtsfc(nscl),
      +     uwsfc, vwsfc, amonin,
-     +     zol, hol, smal_e, sml_eg, Uo, Ttop(nscl),Tbot(nscl)
+     +     zol, hol, smal_e, sml_eg
       end type con_d
       type(con_d), target :: c_c
       real, pointer ::
@@ -178,7 +179,7 @@ c     ----------------------------------------------------------------------
      +     time, zody, zody74, tsfcc(:),
      +     utau, qstar(:), wtsfc(:), 
      +     uwsfc, vwsfc, amonin,
-     +     zol, hol, smal_e, sml_eg, Uo, Ttop(:),Tbot(:)
+     +     zol, hol, smal_e, sml_eg
       contains
       subroutine fill_cc
 c     
@@ -235,9 +236,6 @@ c
       hol    => c_c%hol
       smal_e => c_c%smal_e
       sml_eg => c_c%sml_eg
-      Uo     => c_c%Uo
-      Ttop   => c_c%Ttop
-      Tbot   => c_c%Tbot
       return
       end subroutine fill_cc
       end module con_data
@@ -281,7 +279,7 @@ c ----------------------------------------------------------------------
      +           Tv_diss(maxnz,nscl),
      +           Tv_part1(maxnz,nscl),Tv_part2(maxnz),
      +           radmean(maxnz),rad2mean(maxnz),
-     +           mpmean(maxnz),mwmean(maxnz),  !Brian 9/29/14
+     +           mpmean(maxnz),mwmean(maxnz), 
      +           phimp(maxnz),phimw(maxnz),  
      +           Hpsrc(maxnz),TEpsrc(maxnz),
      +           qstarm(maxnz),
@@ -295,7 +293,7 @@ c ----------------------------------------------------------------------
      +           stokesw,stokesa,
      +           stokess,stokes(maxnz1)
         real ::  dtg, dslg, dzg
-        real ::  phip,phiw,phiv   ! Brian 10/6/14
+        real ::  phip,phiw,phiv 
 
         end type con_s
         type(con_s), target :: c_s
@@ -322,7 +320,7 @@ c ----------------------------------------------------------------------
      +           Tv_tran(:,:),Tv_prod(:,:),Tv_diss(:,:),
      +           Tv_part1(:,:),Tv_part2(:),
      +           radmean(:),rad2mean(:),
-     +           mpmean(:),mwmean(:), !Brian 9/29/14
+     +           mpmean(:),mwmean(:),
      +           phimp(:),phimw(:), 
      +           Hpsrc(:), TEpsrc(:),
      +           qstarm(:),
@@ -337,7 +335,7 @@ c ----------------------------------------------------------------------
         real, pointer ::  
      +           dtg, dslg, dzg
         real, pointer ::  
-     +           phip,phiw,phiv   ! Brian 10/6/14
+     +           phip,phiw,phiv 
       contains
          subroutine fill_cs
 c
@@ -409,10 +407,10 @@ c
              Tv_diss => c_s%Tv_diss  ; isize = isize + size(Tv_diss)
              Tv_part1 => c_s%Tv_part1  ; isize = isize + size(Tv_part1)
              Tv_part2 => c_s%Tv_part2  ; isize = isize + size(Tv_part2)
-             radmean => c_s%radmean  ; isize = isize + size(radmean) !Brian 7/30/14
-             rad2mean => c_s%rad2mean  ; isize = isize + size(rad2mean) !Brian 7/30/14
-             mpmean => c_s%mpmean    ; isize = isize + size(mpmean) !Brian 9/29/14
-             mwmean => c_s%mwmean    ; isize = isize + size(mwmean) !Brian 9/29/14
+             radmean => c_s%radmean  ; isize = isize + size(radmean)
+             rad2mean => c_s%rad2mean  ; isize = isize + size(rad2mean)
+             mpmean => c_s%mpmean    ; isize = isize + size(mpmean)
+             mwmean => c_s%mwmean    ; isize = isize + size(mwmean) 
              phimp => c_s%phimp    ; isize = isize + size(phimp) 
              phimw => c_s%phimw    ; isize = isize + size(phimw)
              Hpsrc   => c_s%Hpsrc    ; isize = isize + size(Hpsrc)
@@ -442,7 +440,7 @@ c
              dtg     => c_s%dtg
              dslg    => c_s%dslg 
              dzg     => c_s%dzg
-             phip    => c_s%phip   ! Brian 10/6/14
+             phip    => c_s%phip 
              phiw    => c_s%phiw 
              phiv    => c_s%phiv
          return
@@ -2606,7 +2604,7 @@ c
          do ix=1,nnx
             taut3_l(ix,iy,iscl) = -vis_s(ix,iy,iscl,izm1)*
      +              (t(ix,iy,iscl,iz) - t(ix,iy,iscl,izm1))*dzu_i(iz)
-         if (iz == 1) then  !Brian 10/22/14
+         if (iz == 1) then 
              sfc_flx = sfc_flx + taut3_l(ix,iy,iscl)
          end if
          enddo
@@ -2614,7 +2612,7 @@ c
 
 
 !      Aside - get each wtsfc value:
-       if (iz == 1 .and. isfc == 1) then   !Brian 10/22/14
+       if (iz == 1 .and. isfc == 1) then
           call mpi_sum_xy(sfc_flx,myid,iss,ise,1)
           wtsfc(iscl) = sfc_flx*fnxy 
        end if
@@ -2802,7 +2800,7 @@ c
       enddo
 
 !---------add on the thermal coupling from the particles:
-      if (iscl == 1) then  !6/2/14 Brian
+      if (iscl == 1) then 
       if (iTcouple == 1) then
       do iz=izs,ize
          do iy=iys,iye
@@ -2812,9 +2810,9 @@ c
          end do
       end do
       end if
-      end if   !6/2/14 Brian
+      end if  
 
-      if (iscl == 2) then  !8/5/14 Brian
+      if (iscl == 2) then 
       if (iHcouple == 1) then
       do iz=izs,ize
          do iy=iys,iye
@@ -2825,7 +2823,7 @@ c
          end do
       end do
       end if
-      end if  !8/5/14 Brian
+      end if 
 
 
 
@@ -4371,7 +4369,7 @@ c
       iz_ee = ize
       iz_ss = izs
       if(ize .eq. nnz) iz_ee = nnzp1
-      if(izs .eq. 1)   iz_ss = 0  !Brian 10/9/14
+      if(izs .eq. 1)   iz_ss = 0 
       do iz=iz_ss,iz_ee
          do iy=iys,iye
          do ix=1,nnx
@@ -5429,15 +5427,15 @@ c
          fcor    = 0.0
          fcor_h  = 0.0
 
-         Uo = 1.59
-         Ttop(1) = 300.15
-         Tbot(1) = 300.15
-c
+         !Get BCs of temperature in Celsius for use in specific expressions
          topC=(Ttop(1)-273.15)
          botC=(Tbot(1)-273.15)  
          
-         RHT = 95.0/100.0
-         RHB = 100.0/100.0         
+         !Normalize the RH given in input file
+         RHT = Ttop(2)/100.0 
+         RHB = Tbot(2)/100.0
+
+         !Convert RH given in input file into specific humidity
          Ttop(2) =  RHT*Mw/Ru/Ttop(1)*610.94*
      +               EXP(17.6257*topC/(topC+243.04))/rhoa
          Tbot(2) =  RHB*Mw/Ru/Tbot(1)*610.94*
@@ -5459,21 +5457,17 @@ c
          zo      = 0.1
          ugcont  = 0.01 
          vgcont  = 0.0
-         
-         !Particle channel:
-         zi = 0.04
-         xl      = pi2*0.04
-         !yl      = pi2*0.02
-         yl      = pi2*0.04
-         zl      = 0.04
+
+         zi = 0.04  !This has to do with grid stretching; make equal to zl for Couette/channel
+         zl = 0.04
+         xl = pi2*zl
+         yl = pi2*zl
   
 c
 c ---------- if stretched grid specify location of first point
 c
          !Particle channel:
-         zw1     = 0.00013333   !dz+(min) = 1
-         !zw1     = 0.000013333    !dz+(min) = 0.1
-c        izi     = int(float(nnz)*zi/zl)
+         zw1 = 0.00013333
          izi     = (60*nnz)/100
       endif
 c
@@ -10173,12 +10167,12 @@ c
       call ztox_trans(mpsum_t(0:nnz+1,iys:iye,mxs:mxe),
      +                mpsum(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,mxs,
      +                mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
-     +                ncpu_s,numprocs) !Brian 9/29/14
+     +                ncpu_s,numprocs)
 
       call ztox_trans(mwsum_t(0:nnz+1,iys:iye,mxs:mxe),
      +                mwsum(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,mxs,
      +                mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
-     +                ncpu_s,numprocs) !Brian 9/29/14
+     +                ncpu_s,numprocs)
 
       call ztox_trans(qstarsum_t(0:nnz+1,iys:iye,mxs:mxe),
      +                qstarsum(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,mxs,
@@ -11285,19 +11279,12 @@ c      brc_r = 4*(nnz+2)*3*2 !Brian 7/14/14
       call date_and_time(VALUES=values)
       iseed = -(myid+values(8)+values(7)+values(6))
 
-!      !Initialize particle number residual to 0:
-!      residual(1:rbins) = 0.0
-
       !Initialize ngidx, the particle global index
       ngidx = 1
   
       !For the channel case, set the total number of particles:
       deltaz = zmax-zmin
 
-      tnumpart = 1036730
-      !tnumpart = 2248907
-      !tnumpart = 150016
-      !tnumpart = 66350
       numpart = tnumpart/numprocs
       if (myid == 0) then
       numpart = numpart + MOD(tnumpart,numprocs)
@@ -11313,9 +11300,9 @@ c      brc_r = 4*(nnz+2)*3*2 !Brian 7/14/14
       do idx=1,numpart
       xv = ran2(iseed)*(xmax-xmin) + xmin
       yv = ran2(iseed)*(ymax-ymin) + ymin
-      zv = ran2(iseed)*(zl-2.0*delta_vis) + delta_vis     !Brian 2/20/15 No droplets in viscous region
+      zv = ran2(iseed)*(zl-2.0*delta_vis) + delta_vis 
       call create_particle((/xv,yv,zv/),(/0.01,0.0,0.0/),
-     +         Tbot(1),Ttop(2),idx)  !Brian 7/29/14 Currently ignoring Tp and qinfp
+     +         Tbot(1),Ttop(2),idx) 
       end do
 
       partTsrc = 0.0
@@ -11650,10 +11637,6 @@ c      brc_r = 4*(nnz+2)*3*2 !Brian 7/14/14
      +                   mpi_mode_rdonly,
      +                   mpi_info_null,fh,ierr)
 
-      !First read in the residual array:
-!      offset = 0
-!      call mpi_file_read_at_all(fh,offset,residual,rbins,
-!     +                      mpi_real8,istatus,ierr)
 
       !Read in the total number of particles:
       offset = 0
@@ -12009,13 +11992,14 @@ c      brc_r = 4*(nnz+2)*3*2 !Brian 7/14/14
       subroutine read_input_file
       use pars
       use particles
+      use con_data
       implicit none
 
       character(48) :: label
       namelist /step_params/ iti,itmax,imean,ihst,itape,
      +                       itstr,it_his,it_viz,i_viz,itn
 
-      namelist /grid_params/ ncpu_s
+      namelist /grid_params/ ncpu_s, Uo, Ttop, Tbot
 
       namelist /path_names/ path_seed,path_part,path_res,
      +         path_sav,path_his,path_viz_xy,path_viz_xz,
@@ -12029,7 +12013,7 @@ c      brc_r = 4*(nnz+2)*3*2 !Brian 7/14/14
       namelist /fluid_properties/ rhoa,
      +         nuf,Cpa,Pra,Sc
 
-      namelist /part_properties/ rhow,part_grav,
+      namelist /part_properties/ tnumpart,rhow,part_grav,
      +         Cpp,Mw,Ms,Ru,Gam,Ion,Os,Sal,
      +         radius_init,radius_mass,delta_vis
 

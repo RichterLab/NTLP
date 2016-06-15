@@ -2,7 +2,7 @@
 !Time step information
 &step_params
 iti=0
-itmax=50
+itmax=300000
 imean=100
 ihst=10
 itape=5000
@@ -18,7 +18,7 @@ itn = 0
 noalis=1, ismlt=0, ifree=0, isfc=1, iradup=0, iupwnd=0
 ibuoy=0, ifilt=0, itcut=1, isubs=0, ibrcl=0, iocean=0
 method=3, idebug=1, iz_space=1, ivis0=0, ifix_dt=0, new_vis=-1
-iDNS = 0
+iDNS = 1
 ispray=1
 icouple=1
 iTcouple=1
@@ -26,9 +26,12 @@ iHcouple=1  !iHcouple also controls TE couple
 ievap=1
 /
 
-!Grid parameters
+!Grid and domain parameters
 &grid_params
 ncpu_s=8
+Uo = 1.59  !Used when top and bottom are equal and opposite
+Ttop(1) = 300.15, 95.0  !Currently this should be (temperature, relative humidity)
+Tbot(1) = 300.15, 100.0  !Currently this should be (temperature, relative humidity)
 /
 
 !Set the paths for code I/O. Must be on the scratch directory, not AFS!
@@ -58,9 +61,10 @@ Sc = 0.615
 
 !Particle properties
 &part_properties
+tnumpart = 1036730
 rhow=1000.0  !kg/m^3
-part_grav=0.0
-Cpp=4179.0  !J/kg-K
+part_grav = 0.0
+Cpp = 4179.0  !J/kg-K
 Mw = 0.018015  !kg/mol
 Ru = 8.3144
 Ms = 0.05844  !kg/mol: molecular weight of salt
