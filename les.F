@@ -1629,7 +1629,7 @@ c
 c -------- evaluate rhs of scalar equations
 c
       do l=1,nscl
-         if (iDNS .eq. 0) then
+         if (iDNS .eq. 1) then
             call rhs_scl_dns(istep,l,it) 
          else
             call rhs_scl(istep,l,it) 
@@ -5440,6 +5440,11 @@ c
      +               EXP(17.6257*topC/(topC+243.04))/rhoa
          Tbot(2) =  RHB*Mw/Ru/Tbot(1)*610.94*
      +               EXP(17.6257*botC/(botC+243.04))/rhoa
+
+         if (myid==0) then
+            write(*,*) 'Ttop(1), Ttop(2) = ',Ttop(1), Ttop(2)
+            write(*,*) 'Tbot(1), Tbot(2) = ',Tbot(1), Tbot(2)
+         end if
 
 c
 c        wtsfc is defined in upward direction

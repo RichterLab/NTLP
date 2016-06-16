@@ -38,14 +38,14 @@ Tbot(1) = 300.15, 100.0  !Currently this should be (temperature, relative humidi
 &path_names
 path_seed="/scratch365/drichte2/input_test/"
 path_part="/scratch365/drichte2/input_test/part.le.cou000"
-path_res="/scratch365/drichte2/input_test/u.le.cou000"
+path_res="/scratch365/drichte2/input_test/u.le.cou000"   !Actually restarting the case from previous time step
 path_sav="/scratch365/drichte2/input_test/"
 path_his="/scratch365/drichte2/input_test/"
 path_viz_xy="/scratch365/drichte2/input_test/"
 path_viz_xz="/scratch365/drichte2/input_test/"
 path_viz_yz="/scratch365/drichte2/input_test/"
 path_stuf="/scratch365/drichte2/input_test/"
-path_ran="/scratch365/drichte2/input_test/u.le.cou000"
+path_ran="/scratch365/drichte2/input_test/u.le.cou000"  !What field to initizlize from in get_fields
 /
 
 
