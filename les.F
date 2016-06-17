@@ -643,7 +643,11 @@ c
             call lower(it)
          end if
       elseif(ifree .eq. 1) then
-         call lower_free(it)
+         if (iDNS .eq. 1) then
+            call lower_dns(it)
+         else
+            call lower_free(it)
+         end if
       endif
       if(ise .eq. numprocs-1) then
          if (iDNS .eq. 1) then
