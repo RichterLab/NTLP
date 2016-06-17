@@ -10,7 +10,7 @@ itstr=1
 it_his=1
 it_viz=1
 i_viz=5000
-itn = 0
+itn = 0  !Index for "u.le.cou001" files
 /
 
 !Flags for various features
@@ -32,6 +32,13 @@ ncpu_s=8
 Uo = 1.59  !Used when top and bottom are equal and opposite
 Ttop(1) = 300.15, 95.0  !Currently this should be (temperature, relative humidity)
 Tbot(1) = 300.15, 100.0  !Currently this should be (temperature, relative humidity)
+
+zi = 0.04  !This has to do with grid stretching; make equal to zl for Couette/channel
+zl = 0.04
+xl = 0.251327 !2*pi*zl
+yl = 0.251327 !2*pi*zl
+
+zw1 = 0.00013333  !The first grid point -- for DNS should be such that dz+ approx. 1
 /
 
 !Set the paths for code I/O. Must be on the scratch directory, not AFS!
@@ -49,18 +56,20 @@ path_ran="/scratch365/drichte2/input_test/u.le.cou000"  !What field to initizliz
 /
 
 
-!Material properties
-&fluid_properties
+!Material and particle properties and other constants
+&constants
+grav = 9.81
+t00 = 273.0 !Reference temp for buoyancy
+fcor = 0.0  !Coriolis parameter
+
+!Air phase:
 rhoa=1.1
 nuf=1.537e-5  !m^2/s
 Cpa=1006.0  !J/kg-K
 Pra = 0.715
 Sc = 0.615
-/
 
-
-!Particle properties
-&part_properties
+!Particles:
 tnumpart = 1036730
 rhow=1000.0  !kg/m^3
 part_grav = 0.0

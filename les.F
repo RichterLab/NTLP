@@ -19,8 +19,9 @@ c
       integer, parameter :: maxnz1=maxnz+1,
      + maxnz2=maxnz+2,maxnx2=maxnx+2,maxny2=maxny+2
 
-      !Boundary conditions
+      !Boundary conditions and other parameters
       real :: Uo, Ttop(nscl), Tbot(nscl)
+      real :: grav,t00,fcor,zi,zl,xl,yl,zw1
 c     
 c     ------------ leave following definitions as is
 c     
@@ -128,7 +129,7 @@ c     ----------------------------------------------------------------------
       type :: particle
       integer :: pidx,procidx
       real :: vp(3),xp(3),uf(3),xrhs(3),vrhs(3),Tp,Tprhs_s
-      real :: Tprhs_L, Tf,radius,radrhs,qinf,qstar
+      real :: Tprhs_L,Tf,radius,radrhs,qinf,qstar
       type(particle), pointer :: prev,next
       end type particle
 
@@ -158,10 +159,10 @@ c     ----------------------------------------------------------------------
       type con_d
       sequence
       real ::  zo, vk, vkin, vk74, vk74in, 
-     +     grav, gcp, fcor, fcor_h, zi, pi2,
-     +     batagk, t00, batag, vgcont, ugcont, 
+     +     gcp, fcor_h, pi2,
+     +     batagk, batag, vgcont, ugcont, 
      +     cdbtm, dtdzf(nscl), dtjump, ugal, divgls,
-     +     z1, utausv, xl, yl, zl, dx, dy, dz, dt, 
+     +     z1, utausv, dx, dy, dz, dt, 
      +     fnxy, dzdz, dsl, c23, dtgama, dtzeta, xkmax,
      +     time, zody, zody74, tsfcc(nscl),
      +     utau, qstar(nscl), wtsfc(nscl),
@@ -171,10 +172,10 @@ c     ----------------------------------------------------------------------
       type(con_d), target :: c_c
       real, pointer ::
      +     zo, vk, vkin, vk74, vk74in, 
-     +     grav, gcp, fcor, fcor_h, zi, pi2,
-     +     batagk, t00, batag, vgcont, ugcont,
+     +     gcp, fcor_h, pi2,
+     +     batagk, batag, vgcont, ugcont,
      +     cdbtm, dtdzf(:), dtjump, ugal, divgls,
-     +     z1, utausv, xl, yl, zl, dx, dy, dz, dt,
+     +     z1, utausv, dx, dy, dz, dt,
      +     fnxy, dzdz, dsl, c23, dtgama, dtzeta, xkmax, 
      +     time, zody, zody74, tsfcc(:),
      +     utau, qstar(:), wtsfc(:), 
@@ -190,14 +191,10 @@ c
       vkin   => c_c%vkin
       vk74   => c_c%vk74
       vk74in => c_c%vk74in
-      grav   => c_c%grav
       gcp    => c_c%gcp
-      fcor   => c_c%fcor
       fcor_h => c_c%fcor_h
-      zi     => c_c%zi
       pi2    => c_c%pi2
       batagk => c_c%batagk
-      t00    => c_c%t00
       batag  => c_c%batag
       vgcont => c_c%vgcont
       ugcont => c_c%ugcont
@@ -208,9 +205,6 @@ c
       divgls => c_c%divgls
       z1     => c_c%z1
       utausv => c_c%utausv
-      xl     => c_c%xl
-      yl     => c_c%yl
-      zl     => c_c%zl
       dx     => c_c%dx
       dy     => c_c%dy
       dz     => c_c%dz
@@ -5381,7 +5375,6 @@ c
 
       pi   = 4.0*atan(1.0)
       pi2  = 2.0*pi
-      grav = 9.81
       bfac = 1.0
       if(ibuoy.eq.0) bfac = 0.
 c
@@ -5419,12 +5412,8 @@ c ---------- if stretched grid specify location of first point
 c
          zw1 = -0.5
       else
-         t00     = 273.0
-         cp      = 1.e3
-         gcp     = grav/cp
+         gcp     = grav/Cpa
          batag   = bfac*grav/t00
-         !fcor    = 1.0e-04
-         fcor    = 0.0
          fcor_h  = 0.0
 
          !Get BCs of temperature in Celsius for use in specific expressions
@@ -5440,11 +5429,6 @@ c
      +               EXP(17.6257*topC/(topC+243.04))/rhoa
          Tbot(2) =  RHB*Mw/Ru/Tbot(1)*610.94*
      +               EXP(17.6257*botC/(botC+243.04))/rhoa
-
-         if (myid==0) then
-            write(*,*) 'Ttop(1), Ttop(2) = ',Ttop(1), Ttop(2)
-            write(*,*) 'Tbot(1), Tbot(2) = ',Tbot(1), Tbot(2)
-         end if
 
 c
 c        wtsfc is defined in upward direction
@@ -5463,16 +5447,11 @@ c
          ugcont  = 0.01 
          vgcont  = 0.0
 
-         zi = 0.04  !This has to do with grid stretching; make equal to zl for Couette/channel
-         zl = 0.04
-         xl = pi2*zl
-         yl = pi2*zl
   
 c
 c ---------- if stretched grid specify location of first point
 c
          !Particle channel:
-         zw1 = 0.00013333
          izi     = (60*nnz)/100
       endif
 c
@@ -10276,7 +10255,7 @@ c
       end function dFdr_uniform
       subroutine particle_bcs_nonperiodic
       use particles
-      use con_data
+      use pars
       implicit none
       real :: top,bot
 
@@ -10310,7 +10289,7 @@ c
       end subroutine particle_bcs_nonperiodic
       subroutine particle_bcs_periodic
       use particles
-      use con_data
+      use pars
       implicit none 
 
       !Assumes domain goes from [0,xl),[0,yl),[0,zl] 
@@ -12004,7 +11983,8 @@ c      brc_r = 4*(nnz+2)*3*2 !Brian 7/14/14
       namelist /step_params/ iti,itmax,imean,ihst,itape,
      +                       itstr,it_his,it_viz,i_viz,itn
 
-      namelist /grid_params/ ncpu_s, Uo, Ttop, Tbot
+      namelist /grid_params/ ncpu_s, Uo, Ttop, Tbot,
+     +         zi, zl, xl, yl, zw1
 
       namelist /path_names/ path_seed,path_part,path_res,
      +         path_sav,path_his,path_viz_xy,path_viz_xz,
@@ -12015,12 +11995,12 @@ c      brc_r = 4*(nnz+2)*3*2 !Brian 7/14/14
      +         method,idebug,iz_space,ivis0,ifix_dt,new_vis,iDNS,
      +         ispray,icouple,iTcouple,iHcouple,ievap
 
-      namelist /fluid_properties/ rhoa,
-     +         nuf,Cpa,Pra,Sc
 
-      namelist /part_properties/ tnumpart,rhow,part_grav,
+      namelist /constants/ rhoa, nuf, Cpa, Pra, Sc,
+     +         tnumpart,rhow,part_grav,
      +         Cpp,Mw,Ms,Ru,Gam,Ion,Os,Sal,
-     +         radius_init,radius_mass,delta_vis
+     +         radius_init,radius_mass,delta_vis,
+     +         grav, t00,fcor
 
 
       !params.in contains namelists to read
@@ -12038,11 +12018,8 @@ c      brc_r = 4*(nnz+2)*3*2 !Brian 7/14/14
       read(12,nml=path_names)
       if (myid==0) print path_names
 
-      read(12,nml=fluid_properties)
-      if (myid==0) print fluid_properties
-
-      read(12,nml=part_properties)
-      if (myid==0) print part_properties
+      read(12,nml=constants)
+      if (myid==0) print constants
       CpaCpp = Cpa/Cpp
 
 
