@@ -12008,7 +12008,7 @@ c      brc_r = 4*(nnz+2)*3*2 !Brian 7/14/14
 
 
       !params.in contains namelists to read
-      open(12, file="../params.in", status="old")
+      open(12, file="params.in", status="old")
 
       read(12,nml=step_params)
       if (myid==0) print step_params

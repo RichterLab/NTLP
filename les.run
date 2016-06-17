@@ -1,0 +1,26 @@
+#!/bin/bash
+
+#$ -M YOUR EMAIL ADDRESS
+#$ -m n
+#$ -pe mpi-16 64
+#$ -q *@@richter,*@@ivybridge
+#$ -N tutorial
+#$ -j y
+
+cd ~/LES-GPU
+
+module load mvapich2/2.1-intel-15.0-mlx
+module load intel/15.0
+
+case=tutorial
+time=0000000
+datadir=DIRECTORY ON SCRATCH365 WHERE YOU WANT DATA WRITTEN: e.g. /scratch365/userID/tutorial
+runout=$case.out.$time
+
+imachine=0
+echo $imachine > ./mach.file
+echo $datadir >> ./mach.file
+
+mpirun -n 64 ./build/lesmpi.a > $datadir/$runout
+
+
