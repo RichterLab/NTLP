@@ -21,7 +21,7 @@ add_library (fft STATIC "fft.f")
 # Build Executable
 set_source_files_properties( "les.F" COMPILE_FLAGS "-assume byterecl")
 
-add_executable (yip "les.F")
-target_link_libraries (yip fft)
+add_executable (lesmpi.a "les.F")
+target_link_libraries (lesmpi.a fft)
 
-install ( TARGETS yip RUNTIME DESTINATION "bin")
+install ( TARGETS lesmpi.a RUNTIME DESTINATION "bin")

@@ -1,0 +1,87 @@
+
+!Time step information
+&step_params
+iti=0
+itmax=50000
+imean=100
+ihst=10
+itape=5000
+itstr=1
+it_his=1
+it_viz=1
+i_viz=5000
+itn = 0  !Index for "u.le.cou001" files
+/
+
+!Flags for various features
+&flags
+noalis=1, ismlt=0, ifree=0, isfc=1, iradup=0, iupwnd=0
+ibuoy=0, ifilt=0, itcut=1, isubs=0, ibrcl=0, iocean=0
+method=3, idebug=1, iz_space=1, ivis0=0, ifix_dt=0, new_vis=-1
+iDNS = 1
+ispray=1
+icouple=1
+iTcouple=1
+iHcouple=1  !iHcouple also controls TE couple
+ievap=1
+/
+
+!Grid and domain parameters
+&grid_params
+ncpu_s=8
+Uo = 1.59  !Used when top and bottom are equal and opposite
+Ttop(1) = 300.15, 95.0  !Currently this should be (temperature, relative humidity)
+Tbot(1) = 300.15, 100.0  !Currently this should be (temperature, relative humidity)
+
+zi = 0.04  !This has to do with grid stretching; make equal to zl for Couette/channel
+zl = 0.04
+xl = 0.251327 !2*pi*zl
+yl = 0.251327 !2*pi*zl
+
+zw1 = 0.00013333  !The first grid point -- for DNS should be such that dz+ approx. 1
+/
+
+!Set the paths for code I/O. Must be on the scratch directory, not AFS!
+&path_names
+path_seed="/scratch365/userID/tutorial/"
+path_part="/scratch365/userID/tutorial/part.le.cou000"
+path_res="/scratch365/userID/tutorial/u.le.cou000"   !Actually restarting the case from previous time step
+path_sav="/scratch365/userID/tutorial/"
+path_his="/scratch365/userID/tutorial/"
+path_viz_xy="/scratch365/userID/tutorial/"
+path_viz_xz="/scratch365/userID/tutorial/"
+path_viz_yz="/scratch365/userID/tutorial/"
+path_stuf="/scratch365/userID/tutorial/"
+path_ran="/scratch365/userID/tutorial/u.le.cou000"  !What field to initizlize from in get_fields
+/
+
+
+!Material and particle properties and other constants
+&constants
+grav = 9.81
+t00 = 273.0 !Reference temp for buoyancy
+fcor = 0.0  !Coriolis parameter
+
+!Air phase:
+rhoa=1.1
+nuf=1.537e-5  !m^2/s
+Cpa=1006.0  !J/kg-K
+Pra = 0.715
+Sc = 0.615
+
+!Particles:
+tnumpart = 1036730
+rhow=1000.0  !kg/m^3
+part_grav = 0.0
+Cpp = 4179.0  !J/kg-K
+Mw = 0.018015  !kg/mol
+Ru = 8.3144
+Ms = 0.05844  !kg/mol: molecular weight of salt
+delta_vis=0.000163 !Bounce-back distance from wall
+radius_init=40.0e-6
+radius_mass=40.0e-6
+Sal = 34.0
+Gam = 7.28e-2
+Ion = 2.0
+Os = 1.093
+/
