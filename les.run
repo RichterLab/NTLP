@@ -7,20 +7,22 @@
 #$ -N tutorial
 #$ -j y
 
-cd ~/LES-GPU
+case=case1
+time=0000000
+runout=$case.out.$time
+
+datadir=/scratch365/YOUR_NDID/tutorial/$case
+homedir=~/tutorial/$case
+
+cd $homedir
 
 module load mvapich2/2.1-intel-15.0-mlx
 module load intel/15.0
-
-case=tutorial
-time=0000000
-datadir=DIRECTORY ON SCRATCH365 WHERE YOU WANT DATA WRITTEN: e.g. /scratch365/userID/tutorial
-runout=$case.out.$time
 
 imachine=0
 echo $imachine > ./mach.file
 echo $datadir >> ./mach.file
 
-mpirun -n 64 ./build/lesmpi.a > $datadir/$runout
+mpirun -n 64 $homedir/../build/lesmpi.a $homedir/params.in > $datadir/$runout
 
 

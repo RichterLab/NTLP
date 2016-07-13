@@ -4,7 +4,7 @@ c     ----------------------------------------------------------------------
       integer :: iti,itmax,imean,ihst,itape
       integer :: itstr,it_his,it_viz,i_viz
 
-      integer :: noalis,ismlt,ifree,isfc,iradup,
+      integer :: ismlt,ifree,iradup,
      +     iupwnd,ibuoy,ifilt,itcut,isubs,ibrcl,iocean,method,
      +     idebug,iz_space,ivis0,ifix_dt,new_vis,iDNS,ispray,
      +     icouple,iTcouple,iHcouple,ievap
@@ -20,8 +20,9 @@ c
      + maxnz2=maxnz+2,maxnx2=maxnx+2,maxny2=maxny+2
 
       !Boundary conditions and other parameters
-      real :: Uo, Ttop(nscl), Tbot(nscl)
+      real :: Uo, Ttop(nscl), Tbot(nscl),qstar(nscl),tsfcc(nscl)
       real :: grav,t00,fcor,zi,zl,xl,yl,zw1
+      integer :: isfc(nscl)
 c     
 c     ------------ leave following definitions as is
 c     
@@ -120,6 +121,7 @@ c     ----------------------------------------------------------------------
       integer :: numpart,tnumpart,ngidx
       integer :: iseed
       real :: Rep_avg,part_grav
+      real :: vp_init(3),Tp_init,qf_init
 
       real :: radius_init,radius_mass,rhow,nuf 
       real :: CpaCpp,Cpa,Cpp,Pra,Sc,Mw,Ru,rhoa
@@ -164,8 +166,8 @@ c     ----------------------------------------------------------------------
      +     cdbtm, dtdzf(nscl), dtjump, ugal, divgls,
      +     z1, utausv, dx, dy, dz, dt, 
      +     fnxy, dzdz, dsl, c23, dtgama, dtzeta, xkmax,
-     +     time, zody, zody74, tsfcc(nscl),
-     +     utau, qstar(nscl), wtsfc(nscl),
+     +     time, zody, zody74,
+     +     utau, wtsfc(nscl),
      +     uwsfc, vwsfc, amonin,
      +     zol, hol, smal_e, sml_eg
       end type con_d
@@ -177,8 +179,8 @@ c     ----------------------------------------------------------------------
      +     cdbtm, dtdzf(:), dtjump, ugal, divgls,
      +     z1, utausv, dx, dy, dz, dt,
      +     fnxy, dzdz, dsl, c23, dtgama, dtzeta, xkmax, 
-     +     time, zody, zody74, tsfcc(:),
-     +     utau, qstar(:), wtsfc(:), 
+     +     time, zody, zody74,
+     +     utau, wtsfc(:), 
      +     uwsfc, vwsfc, amonin,
      +     zol, hol, smal_e, sml_eg
       contains
@@ -219,9 +221,7 @@ c
       time   => c_c%time
       zody   => c_c%zody
       zody74 => c_c%zody74
-      tsfcc  => c_c%tsfcc
       utau   => c_c%utau
-      qstar  => c_c%qstar
       wtsfc  => c_c%wtsfc
       uwsfc  => c_c%uwsfc
       vwsfc  => c_c%vwsfc
@@ -535,7 +535,7 @@ c
       if (iti.eq.0)  then
          igrdr = 2
          case = case_inp
-         call init(Cpa,rhoa,Mw,Ru)
+         call init
          call setup(it)
 
          if (ispray==1) then
@@ -550,8 +550,8 @@ c
          if(iocean .eq. 1) then
             call randoc
          else
-            call get_fields
-c            call random   
+            !call get_fields
+            call random   
          endif
          !Call dns_vis even when doing LES since vis_m needs to be initialized with something
          call dns_vis
@@ -1110,13 +1110,13 @@ c
 c     if(ifilt.eq.1)call filter
       if(l_root) then
          write(6,1) nnx,nny,nnz,ismlt,ifilt,iti,itmax,
-     +             iupwnd,ibuoy,noalis,itcut,
+     +             iupwnd,ibuoy,itcut,
      +             dt,zo,tsfcc(1),isubs,ibrcl,
      +             method, iocean, ivis
       endif
       if(l_debug) then
          write(nprt,1) nnx,nny,nnz,ismlt,ifilt,iti,itmax,
-     +             iupwnd,ibuoy,noalis,itcut,
+     +             iupwnd,ibuoy,itcut,
      +             dt,zo,tsfcc(1),isubs,ibrcl,
      +             method, iocean, ivis
       endif
@@ -1783,8 +1783,17 @@ c
 c
 c ------------ buoyancy (with hydrostatic part)
 c
+
+!MODIFY BUOYANCY TERM TO INCLUDE HUMIDITY
+!         w_buy = batag*(t(ix,iy,1,iz)*weit1 +
+!     +                  t(ix,iy,1,izp1)*weit)
+
          w_buy = batag*(t(ix,iy,1,iz)*weit1 +
-     +                  t(ix,iy,1,izp1)*weit)
+     +                  t(ix,iy,1,izp1)*weit)*
+     +   (1.0+0.61*(weit1*t(ix,iy,2,iz) + 
+     +    weit*t(ix,iy,2,izp1)))
+
+
 c
 c ------------ geostrophic wind
 c
@@ -2610,7 +2619,7 @@ c
 
 
 !      Aside - get each wtsfc value:
-       if (iz == 1 .and. isfc == 1) then
+       if (iz == 1 .and. isfc(iscl) == 1) then
           call mpi_sum_xy(sfc_flx,myid,iss,ise,1)
           wtsfc(iscl) = sfc_flx*fnxy 
        end if
@@ -2873,7 +2882,7 @@ c
 
       !Use Prantdl number for thermal diffusivity:
       vis_s(1:nnx,iys:iye,1,izs-1:ize+1) = nuf/Pra   ! alpha=nu/Prandtl   
-      vis_s(1:nnx,iys:iye,2,izs-1:ize+1) = nuf/Sc    !Dv =nu/Sc
+!      vis_s(1:nnx,iys:iye,2,izs-1:ize+1) = nuf/Sc    !Dv =nu/Sc
       r5 = 0.0
       e = 0.0
 
@@ -3335,17 +3344,17 @@ c
 
 !NOTE: sign convention is that wtsfc is flux upwards INTO domain (not just in vertical direction)
 ! Set the scalar boundary condition based on isfc
-c            isfc = 0, specified surface heat flux (through wtsfc)
-c                 = 1, specified surface temperature (tsfcc)
+c            isfc = 0, specified surface heat flux (through qstar)
+c                 = 1, specified surface temperature (Tbot)
 
       do iscl=1,nscl
          do iy=iys,iye
          do ix=1,nnx
-            if (isfc==1) then
+            if (isfc(iscl)==1) then
             t(ix,iy,iscl,izm1) = 2.0*Tbot(iscl) - t(ix,iy,iscl,iz) 
             end if
 
-            if (isfc==0) then 
+            if (isfc(iscl)==0) then 
             flux = dzu(0)*wtsfc(iscl)/vis_s(ix,iy,iscl,izm1)
             t(ix,iy,iscl,izm1) = t(ix,iy,iscl,iz)     
      +       + flux  
@@ -3393,18 +3402,18 @@ c
       enddo
 
 ! Set the scalar boundary condition based on isfc
-c            isfc = 0, specified surface heat flux (through wtsfc)
-c                 = 1, specified surface temperature (tsfcc)
+c            isfc = 0, specified surface heat flux (through qstar)
+c                 = 1, specified surface temperature (Ttop)
 
 !NOTE: sign convention is that wtsfc is flux upwards INTO domain (not just in vertical direction)
 
       do iscl=1,nscl
          do iy=iys,iye
          do ix=1,nnx
-            if (isfc==1) then
+            if (isfc(iscl)==1) then
             t(ix,iy,iscl,izp1) = 2.0*Ttop(iscl)-t(ix,iy,iscl,iz) 
             end if
-            if (isfc==0) then 
+            if (isfc(iscl)==0) then 
             flux = dzu(izp1)*wtsfc(iscl)/vis_s(ix,iy,iscl,izp1)
             t(ix,iy,iscl,izp1) = t(ix,iy,iscl,iz)      
      +       - flux 
@@ -4962,7 +4971,7 @@ c ---------- limits for zeta
 c
       zeta_mn = zeta_min
       zeta_mx = zeta_max
-      if(isfc .eq. 0) then
+      if(isfc(1) .eq. 0) then
          f_con = z1*batag*vk*qstar(1)/((windm*vk)**3)
       else
          d_theta = vk74in*(tsfcc(1) - t1xy(1))
@@ -4979,7 +4988,7 @@ c
              call fzol(zeta_a,phim,phis,psim,psis)
          endif
          u_fac = (zody - psim)
-         if(isfc .eq. 0) then
+         if(isfc(1) .eq. 0) then
             f_new =  zeta_a + f_con*u_fac**3
          else
             t_fac = 1.0/(zody - psis)
@@ -5011,7 +5020,7 @@ c
       else
          utau = windm*vk/(zody-psim)
          dnom = (zody-psis)*vk74in
-         if(isfc .eq. 0) then
+         if(isfc(1) .eq. 0) then
             thstar(1) = -qstar(1)/utau
             tsfcc(1)  = t1xy(1)-thstar(1)*dnom
             t10xy(1)  = thstar(1)*dnom
@@ -5045,6 +5054,32 @@ c
      +                 tsfcc(1),amonin,utau,it
          go to 9999
       endif
+
+!Now that temperature and momentum have been done, apply BCs on remaining scalars:
+
+      do iscl=2,nscl
+
+      if (ibuoy.eq.0 .or. qstar(1) .eq. 0.) then
+          thstar(iscl) = 0.0
+          t10xy(iscl)  = 0.0
+          tsfcc(iscl)  = t1xy(iscl)
+      else
+         dnom = (zody-psis)*vk74in
+         if(isfc(iscl) .eq. 0) then
+            thstar(iscl) = -qstar(iscl)/utau
+            tsfcc(iscl)  = t1xy(iscl)-thstar(iscl)*dnom
+            t10xy(iscl)  = thstar(iscl)*dnom
+         else
+            thstar(iscl) = (t1xy(iscl) - tsfcc(iscl))/dnom
+            t10xy(iscl)  = thstar(iscl)*dnom
+            qstar(iscl)  = -utau*thstar(iscl)
+         endif
+         amonin = -utau**3/(batagk*qstar(iscl))
+         zeta   = z1/amonin
+      endif
+
+      enddo
+
 c ---------- examples of two other scalars
 c
 c     c
@@ -5076,7 +5111,9 @@ c
       utau2     = utau*utau
       au13m     = -utau2*cos(thta)
       au23m     = -utau2*sin(thta)*sign(1.,v1xy)
-      aut3m(1)  =  qstar(1)
+      do iscl = 1,nscl
+      aut3m(iscl)  =  qstar(iscl)
+      end do
 c
       return
 c
@@ -5144,7 +5181,7 @@ c
 c
 c ---- check for temperature boundary condition
 c
-      if(isfc .eq. 0 ) then
+      if(isfc(iscl) .eq. 0 ) then
          tsfcc(1)=t1xy(1)-t10xy(1)
       endif
 c     vsfc=sqrt(u1xy*u1xy+v1xy*v1xy)
@@ -5187,7 +5224,7 @@ c
       udrift = windm + stokes(1) - stokess + utau*(zody-psim)*vkin
       vdrift = 0.0
       dnom      = (zody-psis)*vk74in
-      if (isfc.eq.1) then
+      if (isfc(iscl).eq.1) then
          thstar(1) = (t1xy(1) - tsfcc(1))/dnom
          t10xy(1)  = thstar(1)*dnom
          qstar(1)  = - utau*thstar(1)
@@ -5367,14 +5404,14 @@ c
 c
       return
       end
-      subroutine init(Cpa,rhoa,Mw,Ru)
+      subroutine init
 c
       use pars
       use fields
       use con_data
       use con_stats
+      use particles
 c
-      real :: Cpa,rhoa,Mw,Ru
       real :: RHT,RHB
 
       pi   = 4.0*atan(1.0)
@@ -5420,6 +5457,9 @@ c
          batag   = bfac*grav/t00
          fcor_h  = 0.0
 
+         !!!If doing DNS, BCs are set somewhat differently than when doing LES
+         if (iDNS .eq. 1) then
+
          !Get BCs of temperature in Celsius for use in specific expressions
          topC=(Ttop(1)-273.15)
          botC=(Tbot(1)-273.15)  
@@ -5434,21 +5474,37 @@ c
          Tbot(2) =  RHB*Mw/Ru/Tbot(1)*610.94*
      +               EXP(17.6257*botC/(botC+243.04))/rhoa
 
+         wtsfc(1) = qstar(1)
+         wtsfc(2) = qstar(2)
+
+         else !(doing LES)
 c
-c        wtsfc is defined in upward direction
-         wtsfc(1) = 0.0 !-32.0/Cpa/rhoa  !Not Advective Flux in DNS
-         wtsfc(2) = 0.0
+         !qstar specified in input file for isfc = 0
+        
+         wtsfc = qstar
+
+         !tsfcc specified in input file for isfc = 1
+
+         !Assuming tsfcc(2) is giving RH:
+
+         botC=(tsfcc(1)-273.15)  
+         RHB = tsfcc(2)/100.0
+
+         tsfcc(2) =  RHB*Mw/Ru/tsfcc(1)*610.94*
+     +               EXP(17.6257*botC/(botC+243.04))/rhoa
+
+
+         end if
 c
-         qstar(1)=wtsfc(1)
-         qstar(2)=wtsfc(2)
 c
+         !Gradients of temperature and scalars above inversion (upper BC)
          dtdzf(1)=0.003
-         dtdzf(2)=0.003
+         dtdzf(2)=0.000
 c
          dtjump  = 0.0
          divgls  = 0.0
          zo      = 0.1
-         ugcont  = 0.01 
+         ugcont  = 10.0 
          vgcont  = 0.0
 
   
@@ -5485,8 +5541,8 @@ c
             z(iz) = dz*float(iz) + zwstrt
          enddo
       else
-        !call vgrid(zw1,zi,zl,nnz,z(0),l_root,l_debug)
-        call vgrid_channel(zw1,zi,zl,nnz,z(0),l_root,l_debug)
+        call vgrid(zw1,zi,zl,nnz,z(0),l_root,l_debug)
+        !call vgrid_channel(zw1,zi,zl,nnz,z(0),l_root,l_debug)
       endif
 c
       call get_dz
@@ -5559,11 +5615,6 @@ c        utau  = vk*(ufree)/zody
       zol   = abs(z1)/amonin
       uwsfc = -utau*utau
       vwsfc = -utau*utau
-c ------- make sure tsfcc is gt than t00 for both isfc=0 or 1
-c     tsfcc(1) = t00+qstar(1)/utau*zody*vk74in
-c      tsfcc(1) = 300    !Brian 6/3/14
-      tsfcc(1) = (Ttop(1)+Tbot(1))/2.0 !Brian 6/3/14
-      tsfcc(2) = (Ttop(2)+Tbot(2))/2.0 !Brian 6/3/14
 c
       if(l_root) then
          write(6,80)
@@ -5876,40 +5927,35 @@ c           u(ix,iy,iz) = ug(iz) - ugal
          if(z(iz) .le. z_lower) then
            do iy=iys,iye
            do ix=1,nnx
-              !t(ix,iy,1,iz) = t_lower
+              t(ix,iy,1,iz) = t_lower
               !t(ix,iy,1,iz) = tsfcc(1) - 5.0 !Brian 5/28/14
-              t(ix,iy,1,iz) = tsfcc(1) !Brian 5/28/14
-              t(ix,iy,2,iz) = tsfcc(2) !Brian 5/28/14 nscl2 field initialize
 
            enddo
            enddo
          elseif(z(iz) .ge. z_upper) then
            do iy=iys,iye
            do ix=1,nnx
-              !t(ix,iy,1,iz) = t_upper + (zz(iz+1) - z_upper)*dtdzf(1)
-              !t(ix,iy,1,iz) = tsfcc(1) - 5.0 !Brian 5/28/14
-              t(ix,iy,1,iz) = tsfcc(1) !Brian 5/28/14
-              t(ix,iy,2,iz) = tsfcc(2) !Brian 5/28/14 nscl2 field initialize
+              t(ix,iy,1,iz) = t_upper + (zz(iz+1) - z_upper)*dtdzf(1)
+              !t(ix,iy,1,iz) = tsfcc(1) - 5.0
            enddo
            enddo
          else
            do iy=iys,iye
            do ix=1,nnx
-              !t(ix,iy,1,iz) = t_lower + slope*(zz(iz+1) - z_lower)
-              !t(ix,iy,1,iz) = tsfcc(1) - 5.0 !Brian 5/28/14
-              t(ix,iy,1,iz) = tsfcc(1) !Brian 5/28/14
-              t(ix,iy,2,iz) = tsfcc(2) !Brian 5/28/14 nscl2 field initialize
+              t(ix,iy,1,iz) = t_lower + slope*(zz(iz+1) - z_lower)
+              !t(ix,iy,1,iz) = tsfcc(1) - 5.0 
            enddo
            enddo
          endif
          do iy=iys,iye
          do ix=1,nnx
+            !t(ix,iy,2,iz) = 0.  !For now just set the initial humidity field to zero
             w(ix,iy,iz)   = 0.
             r1(ix,iy,iz)  = 0.
             r2(ix,iy,iz)  = 0.
             r3(ix,iy,iz)  = 0.
             r4(ix,iy,1,iz)= 0.
-            r4(ix,iy,2,iz)= 0.
+            !r4(ix,iy,2,iz)= 0.
             r5(ix,iy,iz)  = 0.
          enddo 
          enddo 
@@ -7196,6 +7242,10 @@ c
       return
       end
       subroutine tke_budget
+
+!NOTE::: THIS HAS NOT BEEN UPDATED TO REFLECT HUMIDITY IN THE BUOYANCY
+!EQUATION   DHR 7/5/16
+
 c
 c -------- get terms in resolved scale tke budget
 c          as in gabls writeup at w-points
@@ -7880,6 +7930,10 @@ c               and data structures
 c
       call fill_cc
       call fill_cs
+
+      if (myid==0) write(6,5001) isize
+ 5001 format(' size of stats array = ',i8)
+
 c
 c
 c ---------------- debug for arrays
@@ -11289,8 +11343,8 @@ c      brc_r = 4*(nnz+2)*3*2 !Brian 7/14/14
       xv = ran2(iseed)*(xmax-xmin) + xmin
       yv = ran2(iseed)*(ymax-ymin) + ymin
       zv = ran2(iseed)*(zl-2.0*delta_vis) + delta_vis 
-      call create_particle((/xv,yv,zv/),(/0.01,0.0,0.0/),
-     +         Tbot(1),Ttop(2),idx) 
+      call create_particle((/xv,yv,zv/),vp_init,
+     +         Tp_init,qf_init,idx) 
       end do
 
       partTsrc = 0.0
@@ -11316,6 +11370,7 @@ c      brc_r = 4*(nnz+2)*3*2 !Brian 7/14/14
       real :: pi
       integer(kind=MPI_ADDRESS_KIND) :: extent,lb
       integer(kind=MPI_ADDRESS_KIND) :: extent2,lb2,displs(3)
+      integer :: num_reals
 
       !First set up the neighbors for the interpolation stage:
       call assign_nbrs
@@ -11327,8 +11382,6 @@ c      brc_r = 4*(nnz+2)*3*2 !Brian 7/14/14
     
 
       m_s = Sal/1000.0*4.0/3.0*pi*radius_mass**3*rhow
-
-
 
 
       if (myid==0) write(*,*) 'Init Particle radius = ',radius_init  !Brian 7/14/14
@@ -11345,8 +11398,10 @@ c      brc_r = 4*(nnz+2)*3*2 !Brian 7/14/14
 
       !Set up MPI datatypes for sending particle information
       !MUST UPDATE IF THINGS ARE ADDED/REMOVED FROM PARTICLE STRUCTURE
+
+      num_reals = 5*3+8
       
-      blcts(1:3) = (/2,5*3+8,2/) !3*5+8 reals (eg. Tp,Tprhs,Tf)
+      blcts(1:3) = (/2,num_reals,2/)
       displs(1) = 0
       types(1) = mpi_integer
       call mpi_type_get_extent(mpi_integer,lb,extent,ierr)
@@ -11355,8 +11410,8 @@ c      brc_r = 4*(nnz+2)*3*2 !Brian 7/14/14
       displs(2) = extent*2
       types(2) = mpi_real8
       call mpi_type_get_extent(mpi_real8,lb,extent,ierr)
-      !Displace (6*3)*size of mpi_real8 (5 3-vectors plus Tp,Tprhs,Tf...)
-      displs(3) = displs(2) + extent*(5*3+8)
+      !Displace num_reals*size of mpi_real8
+      displs(3) = displs(2) + extent*num_reals
       types(3) = mpi_integer8
 
       !Now define the type:
@@ -11984,17 +12039,19 @@ c      brc_r = 4*(nnz+2)*3*2 !Brian 7/14/14
       implicit none
 
       character(48) :: label
+      character(180) :: params_dir
       namelist /step_params/ iti,itmax,imean,ihst,itape,
      +                       itstr,it_his,it_viz,i_viz,itn
 
       namelist /grid_params/ ncpu_s, Uo, Ttop, Tbot,
+     +         qstar, tsfcc,
      +         zi, zl, xl, yl, zw1
 
       namelist /path_names/ path_seed,path_part,path_res,
      +         path_sav,path_his,path_viz_xy,path_viz_xz,
      +         path_viz_yz,path_stuf,path_ran
 
-      namelist /flags/ noalis,ismlt,ifree,isfc,iradup,
+      namelist /flags/ ismlt,ifree,isfc,iradup,
      +         iupwnd,ibuoy,ifilt,itcut,isubs,ibrcl,iocean,
      +         method,idebug,iz_space,ivis0,ifix_dt,new_vis,iDNS,
      +         ispray,icouple,iTcouple,iHcouple,ievap
@@ -12004,11 +12061,14 @@ c      brc_r = 4*(nnz+2)*3*2 !Brian 7/14/14
      +         tnumpart,rhow,part_grav,
      +         Cpp,Mw,Ms,Ru,Gam,Ion,Os,Sal,
      +         radius_init,radius_mass,delta_vis,
-     +         grav, t00,fcor
+     +         grav, t00,fcor,
+     +         vp_init,Tp_init,qf_init
 
 
       !params.in contains namelists to read
-      open(12, file="params.in", status="old")
+      !open(12, file="./params.in", status="old")
+      call get_command_argument(1,params_dir)
+      open(12,file=params_dir,status="old")
 
       read(12,nml=step_params)
       if (myid==0) print step_params

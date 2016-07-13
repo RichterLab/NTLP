@@ -12,3 +12,9 @@ cd build
 cmake ..
 make
 ```
+
+## SETUP AND RUNNING
+To run, make a directory ("case1" or something) where les.run and params.in will go
+(i.e., not out of the same directory as les.F)
+Make sure all paths in these directories point to the proper locations
+
