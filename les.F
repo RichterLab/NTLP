@@ -5949,7 +5949,8 @@ c           u(ix,iy,iz) = ug(iz) - ugal
          endif
          do iy=iys,iye
          do ix=1,nnx
-            !t(ix,iy,2,iz) = 0.  !For now just set the initial humidity field to zero
+            t(ix,iy,1,iz) = t_lower
+            t(ix,iy,2,iz) = 0.  !For now just set the initial humidity field to zero
             w(ix,iy,iz)   = 0.
             r1(ix,iy,iz)  = 0.
             r2(ix,iy,iz)  = 0.
