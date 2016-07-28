@@ -5541,8 +5541,8 @@ c
             z(iz) = dz*float(iz) + zwstrt
          enddo
       else
-        call vgrid(zw1,zi,zl,nnz,z(0),l_root,l_debug)
-        !call vgrid_channel(zw1,zi,zl,nnz,z(0),l_root,l_debug)
+        !call vgrid(zw1,zi,zl,nnz,z(0),l_root,l_debug)
+        call vgrid_channel(zw1,zi,zl,nnz,z(0),l_root,l_debug)
       endif
 c
       call get_dz
