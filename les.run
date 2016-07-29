@@ -1,18 +1,18 @@
 #!/bin/bash
 
-#$ -M YOUR EMAIL ADDRESS
+#$ -M drichte2@nd.edu
 #$ -m n
 #$ -pe mpi-16 64
 #$ -q *@@richter,*@@ivybridge
-#$ -N tutorial
+#$ -N prof1
 #$ -j y
 
-case=case1
+case=prof1
 time=0000000
 runout=$case.out.$time
 
-datadir=/scratch365/YOUR_NDID/tutorial/$case
-homedir=~/tutorial/$case
+datadir=/scratch365/drichte2/profiles/$case
+homedir=~Research/profiles/$case
 
 cd $homedir
 

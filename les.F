@@ -21,7 +21,7 @@ c
 
       !Boundary conditions and other parameters
       real :: Uo, Ttop(nscl), Tbot(nscl),qstar(nscl),tsfcc(nscl)
-      real :: grav,t00,fcor,zi,zl,xl,yl,zw1
+      real :: grav,t00,fcor,zi,zl,xl,yl,zw1,dpdx
       integer :: isfc(nscl)
 c     
 c     ------------ leave following definitions as is
@@ -2056,7 +2056,7 @@ c
          !Instead of geostrophic wind (which is a pressure gradient)
          !make u_geo and v_geo equal to my pressure gradient:
 
-         u_geo = 0.0
+         u_geo = -dpdx
          v_geo = 0.0
 
 c
@@ -3387,7 +3387,8 @@ c ------------ initialize u, v, w, t and derivatives at izp1
 c
       do iy=iys,iye
       do ix=1,nnx
-         u(ix,iy,izp1)  = 2.0*Uo-u(ix,iy,iz)
+!        u(ix,iy,izp1)  = 2.0*Uo-u(ix,iy,iz)
+         u(ix,iy,izp1) = u(ix,iy,iz)  !Open channel has no-flux at top
          v(ix,iy,izp1)  = -v(ix,iy,iz) 
          w(ix,iy,izp1)  = 0.0 
          r3(ix,iy,izp1) = 0.0
@@ -3407,7 +3408,24 @@ c                 = 1, specified surface temperature (Ttop)
 
 !NOTE: sign convention is that wtsfc is flux upwards INTO domain (not just in vertical direction)
 
-      do iscl=1,nscl
+!      do iscl=1,nscl
+!         do iy=iys,iye
+!         do ix=1,nnx
+!            if (isfc(iscl)==1) then
+!            t(ix,iy,iscl,izp1) = 2.0*Ttop(iscl)-t(ix,iy,iscl,iz) 
+!            end if
+!            if (isfc(iscl)==0) then 
+!            flux = dzu(izp1)*wtsfc(iscl)/vis_s(ix,iy,iscl,izp1)
+!            t(ix,iy,iscl,izp1) = t(ix,iy,iscl,iz)      
+!     +       - flux 
+!            end if
+!         enddo
+!         enddo
+!      enddo
+
+
+      !For temperature, set BC as normal
+      iscl=1
          do iy=iys,iye
          do ix=1,nnx
             if (isfc(iscl)==1) then
@@ -3420,7 +3438,16 @@ c                 = 1, specified surface temperature (Ttop)
             end if
          enddo
          enddo
-      enddo
+
+      !For scalar, set upper BC as no-flux regardless of isfc
+      iscl=2
+         do iy=iys,iye
+         do ix=1,nnx
+            flux = dzu(izp1)*qstar(iscl)/vis_s(ix,iy,iscl,izp1)
+            t(ix,iy,iscl,izp1) = t(ix,iy,iscl,iz)      
+     +       - flux 
+         enddo
+         enddo
 
       end subroutine upper_dns
       subroutine lower_free(it)
@@ -5469,10 +5496,10 @@ c
          RHB = Tbot(2)/100.0
 
          !Convert RH given in input file into specific humidity
-         Ttop(2) =  RHT*Mw/Ru/Ttop(1)*610.94*
-     +               EXP(17.6257*topC/(topC+243.04))/rhoa
-         Tbot(2) =  RHB*Mw/Ru/Tbot(1)*610.94*
-     +               EXP(17.6257*botC/(botC+243.04))/rhoa
+!         Ttop(2) =  RHT*Mw/Ru/Ttop(1)*610.94*
+!     +               EXP(17.6257*topC/(topC+243.04))/rhoa
+!         Tbot(2) =  RHB*Mw/Ru/Tbot(1)*610.94*
+!     +               EXP(17.6257*botC/(botC+243.04))/rhoa
 
          wtsfc(1) = qstar(1)
          wtsfc(2) = qstar(2)
@@ -5541,8 +5568,9 @@ c
             z(iz) = dz*float(iz) + zwstrt
          enddo
       else
-        call vgrid(zw1,zi,zl,nnz,z(0),l_root,l_debug)
+        !call vgrid(zw1,zi,zl,nnz,z(0),l_root,l_debug)
         !call vgrid_channel(zw1,zi,zl,nnz,z(0),l_root,l_debug)
+         call vgrid_channel_fstrm(zw1,zi,zl,nnz,z(0),l_root,l_debug)
       endif
 c
       call get_dz
@@ -5805,6 +5833,86 @@ c
 c
       return
       end subroutine vgrid_channel
+      subroutine vgrid_channel_fstrm(z1,zi,zl,nnz,z,l_root,ldebug)
+c
+      real z(0:nnz+1)
+      real s(0:2*nnz+1)
+      integer :: zidx
+      logical l_root, l_debug
+c      
+                nnz = 2.0*nnz
+                zi = 2.0*zi
+                zl = 2.0*zl
+c
+c ----------------- build grid up to zi first
+c
+      z_frst = z1
+      z_cntr = zi*0.5
+      n_pbl  = nnz
+c     n_pbl  = (5*nnz)/8
+      z_fac1 = z_cntr/z_frst
+      z_fac2 = 1.0/float(n_pbl/2)
+      z_fac  = 1.1
+      knt = 0
+      tol = 0.00001
+   10 continue
+        knt = knt + 1
+        z_facn = (z_fac1*(z_fac - 1.0) + 1.0)**z_fac2
+        test   = abs(1.0 - z_facn/z_fac)
+        if(knt .gt. 50) then
+            if(l_root) write(6,9000) z_fac, z_facn, knt
+ 9000       format(' Cannot find stretching factor',/,
+     +             ' z_fac = ',e15.6,' z_facn = ',e15.6,' knt = ',i3)
+            stop
+        endif
+        z_fac = z_facn
+        if(test .gt. tol) go to 10
+      if(l_root) write(6,9100) z_fac, z_cntr, z1, knt
+ 9100 format(' Stretching factor = ',e15.6,/,
+     +       ' Match point       = ',e15.6,/,
+     +       ' First z           = ',e15.6,/,
+     +       ' Number of iters   = ',i4)
+      s(1) = z_frst
+      do iz=2,n_pbl/2-1
+         s(iz) = z_frst*(z_fac**(float(iz)) - 1.0)/(z_fac - 1.0)
+      enddo
+      s(n_pbl/2) = z_cntr
+      do iz=1,n_pbl/2 - 1
+         s(n_pbl-iz) = zi - s(iz)
+      enddo
+      s(n_pbl) = zi
+      s(0)   = 0.0
+c
+      if(l_root) write(6,5300) n_pbl
+ 5300 format(' n_pbl = ',i4)
+c
+c -------------- build grid from zi on up
+!     For the channel, zi represents the channel centerline
+!     Want the mesh to be a mirror image across this:
+c
+!      zidx = 1
+!      do iz=n_pbl+1,nnz
+!         z(iz) = zi + (zi - z(n_pbl-zidx))
+!         zidx = zidx + 1
+!      enddo
+      s(nnz+1) = s(nnz) + (s(nnz) - s(nnz-1))
+
+                nnz=nnz/2.0
+                zi = zi/2.0
+                zl = zl/2.0
+                
+                do iz=0,nnz
+                        z(iz)=s(iz)
+                enddo
+                 z(nnz+1) = z(nnz) + (z(nnz) - z(nnz-1))
+c
+!               do iz=0,nnz+1
+!               print*,'n = ',iz,'z = ',z(iz)
+!               enddo                 
+c
+      return
+      end subroutine vgrid_channel_fstrm
+
       subroutine get_dz
 c
 c --------------- compute spacing for given vertical
@@ -10108,120 +10216,122 @@ c
       !t_f = mpi_wtime()
       !if (myid==5) write(*,*) 'time cpl: ', t_f - t_s
 
+
+!CAREFUL: FOR SPEED PURPOSES DHR COMMENTED THESE OUT FOR PROFILE CASES 7/29/16
  
       !Finally, now that coupling and statistics arrays are filled, 
       !Transpose them back to align with the velocities:
-      call ztox_trans(partsrc_t(0:nnz+1,iys:iye,mxs:mxe,1),
-     +                partsrc(1:nnx,iys:iye,izs-1:ize+1,1),nnx,nnz,mxs,
-     +                mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
-     +                ncpu_s,numprocs)
-      call ztox_trans(partsrc_t(0:nnz+1,iys:iye,mxs:mxe,2),
-     +                partsrc(1:nnx,iys:iye,izs-1:ize+1,2),nnx,nnz,mxs,
-     +                mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
-     +                ncpu_s,numprocs)
-      call ztox_trans(partsrc_t(0:nnz+1,iys:iye,mxs:mxe,3),
-     +                partsrc(1:nnx,iys:iye,izs-1:ize+1,3),nnx,nnz,mxs,
-     +                mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
-     +                ncpu_s,numprocs)
-      call ztox_trans(partTsrc_t(0:nnz+1,iys:iye,mxs:mxe),
-     +                partTsrc(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,mxs,
-     +                mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
-     +                ncpu_s,numprocs)
-      call ztox_trans(partHsrc_t(0:nnz+1,iys:iye,mxs:mxe),
-     +                partHsrc(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,mxs,
-     +                mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
-     +                ncpu_s,numprocs)
-
-      call ztox_trans(partTEsrc_t(0:nnz+1,iys:iye,mxs:mxe),
-     +                partTEsrc(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,mxs,
-     +                mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
-     +                ncpu_s,numprocs)
+!      call ztox_trans(partsrc_t(0:nnz+1,iys:iye,mxs:mxe,1),
+!     +                partsrc(1:nnx,iys:iye,izs-1:ize+1,1),nnx,nnz,mxs,
+!     +                mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
+!     +                ncpu_s,numprocs)
+!      call ztox_trans(partsrc_t(0:nnz+1,iys:iye,mxs:mxe,2),
+!     +                partsrc(1:nnx,iys:iye,izs-1:ize+1,2),nnx,nnz,mxs,
+!     +                mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
+!     +                ncpu_s,numprocs)
+!      call ztox_trans(partsrc_t(0:nnz+1,iys:iye,mxs:mxe,3),
+!     +                partsrc(1:nnx,iys:iye,izs-1:ize+1,3),nnx,nnz,mxs,
+!     +                mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
+!     +                ncpu_s,numprocs)
+!      call ztox_trans(partTsrc_t(0:nnz+1,iys:iye,mxs:mxe),
+!     +                partTsrc(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,mxs,
+!     +                mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
+!     +                ncpu_s,numprocs)
+!      call ztox_trans(partHsrc_t(0:nnz+1,iys:iye,mxs:mxe),
+!     +                partHsrc(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,mxs,
+!     +                mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
+!     +                ncpu_s,numprocs)
+!
+!      call ztox_trans(partTEsrc_t(0:nnz+1,iys:iye,mxs:mxe),
+!     +                partTEsrc(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,mxs,
+!     +                mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
+!     +                ncpu_s,numprocs)
 
 
       !Try only calling these when the history data is being written:
       if(mtrans  .and. istage .eq. 3) then
-      call ztox_trans(upwp_t(0:nnz+1,iys:iye,mxs:mxe),
-     +                upwp(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,mxs,
-     +                mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
-     +                ncpu_s,numprocs)
-
-      call ztox_trans(vpsum_t(0:nnz+1,iys:iye,mxs:mxe,1),
-     +                vpsum(1:nnx,iys:iye,izs-1:ize+1,1),nnx,nnz,mxs,
-     +                mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
-     +                ncpu_s,numprocs)
-      call ztox_trans(vpsum_t(0:nnz+1,iys:iye,mxs:mxe,2),
-     +                vpsum(1:nnx,iys:iye,izs-1:ize+1,2),nnx,nnz,mxs,
-     +                mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
-     +                ncpu_s,numprocs)
-      call ztox_trans(vpsum_t(0:nnz+1,iys:iye,mxs:mxe,3),
-     +                vpsum(1:nnx,iys:iye,izs-1:ize+1,3),nnx,nnz,mxs,
-     +                mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
-     +                ncpu_s,numprocs)
-
-      call ztox_trans(vpsqrsum_t(0:nnz+1,iys:iye,mxs:mxe,1),
-     +                vpsqrsum(1:nnx,iys:iye,izs-1:ize+1,1),nnx,nnz,mxs,
-     +                mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
-     +                ncpu_s,numprocs)
-      call ztox_trans(vpsqrsum_t(0:nnz+1,iys:iye,mxs:mxe,2),
-     +                vpsqrsum(1:nnx,iys:iye,izs-1:ize+1,2),nnx,nnz,mxs,
-     +                mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
-     +                ncpu_s,numprocs)
-      call ztox_trans(vpsqrsum_t(0:nnz+1,iys:iye,mxs:mxe,3),
-     +                vpsqrsum(1:nnx,iys:iye,izs-1:ize+1,3),nnx,nnz,mxs,
-     +                mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
-     +                ncpu_s,numprocs)
-
-      call ztox_trans(Tpsum_t(0:nnz+1,iys:iye,mxs:mxe),
-     +                Tpsum(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,mxs,
-     +                mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
-     +                ncpu_s,numprocs)
-      call ztox_trans(Tpsqrsum_t(0:nnz+1,iys:iye,mxs:mxe),
-     +                Tpsqrsum(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,mxs,
-     +                mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
-     +                ncpu_s,numprocs)
-      call ztox_trans(Tfsum_t(0:nnz+1,iys:iye,mxs:mxe),
-     +                Tfsum(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,mxs,
-     +                mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
-     +                ncpu_s,numprocs)
-      call ztox_trans(qfsum_t(0:nnz+1,iys:iye,mxs:mxe),
-     +                qfsum(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,mxs,
-     +                mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
-     +                ncpu_s,numprocs)
-      call ztox_trans(wpTpsum_t(0:nnz+1,iys:iye,mxs:mxe),
-     +                wpTpsum(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,mxs,
-     +                mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
-     +                ncpu_s,numprocs)
+!      call ztox_trans(upwp_t(0:nnz+1,iys:iye,mxs:mxe),
+!     +                upwp(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,mxs,
+!     +                mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
+!     +                ncpu_s,numprocs)
+!
+!      call ztox_trans(vpsum_t(0:nnz+1,iys:iye,mxs:mxe,1),
+!     +                vpsum(1:nnx,iys:iye,izs-1:ize+1,1),nnx,nnz,mxs,
+!     +                mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
+!     +                ncpu_s,numprocs)
+!      call ztox_trans(vpsum_t(0:nnz+1,iys:iye,mxs:mxe,2),
+!     +                vpsum(1:nnx,iys:iye,izs-1:ize+1,2),nnx,nnz,mxs,
+!     +                mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
+!     +                ncpu_s,numprocs)
+!      call ztox_trans(vpsum_t(0:nnz+1,iys:iye,mxs:mxe,3),
+!     +                vpsum(1:nnx,iys:iye,izs-1:ize+1,3),nnx,nnz,mxs,
+!     +                mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
+!     +                ncpu_s,numprocs)
+!
+!      call ztox_trans(vpsqrsum_t(0:nnz+1,iys:iye,mxs:mxe,1),
+!     +                vpsqrsum(1:nnx,iys:iye,izs-1:ize+1,1),nnx,nnz,mxs,
+!     +                mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
+!     +                ncpu_s,numprocs)
+!      call ztox_trans(vpsqrsum_t(0:nnz+1,iys:iye,mxs:mxe,2),
+!     +                vpsqrsum(1:nnx,iys:iye,izs-1:ize+1,2),nnx,nnz,mxs,
+!     +                mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
+!     +                ncpu_s,numprocs)
+!      call ztox_trans(vpsqrsum_t(0:nnz+1,iys:iye,mxs:mxe,3),
+!     +                vpsqrsum(1:nnx,iys:iye,izs-1:ize+1,3),nnx,nnz,mxs,
+!     +                mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
+!     +                ncpu_s,numprocs)
+!
+!      call ztox_trans(Tpsum_t(0:nnz+1,iys:iye,mxs:mxe),
+!     +                Tpsum(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,mxs,
+!     +                mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
+!     +                ncpu_s,numprocs)
+!      call ztox_trans(Tpsqrsum_t(0:nnz+1,iys:iye,mxs:mxe),
+!     +                Tpsqrsum(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,mxs,
+!     +                mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
+!     +                ncpu_s,numprocs)
+!      call ztox_trans(Tfsum_t(0:nnz+1,iys:iye,mxs:mxe),
+!     +                Tfsum(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,mxs,
+!     +                mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
+!     +                ncpu_s,numprocs)
+!      call ztox_trans(qfsum_t(0:nnz+1,iys:iye,mxs:mxe),
+!     +                qfsum(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,mxs,
+!     +                mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
+!     +                ncpu_s,numprocs)
+!      call ztox_trans(wpTpsum_t(0:nnz+1,iys:iye,mxs:mxe),
+!     +                wpTpsum(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,mxs,
+!     +                mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
+!     +                ncpu_s,numprocs)
 
       call ztox_trans(partcount_t(0:nnz+1,iys:iye,mxs:mxe),
      +                partcount(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,mxs,
      +                mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
      +                ncpu_s,numprocs)
 
-      call ztox_trans(radsum_t(0:nnz+1,iys:iye,mxs:mxe),
-     +                radsum(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,mxs,
-     +                mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
-     +                ncpu_s,numprocs)
-
-      call ztox_trans(rad2sum_t(0:nnz+1,iys:iye,mxs:mxe),
-     +                rad2sum(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,mxs,
-     +                mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
-     +                ncpu_s,numprocs) 
-
-      call ztox_trans(mpsum_t(0:nnz+1,iys:iye,mxs:mxe),
-     +                mpsum(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,mxs,
-     +                mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
-     +                ncpu_s,numprocs)
-
-      call ztox_trans(mwsum_t(0:nnz+1,iys:iye,mxs:mxe),
-     +                mwsum(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,mxs,
-     +                mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
-     +                ncpu_s,numprocs)
-
-      call ztox_trans(qstarsum_t(0:nnz+1,iys:iye,mxs:mxe),
-     +                qstarsum(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,mxs,
-     +                mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
-     +                ncpu_s,numprocs)
-
+!      call ztox_trans(radsum_t(0:nnz+1,iys:iye,mxs:mxe),
+!     +                radsum(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,mxs,
+!     +                mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
+!     +                ncpu_s,numprocs)
+!
+!      call ztox_trans(rad2sum_t(0:nnz+1,iys:iye,mxs:mxe),
+!     +                rad2sum(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,mxs,
+!     +                mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
+!     +                ncpu_s,numprocs) 
+!
+!      call ztox_trans(mpsum_t(0:nnz+1,iys:iye,mxs:mxe),
+!     +                mpsum(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,mxs,
+!     +                mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
+!     +                ncpu_s,numprocs)
+!
+!      call ztox_trans(mwsum_t(0:nnz+1,iys:iye,mxs:mxe),
+!     +                mwsum(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,mxs,
+!     +                mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
+!     +                ncpu_s,numprocs)
+!
+!      call ztox_trans(qstarsum_t(0:nnz+1,iys:iye,mxs:mxe),
+!     +                qstarsum(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,mxs,
+!     +                mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
+!     +                ncpu_s,numprocs)
+!
       end if
 
 
@@ -10327,7 +10437,7 @@ c
       !perfectly elastic collisions on top, bottom walls
       !i.e. location is reflected, w-velocity is negated
 
-      top = zl - delta_vis!part%radius
+      top = zl- part%radius
       bot = 0.0 + delta_vis!part%radius
 
       if (part%xp(3) .GT. top) then
@@ -12045,7 +12155,7 @@ c      brc_r = 4*(nnz+2)*3*2 !Brian 7/14/14
      +                       itstr,it_his,it_viz,i_viz,itn
 
       namelist /grid_params/ ncpu_s, Uo, Ttop, Tbot,
-     +         qstar, tsfcc,
+     +         qstar, tsfcc, dpdx,
      +         zi, zl, xl, yl, zw1
 
       namelist /path_names/ path_seed,path_part,path_res,
