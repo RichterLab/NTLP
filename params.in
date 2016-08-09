@@ -2,7 +2,7 @@
 !Time step information
 &step_params
 iti=0
-itmax=50000
+itmax=10
 imean=100
 ihst=10
 itape=5000
@@ -25,6 +25,7 @@ icouple=0
 iTcouple=0
 iHcouple=0  !iHcouple also controls TE couple
 ievap=0
+iBrownian=1
 /
 
 !Grid and domain parameters
