@@ -102,6 +102,7 @@ c     ----------------------------------------------------------------------
       real, allocatable :: partHsrc(:,:,:),partHsrc_t(:,:,:) 
       real, allocatable :: partTEsrc(:,:,:),partTEsrc_t(:,:,:) 
       real, allocatable :: partcount_t(:,:,:),partsrc_t(:,:,:,:)
+      real, allocatable :: partcountU_t(:,:,:),partcountU(:,:,:)
       real, allocatable :: vpsum_t(:,:,:,:),vpsqrsum_t(:,:,:,:)
       real, allocatable :: upwp_t(:,:,:),upwp(:,:,:)
       real, allocatable :: partcount(:,:,:),partsrc(:,:,:,:)
@@ -119,9 +120,9 @@ c     ----------------------------------------------------------------------
 
       integer :: particletype,pad_diff
       integer :: numpart,tnumpart,ngidx,Ntarget
-      integer :: num_reintro,tot_reintro
+      integer :: num_reintro,tot_reintro,num_killed
       integer :: iseed
-      real :: Rep_avg,part_grav,zpart
+      real :: Rep_avg,part_grav,zpart,ws
       real :: vp_init(3),Tp_init,qf_init
 
       real :: radius_init,radius_mass,rhow,nuf 
@@ -262,7 +263,7 @@ c ----------------------------------------------------------------------
      +           t_wp(maxnz), t_tau(maxnz),
      +           t_tran(maxnz), t_buoy(maxnz),
      +           t_diss(maxnz), t_sprod(maxnz),
-     +           zconc(maxnz),
+     +           zconc(maxnz),zconc_U(maxnz),
      +           vp1mean(maxnz),vp2mean(maxnz),vp3mean(maxnz),
      +           vp1msqr(maxnz),vp2msqr(maxnz),vp3msqr(maxnz),
      +           m1src(maxnz),m2src(maxnz),m3src(maxnz),
@@ -304,7 +305,7 @@ c ----------------------------------------------------------------------
      +           wps(:), tps(:,:), t_rprod(:), t_wq(:),
      +           t_wp(:), t_tau(:), t_tran(:), t_buoy(:),
      +           t_diss(:), t_sprod(:),
-     +           zconc(:),
+     +           zconc(:),zconc_U(:),
      +           vp1mean(:),vp2mean(:),vp3mean(:),
      +           vp1msqr(:),vp2msqr(:),vp3msqr(:),
      +           m1src(:),m2src(:),m3src(:),
@@ -381,6 +382,7 @@ c
              t_diss  => c_s%t_diss   ; isize = isize + size(t_diss)
              t_sprod => c_s%t_sprod  ; isize = isize + size(t_sprod)
              zconc   => c_s%zconc    ; isize = isize + size(zconc)
+             zconc_U => c_s%zconc_U  ; isize = isize + size(zconc_U)
              vp1mean  => c_s%vp1mean ; isize = isize + size(vp1mean)
              vp2mean  => c_s%vp2mean ; isize = isize + size(vp2mean)
              vp3mean  => c_s%vp3mean ; isize = isize + size(vp3mean)
@@ -2732,6 +2734,37 @@ c
 c -------- end monotone if block
 c
       endif
+
+      if (iscl==2) then   !Adding vertical advection to the 2nd scalar
+
+      if (iz==nnz) then  !Must make sure that we have zero flux at top!
+      do iy=iys,iye
+      do ix=1,nnx
+         theta_l = weit3*t(ix,iy,iscl,iz) +
+     +                weit4*t(ix,iy,iscl,izm1)
+         r4(ix,iy,iscl,iz) = r4(ix,iy,iscl,iz)
+     +     + ws*(0.0 - theta_l)*dzw_i(iz)
+      enddo
+      enddo
+
+      else 
+
+      do iy=iys,iye
+      do ix=1,nnx
+         theta_u = weit1*t(ix,iy,iscl,iz) +
+     +                weit*t(ix,iy,iscl,izp1)
+         theta_l = weit3*t(ix,iy,iscl,iz) +
+     +                weit4*t(ix,iy,iscl,izm1)
+         r4(ix,iy,iscl,iz) = r4(ix,iy,iscl,iz)
+     +     + ws*(theta_u - theta_l)*dzw_i(iz)
+      enddo
+      enddo
+
+      end if
+      end if
+
+
+
 c
 c -------- save SGS fluxes for printout, gather sums on exit
 c
@@ -3441,7 +3474,7 @@ c                 = 1, specified surface temperature (Ttop)
       iscl=2
          do iy=iys,iye
          do ix=1,nnx
-            flux = dzu(izp1)*qstar(iscl)/vis_s(ix,iy,iscl,izp1)
+            flux = 0.0
             t(ix,iy,iscl,izp1) = t(ix,iy,iscl,iz)      
      +       - flux 
          enddo
@@ -5966,6 +5999,8 @@ c
       !Initialize partcount to 0:
       partcount = 0.0
       partcount_t = 0.0
+      partcountU = 0.0
+      partcountU_t = 0.0
       vpsum = 0.0
       vpsum_t = 0.0
       vpsqrsum = 0.0
@@ -7221,6 +7256,7 @@ c
          stat(iz,32) = stat(iz,32) + partHsrc(ix,iy,iz)
          stat(iz,33) = stat(iz,33) + partTEsrc(ix,iy,iz)
          stat(iz,34) = stat(iz,34) + qstarsum(ix,iy,iz)
+         stat(iz,35) = stat(iz,35) + partcountU(ix,iy,iz)
       enddo
       enddo
 c
@@ -7303,6 +7339,7 @@ c
       uwle(iz)   = stat(iz,9)*fnxy
       vwle(iz)   = stat(iz,10)*fnxy
       zconc(iz)  = stat(iz,11)/xl/yl/dzw(iz)
+      zconc_U(iz)  = stat(iz,35)/xl/yl/(zl/nnz)
       vp1mean(iz) = stat(iz,12)/stat(iz,11)
       vp2mean(iz) = stat(iz,13)/stat(iz,11)
       vp3mean(iz) = stat(iz,14)/stat(iz,11)
@@ -8145,6 +8182,8 @@ c     +         Text(0:nnz+1,iys-2:iye+3,mxs-2:mxe+3))
       !NOTE: allocate even if ispray == 0, since it's in xy_stats
       allocate(partcount(nnx,iys:iye,izs-1:ize+1))
       allocate(partcount_t(0:nnz+1,iys:iye,mxs:mxe))
+      allocate(partcountU(nnx,iys:iye,izs-1:ize+1))
+      allocate(partcountU_t(0:nnz+1,iys:iye,mxs:mxe))
       allocate(upwp_t(0:nnz+1,iys:iye,mxs:mxe))
       allocate(upwp(nnx,iys:iye,izs-1:ize+1))
       allocate(vpsum(nnx,iys:iye,izs-1:ize+1,1:3))
@@ -10070,6 +10109,7 @@ c
       !if (myid==5) write(*,*) 'time fill_ext:',t_f-t_s
 
       partcount_t = 0.0
+      partcountU_t = 0.0
       vpsum_t = 0.0
       upwp_t = 0.0
       vpsqrsum_t = 0.0
@@ -10176,6 +10216,7 @@ c
 
 
       !Enforce nonperiodic bcs (either elastic or destroying particles)
+      num_killed = 0
       call particle_bcs_nonperiodic
 
 
@@ -10288,6 +10329,11 @@ c
      +                mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
      +                ncpu_s,numprocs)
 
+      call ztox_trans(partcountU_t(0:nnz+1,iys:iye,mxs:mxe),
+     +                partcountU(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,mxs,
+     +                mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
+     +                ncpu_s,numprocs)
+
 !      call ztox_trans(radsum_t(0:nnz+1,iys:iye,mxs:mxe),
 !     +                radsum(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,mxs,
 !     +                mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
@@ -10387,6 +10433,7 @@ c
       !if (myid==5) write(*,*) 'time fill_ext:',t_f-t_s
 
       partcount_t = 0.0
+      partcountU_t = 0.0
       vpsum_t = 0.0
       upwp_t = 0.0
       vpsqrsum_t = 0.0
@@ -10412,7 +10459,12 @@ c
       part => first_particle
       do while (associated(part))     
          !First, interpolate to get the fluid velocity part%uf(1:3):
+
+         if (part%xp(3) .gt. 0.0) then
          call uf_interp     
+         else
+         part%uf(1:3) = 0.0
+         end if
 
 
          !Now advance the particle and position via RK3 (same as velocity)
@@ -10450,7 +10502,9 @@ c
          part%qstar = Mw/Ru*estar/part%Tp/rhoa
 
   
-         part%vp(1:3) = part%uf  !For now particles are passive tracers
+         !part%vp(1:3) = part%uf - g(1:3)/taup_i  !For now particles are passive tracers with no inertia
+         part%vp(1:3) = part%uf(1:3) !For now particles are passive tracers with no inertia
+         part%vp(3) = part%vp(3)-ws
          part%xrhs(1:3) = part%vp(1:3)
 
  
@@ -10482,7 +10536,8 @@ c
          part%Tp = part%Tp + dt*part%Tprhs_L
          part%radius = part%radius + dt*part%radrhs
 
-         part%vp(1:3) = part%uf  !For now particles are passive tracers
+         part%vp(1:3) = part%uf(1:3) !For now particles are passive tracers with no inertia
+         part%vp(3) = part%vp(3)-ws
 
         part => part%next
       end do
@@ -10490,8 +10545,8 @@ c
 
 
       !Enforce nonperiodic bcs (either elastic or destroying particles)
+      num_killed = 0
       call particle_bcs_nonperiodic
-
 
       !Check to see if particles left processor
       !If they did, remove from one list and add to another
@@ -10601,6 +10656,12 @@ c
      +                mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
      +                ncpu_s,numprocs)
 
+      call ztox_trans(partcountU_t(0:nnz+1,iys:iye,mxs:mxe),
+     +                partcountU(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,mxs,
+     +                mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
+     +                ncpu_s,numprocs)
+
+!      call ztox_trans(radsum_t(0:nnz+1,iys:iye,mxs:mxe),
 !      call ztox_trans(radsum_t(0:nnz+1,iys:iye,mxs:mxe),
 !     +                radsum(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,mxs,
 !     +                mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
@@ -10722,7 +10783,7 @@ c
       include 'mpif.h'
 
       integer :: ierr,randproc,np,tmp_reintro,istage,ix,iy,idx
-      integer :: my_partnum,tot_partnum,my_reintro
+      integer :: my_partnum,tot_partnum,my_reintro,tot_killed
       real :: xv,yv,zv,ran2,vinj
       real :: xpart(nnx),y2part(nnx),yp1,ypn,ddx
 
@@ -10733,19 +10794,13 @@ c
       !Need to compute the current number in first dz:
       
       my_partnum = 0
-!      do iy=iys,iye
-!      do ix=mxs,mxe
-!         my_partnum = my_partnum + 
-!     +   partcount_t(1,iy,ix) + partcount_t(2,iy,ix)  !Count particles in first 2 grid cells
-!      enddo
-!      enddo
 
       part => first_particle
       do while (associated(part))
 
       zv = part%xp(3)
    
-      if ((zv .lt. zpart) .and. (zv .gt. 0.0) ) then
+      if ((zv .gt. zpart) .and. (zv .lt. 0.0) ) then
       my_partnum = my_partnum + 1
       end if
   
@@ -10756,17 +10811,19 @@ c
      +       mpi_comm_world,ierr)
 
 
+      !Base the particle BCs on the BCs of scalar 2
+      if (isfc(2) .eq. 1) then
+      !Maintain a constant number of particles in the range [zpart,0]
+
+
       tmp_reintro = Ntarget - tot_partnum
 
       if (myid==0) then
-      write(*,*) 'N below zpart, reintro:',time,tot_partnum,tmp_reintro
+      write(*,*) 'N above zpart, reintro:',time,tot_partnum,tmp_reintro
       end if
 
+      !For purposes of writing to history file
       tot_reintro = tot_reintro + tmp_reintro
-
-      !Now everyone knows how many total particles need to be
-      !reintroduced
-
 
       if (tmp_reintro .gt. 0) then  ! Must create particles to maintain Ntarget
 
@@ -10786,7 +10843,7 @@ c
 
         xv = ran2(iseed)*(xmax-xmin) + xmin
         yv = ran2(iseed)*(ymax-ymin) + ymin
-        zv = ran2(iseed)*(zpart-0.0) + 0.0
+        zv = ran2(iseed)*(0.0-zpart) + zpart
 
         call create_particle((/xv,yv,zv/),(/0.0,0.0,0.0/),Tbot(1),0.0,2)
 
@@ -10811,7 +10868,7 @@ c
       do while (associated(part))
 
       zv = part%xp(3)
-      if ((zv .lt. zpart) .and. (zv .gt. 0.0) ) then
+      if ((zv .gt. zpart) .and. (zv .lt. 0.0) ) then
          if (idx .lt. my_reintro) then
          call destroy_particle
          idx = idx + 1
@@ -10819,7 +10876,7 @@ c
          part => part%next
          end if
       else
-      part => part%next
+         part => part%next
       end if
 
       end do
@@ -10827,13 +10884,57 @@ c
         
       end if
 
+
+      elseif (isfc(2) .eq. 0) then
+
+      !Ntarget interpreted as a flux: num of particles per second
+      tmp_reintro = floor(Ntarget*dt)
+
+      !Flux is the NET upwards flux, so must add the particles that went
+      !out bottom:
+
+      call mpi_allreduce(num_killed,tot_killed,1,mpi_integer,mpi_sum,
+     +       mpi_comm_world,ierr)
+
+      tmp_reintro = tmp_reintro + tot_killed
+
+      if (myid==0) write(*,*) 'Total killed: ',tot_killed
+      if (myid==0) write(*,*) 'Constant flux adding: ',tmp_reintro
+      
+      my_reintro = tmp_reintro/numprocs
+
+      !Proc 0 gets a random proc ID, broadcasts it out:
+      if (myid==0) randproc = floor(ran2(iseed)*numprocs)
+      call mpi_bcast(randproc,1,mpi_integer,0,mpi_comm_world,ierr)
+      
+      !A random processor picks up the extra
+      if (myid==randproc) then
+          my_reintro = my_reintro + mod(tmp_reintro,numprocs)
+      end if
+
+
+      do np=1,my_reintro
+
+        xv = ran2(iseed)*(xmax-xmin) + xmin
+        yv = ran2(iseed)*(ymax-ymin) + ymin
+        !zv = ran2(iseed)*(0.0-zpart) + zpart
+        zv = 0.0 !For constant flux, put them all at bottom boundary to begin
+
+        call create_particle((/xv,yv,zv/),(/0.0,0.0,0.0/),Tbot(1),0.0,2)
+
+      end do
+
+      end if
+
+
+      !Count particles in "zpart" zone just to make sure:
       my_partnum = 0
       part => first_particle
       do while (associated(part))
 
       zv = part%xp(3)
    
-      if ((zv .lt. zpart) .and. (zv .gt. 0.0) ) then
+      if ((zv .gt. zpart) .and. (zv .lt. 0.0) ) then
       my_partnum = my_partnum + 1
       end if
   
@@ -10845,7 +10946,7 @@ c
 
 
       if (myid==0) then
-      write(*,*) 'particles below zpart:',time,tot_partnum
+      write(*,*) 'particles above zpart:',time,tot_partnum
       end if
 
       end subroutine particle_reintro      
@@ -10864,7 +10965,7 @@ c
 
 
       top = zl
-      bot = 0.0
+      bot = zpart
 
       !Reflect off the top wall
       if (part%xp(3) .GT. top) then
@@ -10872,10 +10973,14 @@ c
          part%vp(3) = -part%vp(3)
          part => part%next
 
-      !Kill particle if below
+      !Reflect particle off zpart:
       elseif (part%xp(3) .LT. bot) then
 
-         call destroy_particle
+        !part%xp(3) = bot + (bot-part%xp(3))
+        !part%vp(3) = -part%vp(3)
+        !part => part%next
+        num_killed = num_killed + 1
+        call destroy_particle
 
       else
          part => part%next
@@ -12338,6 +12443,21 @@ c      brc_r = 4*(nnz+2)*3*2 !Brian 7/14/14
 
 
       end subroutine particle_stats
+      subroutine particle_stats_U(ipt,jpt,kpt)
+      use particles
+      use pars
+      implicit none
+      integer :: i,ipt,jpt,kpt
+      real :: rhop,pi
+
+
+      pi   = 4.0*atan(1.0)
+
+
+      partcountU_t(kpt,jpt,ipt) = partcountU_t(kpt,jpt,ipt) + 1.0
+      
+
+      end subroutine particle_stats_U
       subroutine particle_coupling_update
       use particles
       use pars
@@ -12346,11 +12466,11 @@ c      brc_r = 4*(nnz+2)*3*2 !Brian 7/14/14
       implicit none
       include 'mpif.h'
       real :: wtx,wty,wtz,wtt,dV
-      real :: rhop,taup_i,partmass
+      real :: rhop,taup_i,partmass,dz_U
       real :: xv,yv,zv
       real :: ctbuf_s(nnz+2,1:iye-iys+2,6),cbbuf_r(nnz+2,1:iye-iys+2,6)
       real :: crbuf_s(nnz+2,1:mxe-mxs+1,6),clbuf_r(nnz+2,1:mxe-mxs+1,6)
-      integer :: i,j,k,ncount,ipt,jpt,kpt,kwpt
+      integer :: i,j,k,ncount,ipt,jpt,kpt,kwpt,kUpt
       integer :: istatus(mpi_status_size),ierr
       integer :: ix,iy,iz
       real :: g(3)
@@ -12366,12 +12486,21 @@ c      brc_r = 4*(nnz+2)*3*2 !Brian 7/14/14
       part => first_particle
       do while (associated(part))
 
+      ipt = floor(part%xp(1)/dx) + 1
+      jpt = floor(part%xp(2)/dy) + 1
+
+      dz_U = (zl-zpart)/nnz
+
+      kUpt = floor((part%xp(3)-zpart)/dz_U) + 1
+      call particle_stats_U(ipt,jpt,kUpt)
+
+      !Only do any of this if the particle is actually living in the domain
+      if (part%xp(3) .gt. 0.0) then
+
       !First, as done in uf_interp, must find the "leftmost" node
       !of volume where particle belongs:
       !(must repeat since now particle locations have been updated)
-     
-      ipt = floor(part%xp(1)/dx) + 1
-      jpt = floor(part%xp(2)/dy) + 1
+
       do iz=0,nnz+1
          if (zz(iz) .GT. part%xp(3)) go to 1299
       end do
@@ -12386,11 +12515,13 @@ c      brc_r = 4*(nnz+2)*3*2 !Brian 7/14/14
 
       kwpt = iz
 
+
 !---------
       !As an aside, use ipt,jpt,kwpt to update the particle numbers at each cell:
 
       !call inputs are the nodes associated with the volume that each part. lies in
       call particle_stats(ipt,jpt,kwpt)
+      
   
 !---------
 
@@ -12480,6 +12611,8 @@ c      brc_r = 4*(nnz+2)*3*2 !Brian 7/14/14
       end do
       end do
       end do
+
+      end if !If statement of whether particle is in domain
 
       part => part%next
       end do
@@ -12628,6 +12761,9 @@ c      brc_r = 4*(nnz+2)*3*2 !Brian 7/14/14
       read(12,nml=constants)
       if (myid==0) print constants
       CpaCpp = Cpa/Cpp
+      ws = part_grav*(rhow*(2*radius_init)**2/18.0/nuf/rhoa)
+
+      if (myid==0) write(*,*) 'WS = ',ws
 
 
 

@@ -2,7 +2,7 @@
 !Time step information
 &step_params
 iti=0
-itmax=10
+itmax=50000
 imean=100
 ihst=10
 itape=5000
@@ -17,8 +17,8 @@ itn = 0  !Index for "u.le.cou001" files
 &flags
 ismlt=0, ifree=0, iradup=0, iupwnd=0
 ibuoy=0, ifilt=0, itcut=1, isubs=0, ibrcl=0, iocean=0
-method=3, idebug=1, iz_space=1, ivis0=0, ifix_dt=0, new_vis=-1
-isfc = 0, 1  ! isfc = 0 sets surface flux, isfc = 1 sets surface condition
+method=3, idebug=0, iz_space=1, ivis0=0, ifix_dt=0, new_vis=-1
+isfc = 0, 0  ! isfc = 0 sets surface flux, isfc = 1 sets surface condition
 iDNS = 1
 ispray=1
 icouple=0
@@ -35,14 +35,14 @@ ncpu_s=8
 !Use for DNS:
 Uo = 0.0  !Used when top and bottom are equal and opposite in DNS of Couette flow
 Ttop(1) = 300.15, 0.0  !CAREFUL: I'VE MANUALLY CHANGED TOP SCALAR 2 CONDITION TO BE NO-FLUX
-Tbot(1) = 300.15, 1.0  !For profile cases, this is temperature (useless) and conserved scalar 
+Tbot(1) = 302.15, 1.0  !For profile cases, this is temperature (useless) and conserved scalar 
 
 dpdx = -0.381289
 
 !Use for LES:
 tsfcc = 305.15, 100.0    !Surface conditions of (temp, humidity) (used for LES) -- make sure tsfcc is gt than t00 for both isfc=0 or 1
 
-qstar = 0.0, 0.0  !Surface fluxes temp and scalar (despite isfc=1 for scalar, use this on top!)
+qstar = 0.0, 0.2  !Surface fluxes temp and scalar (despite isfc=1 for scalar, use this on top!)
 
 zi = 0.04  !This has to do with grid stretching; make equal to zl for Couette/channel
 zl = 0.04 
@@ -73,16 +73,19 @@ grav = 9.81
 t00 = 273.0 !Reference temp for buoyancy
 fcor = 0.0  !Coriolis parameter
 
+Dpart = 1.57e-5
+Sc = 1.0
 
 !Air phase:
 rhoa=1.1
 nuf=1.57e-5  !m^2/s
 Cpa=1006.0  !J/kg-K
 Pra = 0.715
-Sc = 0.615
 
 !Particles:
-tnumpart = 100000
+tnumpart = 0
+Ntarget = 100000
+zpart = 0.00013333  !Layer under which particle conc held constant
 rhow=1000.0  !kg/m^3
 part_grav = 0.0
 Cpp = 4179.0  !J/kg-K
