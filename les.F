@@ -122,7 +122,7 @@ c     ----------------------------------------------------------------------
       integer :: numpart,tnumpart,ngidx,Ntarget
       integer :: num_reintro,tot_reintro,num_killed
       integer :: iseed
-      real :: Rep_avg,part_grav,zpart,ws
+      real :: Rep_avg,part_grav,zpart,ws,dz_U
       real :: vp_init(3),Tp_init,qf_init
 
       real :: radius_init,radius_mass,rhow,nuf 
@@ -697,35 +697,25 @@ c
 c
 c --------- get rhs for all equations
 c
-      !t_s = mpi_wtime()
+      !if (it .le. 1) call comp1(istage,it)
       call comp1(istage,it)
-      !t_f = mpi_wtime()
-      !write(*,*) 'proc, comp1: ',myid,t_f-t_s
-      !call mpi_barrier(mpi_comm_world,ierr)
-      !if (myid==5) write(*,*) 'time comp1: ',t_f-t_s
+
       if(istage .eq. 1) then
          if(msave .and. l_root) call save_c(it)
       endif
 c
 c --------- solve for pressure
 c
-      !t_s = mpi_wtime()
+      !if (it .le. 1) call comp_p
       call comp_p
-      !t_f = mpi_wtime()
-      !write(*,*) 'proc, comp_p: ',myid,t_f-t_s
-      !call mpi_barrier(mpi_comm_world,ierr)
-      !if (myid==5) write(*,*) 'time comp_p: ',t_f-t_s
 c
 c --------- add pressure gradient and dealias
 c
-      !t_s = mpi_wtime()
+      !if (it .le. 1) call comp2
       call comp2
-      !t_f = mpi_wtime()
-      !!write(*,*) 'proc, comp2: ',myid,t_f-t_s
-      !call mpi_barrier(mpi_comm_world,ierr)
-      !if (myid==5) write(*,*) 'time comp2: ',t_f-t_s
+
       if(micut) then
-         call dealias
+        call dealias
       endif
 
 c      
@@ -879,7 +869,7 @@ c
 c
 c ------------- if used, change to fit your problem
 c
-        dt_new = 0.5
+        !dt_new = 0.2e-3 !Now in the input file
       else
 c
 c ------------------- new estimate of best time step
@@ -1065,9 +1055,6 @@ c ----------- a full step, at the new time
 c
       etas(4)  =  0.0
 c
-      cfl = 0.7
-      !cfl = 0.2  !For phi0.25_rho1000_r100_Mun_Tcpl
-c     cfl = 0.50
 c
       return
 c
@@ -7339,7 +7326,7 @@ c
       uwle(iz)   = stat(iz,9)*fnxy
       vwle(iz)   = stat(iz,10)*fnxy
       zconc(iz)  = stat(iz,11)/xl/yl/dzw(iz)
-      zconc_U(iz)  = stat(iz,35)/xl/yl/(zl/nnz)
+      zconc_U(iz)  = stat(iz,35)/xl/yl/dz_U
       vp1mean(iz) = stat(iz,12)/stat(iz,11)
       vp2mean(iz) = stat(iz,13)/stat(iz,11)
       vp3mean(iz) = stat(iz,14)/stat(iz,11)
@@ -10426,11 +10413,7 @@ c
       g(1:3) = (/0.0, 0.0, part_grav/)
 
       !First fill extended velocity field for interpolation
-      !t_s = mpi_wtime()
       call fill_ext 
-      !t_f = mpi_wtime()
-      !call mpi_barrier(mpi_comm_world,ierr)
-      !if (myid==5) write(*,*) 'time fill_ext:',t_f-t_s
 
       partcount_t = 0.0
       partcountU_t = 0.0
@@ -10461,7 +10444,8 @@ c
          !First, interpolate to get the fluid velocity part%uf(1:3):
 
          if (part%xp(3) .gt. 0.0) then
-         call uf_interp     
+         !call uf_interp 
+         call uf_interp_lin
          else
          part%uf(1:3) = 0.0
          end if
@@ -10965,20 +10949,21 @@ c
 
 
       top = zl
-      bot = zpart
 
       !Reflect off the top wall
       if (part%xp(3) .GT. top) then
          part%xp(3) = top - (part%xp(3)-top)
-         part%vp(3) = -part%vp(3)
-         part => part%next
+      end if
 
-      !Reflect particle off zpart:
-      elseif (part%xp(3) .LT. bot) then
+      !Reflect off the bottom of reservoir:
+      if (part%xp(3) .LT. zpart) then
+        part%xp(3) = zpart + (zpart-part%xp(3))
+      end if 
 
-        !part%xp(3) = bot + (bot-part%xp(3))
-        !part%vp(3) = -part%vp(3)
-        !part => part%next
+
+      !Now check to purge the reservoir
+      if (part%xp(3) .LT. 0.0) then
+
         num_killed = num_killed + 1
         call destroy_particle
 
@@ -11951,6 +11936,240 @@ c      brc_r = 4*(nnz+2)*3*2 !Brian 7/14/14
 
 
       end subroutine uf_interp 
+      subroutine uf_interp_lin
+      use pars
+      use particles
+      use fields
+      use con_stats
+      use con_data
+      implicit none
+       
+      integer :: ix,iy,izuv,izw,iz,i,k,j
+      integer :: first,last
+      real :: xkval,xjval,pj,dxvec(2)
+      integer :: ijpts(2,6),kuvpts(6),kwpts(6)
+      real :: wt(4,6)
+      real :: ran2
+      
+      !Following Orlando's code, get the "leftmost" node
+      !This is just the minimum (i,j,k) on the volume 
+
+      ijpts(1,3) = floor(part%xp(1)/dx) + 1 
+      ijpts(2,3) = floor(part%xp(2)/dy) + 1
+     
+      !Fill in the neighbors:
+      ijpts(1,2) = ijpts(1,3)-1
+      ijpts(1,1) = ijpts(1,2)-1
+      ijpts(1,4) = ijpts(1,3)+1
+      ijpts(1,5) = ijpts(1,4)+1
+      ijpts(1,6) = ijpts(1,5)+1
+
+      ijpts(2,2) = ijpts(2,3)-1
+      ijpts(2,1) = ijpts(2,2)-1
+      ijpts(2,4) = ijpts(2,3)+1
+      ijpts(2,5) = ijpts(2,4)+1
+      ijpts(2,6) = ijpts(2,5)+1
+     
+      !Finding the k-lhnode is different since grid may be stretched
+      !AND since (u,v) and w stored differently
+      !Will get a k-index for (u,v) and one for w
+      
+      !Do (u,v) loop first:
+      do iz=0,nnz+1
+         if (zz(iz) .GT. part%xp(3)) go to 1199
+      end do
+1199  continue
+
+      kuvpts(3) = iz-1
+      !Then fill in the rest:
+      kuvpts(4) = kuvpts(3)+1
+      kuvpts(5) = kuvpts(4)+1
+      kuvpts(6) = kuvpts(5)+1
+      kuvpts(2) = kuvpts(3)-1
+      kuvpts(1) = kuvpts(2)-1
+
+      !Do again for w:
+      do iz = 0,nnz+1 
+         if (z(iz) .GT. part%xp(3)) go to 1120
+      end do
+1120  continue
+   
+      kwpts(3) = iz-1
+      !Then fill in the rest:
+      kwpts(4) = kwpts(3)+1
+      kwpts(5) = kwpts(4)+1
+      kwpts(6) = kwpts(5)+1
+      kwpts(2) = kwpts(3)-1
+      kwpts(1) = kwpts(2)-1
+
+!---------
+!      !As an aside, use ijpts,kwpts to update the particle numbers at each cell:
+!
+!      !call inputs  are the nodes associated with the volume that each part. lies in
+!      !The +1 on kwpts is since stats are stored at uv (center) points in z
+!      call particle_stats(ijpts(1,3),ijpts(2,3),kwpts(3)+1)
+!   
+!---------
+
+      !Fill in the weights:
+      !First for x and y since they are periodic:
+      wt(1:4,1:6) = 0.0
+      dxvec(1) = dx
+      dxvec(2) = dy
+      do iz = 1,2
+      do j = 1,6
+         xjval = dxvec(iz)*(ijpts(iz,j)-1)
+         pj = 1.0
+         do k = 1,6
+            xkval = dxvec(iz)*(ijpts(iz,k)-1)
+            if (j .NE. k) then
+                  pj = pj*(part%xp(iz)-xkval)/(xjval-xkval)
+            end if
+         end do
+         wt(iz,j) = pj
+       end do
+       end do
+      
+
+!      !Enforce periodicity in x by adjusting the indices:
+!      !NOTE: doing this after having computed the weights
+!      do i=1,6
+!         if (ijpts(1,i) .LT. 1) then
+!            ijpts(1,i) = ijpts(1,i)+nnx
+!         elseif (ijpts(1,i) .GT. nnx) then
+!            ijpts(1,i) = ijpts(1,i)-nnx
+!         end if
+!      end do
+     
+       !Now compute weights in z-dir
+       !There are 2 sections: weights at (u,v) nodes (kuvpts) 
+       !And weights computed at w nodes (kwpts)
+
+       !Compute weights at kuvpts
+       !Must check to see how close we are to a top/bot boundary
+       if (kuvpts(3) == 1) then
+          first = 3
+          last = 4
+          !Set these equal to 1 so uext(-1) won't be accessed
+          !Note: the value doesn't matter since weight will be 0
+          kuvpts(1) = 1
+          kuvpts(2) = 1
+       elseif (kuvpts(3) == 0) then
+          first = 4
+          last = 5
+          kuvpts(1) = 1
+          kuvpts(2) = 1
+          kuvpts(3) = 1
+       elseif (kuvpts(3) .LT. 0) then 
+          first = 0
+          last = 0
+       elseif (kuvpts(3) == 2) then 
+          first = 3
+          last = 4
+       !Between top cell center and the domain boundary
+       elseif (kuvpts(3) == nnz) then
+          first = 2
+          last = 3
+          kuvpts(4) = nnz
+          kuvpts(5) = nnz
+          kuvpts(6) = nnz
+       elseif (kuvpts(3) .GT. nnz) then
+          first = 0
+          last = 0
+       !Between 2nd to last and last cell center at top
+       elseif (kuvpts(3) == nnz-1) then
+          first = 3
+          last = 4
+          kuvpts(5) = nnz
+          kuvpts(6) = nnz
+       elseif (kuvpts(3) == nnz-2) then
+          first = 3
+          last = 4
+       else
+          first = 3
+          last = 4
+       end if
+
+       !Recall that wt has been set to zero, so
+       !weights will be zero if (first,last) isn't (1,6)
+       do j = first,last
+           xjval = zz(kuvpts(j))
+           pj = 1.0
+           do k = first,last
+              xkval = zz(kuvpts(k))
+              if (j .NE. k) then
+                 pj = pj*(part%xp(3)-xkval)/(xjval-xkval)
+              end if
+           end do
+           wt(3,j) = pj
+      end do
+
+       !Now compute weights at kwpts
+       !Again must check to see how close we are to a top/bot boundary
+       if (kwpts(3) == 0) then
+          first = 3
+          last = 4
+       elseif (kwpts(3) .LT. 0) then 
+          first = 0
+          last = 0
+       elseif (kwpts(3) == 1) then 
+          first = 3
+          last = 4
+       elseif (kwpts(3) == nnz-1) then
+          first = 3
+          last = 4
+       elseif (kwpts(3) .GE. nnz) then
+          first = 0
+          last = 0
+       elseif (kwpts(3) == nnz-2) then
+          first = 3
+          last = 4
+       else
+          first = 3
+          last = 4
+       end if
+
+       !Recall that wt has been set to zero, so
+       !weights will be zero if (first,last) isn't (1,6)
+       do j = first,last
+           xjval = z(kwpts(j))
+           pj = 1.0
+           do k = first,last
+              xkval = z(kwpts(k))
+              if (j .NE. k) then
+                 pj = pj*(part%xp(3)-xkval)/(xjval-xkval)
+              end if
+           end do
+           wt(4,j) = pj
+      end do
+
+      !Now we have the weights - compute the velocity at xp:
+        part%uf(1:3) = 0.0
+        part%Tf = 0.0
+        part%qinf = 0.0 ! Brian 7/14/14 
+        do k = 1,6
+        do j = 1,6
+        do i = 1,6
+            ix = ijpts(1,i)
+            iy = ijpts(2,j)
+            izuv = kuvpts(k)
+            izw = kwpts(k)
+            part%uf(1) = part%uf(1)+uext(izuv,iy,ix)*wt(1,i)*
+     +                   wt(2,j)*wt(3,k) 
+            part%uf(2) = part%uf(2)+vext(izuv,iy,ix)*wt(1,i)*
+     +                   wt(2,j)*wt(3,k) 
+            part%uf(3) = part%uf(3)+wext(izw,iy,ix)*wt(1,i)*
+     +                   wt(2,j)*wt(4,k) 
+            part%Tf = part%Tf+Text(izuv,iy,ix)*wt(1,i)*
+     +                   wt(2,j)*wt(3,k)
+            part%qinf = part%qinf+T2ext(izuv,iy,ix)*wt(1,i)*
+     +                   wt(2,j)*wt(3,k)  ! Brian 7/14/14 
+         end do
+         end do 
+         end do
+
+
+      end subroutine uf_interp_lin
       subroutine particle_init
       use particles
       use pars
@@ -12466,7 +12685,7 @@ c      brc_r = 4*(nnz+2)*3*2 !Brian 7/14/14
       implicit none
       include 'mpif.h'
       real :: wtx,wty,wtz,wtt,dV
-      real :: rhop,taup_i,partmass,dz_U
+      real :: rhop,taup_i,partmass
       real :: xv,yv,zv
       real :: ctbuf_s(nnz+2,1:iye-iys+2,6),cbbuf_r(nnz+2,1:iye-iys+2,6)
       real :: crbuf_s(nnz+2,1:mxe-mxs+1,6),clbuf_r(nnz+2,1:mxe-mxs+1,6)
@@ -12489,7 +12708,6 @@ c      brc_r = 4*(nnz+2)*3*2 !Brian 7/14/14
       ipt = floor(part%xp(1)/dx) + 1
       jpt = floor(part%xp(2)/dy) + 1
 
-      dz_U = (zl-zpart)/nnz
 
       kUpt = floor((part%xp(3)-zpart)/dz_U) + 1
       call particle_stats_U(ipt,jpt,kUpt)
@@ -12721,7 +12939,7 @@ c      brc_r = 4*(nnz+2)*3*2 !Brian 7/14/14
 
       namelist /grid_params/ ncpu_s, Uo, Ttop, Tbot,
      +         qstar, tsfcc, dpdx,
-     +         zi, zl, xl, yl, zw1
+     +         zi, zl, xl, yl, zw1, dt_new, cfl
 
       namelist /path_names/ path_seed,path_part,path_res,
      +         path_sav,path_his,path_viz_xy,path_viz_xz,
@@ -12762,6 +12980,7 @@ c      brc_r = 4*(nnz+2)*3*2 !Brian 7/14/14
       if (myid==0) print constants
       CpaCpp = Cpa/Cpp
       ws = part_grav*(rhow*(2*radius_init)**2/18.0/nuf/rhoa)
+      dz_U = (zl-zpart)/maxnz
 
       if (myid==0) write(*,*) 'WS = ',ws
 
