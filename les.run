@@ -12,7 +12,7 @@ time=0000000
 runout=$case.out.$time
 
 datadir=/scratch365/drichte2/profiles/$case
-homedir=~Research/profiles/$case
+homedir=~/Research/profiles/$case
 
 cd $homedir
 

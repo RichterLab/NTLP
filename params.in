@@ -2,7 +2,7 @@
 !Time step information
 &step_params
 iti=0
-itmax=200000
+itmax=400000
 imean=100
 ihst=10
 itape=5000
@@ -31,6 +31,10 @@ iBrownian=1
 !Grid and domain parameters
 &grid_params
 ncpu_s=8
+
+!Time step:
+cfl = 0.25
+dt_new = 0.2e-3
 
 !Use for DNS:
 Uo = 0.0  !Used when top and bottom are equal and opposite in DNS of Couette flow
@@ -83,9 +87,9 @@ Cpa=1006.0  !J/kg-K
 Pra = 0.715
 
 !Particles:
-tnumpart = 100000
-Ntarget = 100000
-zpart = -0.0400
+tnumpart = 5000
+Ntarget = 5000
+zpart = -0.000313  !Layer under which particle conc held constant
 rhow=1000.0  !kg/m^3
 part_grav = 0.0
 Cpp = 4179.0  !J/kg-K
