@@ -144,7 +144,8 @@ c     ---------------------------------------------------------------------
       module fields
       real, allocatable :: 
      +     u(:,:,:), v(:,:,:), w(:,:,:), t(:,:,:,:), e(:,:,:), 
-     +     r1(:,:,:), r2(:,:,:), r3(:,:,:), r4(:,:,:,:), r5(:,:,:)
+     +     r1(:,:,:), r2(:,:,:), r3(:,:,:), r4(:,:,:,:), r5(:,:,:),
+     +     DwDt(:,:,:)
       real, allocatable :: 
      +     ux(:,:,:), uy(:,:,:), vx(:,:,:), vy(:,:,:), 
      +     wx(:,:,:), wy(:,:,:),
@@ -727,6 +728,8 @@ c
 
          if (iBrownian .eq. 0) then
             call particle_update_rk3(it,istage) 
+         else
+            call particle_update_adv_rk3(it,istage)
          endif
          
       end if
@@ -744,7 +747,8 @@ c
  8999 continue
 
       if (iBrownian .eq. 1) then
-         call particle_update_FE(it)
+         !call particle_update_FE(it)
+         call particle_update_diff(it)
       end if
      
       call get_max
@@ -1994,9 +1998,10 @@ c
       real fnt3(nnx,iys:iye), fnt4(nnx,iys:iye)
       real tau13_u(nnx,iys:iye), tau23_u(nnx,iys:iye)
       real tau13_l(nnx,iys:iye), tau23_l(nnx,iys:iye)
-      real r3_sum(1:nnz)
+      real r3_sum(1:nnz),DwDt_sum(1:nnz)
       real sfc_flx(2)
 c
+
       do iz=izs,ize
 c
       izm1 = iz - 1
@@ -2054,6 +2059,8 @@ c
          r1(ix,iy,iz) = u_adv + u_cor + u_geo
          r2(ix,iy,iz) = v_adv + v_cor + v_geo
          r3(ix,iy,iz) = w_adv + w_cor + w_buy
+         
+         DwDt(ix,iy,iz) = w_cor + w_buy
 
          !Add particle momentum coupling
          if (icouple == 1) then
@@ -2148,6 +2155,8 @@ c
      +                (w(ix,iy,izp1)-w(ix,iy,iz))*dzw_i(izp1)
          r3(ix,iy,iz) = r3(ix,iy,iz) - fnt3(ix,iy) -
      +                   (fnt2(ix,iy)-fnt4(ix,iy))*dzu_i(izp1)
+         DwDt(ix,iy,iz) = DwDt(ix,iy,iz) - fnt3(ix,iy) - 
+     +                   (fnt2(ix,iy)-fnt4(ix,iy))*dzu_i(izp1)
       enddo
       enddo
 c
@@ -2241,18 +2250,23 @@ c
      +           iys,iye,iy_s,iy_e,izs,ize,myid,ncpu_s,numprocs)
       do iz=1,nnz
          r3_sum(iz) = 0.0
+         DwDt_sum(iz) = 0.0
       enddo
       do iz=izs,ize
          do iy=iys,iye
          do ix=1,nnx
             r3(ix,iy,iz) = r3(ix,iy,iz) - fntd(ix,iy,iz)
+            DwDt(ix,iy,iz) = DwDt(ix,iy,iz) - fntd(ix,iy,iz)
             r3_sum(iz)   = r3_sum(iz) + r3(ix,iy,iz)
+            DwDt_sum(iz)   = DwDt_sum(iz) + r3(ix,iy,iz)
          enddo
          enddo
          r3_sum(iz) = r3_sum(iz)*fnxy
+         DwDt_sum(iz) = DwDt_sum(iz)*fnxy
       enddo
 c
       call mpi_sum_z(r3_sum,i_root,myid,nnz,1)
+      call mpi_sum_z(DwDt_sum,i_root,myid,nnz,1)
 c
 c ------- make sure <r3> = 0 and set r3 = 0 at top
 c
@@ -2261,12 +2275,14 @@ c
             do iy=iys,iye
             do ix=1,nnx
                r3(ix,iy,iz) = 0.0
+               DwDt(ix,iy,iz) = 0.0
             enddo
             enddo
          else
             do iy=iys,iye
             do ix=1,nnx
                r3(ix,iy,iz) = r3(ix,iy,iz) - r3_sum(iz)
+               DwDt(ix,iy,iz) = DwDt(ix,iy,iz) - DwDt_sum(iz)
             enddo
             enddo
          endif
@@ -3351,6 +3367,7 @@ c
          v(ix,iy,izm1)  = -v(ix,iy,iz) 
          w(ix,iy,izm1)  = 0.0 
          r3(ix,iy,izm1) = 0.0
+         DwDt(ix,iy,izm1) = 0.0
          e(ix,iy,izm1)  = 0.0 
          ux(ix,iy,izm1) = 0.0
          uy(ix,iy,izm1) = 0.0
@@ -3412,6 +3429,7 @@ c
          v(ix,iy,izp1)  = -v(ix,iy,iz) 
          w(ix,iy,izp1)  = 0.0 
          r3(ix,iy,izp1) = 0.0
+         DwDt(ix,iy,izp1) = 0.0
          e(ix,iy,izp1)  = 0.0 
          ux(ix,iy,izp1) = 0.0
          uy(ix,iy,izp1) = 0.0
@@ -3869,6 +3887,7 @@ c
          do iy=iys,iye
          do ix=1,nnx
             r3(ix,iy,izs-1) = fr(ix,iy,1)
+            DwDt(ix,iy,izs-1) = fr(ix,iy,1)
             w(ix,iy,izs-1)  = fr(ix,iy,2)
          enddo
          enddo
@@ -3966,11 +3985,13 @@ c
       use con_stats
       real fnt1(nnx,iys:iye,izs:ize), fnt2(nnx,iys:iye)
       real r3_sum(1:nnz)
+      real DwDt_sum(1:nnz)
       include 'mpif.h'
       integer istatus(mpi_status_size)
 c
       do iz=1,nnz
          r3_sum(iz) = 0.0
+         DwDt_sum(iz) = 0.0
       enddo
 c
 c --------- dp/dy at all z
@@ -4009,10 +4030,14 @@ c
             do ix=1,nnx
                r3(ix,iy,iz) = r3(ix,iy,iz) -
      +            (p(ix,iy,izp1)-p(ix,iy,iz))*dzu_i(izp1)
+               DwDt(ix,iy,iz) = DwDt(ix,iy,iz) -
+     +            (p(ix,iy,izp1)-p(ix,iy,iz))*dzu_i(izp1)
                r3_sum(iz) = r3_sum(iz) + r3(ix,iy,iz)
+               DwDt_sum(iz) = DwDt_sum(iz) + DwDt(ix,iy,iz)
             enddo
             enddo
             r3_sum(iz) = r3_sum(iz)*fnxy
+            DwDt_sum(iz) = DwDt_sum(iz)*fnxy
          endif
 c
 c ------------------------ time stepping with 3-order rk method
@@ -4034,6 +4059,7 @@ c
             w(ix,iy,iz)  = wbc(ix,iy,1)
             e(ix,iy,iz)  = ebc(ix,iy,1)
             r3(ix,iy,iz) = 0.0
+            DwDt(ix,iy,iz) = 0.0
             r5(ix,iy,iz) = 0.0
          enddo
          enddo
@@ -4063,11 +4089,13 @@ c
 c ---------- gather partial sums for w computation
 c
       call mpi_sum_z(r3_sum,i_root,myid,nnz,1)
+      call mpi_sum_z(DwDt_sum,i_root,myid,nnz,1)
 c
       do iz=izs,min(ize,nnz-1)
          do iy=iys,iye
          do ix=1,nnx
             r3(ix,iy,iz) = r3(ix,iy,iz) - r3_sum(iz)
+            DwDt(ix,iy,iz) = DwDt(ix,iy,iz) - DwDt_sum(iz)
             w(ix,iy,iz)  = w(ix,iy,iz) + dtgama*r3(ix,iy,iz)
          enddo
          enddo
@@ -7132,7 +7160,7 @@ c ------- indices for indexing array stat(.,.)
 c         js = number of non-scalar stats
 c         ns = number of scalar stats
 c
-      parameter(js = 36, ns = 5, nstat = js + ns*nscl)   !Brian 7/30/14  js=25->26
+      parameter(js = 37, ns = 5, nstat = js + ns*nscl)   !Brian 7/30/14  js=25->26
       real stat(1:nnz,nstat)
 c
 c -------- stat(.,1) = u*u = ups
@@ -7249,6 +7277,12 @@ c
          stat(iz,34) = stat(iz,34) + qstarsum(ix,iy,iz)
          stat(iz,35) = stat(iz,35) + partcountU(ix,iy,iz)
          stat(iz,36) = stat(iz,36) + partflux(ix,iy,iz)
+!         stat(iz,37) = stat(iz,37) + (t(ix,iy,2,iz) - txym(iz,2))*
+!     +               (0.5*(DwDt(ix,iy,iz)+DwDt(ix,iy,izp1)))
+         stat(iz,37) = stat(iz,37) + DwDt(ix,iy,iz)*
+     +               0.5*(t(ix,iy,2,iz)-txym(iz,2) +
+     +                    t(ix,iy,2,izp1)-txym(izp1,2))
+
       enddo
       enddo
 c
@@ -7364,6 +7398,10 @@ c
 
       pflux(iz) = stat(iz,36)  !Just want the total sum of +1's and -1's for particle flux
 
+      Tpdqp(iz) = stat(iz,37)*fnxy
+
+
+      
 c
 c ------------ get scalar resolved fluxes and variances
 c
@@ -7678,7 +7716,7 @@ c ------------- gather all the budget terms
 c
          trip(iz) = stat(iz,1)
          TpSq(iz) = stat(iz,2)
-         Tpdqp(iz) = stat(iz,3)
+         !Tpdqp(iz) = stat(iz,3)
       enddo
 c
       return
@@ -8153,6 +8191,8 @@ c
      +         r3(nnx,iys:iye,izs-1:ize+1),
      +         r4(nnx,iys:iye,nscl,izs-1:ize+1),
      +         r5(nnx,iys:iye,izs-1:ize+1))
+
+      allocate(DwDt(nnx,iys:iye,izs-1:ize+1))
 
 c
 c ------------- allocate extended arrays for interpolation of
@@ -10399,6 +10439,494 @@ c
       !if (myid==5) write(*,*) 'time mpi_allreduce: ', t_f - t_s
 
       end subroutine particle_update_rk3
+      subroutine particle_update_adv_rk3(it,istage)
+      use pars
+      use particles
+      use con_data
+      use con_stats
+      implicit none
+      include 'mpif.h'
+
+      integer :: istage,ierr,it
+      real :: g(3)
+      real :: denom,dtl,sigma,ttest
+      integer :: ix,iy,iz
+      real :: Rep,diff(3),diffnorm,corrfac,myRep_avg
+      real :: xtmp(3),vtmp(3),Tptmp,radiustmp
+      real :: Nup,Shp,rhop,taup_i,estar,einf
+      real :: myphip_sum,myphiw_sum,myphiv_sum,Volp      
+      real :: TfC,TpC,Lv,Eff_C,Eff_S
+      real :: t_s,t_f,t_s1,t_f1
+
+      g(1:3) = (/0.0, 0.0, part_grav/)
+
+      !First fill extended velocity field for interpolation
+      call fill_ext 
+
+      partcount_t = 0.0
+      partcountU_t = 0.0
+      vpsum_t = 0.0
+      upwp_t = 0.0
+      vpsqrsum_t = 0.0
+      Tpsum_t = 0.0
+      Tfsum_t = 0.0
+      qfsum_t = 0.0
+      radsum_t = 0.0  
+      rad2sum_t = 0.0  
+      mpsum_t = 0.0
+      mwsum_t = 0.0
+      Tpsqrsum_t = 0.0
+      wpTpsum_t = 0.0
+      myRep_avg = 0.0
+      myphip_sum = 0.0
+      myphiw_sum = 0.0
+      myphiv_sum = 0.0
+      qstarsum_t = 0.0 
+
+
+      !Loop over the linked list of particles:
+      part => first_particle
+      do while (associated(part))     
+         !First, interpolate to get the fluid velocity part%uf(1:3):
+         call uf_interp     
+
+
+         if (it .LE. 1 ) then 
+            part%vp(1:3) = part%uf
+            part%Tp = part%Tf
+         endif
+
+         !Now advance the particle and position via RK3 (same as velocity)
+        
+         !Intermediate Values
+         diff(1:3) = part%vp - part%uf
+         diffnorm = sqrt(diff(1)**2 + diff(2)**2 + diff(3)**2)
+         Rep = 2.0*part%radius*diffnorm/nuf  
+         Volp = pi2*2.0/3.0*part%radius**3
+         rhop = (m_s+Volp*rhow)/Volp
+         taup_i = 18.0*rhoa*nuf/rhop/(2.0*part%radius)**2 
+
+         myRep_avg = myRep_avg + Rep
+         corrfac = (1.0 + 0.15*Rep**(0.687))
+         myphip_sum = myphip_sum + Volp*rhop
+         myphiw_sum = myphiw_sum + Volp*rhow
+         myphiv_sum = myphiv_sum + Volp
+
+
+         !Compute Nusselt number for particle:
+         !Ranz-Marshall relation
+         Nup = 2.0 + 0.6*Rep**(1.0/2.0)*Pra**(1.0/3.0)
+         Shp = 2.0 + 0.6*Rep**(1.0/2.0)*Sc**(1.0/3.0)
+
+
+         !Mass Transfer calculations
+         TfC = part%Tf-273.15
+         einf = 610.94*EXP(17.6257*TfC/(TfC+243.04))
+         TpC = part%Tp-273.15
+         Lv =(25.0 - 0.02274*26.0)*10.0**5
+
+         Eff_C = 2.0*Mw*Gam/(Ru*rhow*part%radius*part%Tp)
+         Eff_S = Ion*Os*m_s*Mw/Ms/(Volp*rhop-m_s)
+         estar = einf*exp(Mw*Lv/Ru*(1.0/part%Tf-1.0/part%Tp)
+     +                                           +Eff_C-Eff_S)
+         part%qstar = Mw/Ru*estar/part%Tp/rhoa
+
+  
+         xtmp(1:3) = part%xp(1:3) + dt*zetas(istage)*part%xrhs(1:3)
+         vtmp(1:3) = part%vp(1:3) + dt*zetas(istage)*part%vrhs(1:3) 
+         Tptmp = part%Tp + dt*zetas(istage)*part%Tprhs_s
+         Tptmp = Tptmp + dt*zetas(istage)*part%Tprhs_L
+         radiustmp = part%radius + dt*zetas(istage)*part%radrhs
+
+         if (iInertia == 0) then
+           part%vp(1:3) = part%uf(1:3) !No inertia
+           part%vp(3) = part%vp(3)-ws
+         end if
+
+         part%xrhs(1:3) = part%vp(1:3)
+         part%vrhs(1:3) = corrfac*taup_i*(part%uf(1:3)-part%vp(1:3))
+     +                               - g(1:3)
+
+         if (ievap .EQ. 1) then      
+            part%radrhs = Shp/9.0/Sc*rhop/rhow*part%radius*
+     +                       taup_i*(part%qinf-part%qstar) !assumes qinf=rhov/rhoa rather than rhov/rhom
+         else
+            part%radrhs = 0.0
+         end if
+
+
+         part%Tprhs_s = -Nup/3.0/Pra*CpaCpp*
+     +                     rhop/rhow*taup_i*(part%Tp-part%Tf)
+         part%Tprhs_L = 3.0*Lv/Cpp/part%radius*part%radrhs
+  
+
+
+         if (istage==1) part%xp_i(1:3) = part%xp(1:3)
+         part%xp(1:3) = xtmp(1:3) + dt*gama(istage)*part%xrhs(1:3)
+         part%Tp = Tptmp + dt*gama(istage)*part%Tprhs_s
+         part%Tp = part%Tp + dt*gama(istage)*part%Tprhs_L
+         part%radius = radiustmp + dt*gama(istage)*part%radrhs
+
+         if (iInertia == 1) then
+           !If there is particle inertia:
+           part%vp(1:3) = vtmp(1:3) + dt*gama(istage)*part%vrhs(1:3)
+
+         elseif (iInertia == 0) then
+
+           !In the case of having no inertia, the new particle velocity
+           !must be set to the NEW uf:
+           if (part%xp(3) .gt. 0.0) then
+             call uf_interp 
+           else
+             part%uf(1:3) = 0.0
+           end if
+
+           part%vp(1:3) = part%uf(1:3) !For now particles are passive tracers with no inertia
+           part%vp(3) = part%vp(3)-ws
+
+         end if
+
+        part => part%next
+      end do
+
+
+      !Enforce nonperiodic bcs (either elastic or destroying particles)
+      num_killed = 0
+      call particle_bcs_nonperiodic
+
+
+      !Check to see if particles left processor
+      !If they did, remove from one list and add to another
+      call particle_exchange
+
+      !Now enforce periodic bcs 
+      !just updates x,y locations if over xl,yl or under 0
+      call particle_bcs_periodic
+
+      !Add new particles
+      if (istage == 1) tot_reintro = 0
+      call particle_reintro
+
+      !Now that particles are in their updated position, 
+      !compute their contribution to the momentum coupling:
+      !This calls particle_stats, so run even if icouple = 0
+      !call particle_coupling_update
+
+
+      !t_s = mpi_wtime
+      !Get particle count:
+      numpart = 0
+      part => first_particle
+      do while (associated(part))
+      numpart = numpart + 1
+      part => part%next
+      end do
+      !call mpi_barrier(mpi_comm_world,ierr)
+      !t_f = mpi_wtime()
+      !if (myid==5) write(*,*) 'time numpart: ', t_f - t_s
+ 
+      !t_s = mpi_wtime()
+      !Compute total number of particles
+      call mpi_allreduce(numpart,tnumpart,1,mpi_integer,mpi_sum,
+     +                   mpi_comm_world,ierr)
+      !Compute average particle Reynolds number
+      call mpi_allreduce(myRep_avg,Rep_avg,1,mpi_real8,mpi_sum,
+     +                   mpi_comm_world,ierr)
+
+      Rep_avg = Rep_avg/tnumpart
+
+      call mpi_allreduce(myphip_sum,phip,1,mpi_real8,mpi_sum,
+     +                   mpi_comm_world,ierr)
+
+      call mpi_allreduce(myphiw_sum,phiw,1,mpi_real8,mpi_sum,
+     +                   mpi_comm_world,ierr)
+
+      call mpi_allreduce(myphiv_sum,phiv,1,mpi_real8,mpi_sum,
+     +                   mpi_comm_world,ierr)
+
+      
+      phip = phip/xl/yl/zl/rhoa
+      phiw = phiw/xl/yl/zl/rhoa
+      phiv = phiv/xl/yl/zl
+
+      !call mpi_barrier(mpi_comm_world,ierr)
+      !t_f = mpi_wtime()
+      !if (myid==5) write(*,*) 'time mpi_allreduce: ', t_f - t_s
+
+      end subroutine particle_update_adv_rk3
+      subroutine particle_update_diff(it)
+      use pars
+      use particles
+      use con_data
+      use con_stats
+      implicit none
+      include 'mpif.h'
+
+      integer :: ierr,it,istage
+      real :: g(3)
+      real :: denom,dtl,sigma,ttest
+      integer :: ix,iy,iz
+      real :: Rep,diff(3),diffnorm,corrfac,myRep_avg
+      real :: xtmp(3),vtmp(3),Tptmp,radiustmp
+      real :: Nup,Shp,rhop,taup_i,estar,einf
+      real :: myphip_sum,myphiw_sum,myphiv_sum,Volp      
+      real :: TfC,TpC,Lv,Eff_C,Eff_S
+      real :: t_s,t_f,t_s1,t_f1
+      real :: xi(3),gasdev
+
+      g(1:3) = (/0.0, 0.0, part_grav/)
+
+      !First fill extended velocity field for interpolation
+      call fill_ext 
+
+      partcount_t = 0.0
+      partcountU_t = 0.0
+      partflux_t = 0.0
+      vpsum_t = 0.0
+      upwp_t = 0.0
+      vpsqrsum_t = 0.0
+      Tpsum_t = 0.0
+      Tfsum_t = 0.0
+      qfsum_t = 0.0
+      radsum_t = 0.0  
+      rad2sum_t = 0.0  
+      mpsum_t = 0.0
+      mwsum_t = 0.0
+      Tpsqrsum_t = 0.0
+      wpTpsum_t = 0.0
+      myRep_avg = 0.0
+      myphip_sum = 0.0
+      myphiw_sum = 0.0
+      myphiv_sum = 0.0
+      qstarsum_t = 0.0 
+
+      !t_s = mpi_wtime()
+
+
+      !Loop over the linked list of particles:
+      part => first_particle
+      do while (associated(part))     
+         !First, interpolate to get the fluid velocity part%uf(1:3):
+
+
+         xi(1) = gasdev(iseed)*sqrt(2.0*Dpart*dt)
+         xi(2) = gasdev(iseed)*sqrt(2.0*Dpart*dt)
+         xi(3) = gasdev(iseed)*sqrt(2.0*Dpart*dt)
+
+         part%xp(1:3) = part%xp(1:3) + xi(1:3)
+
+
+
+         if (iInertia == 0) then
+
+           !In the case of having no inertia, the new particle velocity
+           !must be set to the NEW uf:
+           if (part%xp(3) .gt. 0.0) then
+             call uf_interp 
+             !call uf_interp_lin
+           else
+             part%uf(1:3) = 0.0
+           end if
+
+           part%vp(1:3) = part%uf(1:3) !For now particles are passive tracers with no inertia
+           part%vp(3) = part%vp(3)-ws
+
+         end if
+
+        part => part%next
+      end do
+
+
+
+      !Enforce nonperiodic bcs (either elastic or destroying particles)
+      num_killed = 0
+      call particle_bcs_nonperiodic
+
+      !Check to see if particles left processor
+      !If they did, remove from one list and add to another
+      call particle_exchange
+
+      !Now enforce periodic bcs 
+      !just updates x,y locations if over xl,yl or under 0
+      call particle_bcs_periodic
+
+      !Add new particles
+      tot_reintro = 0
+      call particle_reintro
+
+      !Now that particles are in their updated position, 
+      !compute their contribution to the momentum coupling:
+      !This calls particle_stats, so run even if icouple = 0
+      call particle_coupling_update
+
+
+!CAREFUL: FOR SPEED PURPOSES DHR COMMENTED THESE OUT FOR PROFILE CASES 7/29/16
+ 
+      !Finally, now that coupling and statistics arrays are filled, 
+      !Transpose them back to align with the velocities:
+!      call ztox_trans(partsrc_t(0:nnz+1,iys:iye,mxs:mxe,1),
+!     +                partsrc(1:nnx,iys:iye,izs-1:ize+1,1),nnx,nnz,mxs,
+!     +                mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
+!     +                ncpu_s,numprocs)
+!      call ztox_trans(partsrc_t(0:nnz+1,iys:iye,mxs:mxe,2),
+!     +                partsrc(1:nnx,iys:iye,izs-1:ize+1,2),nnx,nnz,mxs,
+!     +                mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
+!     +                ncpu_s,numprocs)
+!      call ztox_trans(partsrc_t(0:nnz+1,iys:iye,mxs:mxe,3),
+!     +                partsrc(1:nnx,iys:iye,izs-1:ize+1,3),nnx,nnz,mxs,
+!     +                mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
+!     +                ncpu_s,numprocs)
+!      call ztox_trans(partTsrc_t(0:nnz+1,iys:iye,mxs:mxe),
+!     +                partTsrc(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,mxs,
+!     +                mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
+!     +                ncpu_s,numprocs)
+!      call ztox_trans(partHsrc_t(0:nnz+1,iys:iye,mxs:mxe),
+!     +                partHsrc(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,mxs,
+!     +                mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
+!     +                ncpu_s,numprocs)
+!
+!      call ztox_trans(partTEsrc_t(0:nnz+1,iys:iye,mxs:mxe),
+!     +                partTEsrc(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,mxs,
+!     +                mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
+!     +                ncpu_s,numprocs)
+
+
+      !Try only calling these when the history data is being written:
+      if(mtrans) then
+      call ztox_trans(upwp_t(0:nnz+1,iys:iye,mxs:mxe),
+     +                upwp(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,mxs,
+     +                mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
+     +                ncpu_s,numprocs)
+
+      call ztox_trans(vpsum_t(0:nnz+1,iys:iye,mxs:mxe,1),
+     +                vpsum(1:nnx,iys:iye,izs-1:ize+1,1),nnx,nnz,mxs,
+     +                mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
+     +                ncpu_s,numprocs)
+      call ztox_trans(vpsum_t(0:nnz+1,iys:iye,mxs:mxe,2),
+     +                vpsum(1:nnx,iys:iye,izs-1:ize+1,2),nnx,nnz,mxs,
+     +                mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
+     +                ncpu_s,numprocs)
+      call ztox_trans(vpsum_t(0:nnz+1,iys:iye,mxs:mxe,3),
+     +                vpsum(1:nnx,iys:iye,izs-1:ize+1,3),nnx,nnz,mxs,
+     +                mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
+     +                ncpu_s,numprocs)
+!
+!      call ztox_trans(vpsqrsum_t(0:nnz+1,iys:iye,mxs:mxe,1),
+!     +                vpsqrsum(1:nnx,iys:iye,izs-1:ize+1,1),nnx,nnz,mxs,
+!     +                mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
+!     +                ncpu_s,numprocs)
+!      call ztox_trans(vpsqrsum_t(0:nnz+1,iys:iye,mxs:mxe,2),
+!     +                vpsqrsum(1:nnx,iys:iye,izs-1:ize+1,2),nnx,nnz,mxs,
+!     +                mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
+!     +                ncpu_s,numprocs)
+!      call ztox_trans(vpsqrsum_t(0:nnz+1,iys:iye,mxs:mxe,3),
+!     +                vpsqrsum(1:nnx,iys:iye,izs-1:ize+1,3),nnx,nnz,mxs,
+!     +                mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
+!     +                ncpu_s,numprocs)
+!
+!      call ztox_trans(Tpsum_t(0:nnz+1,iys:iye,mxs:mxe),
+!     +                Tpsum(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,mxs,
+!     +                mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
+!     +                ncpu_s,numprocs)
+!      call ztox_trans(Tpsqrsum_t(0:nnz+1,iys:iye,mxs:mxe),
+!     +                Tpsqrsum(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,mxs,
+!     +                mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
+!     +                ncpu_s,numprocs)
+!      call ztox_trans(Tfsum_t(0:nnz+1,iys:iye,mxs:mxe),
+!     +                Tfsum(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,mxs,
+!     +                mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
+!     +                ncpu_s,numprocs)
+!      call ztox_trans(qfsum_t(0:nnz+1,iys:iye,mxs:mxe),
+!     +                qfsum(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,mxs,
+!     +                mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
+!     +                ncpu_s,numprocs)
+!      call ztox_trans(wpTpsum_t(0:nnz+1,iys:iye,mxs:mxe),
+!     +                wpTpsum(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,mxs,
+!     +                mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
+!     +                ncpu_s,numprocs)
+
+      call ztox_trans(partcount_t(0:nnz+1,iys:iye,mxs:mxe),
+     +                partcount(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,mxs,
+     +                mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
+     +                ncpu_s,numprocs)
+
+      call ztox_trans(partcountU_t(0:nnz+1,iys:iye,mxs:mxe),
+     +                partcountU(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,mxs,
+     +                mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
+     +                ncpu_s,numprocs)
+
+      call ztox_trans(partflux_t(0:nnz+1,iys:iye,mxs:mxe),
+     +                partflux(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,mxs,
+     +                mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
+     +                ncpu_s,numprocs)
+
+!      call ztox_trans(radsum_t(0:nnz+1,iys:iye,mxs:mxe),
+!      call ztox_trans(radsum_t(0:nnz+1,iys:iye,mxs:mxe),
+!     +                radsum(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,mxs,
+!     +                mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
+!     +                ncpu_s,numprocs)
+!
+!      call ztox_trans(rad2sum_t(0:nnz+1,iys:iye,mxs:mxe),
+!     +                rad2sum(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,mxs,
+!     +                mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
+!     +                ncpu_s,numprocs) 
+!
+!      call ztox_trans(mpsum_t(0:nnz+1,iys:iye,mxs:mxe),
+!     +                mpsum(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,mxs,
+!     +                mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
+!     +                ncpu_s,numprocs)
+!
+!      call ztox_trans(mwsum_t(0:nnz+1,iys:iye,mxs:mxe),
+!     +                mwsum(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,mxs,
+!     +                mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
+!     +                ncpu_s,numprocs)
+!
+!      call ztox_trans(qstarsum_t(0:nnz+1,iys:iye,mxs:mxe),
+!     +                qstarsum(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,mxs,
+!     +                mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
+!     +                ncpu_s,numprocs)
+!
+      end if
+
+
+      !t_s = mpi_wtime
+      !Get particle count:
+      numpart = 0
+      part => first_particle
+      do while (associated(part))
+      numpart = numpart + 1
+      part => part%next
+      end do
+      !call mpi_barrier(mpi_comm_world,ierr)
+      !t_f = mpi_wtime()
+      !if (myid==5) write(*,*) 'time numpart: ', t_f - t_s
+ 
+      !t_s = mpi_wtime()
+      !Compute total number of particles
+      call mpi_allreduce(numpart,tnumpart,1,mpi_integer,mpi_sum,
+     +                   mpi_comm_world,ierr)
+      !Compute average particle Reynolds number
+      call mpi_allreduce(myRep_avg,Rep_avg,1,mpi_real8,mpi_sum,
+     +                   mpi_comm_world,ierr)
+
+      Rep_avg = Rep_avg/tnumpart
+
+      call mpi_allreduce(myphip_sum,phip,1,mpi_real8,mpi_sum,
+     +                   mpi_comm_world,ierr)
+
+      call mpi_allreduce(myphiw_sum,phiw,1,mpi_real8,mpi_sum,
+     +                   mpi_comm_world,ierr)
+
+      call mpi_allreduce(myphiv_sum,phiv,1,mpi_real8,mpi_sum,
+     +                   mpi_comm_world,ierr)
+
+      
+      phip = phip/xl/yl/zl/rhoa
+      phiw = phiw/xl/yl/zl/rhoa
+      phiv = phiv/xl/yl/zl
+
+
+      end subroutine particle_update_diff
       subroutine particle_update_FE(it)
       use pars
       use particles
@@ -10771,6 +11299,7 @@ c
       end if
   
       part%xp(1:3) = xp(1:3)
+      part%xp_i(1:3) = xp(1:3)
       part%vp(1:3) = vp(1:3)
       part%Tp = Tp
       part%radius = radius_init !Brian 7/9/14
