@@ -145,7 +145,7 @@ c     ---------------------------------------------------------------------
       real, allocatable :: 
      +     u(:,:,:), v(:,:,:), w(:,:,:), t(:,:,:,:), e(:,:,:), 
      +     r1(:,:,:), r2(:,:,:), r3(:,:,:), r4(:,:,:,:), r5(:,:,:),
-     +     DwDt(:,:,:)
+     +     DwDt(:,:,:),w_old(:,:,:),Gamma2(:,:,:)
       real, allocatable :: 
      +     ux(:,:,:), uy(:,:,:), vx(:,:,:), vy(:,:,:), 
      +     wx(:,:,:), wy(:,:,:),
@@ -700,7 +700,6 @@ c
 c
 c --------- get rhs for all equations
 c
-      !if (it .le. 1) call comp1(istage,it)
       call comp1(istage,it)
 
       if(istage .eq. 1) then
@@ -709,13 +708,11 @@ c
 c
 c --------- solve for pressure
 c
-      !if (it .le. 1) call comp_p
       call comp_p
 c
 c --------- add pressure gradient and dealias
 c
-      !if (it .le. 1) call comp2
-      call comp2
+      call comp2(istage,it)
 
       if(micut) then
         call dealias
@@ -1778,13 +1775,13 @@ c ------------ buoyancy (with hydrostatic part)
 c
 
 !MODIFY BUOYANCY TERM TO INCLUDE HUMIDITY
-!         w_buy = batag*(t(ix,iy,1,iz)*weit1 +
-!     +                  t(ix,iy,1,izp1)*weit)
-
          w_buy = batag*(t(ix,iy,1,iz)*weit1 +
-     +                  t(ix,iy,1,izp1)*weit)*
-     +   (1.0+0.61*(weit1*t(ix,iy,2,iz) + 
-     +    weit*t(ix,iy,2,izp1)))
+     +                  t(ix,iy,1,izp1)*weit)
+
+!         w_buy = batag*(t(ix,iy,1,iz)*weit1 +
+!     +                  t(ix,iy,1,izp1)*weit)*
+!     +   (1.0+0.61*(weit1*t(ix,iy,2,iz) + 
+!     +    weit*t(ix,iy,2,izp1)))
 
 
 c
@@ -1998,8 +1995,9 @@ c
       real fnt3(nnx,iys:iye), fnt4(nnx,iys:iye)
       real tau13_u(nnx,iys:iye), tau23_u(nnx,iys:iye)
       real tau13_l(nnx,iys:iye), tau23_l(nnx,iys:iye)
-      real r3_sum(1:nnz),DwDt_sum(1:nnz)
+      real r3_sum(1:nnz)
       real sfc_flx(2)
+      real wz,wzp
 c
 
       do iz=izs,ize
@@ -2060,7 +2058,12 @@ c
          r2(ix,iy,iz) = v_adv + v_cor + v_geo
          r3(ix,iy,iz) = w_adv + w_cor + w_buy
          
-         DwDt(ix,iy,iz) = w_cor + w_buy
+         wz  = (w(ix,iy,iz)-w(ix,iy,izm1))*dzw_i(iz)
+         wzp = (w(ix,iy,izp1)-w(ix,iy,iz))*dzw_i(izp1)
+         DwDt(ix,iy,iz) = u_avg*wx(ix,iy,iz) + 
+     +                    v_avg*wy(ix,iy,iz) + 
+     +    w(ix,iy,iz)*(weit*wzp + weit1*wz)
+         Gamma2(ix,iy,iz) = weit*wzp + weit1*wz
 
          !Add particle momentum coupling
          if (icouple == 1) then
@@ -2155,8 +2158,6 @@ c
      +                (w(ix,iy,izp1)-w(ix,iy,iz))*dzw_i(izp1)
          r3(ix,iy,iz) = r3(ix,iy,iz) - fnt3(ix,iy) -
      +                   (fnt2(ix,iy)-fnt4(ix,iy))*dzu_i(izp1)
-         DwDt(ix,iy,iz) = DwDt(ix,iy,iz) - fnt3(ix,iy) - 
-     +                   (fnt2(ix,iy)-fnt4(ix,iy))*dzu_i(izp1)
       enddo
       enddo
 c
@@ -2250,23 +2251,18 @@ c
      +           iys,iye,iy_s,iy_e,izs,ize,myid,ncpu_s,numprocs)
       do iz=1,nnz
          r3_sum(iz) = 0.0
-         DwDt_sum(iz) = 0.0
       enddo
       do iz=izs,ize
          do iy=iys,iye
          do ix=1,nnx
             r3(ix,iy,iz) = r3(ix,iy,iz) - fntd(ix,iy,iz)
-            DwDt(ix,iy,iz) = DwDt(ix,iy,iz) - fntd(ix,iy,iz)
             r3_sum(iz)   = r3_sum(iz) + r3(ix,iy,iz)
-            DwDt_sum(iz)   = DwDt_sum(iz) + r3(ix,iy,iz)
          enddo
          enddo
          r3_sum(iz) = r3_sum(iz)*fnxy
-         DwDt_sum(iz) = DwDt_sum(iz)*fnxy
       enddo
 c
       call mpi_sum_z(r3_sum,i_root,myid,nnz,1)
-      call mpi_sum_z(DwDt_sum,i_root,myid,nnz,1)
 c
 c ------- make sure <r3> = 0 and set r3 = 0 at top
 c
@@ -2275,14 +2271,12 @@ c
             do iy=iys,iye
             do ix=1,nnx
                r3(ix,iy,iz) = 0.0
-               DwDt(ix,iy,iz) = 0.0
             enddo
             enddo
          else
             do iy=iys,iye
             do ix=1,nnx
                r3(ix,iy,iz) = r3(ix,iy,iz) - r3_sum(iz)
-               DwDt(ix,iy,iz) = DwDt(ix,iy,iz) - DwDt_sum(iz)
             enddo
             enddo
          endif
@@ -3368,6 +3362,7 @@ c
          w(ix,iy,izm1)  = 0.0 
          r3(ix,iy,izm1) = 0.0
          DwDt(ix,iy,izm1) = 0.0
+         Gamma2(ix,iy,izm1) = 0.0
          e(ix,iy,izm1)  = 0.0 
          ux(ix,iy,izm1) = 0.0
          uy(ix,iy,izm1) = 0.0
@@ -3430,6 +3425,7 @@ c
          w(ix,iy,izp1)  = 0.0 
          r3(ix,iy,izp1) = 0.0
          DwDt(ix,iy,izp1) = 0.0
+         Gamma2(ix,iy,izp1) = 0.0
          e(ix,iy,izp1)  = 0.0 
          ux(ix,iy,izp1) = 0.0
          uy(ix,iy,izp1) = 0.0
@@ -3887,7 +3883,6 @@ c
          do iy=iys,iye
          do ix=1,nnx
             r3(ix,iy,izs-1) = fr(ix,iy,1)
-            DwDt(ix,iy,izs-1) = fr(ix,iy,1)
             w(ix,iy,izs-1)  = fr(ix,iy,2)
          enddo
          enddo
@@ -3973,7 +3968,7 @@ c
 c
       return
       end
-      subroutine comp2
+      subroutine comp2(istage,it)
 c
 c ------- add p gradients to rhs. Use already defined p
 c         at ize+1 to get w (see sr. pressure).
@@ -3985,13 +3980,12 @@ c
       use con_stats
       real fnt1(nnx,iys:iye,izs:ize), fnt2(nnx,iys:iye)
       real r3_sum(1:nnz)
-      real DwDt_sum(1:nnz)
       include 'mpif.h'
       integer istatus(mpi_status_size)
+      integer istage,it
 c
       do iz=1,nnz
          r3_sum(iz) = 0.0
-         DwDt_sum(iz) = 0.0
       enddo
 c
 c --------- dp/dy at all z
@@ -4030,14 +4024,10 @@ c
             do ix=1,nnx
                r3(ix,iy,iz) = r3(ix,iy,iz) -
      +            (p(ix,iy,izp1)-p(ix,iy,iz))*dzu_i(izp1)
-               DwDt(ix,iy,iz) = DwDt(ix,iy,iz) -
-     +            (p(ix,iy,izp1)-p(ix,iy,iz))*dzu_i(izp1)
                r3_sum(iz) = r3_sum(iz) + r3(ix,iy,iz)
-               DwDt_sum(iz) = DwDt_sum(iz) + DwDt(ix,iy,iz)
             enddo
             enddo
             r3_sum(iz) = r3_sum(iz)*fnxy
-            DwDt_sum(iz) = DwDt_sum(iz)*fnxy
          endif
 c
 c ------------------------ time stepping with 3-order rk method
@@ -4059,7 +4049,6 @@ c
             w(ix,iy,iz)  = wbc(ix,iy,1)
             e(ix,iy,iz)  = ebc(ix,iy,1)
             r3(ix,iy,iz) = 0.0
-            DwDt(ix,iy,iz) = 0.0
             r5(ix,iy,iz) = 0.0
          enddo
          enddo
@@ -4089,17 +4078,21 @@ c
 c ---------- gather partial sums for w computation
 c
       call mpi_sum_z(r3_sum,i_root,myid,nnz,1)
-      call mpi_sum_z(DwDt_sum,i_root,myid,nnz,1)
-c
+
+
+      !Before updating w, save w_old for computing DwDt
+      if (istage .eq. 1) w_old = w
+
       do iz=izs,min(ize,nnz-1)
          do iy=iys,iye
          do ix=1,nnx
             r3(ix,iy,iz) = r3(ix,iy,iz) - r3_sum(iz)
-            DwDt(ix,iy,iz) = DwDt(ix,iy,iz) - DwDt_sum(iz)
             w(ix,iy,iz)  = w(ix,iy,iz) + dtgama*r3(ix,iy,iz)
          enddo
          enddo
       enddo
+
+
 c
       return
       end
@@ -7160,7 +7153,7 @@ c ------- indices for indexing array stat(.,.)
 c         js = number of non-scalar stats
 c         ns = number of scalar stats
 c
-      parameter(js = 37, ns = 5, nstat = js + ns*nscl)   !Brian 7/30/14  js=25->26
+      parameter(js = 38, ns = 5, nstat = js + ns*nscl)   !Brian 7/30/14  js=25->26
       real stat(1:nnz,nstat)
 c
 c -------- stat(.,1) = u*u = ups
@@ -7277,11 +7270,19 @@ c
          stat(iz,34) = stat(iz,34) + qstarsum(ix,iy,iz)
          stat(iz,35) = stat(iz,35) + partcountU(ix,iy,iz)
          stat(iz,36) = stat(iz,36) + partflux(ix,iy,iz)
-!         stat(iz,37) = stat(iz,37) + (t(ix,iy,2,iz) - txym(iz,2))*
-!     +               (0.5*(DwDt(ix,iy,iz)+DwDt(ix,iy,izp1)))
+
+         !At this point only has convective accel. -- need to add local
+         DwDt(ix,iy,iz) = DwDt(ix,iy,iz) + 
+     +   (w(ix,iy,iz)-w_old(ix,iy,iz))/dt
+
          stat(iz,37) = stat(iz,37) + DwDt(ix,iy,iz)*
      +               0.5*(t(ix,iy,2,iz)-txym(iz,2) +
      +                    t(ix,iy,2,izp1)-txym(izp1,2))
+
+         stat(iz,38) = stat(iz,38) + Gamma2(ix,iy,iz)*
+     +               0.5*(t(ix,iy,2,iz)-txym(iz,2) +
+     +                    t(ix,iy,2,izp1)-txym(izp1,2))
+         
 
       enddo
       enddo
@@ -7399,6 +7400,7 @@ c
       pflux(iz) = stat(iz,36)  !Just want the total sum of +1's and -1's for particle flux
 
       Tpdqp(iz) = stat(iz,37)*fnxy
+      TpSq(iz)  = stat(iz,38)*fnxy
 
 
       
@@ -7715,7 +7717,7 @@ c
 c ------------- gather all the budget terms
 c
          trip(iz) = stat(iz,1)
-         TpSq(iz) = stat(iz,2)
+         !TpSq(iz) = stat(iz,2)
          !Tpdqp(iz) = stat(iz,3)
       enddo
 c
@@ -8193,6 +8195,8 @@ c
      +         r5(nnx,iys:iye,izs-1:ize+1))
 
       allocate(DwDt(nnx,iys:iye,izs-1:ize+1))
+      allocate(Gamma2(nnx,iys:iye,izs-1:ize+1))
+      allocate(w_old(nnxp2,iys:iye,izs-1:ize+1))
 
 c
 c ------------- allocate extended arrays for interpolation of
