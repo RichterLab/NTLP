@@ -125,6 +125,7 @@ c     ----------------------------------------------------------------------
       integer :: iseed
       real :: Rep_avg,part_grav,zpart,ws,dz_U
       real :: vp_init(3),Tp_init,qf_init
+      real :: taup
 
       real :: radius_init,radius_mass,rhow,nuf 
       real :: CpaCpp,Cpa,Cpp,Pra,Sc,Mw,Ru,rhoa
@@ -145,7 +146,9 @@ c     ---------------------------------------------------------------------
       real, allocatable :: 
      +     u(:,:,:), v(:,:,:), w(:,:,:), t(:,:,:,:), e(:,:,:), 
      +     r1(:,:,:), r2(:,:,:), r3(:,:,:), r4(:,:,:,:), r5(:,:,:),
-     +     DwDt(:,:,:),w_old(:,:,:),Gamma2(:,:,:)
+     +     DwDt(:,:,:),w_old(:,:,:),Gamma2(:,:,:),
+     +     DuDt(:,:,:),u_old(:,:,:),
+     +     DvDt(:,:,:),v_old(:,:,:)
       real, allocatable :: 
      +     ux(:,:,:), uy(:,:,:), vx(:,:,:), vy(:,:,:), 
      +     wx(:,:,:), wy(:,:,:),
@@ -2060,10 +2063,22 @@ c
          
          wz  = (w(ix,iy,iz)-w(ix,iy,izm1))*dzw_i(iz)
          wzp = (w(ix,iy,izp1)-w(ix,iy,iz))*dzw_i(izp1)
-         DwDt(ix,iy,iz) = u_avg*wx(ix,iy,iz) + 
-     +                    v_avg*wy(ix,iy,iz) + 
-     +    w(ix,iy,iz)*(weit*wzp + weit1*wz)
+         DwDt(ix,iy,iz) = DwDt(ix,iy,iz) + 
+     +      u_avg*wx(ix,iy,iz) + 
+     +      v_avg*wy(ix,iy,iz) + 
+     +      w(ix,iy,iz)*(weit*wzp + weit1*wz)
+
          Gamma2(ix,iy,iz) = weit*wzp + weit1*wz
+
+         DuDt(ix,iy,iz) = DuDt(ix,iy,iz) + 
+     +      u(ix,iy,iz)*ux(ix,iy,iz) + 
+     +      v(ix,iy,iz)*uy(ix,iy,iz) + 
+     +      0.5*(w(ix,iy,izm1)*uzm + w(ix,iy,iz)*uz)
+
+         DvDt(ix,iy,iz) = DvDt(ix,iy,iz) + 
+     +      u(ix,iy,iz)*vx(ix,iy,iz) + 
+     +      v(ix,iy,iz)*vy(ix,iy,iz) + 
+     +      0.5*(w(ix,iy,izm1)*vzm + w(ix,iy,iz)*vz)
 
          !Add particle momentum coupling
          if (icouple == 1) then
@@ -2572,6 +2587,7 @@ c
       real flux_u(nnx,iys:iye), flux_l(nnx,iys:iye)
       real taut3_u(nnx,iys:iye,nscl), taut3_l(nnx,iys:iye,nscl)
       real :: sfc_flx
+      real adv_x(nnx,iys:iye), adv_y(nnx,iys:iye,izs:ize)
 c
 c --------- set sign for ocean simulations that use monotone
 c
@@ -2734,33 +2750,6 @@ c -------- end monotone if block
 c
       endif
 
-      if (iscl==2) then   !Adding vertical advection to the 2nd scalar
-
-      if (iz==nnz) then  !Must make sure that we have zero flux at top!
-      do iy=iys,iye
-      do ix=1,nnx
-         theta_l = weit3*t(ix,iy,iscl,iz) +
-     +                weit4*t(ix,iy,iscl,izm1)
-         r4(ix,iy,iscl,iz) = r4(ix,iy,iscl,iz)
-     +     + ws*(0.0 - theta_l)*dzw_i(iz)
-      enddo
-      enddo
-
-      else 
-
-      do iy=iys,iye
-      do ix=1,nnx
-         theta_u = weit1*t(ix,iy,iscl,iz) +
-     +                weit*t(ix,iy,iscl,izp1)
-         theta_l = weit3*t(ix,iy,iscl,iz) +
-     +                weit4*t(ix,iy,iscl,izm1)
-         r4(ix,iy,iscl,iz) = r4(ix,iy,iscl,iz)
-     +     + ws*(theta_u - theta_l)*dzw_i(iz)
-      enddo
-      enddo
-
-      end if
-      end if
 
 
 
@@ -2861,6 +2850,77 @@ c
       end do
       end if
       end if 
+
+      if (iscl==2) then   !Adding vertical advection to the 2nd scalar
+
+      !Get d/dy(C*taup*DvDt)
+      do iz=izs,ize
+      do iy=iys,iye
+      do ix=1,nnx
+
+      adv_y(ix,iy,iz) = t(ix,iy,iscl,iz)*taup*DvDt(ix,iy,iz)
+
+      end do
+      end do
+      end do
+
+      call yd_mpi(adv_y(1,iys,izs),trigx(1,2),yk(1),
+     +           nnx,nny,ixs,ixe,ix_s,ix_e,
+     +           iys,iye,iy_s,iy_e,izs,ize,myid,ncpu_s,numprocs)
+
+      do iz=izs,ize
+
+      if (iz==nnz) then  !Must make sure that we have zero flux at top!
+
+      do iy=iys,iye
+      do ix=1,nnx
+         theta_l = weit3*t(ix,iy,iscl,iz) +
+     +                weit4*t(ix,iy,iscl,izm1)
+         r4(ix,iy,iscl,iz) = r4(ix,iy,iscl,iz)
+     +     + ws*(0.0 - theta_l)*dzw_i(iz)
+      enddo
+      enddo
+
+      else 
+
+      do ix=1,nnx
+      do iy=iys,iye
+
+      !For getting d/dx(C*taup*DuDt):
+      adv_x(ix,iy) = taup*DuDt(ix,iy,iz)*t(ix,iy,iscl,iz)
+
+      end do
+      end do
+
+      call xderivp(adv_x(1,iys),trigx(1,1),xk(1),nnx,iys,iye)
+
+      do iy=iys,iye
+      do ix=1,nnx
+         theta_u = weit1*t(ix,iy,iscl,iz) +
+     +                weit*t(ix,iy,iscl,izp1)
+         theta_l = weit3*t(ix,iy,iscl,iz) +
+     +                weit4*t(ix,iy,iscl,izm1)
+
+         !Add the settling flux:
+         r4(ix,iy,iscl,iz) = r4(ix,iy,iscl,iz) + 
+     +      ws*(theta_u - theta_l)*dzw_i(iz)
+
+      
+         !Add the inertial correction:
+         r4(ix,iy,iscl,iz) = r4(ix,iy,iscl,iz) - 
+     +   adv_x(ix,iy) - 
+     +   adv_y(ix,iy,iz) - 
+     +   ((theta_u*taup*DwDt(ix,iy,iz))- 
+     +    (theta_l*taup*DwDt(ix,iy,izm1)))*dzw_i(iz)
+
+      enddo
+      enddo
+      end if
+
+      end do
+
+
+      end if
 
 
 
@@ -3362,6 +3422,8 @@ c
          w(ix,iy,izm1)  = 0.0 
          r3(ix,iy,izm1) = 0.0
          DwDt(ix,iy,izm1) = 0.0
+         DvDt(ix,iy,izm1) = 0.0
+         DuDt(ix,iy,izm1) = 0.0
          Gamma2(ix,iy,izm1) = 0.0
          e(ix,iy,izm1)  = 0.0 
          ux(ix,iy,izm1) = 0.0
@@ -3425,6 +3487,8 @@ c
          w(ix,iy,izp1)  = 0.0 
          r3(ix,iy,izp1) = 0.0
          DwDt(ix,iy,izp1) = 0.0
+         DvDt(ix,iy,izp1) = 0.0
+         DuDt(ix,iy,izp1) = 0.0
          Gamma2(ix,iy,izp1) = 0.0
          e(ix,iy,izp1)  = 0.0 
          ux(ix,iy,izp1) = 0.0
@@ -3983,6 +4047,7 @@ c
       include 'mpif.h'
       integer istatus(mpi_status_size)
       integer istage,it
+      real dt_accel
 c
       do iz=1,nnz
          r3_sum(iz) = 0.0
@@ -4056,6 +4121,14 @@ c
 c
 c -------- now all u-variables
 c
+
+      !Before updating velocities, save u_old for computing DuDt
+      if (istage .eq. 1) then
+          w_old = w
+          v_old = v
+          u_old = u
+       end if
+
          do iy=iys,iye
          do ix=1,nnx
             u(ix,iy,iz) = u(ix,iy,iz)+dtgama*r1(ix,iy,iz)
@@ -4080,8 +4153,6 @@ c
       call mpi_sum_z(r3_sum,i_root,myid,nnz,1)
 
 
-      !Before updating w, save w_old for computing DwDt
-      if (istage .eq. 1) w_old = w
 
       do iz=izs,min(ize,nnz-1)
          do iy=iys,iye
@@ -4092,6 +4163,15 @@ c
          enddo
       enddo
 
+         dt_accel = dt*(zetas(istage)+gama(istage))
+
+         !At this point only has convective accel. -- need to add local
+         DwDt(ix,iy,iz) = 
+     +   (w(ix,iy,iz)-w_old(ix,iy,iz))/dt_accel
+         DvDt(ix,iy,iz) = 
+     +   (v(ix,iy,iz)-v_old(ix,iy,iz))/dt_accel
+         DuDt(ix,iy,iz) = 
+     +   (u(ix,iy,iz)-u_old(ix,iy,iz))/dt_accel
 
 c
       return
@@ -7271,10 +7351,6 @@ c
          stat(iz,35) = stat(iz,35) + partcountU(ix,iy,iz)
          stat(iz,36) = stat(iz,36) + partflux(ix,iy,iz)
 
-         !At this point only has convective accel. -- need to add local
-         DwDt(ix,iy,iz) = DwDt(ix,iy,iz) + 
-     +   (w(ix,iy,iz)-w_old(ix,iy,iz))/dt
-
          stat(iz,37) = stat(iz,37) + DwDt(ix,iy,iz)*
      +               0.5*(t(ix,iy,2,iz)-txym(iz,2) +
      +                    t(ix,iy,2,izp1)-txym(izp1,2))
@@ -8195,8 +8271,18 @@ c
      +         r5(nnx,iys:iye,izs-1:ize+1))
 
       allocate(DwDt(nnx,iys:iye,izs-1:ize+1))
+      allocate(DvDt(nnx,iys:iye,izs-1:ize+1))
+      allocate(DuDt(nnx,iys:iye,izs-1:ize+1))
+      DwDt = 0.0
+      DvDt = 0.0
+      DuDt = 0.0
       allocate(Gamma2(nnx,iys:iye,izs-1:ize+1))
       allocate(w_old(nnxp2,iys:iye,izs-1:ize+1))
+      allocate(v_old(nnxp2,iys:iye,izs-1:ize+1))
+      allocate(u_old(nnxp2,iys:iye,izs-1:ize+1))
+      w_old = 0.0
+      v_old = 0.0
+      u_old = 0.0
 
 c
 c ------------- allocate extended arrays for interpolation of
@@ -13629,7 +13715,8 @@ c      brc_r = 4*(nnz+2)*3*2 !Brian 7/14/14
       read(12,nml=constants)
       if (myid==0) print constants
       CpaCpp = Cpa/Cpp
-      ws = part_grav*(rhow*(2*radius_init)**2/18.0/nuf/rhoa)
+      taup = rhow*(2*radius_init)**2/18.0/nuf/rhoa
+      ws = part_grav*taup
       dz_U = (zl-0.0)/maxnz
 
       if (myid==0) write(*,*) 'WS = ',ws
