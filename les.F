@@ -1593,6 +1593,12 @@ c
             vrhs(ix,iy,iz) = v(ix,iy,iz) + dtzeta*r2(ix,iy,iz)
             wrhs(ix,iy,iz) = w(ix,iy,iz) + dtzeta*r3(ix,iy,iz)
             erhs(ix,iy,iz) = e(ix,iy,iz) + dtzeta*r5(ix,iy,iz)
+
+            !Right here get part of the time derivative term:
+            DuDt(ix,iy,iz) = zetas(istage)*r1(ix,iy,iz)
+            DvDt(ix,iy,iz) = zetas(istage)*r2(ix,iy,iz)
+            DwDt(ix,iy,iz) = zetas(istage)*r3(ix,iy,iz)
+
          enddo
          enddo
       enddo
@@ -2063,7 +2069,8 @@ c
          
          wz  = (w(ix,iy,iz)-w(ix,iy,izm1))*dzw_i(iz)
          wzp = (w(ix,iy,izp1)-w(ix,iy,iz))*dzw_i(izp1)
-         DwDt(ix,iy,iz) = DwDt(ix,iy,iz) + 
+
+         DwDt(ix,iy,iz) =  DwDt(ix,iy,iz) + 
      +      u_avg*wx(ix,iy,iz) + 
      +      v_avg*wy(ix,iy,iz) + 
      +      w(ix,iy,iz)*(weit*wzp + weit1*wz)
@@ -2587,7 +2594,6 @@ c
       real flux_u(nnx,iys:iye), flux_l(nnx,iys:iye)
       real taut3_u(nnx,iys:iye,nscl), taut3_l(nnx,iys:iye,nscl)
       real :: sfc_flx
-      real adv_x(nnx,iys:iye), adv_y(nnx,iys:iye,izs:ize)
 c
 c --------- set sign for ocean simulations that use monotone
 c
@@ -2853,21 +2859,6 @@ c
 
       if (iscl==2) then   !Adding vertical advection to the 2nd scalar
 
-      !Get d/dy(C*taup*DvDt)
-      do iz=izs,ize
-      do iy=iys,iye
-      do ix=1,nnx
-
-      adv_y(ix,iy,iz) = t(ix,iy,iscl,iz)*taup*DvDt(ix,iy,iz)
-
-      end do
-      end do
-      end do
-
-      call yd_mpi(adv_y(1,iys,izs),trigx(1,2),yk(1),
-     +           nnx,nny,ixs,ixe,ix_s,ix_e,
-     +           iys,iye,iy_s,iy_e,izs,ize,myid,ncpu_s,numprocs)
-
       do iz=izs,ize
 
       if (iz==nnz) then  !Must make sure that we have zero flux at top!
@@ -2883,17 +2874,6 @@ c
 
       else 
 
-      do ix=1,nnx
-      do iy=iys,iye
-
-      !For getting d/dx(C*taup*DuDt):
-      adv_x(ix,iy) = taup*DuDt(ix,iy,iz)*t(ix,iy,iscl,iz)
-
-      end do
-      end do
-
-      call xderivp(adv_x(1,iys),trigx(1,1),xk(1),nnx,iys,iye)
-
       do iy=iys,iye
       do ix=1,nnx
          theta_u = weit1*t(ix,iy,iscl,iz) +
@@ -2905,14 +2885,6 @@ c
          r4(ix,iy,iscl,iz) = r4(ix,iy,iscl,iz) + 
      +      ws*(theta_u - theta_l)*dzw_i(iz)
 
-      
-         !Add the inertial correction:
-         r4(ix,iy,iscl,iz) = r4(ix,iy,iscl,iz) - 
-     +   adv_x(ix,iy) - 
-     +   adv_y(ix,iy,iz) - 
-     +   ((theta_u*taup*DwDt(ix,iy,iz))- 
-     +    (theta_l*taup*DwDt(ix,iy,izm1)))*dzw_i(iz)
-
       enddo
       enddo
       end if
@@ -2921,7 +2893,6 @@ c
 
 
       end if
-
 
 
 c
@@ -4042,12 +4013,16 @@ c
       use fftwk
       use con_data
       use con_stats
+      use particles
       real fnt1(nnx,iys:iye,izs:ize), fnt2(nnx,iys:iye)
       real r3_sum(1:nnz)
       include 'mpif.h'
       integer istatus(mpi_status_size)
       integer istage,it
-      real dt_accel
+      real weit,weit1,weit3,weit4
+      real adv_x(nnx,iys:iye), adv_y(nnx,iys:iye,izs:ize)
+      real fs(nnx,iys:iye),fr(nnx,iys:iye)
+      integer nsend,nrecv,nt,nb
 c
       do iz=1,nnz
          r3_sum(iz) = 0.0
@@ -4071,6 +4046,10 @@ c
 c
          izm1  = iz - 1
          izp1  = iz + 1
+         weit  = dzw(iz)/(dzw(iz) + dzw(izp1))
+         weit1 = 1.0 - weit
+         weit3 = dzw(izm1)/(dzw(iz) + dzw(izm1))
+         weit4 = 1.0 - weit3
 c
          do iy=iys,iye
          do ix=1,nnx
@@ -4122,25 +4101,16 @@ c
 c -------- now all u-variables
 c
 
-      !Before updating velocities, save u_old for computing DuDt
-      if (istage .eq. 1) then
-          w_old = w
-          v_old = v
-          u_old = u
-       end if
-
          do iy=iys,iye
          do ix=1,nnx
             u(ix,iy,iz) = u(ix,iy,iz)+dtgama*r1(ix,iy,iz)
             v(ix,iy,iz) = v(ix,iy,iz)+dtgama*r2(ix,iy,iz)
-         enddo
-         enddo
-         do iscl=1,nscl
-         do iy=iys,iye
-         do ix=1,nnx
-            t(ix,iy,iscl,iz)  = t(ix,iy,iscl,iz)+
-     +                          dtgama*r4(ix,iy,iscl,iz)
-         enddo
+            
+            !Get final term from time derivative:
+            DuDt(ix,iy,iz) = DuDt(ix,iy,iz) + 
+     +            gama(istage)*r1(ix,iy,iz)
+            DvDt(ix,iy,iz) = DvDt(ix,iy,iz) + 
+     +            gama(istage)*r2(ix,iy,iz)
          enddo
          enddo
 c
@@ -4152,26 +4122,149 @@ c ---------- gather partial sums for w computation
 c
       call mpi_sum_z(r3_sum,i_root,myid,nnz,1)
 
-
-
       do iz=izs,min(ize,nnz-1)
          do iy=iys,iye
          do ix=1,nnx
             r3(ix,iy,iz) = r3(ix,iy,iz) - r3_sum(iz)
             w(ix,iy,iz)  = w(ix,iy,iz) + dtgama*r3(ix,iy,iz)
+            DwDt(ix,iy,iz) = DwDt(ix,iy,iz) + 
+     +            gama(istage)*r3(ix,iy,iz)
          enddo
          enddo
       enddo
 
-         dt_accel = dt*(zetas(istage)+gama(istage))
 
-         !At this point only has convective accel. -- need to add local
-         DwDt(ix,iy,iz) = 
-     +   (w(ix,iy,iz)-w_old(ix,iy,iz))/dt_accel
-         DvDt(ix,iy,iz) = 
-     +   (v(ix,iy,iz)-v_old(ix,iy,iz))/dt_accel
-         DuDt(ix,iy,iz) = 
-     +   (u(ix,iy,iz)-u_old(ix,iy,iz))/dt_accel
+!!!!!!At this point must also exchange DwDt data to take z-derivative:
+
+      nb = myid - ncpu_s
+      nt = myid + ncpu_s
+c
+c ------------ account for endpoints
+c
+      if(iss .eq. 0) then
+         nb = mpi_proc_null
+      endif
+      if(ise .eq. numprocs-1) then
+         nt = mpi_proc_null
+      endif
+      nsend = nnx*(iye + 1 - iys)
+      nrecv = nsend
+
+      do iy=iys,iye
+      do ix=1,nnx
+         fs(ix,iy) = DwDt(ix,iy,ize)
+      end do
+      end do
+
+      call mpi_sendrecv(
+     +     fs(1,iys),nsend,mpi_real8,nt,0,
+     +     fr(1,iys),nrecv,mpi_real8,nb,0,
+     +     mpi_comm_world,istatus,ierr)
+
+
+      if(iss .ne. 0) then
+         izm1 = izs-1
+         do iy=iys,iye
+         do ix=1,nnx
+            DwDt(ix,iy,izm1) = fr(ix,iy)
+         enddo
+         enddo
+      endif     
+
+      do iy=iys,iye
+      do ix=1,nnx
+         fs(ix,iy) = DwDt(ix,iy,izs)
+      enddo
+      enddo
+
+      call mpi_sendrecv(
+     +     fs(1,iys),nsend,mpi_real8,nb,1,
+     +     fr(1,iys),nrecv,mpi_real8,nt,1,
+     +     mpi_comm_world,istatus,ierr)
+
+      if(ise .ne. numprocs-1) then
+         izp1 = ize+1
+         do iy=iys,iye
+         do ix=1,nnx
+            DwDt(ix,iy,izp1) = fr(ix,iy)
+         enddo
+         enddo
+      endif
+
+!!!!!
+
+
+
+      !Finally do the scalars since t2 needed to have complete DuDt:
+
+      !Get d/dy(C*taup*DvDt)
+      do iz=izs,ize
+      do iy=iys,iye
+      do ix=1,nnx
+
+      adv_y(ix,iy,iz) = t(ix,iy,2,iz)*taup*DvDt(ix,iy,iz)
+
+      end do
+      end do
+      end do
+
+      call yd_mpi(adv_y(1,iys,izs),trigx(1,2),yk(1),
+     +           nnx,nny,ixs,ixe,ix_s,ix_e,
+     +           iys,iye,iy_s,iy_e,izs,ize,myid,ncpu_s,numprocs)
+
+      do iz=izs,ize
+
+      izm1  = iz - 1
+      izp1  = iz + 1
+      weit  = dzw(iz)/(dzw(iz) + dzw(izp1))
+      weit1 = 1.0 - weit
+      weit3 = dzw(izm1)/(dzw(iz) + dzw(izm1))
+      weit4 = 1.0 - weit3
+
+      do ix=1,nnx
+      do iy=iys,iye
+
+      !For getting d/dx(C*taup*DuDt):
+      adv_x(ix,iy) = taup*DuDt(ix,iy,iz)*t(ix,iy,2,iz)
+
+      end do
+      end do
+
+      call xderivp(adv_x(1,iys),trigx(1,1),xk(1),nnx,iys,iye)
+
+      do iy=iys,iye
+      do ix=1,nnx
+         theta_u = weit1*t(ix,iy,2,iz) +
+     +                weit*t(ix,iy,2,izp1)
+         theta_l = weit3*t(ix,iy,2,iz) +
+     +                weit4*t(ix,iy,2,izm1)
+
+         !Add the inertial correction:
+         r4(ix,iy,2,iz) = r4(ix,iy,2,iz) +
+     +   adv_x(ix,iy) +
+     +   adv_y(ix,iy,iz) +
+     +   ((theta_u*taup*DwDt(ix,iy,iz))- 
+     +    (theta_l*taup*DwDt(ix,iy,izm1)))*dzw_i(iz)
+
+      enddo
+      enddo
+
+      end do
+
+      !Then do the update
+      do iz=izs,ize
+
+         do iscl=1,nscl
+         do iy=iys,iye
+         do ix=1,nnx
+
+            t(ix,iy,iscl,iz)  = t(ix,iy,iscl,iz)+
+     +                          dtgama*r4(ix,iy,iscl,iz)
+         enddo
+         enddo
+         enddo
+
+      end do
 
 c
       return
@@ -7235,6 +7328,7 @@ c         ns = number of scalar stats
 c
       parameter(js = 38, ns = 5, nstat = js + ns*nscl)   !Brian 7/30/14  js=25->26
       real stat(1:nnz,nstat)
+      real weit,weit1
 c
 c -------- stat(.,1) = u*u = ups
 c          stat(.,2) = v*v = vps
@@ -7301,6 +7395,8 @@ c
       izp2 = iz + 2
       izp1 = iz + 1
       izm1 = iz - 1
+      weit  = dzw(iz)/(dzw(iz) + dzw(izp1))
+      weit1 = 1.0 - weit
 c
       do iy=iys,iye
       do ix=1,nnx
@@ -7352,12 +7448,13 @@ c
          stat(iz,36) = stat(iz,36) + partflux(ix,iy,iz)
 
          stat(iz,37) = stat(iz,37) + DwDt(ix,iy,iz)*
-     +               0.5*(t(ix,iy,2,iz)-txym(iz,2) +
-     +                    t(ix,iy,2,izp1)-txym(izp1,2))
+     +               (weit1*(t(ix,iy,2,iz)-txym(iz,2)) +
+     +                weit*(t(ix,iy,2,izp1)-txym(izp1,2)))
+
 
          stat(iz,38) = stat(iz,38) + Gamma2(ix,iy,iz)*
-     +               0.5*(t(ix,iy,2,iz)-txym(iz,2) +
-     +                    t(ix,iy,2,izp1)-txym(izp1,2))
+     +               (weit1*(t(ix,iy,2,iz)-txym(iz,2)) +
+     +                weit*(t(ix,iy,2,izp1)-txym(izp1,2)))
          
 
       enddo
@@ -9985,6 +10082,7 @@ c
 c     use fftwk
       include 'mpif.h'
 c
+      !NOTE: CHANGED THIS ON 1/20/17 TO ADD IN DuDt,DvDt,DwDt:
       real fs(nnx,iys:iye,(4+nscl)),fr(nnx,iys:iye,(4+nscl))
       integer istatus(mpi_status_size)
 c
@@ -10020,6 +10118,7 @@ c
          enddo
          enddo
       enddo
+
 c
       call mpi_sendrecv(
      +     fs(1,iys,1),nsend,mpi_real8,nt,0,
@@ -10283,6 +10382,7 @@ c
 
          myRep_avg = myRep_avg + Rep
          corrfac = (1.0 + 0.15*Rep**(0.687))
+         corrfac = 1.0
          myphip_sum = myphip_sum + Volp*rhop
          myphiw_sum = myphiw_sum + Volp*rhow
          myphiv_sum = myphiv_sum + Volp
@@ -13715,8 +13815,16 @@ c      brc_r = 4*(nnz+2)*3*2 !Brian 7/14/14
       read(12,nml=constants)
       if (myid==0) print constants
       CpaCpp = Cpa/Cpp
+     
+      !taup gets used for Eulerian correction - only do if inertial
+      if (iInertia .eq. 1) then
       taup = rhow*(2*radius_init)**2/18.0/nuf/rhoa
-      ws = part_grav*taup
+      else
+      taup = 0.0
+      end if
+
+      !Either way, provide a nonzero settling velocity since this is controlled by part_grav
+      ws = part_grav*rhow*(2*radius_init)**2/18.0/nuf/rhoa
       dz_U = (zl-0.0)/maxnz
 
       if (myid==0) write(*,*) 'WS = ',ws
