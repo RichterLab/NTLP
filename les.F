@@ -11246,21 +11246,33 @@ c      brc_r = 4*(nnz+2)*3*2 !Brian 7/14/14
        if (kwpts(3) == 0) then
           first = 3
           last = 4
-       elseif (kwpts(3) .LT. 0) then 
+          kwpts(1) = 0;
+          kwpts(2) = 0;
+       elseif (kwpts(3) .LT. 0) then
           first = 0
           last = 0
-       elseif (kwpts(3) == 1) then 
+          kwpts(1) = 0;
+          kwpts(2) = 0;
+          kwpts(3) = 0;
+       elseif (kwpts(3) == 1) then
           first = 2
           last = 5
+          kwpts(1) = 0;
        elseif (kwpts(3) == nnz-1) then
           first = 3
           last = 4
+          kwpts(4) = nnz;
+          kwpts(5) = nnz;
+          kwpts(6) = nnz;
        elseif (kwpts(3) .GE. nnz) then
           first = 0
           last = 0
+          kwpts(5) = nnz;
+          kwpts(6) = nnz;
        elseif (kwpts(3) == nnz-2) then
           first = 2
           last = 5
+          kwpts(1) = 0;
        else
           first = 1
           last = 6
