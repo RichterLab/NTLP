@@ -7,7 +7,7 @@ c     ----------------------------------------------------------------------
       integer :: ismlt,ifree,iradup,
      +     iupwnd,ibuoy,ifilt,itcut,isubs,ibrcl,iocean,method,
      +     idebug,iz_space,ivis0,ifix_dt,new_vis,iDNS,ispray,
-     +     icouple,iTcouple,iHcouple,ievap
+     +     icouple,iTcouple,iHcouple,ievap,ifields
 c     
 c     -------- j_recl = record length in "bytes" for history file
 c     k8     = kind parameter for integers in mpi_io routines
@@ -15,13 +15,14 @@ c
       integer, parameter :: j_recl=4, k8=8
 
       integer, parameter :: nscl = 2, nvar = (4+nscl)
-      integer, parameter :: maxnx=128,maxny=256,maxnz=128
+      integer, parameter :: maxnx=128,maxny=128,maxnz=128
       integer, parameter :: maxnz1=maxnz+1,
      + maxnz2=maxnz+2,maxnx2=maxnx+2,maxny2=maxny+2
 
       !Boundary conditions and other parameters
       real :: Uo, Ttop(nscl), Tbot(nscl),qstar(nscl),tsfcc(nscl)
-      real :: grav,t00,fcor,zi,zl,xl,yl,zw1
+      real :: grav,t00,fcor,zi,zl,xl,yl,zw1,dpdx
+      real :: ugcont,vgcont,zo
       integer :: isfc(nscl)
 c     
 c     ------------ leave following definitions as is
@@ -123,9 +124,9 @@ c     ----------------------------------------------------------------------
       real :: Rep_avg,part_grav
       real :: vp_init(3),Tp_init,qf_init
 
-      real :: radius_init,radius_mass,rhow,nuf 
+      real :: radius_init,rhow,nuf 
       real :: CpaCpp,Cpa,Cpp,Pra,Sc,Mw,Ru,rhoa
-      real :: m_s,Sal,Ms,delta_vis,Gam,Ion,Os
+      real :: m_s,Sal,Ms,Gam,Ion,Os
       
       !REMEMBER: IF ADDING ANYTHING, MUST UPDATE MPI DATATYPE!
       type :: particle
@@ -160,9 +161,9 @@ c     ----------------------------------------------------------------------
       use pars, only : nscl
       type con_d
       sequence
-      real ::  zo, vk, vkin, vk74, vk74in, 
+      real ::  vk, vkin, vk74, vk74in, 
      +     gcp, fcor_h, pi2,
-     +     batagk, batag, vgcont, ugcont, 
+     +     batagk, batag,
      +     cdbtm, dtdzf(nscl), dtjump, ugal, divgls,
      +     z1, utausv, dx, dy, dz, dt, 
      +     fnxy, dzdz, dsl, c23, dtgama, dtzeta, xkmax,
@@ -173,9 +174,9 @@ c     ----------------------------------------------------------------------
       end type con_d
       type(con_d), target :: c_c
       real, pointer ::
-     +     zo, vk, vkin, vk74, vk74in, 
+     +     vk, vkin, vk74, vk74in, 
      +     gcp, fcor_h, pi2,
-     +     batagk, batag, vgcont, ugcont,
+     +     batagk, batag,
      +     cdbtm, dtdzf(:), dtjump, ugal, divgls,
      +     z1, utausv, dx, dy, dz, dt,
      +     fnxy, dzdz, dsl, c23, dtgama, dtzeta, xkmax, 
@@ -188,7 +189,6 @@ c     ----------------------------------------------------------------------
 c     
 c     --------------- pointer associations for constant variables
 c     
-      zo     => c_c%zo
       vk     => c_c%vk 
       vkin   => c_c%vkin
       vk74   => c_c%vk74
@@ -198,8 +198,6 @@ c
       pi2    => c_c%pi2
       batagk => c_c%batagk
       batag  => c_c%batag
-      vgcont => c_c%vgcont
-      ugcont => c_c%ugcont
       cdbtm  => c_c%cdbtm
       dtdzf  => c_c%dtdzf
       dtjump => c_c%dtjump
@@ -550,8 +548,11 @@ c
          if(iocean .eq. 1) then
             call randoc
          else
-            !call get_fields
+            if (ifields .eq. 1) then
+            call get_fields
+            else
             call random   
+            end if
          endif
          !Call dns_vis even when doing LES since vis_m needs to be initialized with something
          call dns_vis
@@ -722,6 +723,8 @@ c
       if(micut) then
          call dealias
       endif
+
+
 
 c      
 c -------- update particles
@@ -2056,7 +2059,7 @@ c
          !Instead of geostrophic wind (which is a pressure gradient)
          !make u_geo and v_geo equal to my pressure gradient:
 
-         u_geo = 0.0
+         u_geo = -dpdx
          v_geo = 0.0
 
 c
@@ -2065,6 +2068,7 @@ c
          r1(ix,iy,iz) = u_adv + u_cor + u_geo
          r2(ix,iy,iz) = v_adv + v_cor + v_geo
          r3(ix,iy,iz) = w_adv + w_cor + w_buy
+
 
          !Add particle momentum coupling
          if (icouple == 1) then
@@ -3338,6 +3342,13 @@ c
          vy(ix,iy,izm1) = 0.0
          wx(ix,iy,izm1) = 0.0 
          wy(ix,iy,izm1) = 0.0 
+           wbc(ix,iy,2) = 0.0
+           ebc(ix,iy,2) = 0.0
+           ubc(ix,iy,2) = u(ix,iy,izm1)
+           vbc(ix,iy,2) = v(ix,iy,izm1)
+           pbc(ix,iy,2) = 0.0
+           pbc2(ix,iy,2)= 0.0
+         
       enddo
       enddo
 
@@ -3398,6 +3409,12 @@ c
          vy(ix,iy,izp1) = 0.0
          wx(ix,iy,izp1) = 0.0 
          wy(ix,iy,izp1) = 0.0 
+           wbc(ix,iy,1) = 0.0
+           ebc(ix,iy,1) = 0.0
+           ubc(ix,iy,1) = u(ix,iy,izp1)
+           vbc(ix,iy,1) = v(ix,iy,izp1)
+           pbc(ix,iy,1) = 0.0
+           pbc2(ix,iy,1)= 0.0
       enddo
       enddo
 
@@ -3846,6 +3863,7 @@ c
                 p(ix,iy,iz) = fnt1(ix,iy,iz) +  
      +                     ((w(ix,iy,iz) -wbc(ix,iy,2))*gami +
      +                       r3(ix,iy,iz))*dzw_i(iz)
+
             enddo
             enddo
          else if(iz .eq. nnz) then
@@ -4054,9 +4072,12 @@ c ------------ Fourier analyze the right hand side
 c              at all iz = izs,ize. results are in pfft
 c
 c
+
+
       call fft2d_mpi(p(1,iys,izs),pfft(1,jxs,izs),trigx(1,1),trigc,
      +           nnx,nny,jxs,jxe,jx_s,jx_e,iys,iye,iy_s,iy_e,
      +           izs,ize,myid,ncpu_s,numprocs,-2)
+
 c
 c ------------ Fourier analyze the radiation bc arrays
 c
@@ -4073,7 +4094,10 @@ c
       call xtoz_trans(pfft,pt,nny,nnz,jys,jye,jy_s,jy_e,
      +                jxs,jxe,izs,ize,iz_s,iz_e,myid,ncpu_s,
      +                numprocs)
+
+
       call solve_trid(pt, ptopfft)
+
 c
 c ------------- transpose back
 c
@@ -4198,6 +4222,8 @@ c
 c
 c --------------- solve system
 c
+
+
          call tridv(bb,dd,aa,rh,nnz,jxs,jxe)
          do lp=jxs,jxe
          do iz=1,nnz
@@ -4224,6 +4250,7 @@ c --- output:  r   solution vector
 c
       real b(n,j1:j2), d(n,j1:j2), a(n,j1:j2), r(n,j1:j2)
 c
+
       if(n .le. 1 ) then
          do j=j1,j2
             r(1,j) = r(1,j)/d(1,j)
@@ -5430,8 +5457,6 @@ c
 c        fcor    = 0.0
          fcor    = 1.39e-04
          fcor_h  = 0.0
-         ugcont  = 0.0
-         vgcont  = 0.0
 c        wtsfc(1)=0.00
 c        wtsfc(1)=4.96e-07
          wtsfc(1)=1.190476e-06
@@ -5503,9 +5528,6 @@ c
 c
          dtjump  = 0.0
          divgls  = 0.0
-         zo      = 0.1
-         ugcont  = 10.0 
-         vgcont  = 0.0
 
   
 c
@@ -7635,7 +7657,11 @@ c          stat(.,3) = Particle: <T' Q'>
           if (iscl == 1) then
           if (iTcouple ==1) then
             qfluc = partTsrc(i,j,iz)-Tpsrc(iz)
+            if (iz==nnz) then
+            qflucp1 = 0.0
+            else
             qflucp1 = partTsrc(i,j,izp1)-Tpsrc(izp1)
+            end if
             stat(iz,3) = stat(iz,3) + 
      +         weit*(qflucp1*Tflucp1) + weit1*(qfluc*Tfluc)
           endif
@@ -7645,7 +7671,11 @@ c          stat(.,3) = Particle: <T' Q'>
           if (iscl == 2) then
           if (iHcouple ==1) then
             qfluc = partHsrc(i,j,iz)-Hpsrc(iz)
+            if (iz==nnz) then
+            qflucp1 = 0.0
+            else
             qflucp1 = partHsrc(i,j,izp1)-Hpsrc(izp1)
+            end if
             stat(iz,3) = stat(iz,3) + 
      +         weit*(qflucp1*Tflucp1) + weit1*(qfluc*Tfluc)
           endif
@@ -7653,7 +7683,11 @@ c          stat(.,3) = Particle: <T' Q'>
 
           if (iscl .eq. 2 .and. iHcouple .eq. 1 ) then
               qfluc = partTEsrc(i,j,iz)-TEpsrc(iz)
+              if (iz==nnz) then
+              qflucp1 = 0.0
+              else
               qflucp1 = partTEsrc(i,j,izp1)-TEpsrc(izp1)
+              end if
               Tv_part2(iz) = Tv_part2(iz) + 
      +          weit*(qflucp1*Tflucp1) + weit1*(qfluc*Tfluc)
   
@@ -9963,6 +9997,7 @@ c
       !call mpi_barrier(mpi_comm_world,ierr)
       !if (myid==5) write(*,*) 'time fill_ext:',t_f-t_s
 
+
       partcount_t = 0.0
       vpsum_t = 0.0
       upwp_t = 0.0
@@ -9990,6 +10025,7 @@ c
       do while (associated(part))     
          !First, interpolate to get the fluid velocity part%uf(1:3):
          call uf_interp     
+
 
 
          if (it .LE. 1 ) then 
@@ -10327,8 +10363,8 @@ c
       !perfectly elastic collisions on top, bottom walls
       !i.e. location is reflected, w-velocity is negated
 
-      top = zl - delta_vis!part%radius
-      bot = 0.0 + delta_vis!part%radius
+      top = zl - part%radius
+      bot = 0.0 + part%radius
 
       if (part%xp(3) .GT. top) then
          part%xp(3) = top - (part%xp(3)-top)
@@ -10788,24 +10824,16 @@ c
       !preceding letter: r=right,l=left,t=top,b=bot.
       !_s: buf of things to send TO r,l,t,b
       !_r: buf of things to recv FROM r,l,t,b 
-c      real :: tbuf_s(nnz+2,iye-iys+1,2,4),tbuf_r(nnz+2,iye-iys+1,3,4) !Brian 7/14/14
-c      real :: bbuf_s(nnz+2,iye-iys+1,3,4),bbuf_r(nnz+2,iye-iys+1,2,4) !Brian 7/14/14
-c      real :: rbuf_s(nnz+2,2,mxe-mxs+1,4),rbuf_r(nnz+2,3,mxe-mxs+1,4) !Brian 7/14/14
-c      real :: lbuf_s(nnz+2,3,mxe-mxs+1,4),lbuf_r(nnz+2,2,mxe-mxs+1,4) !Brian 7/14/14
-      real :: tbuf_s(nnz+2,iye-iys+1,2,5),tbuf_r(nnz+2,iye-iys+1,3,5) !Brian 7/14/14
-      real :: bbuf_s(nnz+2,iye-iys+1,3,5),bbuf_r(nnz+2,iye-iys+1,2,5) !Brian 7/14/14
-      real :: rbuf_s(nnz+2,2,mxe-mxs+1,5),rbuf_r(nnz+2,3,mxe-mxs+1,5) !Brian 7/14/14
-      real :: lbuf_s(nnz+2,3,mxe-mxs+1,5),lbuf_r(nnz+2,2,mxe-mxs+1,5) !Brian 7/14/14
+      real :: tbuf_s(nnz+2,iye-iys+1,2,5),tbuf_r(nnz+2,iye-iys+1,3,5)
+      real :: bbuf_s(nnz+2,iye-iys+1,3,5),bbuf_r(nnz+2,iye-iys+1,2,5)
+      real :: rbuf_s(nnz+2,2,mxe-mxs+1,5),rbuf_r(nnz+2,3,mxe-mxs+1,5)
+      real :: lbuf_s(nnz+2,3,mxe-mxs+1,5),lbuf_r(nnz+2,2,mxe-mxs+1,5)
 
       !Corners:
-c      real :: trbuf_s(nnz+2,2,2,4),trbuf_r(nnz+2,3,3,4) !Brian 7/14/14
-c      real :: brbuf_s(nnz+2,2,3,4),brbuf_r(nnz+2,3,2,4) !Brian 7/14/14
-c      real :: blbuf_s(nnz+2,3,3,4),blbuf_r(nnz+2,2,2,4) !Brian 7/14/14
-c      real :: tlbuf_s(nnz+2,3,2,4),tlbuf_r(nnx+2,2,3,4) !Brian 7/14/14
-      real :: trbuf_s(nnz+2,2,2,5),trbuf_r(nnz+2,3,3,5) !Brian 7/14/14
-      real :: brbuf_s(nnz+2,2,3,5),brbuf_r(nnz+2,3,2,5) !Brian 7/14/14
-      real :: blbuf_s(nnz+2,3,3,5),blbuf_r(nnz+2,2,2,5) !Brian 7/14/14
-      real :: tlbuf_s(nnz+2,3,2,5),tlbuf_r(nnx+2,2,3,5) !Brian 7/14/14
+      real :: trbuf_s(nnz+2,2,2,5),trbuf_r(nnz+2,3,3,5) 
+      real :: brbuf_s(nnz+2,2,3,5),brbuf_r(nnz+2,3,2,5)
+      real :: blbuf_s(nnz+2,3,3,5),blbuf_r(nnz+2,2,2,5)
+      real :: tlbuf_s(nnz+2,3,2,5),tlbuf_r(nnx+2,2,3,5)
 
       !MPI send counts:
       integer :: rc_s,rc_r,trc_s,trc_r,tc_s,tc_r,tlc_s,tlc_r
@@ -10857,13 +10885,14 @@ c      real :: tlbuf_s(nnz+2,3,2,4),tlbuf_r(nnx+2,2,3,4) !Brian 7/14/14
      +                myid,ncpu_s,numprocs)
       call xtoz_trans(t(1:nnx,iys:iye,2,izs-1:ize+1),T2_t,nnx,nnz,
      +                mxs,mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,
-     +                myid,ncpu_s,numprocs)   !Brian 7/14/14
+     +                myid,ncpu_s,numprocs) 
 
       uext(0:nnz+1,iys:iye,mxs:mxe) = u_t(0:nnz+1,iys:iye,mxs:mxe)
       vext(0:nnz+1,iys:iye,mxs:mxe) = v_t(0:nnz+1,iys:iye,mxs:mxe)
       wext(0:nnz+1,iys:iye,mxs:mxe) = w_t(0:nnz+1,iys:iye,mxs:mxe)
       Text(0:nnz+1,iys:iye,mxs:mxe) = T_t(0:nnz+1,iys:iye,mxs:mxe)
-      T2ext(0:nnz+1,iys:iye,mxs:mxe) = T2_t(0:nnz+1,iys:iye,mxs:mxe) !Brian 7/14/14
+      T2ext(0:nnz+1,iys:iye,mxs:mxe) = T2_t(0:nnz+1,iys:iye,mxs:mxe)
+
 
       !Recall that SR assign_nbrs assigned rproc,lproc, etc.
 
@@ -10871,40 +10900,23 @@ c      real :: tlbuf_s(nnz+2,3,2,4),tlbuf_r(nnx+2,2,3,4) !Brian 7/14/14
       
       !Fill the send buffers:
       
-c      !I know these are redundant, but so I can keep them straight...
-c      tc_s = 4*(nnz+2)*2*(iye-iys+1) !Brian 7/14/14
-c      tc_r = 4*(nnz+2)*3*(iye-iys+1) !Brian 7/14/14
-c      trc_s = 4*(nnz+2)*2*2 !Brian 7/14/14
-c      trc_r = 4*(nnz+2)*3*3 !Brian 7/14/14
-c      rc_s = 4*(nnz+2)*(mxe-mxs+1)*2 !Brian 7/14/14
-c      rc_r = 4*(nnx+2)*(mxe-mxs+1)*3 !Brian 7/14/14
-c      tlc_s = 4*(nnz+2)*3*2 !Brian 7/14/14
-c      tlc_r = 4*(nnz+2)*2*3 !Brian 7/14/14
-c      bc_s = 4*(nnz+2)*3*(iye-iys+1) !Brian 7/14/14
-c      bc_r = 4*(nnz+2)*2*(iye-iys+1) !Brian 7/14/14
-c      blc_s = 4*(nnz+2)*3*3 !Brian 7/14/14
-c      blc_r = 4*(nnz+2)*2*2 !Brian 7/14/14
-c      lc_s = 4*(nnz+2)*(mxe-mxs+1)*3 !Brian 7/14/14
-c      lc_r = 4*(nnz+2)*(mxe-mxs+1)*2 !Brian 7/14/14
-c      brc_s = 4*(nnz+2)*2*3 !Brian 7/14/14
-c      brc_r = 4*(nnz+2)*3*2 !Brian 7/14/14
       !I know these are redundant, but so I can keep them straight...
-      tc_s = 5*(nnz+2)*2*(iye-iys+1) !Brian 7/14/14
-      tc_r = 5*(nnz+2)*3*(iye-iys+1) !Brian 7/14/14
-      trc_s = 5*(nnz+2)*2*2 !Brian 7/14/14
-      trc_r = 5*(nnz+2)*3*3 !Brian 7/14/14
-      rc_s = 5*(nnz+2)*(mxe-mxs+1)*2 !Brian 7/14/14
-      rc_r = 5*(nnx+2)*(mxe-mxs+1)*3 !Brian 7/14/14
-      tlc_s = 5*(nnz+2)*3*2 !Brian 7/14/14
-      tlc_r = 5*(nnz+2)*2*3 !Brian 7/14/14
-      bc_s = 5*(nnz+2)*3*(iye-iys+1) !Brian 7/14/14
-      bc_r = 5*(nnz+2)*2*(iye-iys+1) !Brian 7/14/14
-      blc_s = 5*(nnz+2)*3*3 !Brian 7/14/14
-      blc_r = 5*(nnz+2)*2*2 !Brian 7/14/14
-      lc_s = 5*(nnz+2)*(mxe-mxs+1)*3 !Brian 7/14/14
-      lc_r = 5*(nnz+2)*(mxe-mxs+1)*2 !Brian 7/14/14
-      brc_s = 5*(nnz+2)*2*3 !Brian 7/14/14
-      brc_r = 5*(nnz+2)*3*2 !Brian 7/14/14
+      tc_s = 5*(nnz+2)*2*(iye-iys+1)
+      tc_r = 5*(nnz+2)*3*(iye-iys+1)
+      trc_s = 5*(nnz+2)*2*2
+      trc_r = 5*(nnz+2)*3*3
+      rc_s = 5*(nnz+2)*(mxe-mxs+1)*2 
+      rc_r = 5*(nnx+2)*(mxe-mxs+1)*3 
+      tlc_s = 5*(nnz+2)*3*2 
+      tlc_r = 5*(nnz+2)*2*3 
+      bc_s = 5*(nnz+2)*3*(iye-iys+1) 
+      bc_r = 5*(nnz+2)*2*(iye-iys+1)
+      blc_s = 5*(nnz+2)*3*3
+      blc_r = 5*(nnz+2)*2*2
+      lc_s = 5*(nnz+2)*(mxe-mxs+1)*3 
+      lc_r = 5*(nnz+2)*(mxe-mxs+1)*2
+      brc_s = 5*(nnz+2)*2*3 
+      brc_r = 5*(nnz+2)*3*2 
      
       !First u:
       tbuf_s(1:nnz+2,1:iye-iys+1,1:2,1) = u_t(0:nnz+1,iys:iye,mxe-1:mxe)
@@ -11139,6 +11151,7 @@ c      brc_r = 4*(nnz+2)*3*2 !Brian 7/14/14
       kwpts(2) = kwpts(3)-1
       kwpts(1) = kwpts(2)-1
 
+
 !---------
 !      !As an aside, use ijpts,kwpts to update the particle numbers at each cell:
 !
@@ -11167,16 +11180,6 @@ c      brc_r = 4*(nnz+2)*3*2 !Brian 7/14/14
        end do
        end do
       
-
-!      !Enforce periodicity in x by adjusting the indices:
-!      !NOTE: doing this after having computed the weights
-!      do i=1,6
-!         if (ijpts(1,i) .LT. 1) then
-!            ijpts(1,i) = ijpts(1,i)+nnx
-!         elseif (ijpts(1,i) .GT. nnx) then
-!            ijpts(1,i) = ijpts(1,i)-nnx
-!         end if
-!      end do
      
        !Now compute weights in z-dir
        !There are 2 sections: weights at (u,v) nodes (kuvpts) 
@@ -11246,21 +11249,34 @@ c      brc_r = 4*(nnz+2)*3*2 !Brian 7/14/14
        if (kwpts(3) == 0) then
           first = 3
           last = 4
+          kwpts(1) = 1
+          kwpts(2) = 1
        elseif (kwpts(3) .LT. 0) then 
           first = 0
           last = 0
+          kwpts(1) = 1
+          kwpts(2) = 1
+          kwpts(3) = 1
        elseif (kwpts(3) == 1) then 
           first = 2
           last = 5
+          kwpts(1) = 1
        elseif (kwpts(3) == nnz-1) then
           first = 3
           last = 4
+          kwpts(5) = nnz
+          kwpts(6) = nnz
        elseif (kwpts(3) .GE. nnz) then
           first = 0
           last = 0
+          kwpts(3) = nnz
+          kwpts(4) = nnz
+          kwpts(5) = nnz
+          kwpts(6) = nnz
        elseif (kwpts(3) == nnz-2) then
           first = 2
           last = 5
+          kwpts(6) = nnz
        else
           first = 1
           last = 6
@@ -11317,6 +11333,7 @@ c      brc_r = 4*(nnz+2)*3*2 !Brian 7/14/14
       integer :: idx
       real :: xv,yv,zv,ran2,deltaz
       real :: maxx,maxy,maxz
+      real :: xp_init(3)
 
       !Create the seed for the random number generator:
       call date_and_time(VALUES=values)
@@ -11343,8 +11360,9 @@ c      brc_r = 4*(nnz+2)*3*2 !Brian 7/14/14
       do idx=1,numpart
       xv = ran2(iseed)*(xmax-xmin) + xmin
       yv = ran2(iseed)*(ymax-ymin) + ymin
-      zv = ran2(iseed)*(zl-2.0*delta_vis) + delta_vis 
-      call create_particle((/xv,yv,zv/),vp_init,
+      zv = ran2(iseed)*(zl-2.0*radius_init) + radius_init
+      xp_init = (/xv,yv,zv/)
+      call create_particle(xp_init,vp_init,
      +         Tp_init,qf_init,idx) 
       end do
 
@@ -11382,7 +11400,7 @@ c      brc_r = 4*(nnz+2)*3*2 !Brian 7/14/14
       pi   = 4.0*atan(1.0)  
     
 
-      m_s = Sal/1000.0*4.0/3.0*pi*radius_mass**3*rhow
+      m_s = Sal/1000.0*4.0/3.0*pi*radius_init**3*rhow
 
 
       if (myid==0) write(*,*) 'Init Particle radius = ',radius_init  !Brian 7/14/14
@@ -11844,6 +11862,7 @@ c      brc_r = 4*(nnz+2)*3*2 !Brian 7/14/14
 
       kwpt = iz
 
+
 !---------
       !As an aside, use ipt,jpt,kwpt to update the particle numbers at each cell:
 
@@ -12045,8 +12064,8 @@ c      brc_r = 4*(nnz+2)*3*2 !Brian 7/14/14
      +                       itstr,it_his,it_viz,i_viz,itn
 
       namelist /grid_params/ ncpu_s, Uo, Ttop, Tbot,
-     +         qstar, tsfcc,
-     +         zi, zl, xl, yl, zw1
+     +         qstar, tsfcc, ugcont, vgcont,
+     +         zi, zl, xl, yl, zw1, dpdx
 
       namelist /path_names/ path_seed,path_part,path_res,
      +         path_sav,path_his,path_viz_xy,path_viz_xz,
@@ -12055,14 +12074,14 @@ c      brc_r = 4*(nnz+2)*3*2 !Brian 7/14/14
       namelist /flags/ ismlt,ifree,isfc,iradup,
      +         iupwnd,ibuoy,ifilt,itcut,isubs,ibrcl,iocean,
      +         method,idebug,iz_space,ivis0,ifix_dt,new_vis,iDNS,
-     +         ispray,icouple,iTcouple,iHcouple,ievap
+     +         ispray,icouple,iTcouple,iHcouple,ievap,ifields
 
 
       namelist /constants/ rhoa, nuf, Cpa, Pra, Sc,
      +         tnumpart,rhow,part_grav,
      +         Cpp,Mw,Ms,Ru,Gam,Ion,Os,Sal,
-     +         radius_init,radius_mass,delta_vis,
-     +         grav, t00,fcor,
+     +         radius_init,
+     +         grav, t00,fcor,zo,
      +         vp_init,Tp_init,qf_init
 
 
