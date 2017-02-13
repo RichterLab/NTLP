@@ -7,7 +7,7 @@ c     ----------------------------------------------------------------------
       integer :: ismlt,ifree,iradup,
      +     iupwnd,ibuoy,ifilt,itcut,isubs,ibrcl,iocean,method,
      +     idebug,iz_space,ivis0,ifix_dt,new_vis,iDNS,ispray,
-     +     icouple,iTcouple,iHcouple,ievap,ifields
+     +     icouple,iTcouple,iHcouple,ievap,ifields,ilin
 c     
 c     -------- j_recl = record length in "bytes" for history file
 c     k8     = kind parameter for integers in mpi_io routines
@@ -10024,7 +10024,11 @@ c
       part => first_particle
       do while (associated(part))     
          !First, interpolate to get the fluid velocity part%uf(1:3):
-         call uf_interp     
+         if (ilin .eq. 1) then
+            call uf_interp_lin   !Use trilinear interpolation
+         else
+            call uf_interp       !Use 6th order Lagrange interpolation
+         end if
 
 
 
@@ -11323,6 +11327,89 @@ c
 
 
       end subroutine uf_interp 
+
+      subroutine uf_interp_lin
+      use pars
+      use particles
+      use fields
+      use con_stats
+      use con_data
+      implicit none
+       
+      integer :: ix,iy,izuv,izw,iz,i,k,j
+      integer :: ipt,jpt,kpt,kwpt
+      real :: wtx,wty,wtz,wtzw,wtt,wttw
+      real :: xv,yv,zv,zwv
+      
+
+      ipt = floor(part%xp(1)/dx) + 1 
+      jpt = floor(part%xp(2)/dy) + 1
+     
+     
+      !Finding the k-lhnode is different since grid may be stretched
+      !AND since (u,v) and w stored differently
+      !Will get a k-index for (u,v) and one for w
+      
+      !Do (u,v) loop first:
+      do iz=0,nnz+1
+         if (zz(iz) .GT. part%xp(3)) go to 1199
+      end do
+1199  continue
+
+      kpt = iz-1
+
+      !Do again for w:
+      do iz = 0,nnz+1 
+         if (z(iz) .GT. part%xp(3)) go to 1120
+      end do
+1120  continue
+   
+      kwpt = iz-1
+
+
+      part%uf(1:3) = 0.0
+      part%Tf = 0.0
+      part%qinf = 0.0
+      do i=0,1
+      do j=0,1
+      do k=0,1
+
+      xv = dx*(i+ipt-1)
+      yv = dy*(j+jpt-1)
+      zv = zz(k+kpt)
+      zwv = z(k+kwpt)
+
+      wtx = (1.0 - abs(part%xp(1)-xv)/dx)
+      wty = (1.0 - abs(part%xp(2)-yv)/dy)
+      wtz = (1.0 - abs(part%xp(3)-zv)/dzu(kpt+1))
+      wtzw = (1.0 - abs(part%xp(3)-zwv)/dzw(kwpt+1))
+
+      ix = ipt+i
+      iy = jpt+i
+      izuv = kpt+k
+      izw = kwpt+k
+
+
+      part%uf(1) = part%uf(1) + uext(izuv,iy,ix)*
+     +      wtx*wty*wtz
+      part%uf(2) = part%uf(2) + vext(izuv,iy,ix)*
+     +      wtx*wty*wtz
+      part%uf(3) = part%uf(3) + wext(izw,iy,ix)*
+     +      wtx*wty*wtzw
+
+      part%Tf = part%Tf + Text(izuv,iy,ix)*
+     +      wtx*wty*wtz
+      part%qinf = part%qinf + T2ext(izuv,iy,ix)*
+     +      wtx*wty*wtz
+
+
+      end do
+      end do
+      end do
+
+
+      end subroutine uf_interp_lin
+
       subroutine particle_init
       use particles
       use pars
@@ -12074,7 +12161,7 @@ c
       namelist /flags/ ismlt,ifree,isfc,iradup,
      +         iupwnd,ibuoy,ifilt,itcut,isubs,ibrcl,iocean,
      +         method,idebug,iz_space,ivis0,ifix_dt,new_vis,iDNS,
-     +         ispray,icouple,iTcouple,iHcouple,ievap,ifields
+     +         ispray,icouple,iTcouple,iHcouple,ievap,ifields,ilin
 
 
       namelist /constants/ rhoa, nuf, Cpa, Pra, Sc,

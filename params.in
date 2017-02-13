@@ -21,6 +21,7 @@ method=3, idebug=1, iz_space=1, ivis0=0, ifix_dt=0, new_vis=-1
 isfc = 0, 1  ! isfc = 0 sets surface flux (qstar), isfc = 1 sets surface condition (Dirichlet through tsfcc)
 iDNS = 1
 ifields = 1
+ilin = 0   !1 means linear interpolation for particle, 6th order otherwise
 ispray=1
 icouple=0
 iTcouple=0
