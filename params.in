@@ -2,7 +2,7 @@
 !Time step information
 &step_params
 iti=0
-itmax=100000
+itmax=300000
 imean=100
 ihst=10
 itape=10000
@@ -20,7 +20,7 @@ ibuoy=0, ifilt=0, itcut=1, isubs=0, ibrcl=0, iocean=0
 method=3, idebug=1, iz_space=1, ivis0=0, ifix_dt=0, new_vis=-1
 isfc = 0, 1  ! isfc = 0 sets surface flux (qstar), isfc = 1 sets surface condition (Dirichlet through tsfcc)
 iDNS = 1
-ifields = 1
+ifields = 1  ! if set to 1, reads the initial condition from path_ran below; otherwise calls subroutine random
 ilin = 0   !1 means linear interpolation for particle, 6th order otherwise
 ispray=1
 icouple=0
@@ -34,7 +34,7 @@ ievap=0
 ncpu_s=8
 
 !Use for DNS:
-Uo = 1.59  !Used when top and bottom are equal and opposite in DNS of Couette flow
+Uo = 0.0  !Sets the magnitude of the top and bottom plate velocities (Couette flow -- assumes equal and opposite)
 Ttop(1) = 300.15, 95.0  !Currently this should be (temperature, relative humidity) (used in DNS)
 Tbot(1) = 300.15, 100.0  !Currently this should be (temperature, relative humidity) (used in DNS)
 
@@ -52,7 +52,7 @@ zl = 0.04
 xl = 0.251327  !2*pi*zl
 yl = 0.125664  !2*pi*zl
 
-zw1 = 0.00013333  !The first grid point
+zw1 = 0.00008  !The first grid point
 /
 
 !Set the paths for code I/O. Must be on the scratch directory, not AFS!
@@ -78,14 +78,14 @@ fcor = 0.0  !Coriolis parameter
 zo = 0.1       !Roughness height (for LES)
 
 !Air phase:
-rhoa=1.1
+rhoa=1.0
 nuf=1.57e-5  !m^2/s
 Cpa=1006.0  !J/kg-K
 Pra = 0.715
 Sc = 0.615
 
 !Particles:
-tnumpart = 1e6
+tnumpart = 1e5
 rhow=1000.0  !kg/m^3
 part_grav = 0.0
 Cpp = 4179.0  !J/kg-K
