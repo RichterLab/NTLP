@@ -146,9 +146,11 @@ c     ---------------------------------------------------------------------
       real, allocatable :: 
      +     u(:,:,:), v(:,:,:), w(:,:,:), t(:,:,:,:), e(:,:,:), 
      +     r1(:,:,:), r2(:,:,:), r3(:,:,:), r4(:,:,:,:), r5(:,:,:),
-     +     DwDt(:,:,:),w_old(:,:,:),Gamma2(:,:,:),
-     +     DuDt(:,:,:),u_old(:,:,:),
-     +     DvDt(:,:,:),v_old(:,:,:)
+     +     DwDt(:,:,:),Gamma2(:,:,:),t_unch(:,:,:),
+     +     DuDt(:,:,:),
+     +     DvDt(:,:,:),
+     +     Duch(:,:,:),Dvch(:,:,:),Dwch(:,:,:),Dwch5(:,:,:),
+     +     Dwch1(:,:,:),Dwch2(:,:,:),Dwch3(:,:,:),Dwch4(:,:,:)
       real, allocatable :: 
      +     ux(:,:,:), uy(:,:,:), vx(:,:,:), vy(:,:,:), 
      +     wx(:,:,:), wy(:,:,:),
@@ -1595,9 +1597,10 @@ c
             erhs(ix,iy,iz) = e(ix,iy,iz) + dtzeta*r5(ix,iy,iz)
 
             !Right here get part of the time derivative term:
-            DuDt(ix,iy,iz) = zetas(istage)*r1(ix,iy,iz)
-            DvDt(ix,iy,iz) = zetas(istage)*r2(ix,iy,iz)
-            DwDt(ix,iy,iz) = zetas(istage)*r3(ix,iy,iz)
+            DuDt(ix,iy,iz) = zetas(istep)*r1(ix,iy,iz)
+            DvDt(ix,iy,iz) = zetas(istep)*r2(ix,iy,iz)
+            DwDt(ix,iy,iz) = zetas(istep)*r3(ix,iy,iz)
+            Dwch1(ix,iy,iz) = zetas(istep)*r3(ix,iy,iz)
 
          enddo
          enddo
@@ -1704,6 +1707,15 @@ c
 c
 c ------- save old rhs in field variables for RK-advancement
 c
+      !For "profiles" case, save the unchanged field for use later:
+      do iz=izs-1,ize+1
+      do iy=iys,iye
+      do ix=1,nnx
+         t_unch(ix,iy,iz) = t(ix,iy,2,iz)
+      end do
+      end do
+      end do
+
       do iz=izs,ize
          do iy=iys,iye
          do ix=1,nnx
@@ -1711,6 +1723,7 @@ c
             v(ix,iy,iz) = vrhs(ix,iy,iz)
             w(ix,iy,iz) = wrhs(ix,iy,iz)
             e(ix,iy,iz) = erhs(ix,iy,iz)
+
          enddo
          enddo
       enddo
@@ -1723,6 +1736,7 @@ c
          enddo
          enddo
       enddo
+
 c
       return
       end
@@ -2074,6 +2088,10 @@ c
      +      u_avg*wx(ix,iy,iz) + 
      +      v_avg*wy(ix,iy,iz) + 
      +      w(ix,iy,iz)*(weit*wzp + weit1*wz)
+
+         Dwch2(ix,iy,iz) = u_avg*wx(ix,iy,iz)
+         Dwch3(ix,iy,iz) = v_avg*wy(ix,iy,iz)
+         Dwch4(ix,iy,iz) = w(ix,iy,iz)*(weit*wzp + weit1*wz)
 
          Gamma2(ix,iy,iz) = weit*wzp + weit1*wz
 
@@ -2860,6 +2878,8 @@ c
       if (iscl==2) then   !Adding vertical advection to the 2nd scalar
 
       do iz=izs,ize
+      izm1 = iz - 1
+      izp1 = iz + 1
 
       if (iz==nnz) then  !Must make sure that we have zero flux at top!
 
@@ -3403,6 +3423,12 @@ c
          vy(ix,iy,izm1) = 0.0
          wx(ix,iy,izm1) = 0.0 
          wy(ix,iy,izm1) = 0.0 
+           wbc(ix,iy,2) = 0.0
+           ebc(ix,iy,2) = 0.0
+           ubc(ix,iy,2) = u(ix,iy,izm1)
+           vbc(ix,iy,2) = v(ix,iy,izm1)
+           pbc(ix,iy,2) = 0.0
+           pbc2(ix,iy,2)= 0.0
       enddo
       enddo
 
@@ -3468,6 +3494,12 @@ c
          vy(ix,iy,izp1) = 0.0
          wx(ix,iy,izp1) = 0.0 
          wy(ix,iy,izp1) = 0.0 
+           wbc(ix,iy,1) = 0.0
+           ebc(ix,iy,1) = 0.0
+           ubc(ix,iy,1) = u(ix,iy,izp1)
+           vbc(ix,iy,1) = v(ix,iy,izp1)
+           pbc(ix,iy,1) = 0.0
+           pbc2(ix,iy,1)= 0.0
       enddo
       enddo
 
@@ -4023,6 +4055,10 @@ c
       real adv_x(nnx,iys:iye), adv_y(nnx,iys:iye,izs:ize)
       real fs(nnx,iys:iye),fr(nnx,iys:iye)
       integer nsend,nrecv,nt,nb
+      real :: Dwavg,Dwavgm1
+      real :: t_u_avg,t_l_avg
+      real :: Dwavg_u,Dwavgm1_u
+      real :: t_u_avg_u,t_l_avg_u
 c
       do iz=1,nnz
          r3_sum(iz) = 0.0
@@ -4129,6 +4165,7 @@ c
             w(ix,iy,iz)  = w(ix,iy,iz) + dtgama*r3(ix,iy,iz)
             DwDt(ix,iy,iz) = DwDt(ix,iy,iz) + 
      +            gama(istage)*r3(ix,iy,iz)
+            Dwch5(ix,iy,iz) = gama(istage)*r3(ix,iy,iz)
          enddo
          enddo
       enddo
@@ -4193,8 +4230,6 @@ c
 
 !!!!!
 
-
-
       !Finally do the scalars since t2 needed to have complete DuDt:
 
       !Get d/dy(C*taup*DvDt)
@@ -4202,7 +4237,9 @@ c
       do iy=iys,iye
       do ix=1,nnx
 
-      adv_y(ix,iy,iz) = t(ix,iy,2,iz)*taup*DvDt(ix,iy,iz)
+      adv_y(ix,iy,iz) = t_unch(ix,iy,iz)*taup*DvDt(ix,iy,iz)
+
+      !Dvch(ix,iy,iz) =  taup*DvDt(ix,iy,iz)*t(ix,iy,2,iz)
 
       end do
       end do
@@ -4212,6 +4249,8 @@ c
      +           nnx,nny,ixs,ixe,ix_s,ix_e,
      +           iys,iye,iy_s,iy_e,izs,ize,myid,ncpu_s,numprocs)
 
+      Dwavg = 0.0
+      Dwavgm1 = 0.0
       do iz=izs,ize
 
       izm1  = iz - 1
@@ -4225,19 +4264,20 @@ c
       do iy=iys,iye
 
       !For getting d/dx(C*taup*DuDt):
-      adv_x(ix,iy) = taup*DuDt(ix,iy,iz)*t(ix,iy,2,iz)
+      adv_x(ix,iy) = taup*DuDt(ix,iy,iz)*t_unch(ix,iy,iz)
 
       end do
       end do
 
       call xderivp(adv_x(1,iys),trigx(1,1),xk(1),nnx,iys,iye)
 
+
       do iy=iys,iye
       do ix=1,nnx
-         theta_u = weit1*t(ix,iy,2,iz) +
-     +                weit*t(ix,iy,2,izp1)
-         theta_l = weit3*t(ix,iy,2,iz) +
-     +                weit4*t(ix,iy,2,izm1)
+         theta_u = weit1*t_unch(ix,iy,iz) +
+     +                weit*t_unch(ix,iy,izp1)
+         theta_l = weit3*t_unch(ix,iy,iz) +
+     +                weit4*t_unch(ix,iy,izm1)
 
          !Add the inertial correction:
          r4(ix,iy,2,iz) = r4(ix,iy,2,iz) +
@@ -4246,10 +4286,63 @@ c
      +   ((theta_u*taup*DwDt(ix,iy,iz))- 
      +    (theta_l*taup*DwDt(ix,iy,izm1)))*dzw_i(iz)
 
+      if (iz==ize) then
+      Dwavg = Dwavg + theta_u*taup*DwDt(ix,iy,iz)  
+      end if
+
+      if (iz==izs) then
+      Dwavgm1 = Dwavgm1 + theta_l*taup*DwDt(ix,iy,izm1)
+      end if
+
+      Duch(ix,iy,iz) =  adv_x(ix,iy)
+      Dvch(ix,iy,iz) =  adv_y(ix,iy,iz)
+      Dwch(ix,iy,iz) = ((theta_u*taup*DwDt(ix,iy,iz))- 
+     +    (theta_l*taup*DwDt(ix,iy,izm1)))*dzw_i(iz)
+
+!      Dwch(ix,iy,iz) = 0.5*((theta_u*taup*DwDt(ix,iy,iz))+
+!     +    (theta_l*taup*DwDt(ix,iy,izm1)))
+
       enddo
       enddo
 
       end do
+
+!      Dwavg = 0.0
+!      Dwavgm1 = 0.0
+!      Dwavg_u = 0.0
+!      Dwavgm1_u = 0.0
+!      t_u_avg = 0.0
+!      t_l_avg = 0.0
+!      t_u_avg_u = 0.0
+!      t_l_avg_u = 0.0
+!      do iy=iys,iye
+!      do ix=1,nnx
+!      Dwavg = Dwavg + DwDt(ix,iy,ize)
+!      Dwavgm1 = Dwavgm1 + DwDt(ix,iy,izs-1)
+!      t_u_avg = t_u_avg + t_unch(ix,iy,ize)
+!      t_l_avg = t_l_avg + t_unch(ix,iy,izs-1)
+!
+!      Dwavg_u = Dwavg_u + DwDt(ix,iy,ize+1)
+!      Dwavgm1_u = Dwavgm1_u + DwDt(ix,iy,izs)
+!      t_u_avg_u = t_u_avg_u + t_unch(ix,iy,ize+1)
+!      t_l_avg_u = t_l_avg_u + t_unch(ix,iy,izs)
+!      end do
+!      end do
+      Dwavg = Dwavg*fnxy
+      Dwavgm1 = Dwavgm1*fnxy
+!      t_u_avg = t_u_avg*fnxy
+!      t_l_avg = t_l_avg*fnxy
+!      Dwavg_u = Dwavg_u*fnxy
+!      Dwavgm1_u = Dwavgm1_u*fnxy
+!      t_u_avg_u = t_u_avg_u*fnxy
+!      t_l_avg_u = t_l_avg_u*fnxy
+ 
+      if (myid==0) write(*,'(a,i,2e15.6)') 'D0',myid,Dwavg,t_u_avg
+      if (myid==8) write(*,'(a,i,2e15.6)') 'D0',myid,Dwavgm1,t_l_avg
+
+!      if (myid==0) write(*,'(a,i,2e15.6)') 'D1',myid,Dwavg_u,t_u_avg_u
+!      if (myid==8) write(*,'(a,i,2e15.6)')'D1',myid,Dwavgm1_u,t_l_avg_u
+
 
       !Then do the update
       do iz=izs,ize
@@ -7291,24 +7384,24 @@ c
 c
 c --------------- output additional scalars
 c
-c     if(nscl .eq. 2) then
-c     write(lu,5005)tsfcc(2),wtsfc(2)
-c5005 format(/,'  SURFACE VALUE: TXYM(2) =',e15.6,' WTSFC(2) = ',e15.6)
-c     write(lu,5100) (iz,txym(iz,2),wtle(iz,2),
-c    +              wtsb(iz,2),iz=iz_strt,iz_end)
-c5100 format(//,' IZ',5x,' SCALAR-1 MEAN',8x,' WS1LE',10x,
-c    +          ' WS1SB',10x
-c    +       ,/,(1x,i4,3(3x,e12.6)))
-c     else if (nscl .eq. 3) then
-c     write(lu,5205)tsfcc(2),wtsfc(2),tsfcc(3),wtsfc(3)
-c5205 format(/,'  SURFACE VALUE: TXYM(2) =',e15.6,' WTSFC(2) = ',e15.6,
-c    +       /,'  SURFACE VALUE: TXYM(3) =',e15.6,' WTSFC(3) = ',e15.6)
-c     write(lu,5200) (iz,txym(iz,2),txym(iz,3),wtle(iz,2),
-c    +    wtsb(iz,2),wtle(iz,3),wtsb(iz,3),iz=iz_strt,iz_end)
-c5200 format(//,' IZ',5x,' SCALAR-1 MEAN',8x,' SCALAR-2 MEAN',10x,
-c    +          ' WS1LE',10x,' WS1SB',10x,' WS2LE',10x,' WS1SB'
-c    +       ,/,(1x,i4,6(3x,e12.6)))
-c     endif
+      if(nscl .eq. 2) then
+      write(lu,5005)tsfcc(2),wtsfc(2)
+ 5005 format(/,'  SURFACE VALUE: TXYM(2) =',e15.6,' WTSFC(2) = ',e15.6)
+      write(lu,5100) (iz,txym(iz,2),wtle(iz,2),
+     +              wtsb(iz,2),iz=iz_strt,iz_end)
+ 5100 format(//,' IZ',5x,' SCALAR-1 MEAN',8x,' WS1LE',10x,
+     +          ' WS1SB',10x
+     +       ,/,(1x,i4,3(3x,e15.7)))
+!      else if (nscl .eq. 3) then
+!      write(lu,5205)tsfcc(2),wtsfc(2),tsfcc(3),wtsfc(3)
+! 5205 format(/,'  SURFACE VALUE: TXYM(2) =',e15.6,' WTSFC(2) = ',e15.6,
+!     +       /,'  SURFACE VALUE: TXYM(3) =',e15.6,' WTSFC(3) = ',e15.6)
+!      write(lu,5200) (iz,txym(iz,2),txym(iz,3),wtle(iz,2),
+!     +    wtsb(iz,2),wtle(iz,3),wtsb(iz,3),iz=iz_strt,iz_end)
+! 5200 format(//,' IZ',5x,' SCALAR-1 MEAN',8x,' SCALAR-2 MEAN',10x,
+!     +          ' WS1LE',10x,' WS1SB',10x,' WS2LE',10x,' WS1SB'
+!     +       ,/,(1x,i4,6(3x,e15.7)))
+      endif
 c
       return
       end
@@ -7434,27 +7527,43 @@ c
          stat(iz,22) = stat(iz,22) + Tpsum(ix,iy,iz)
          stat(iz,23) = stat(iz,23) + Tpsqrsum(ix,iy,iz)
          stat(iz,24) = stat(iz,24) + Tfsum(ix,iy,iz)
-         stat(iz,25) = stat(iz,25) + qfsum(ix,iy,iz)
-         stat(iz,26) = stat(iz,26) + wpTpsum(ix,iy,iz)
-         stat(iz,27) = stat(iz,27) + partTsrc(ix,iy,iz)
-         stat(iz,28) = stat(iz,28) + radsum(ix,iy,iz) 
-         stat(iz,29) = stat(iz,29) + rad2sum(ix,iy,iz) 
-         stat(iz,30) = stat(iz,30) + mpsum(ix,iy,iz)
-         stat(iz,31) = stat(iz,31) + mwsum(ix,iy,iz)
-         stat(iz,32) = stat(iz,32) + partHsrc(ix,iy,iz)
+!         stat(iz,25) = stat(iz,25) + qfsum(ix,iy,iz)
+!         stat(iz,26) = stat(iz,26) + wpTpsum(ix,iy,iz)
+!         stat(iz,27) = stat(iz,27) + partTsrc(ix,iy,iz)
+!         stat(iz,28) = stat(iz,28) + radsum(ix,iy,iz) 
+!         stat(iz,29) = stat(iz,29) + rad2sum(ix,iy,iz) 
+!         stat(iz,30) = stat(iz,30) + mpsum(ix,iy,iz)
+!         stat(iz,31) = stat(iz,31) + mwsum(ix,iy,iz)
+!         stat(iz,32) = stat(iz,32) + partHsrc(ix,iy,iz)
+
+         !Debugging
+         stat(iz,25) = stat(iz,25) + Duch(ix,iy,iz)
+         stat(iz,26) = stat(iz,26) + Dvch(ix,iy,iz)
+         stat(iz,27) = stat(iz,27) + Dwch(ix,iy,iz)
+         stat(iz,28) = stat(iz,28) + Dwch1(ix,iy,iz)
+         stat(iz,29) = stat(iz,29) + Dwch2(ix,iy,iz)
+         stat(iz,30) = stat(iz,30) + Dwch3(ix,iy,iz)
+         stat(iz,31) = stat(iz,31) + Dwch4(ix,iy,iz)
+         stat(iz,32) = stat(iz,32) + Dwch5(ix,iy,iz)
+          
+         !Back to real arrays:
          stat(iz,33) = stat(iz,33) + partTEsrc(ix,iy,iz)
          stat(iz,34) = stat(iz,34) + qstarsum(ix,iy,iz)
          stat(iz,35) = stat(iz,35) + partcountU(ix,iy,iz)
          stat(iz,36) = stat(iz,36) + partflux(ix,iy,iz)
 
+
          stat(iz,37) = stat(iz,37) + DwDt(ix,iy,iz)*
+     +               (weit1*t(ix,iy,2,iz) +
+     +                weit*t(ix,iy,2,izp1))
+
+         stat(iz,38) = stat(iz,38) + DwDt(ix,iy,iz)*
      +               (weit1*(t(ix,iy,2,iz)-txym(iz,2)) +
      +                weit*(t(ix,iy,2,izp1)-txym(izp1,2)))
 
-
-         stat(iz,38) = stat(iz,38) + Gamma2(ix,iy,iz)*
-     +               (weit1*(t(ix,iy,2,iz)-txym(iz,2)) +
-     +                weit*(t(ix,iy,2,izp1)-txym(izp1,2)))
+!         stat(iz,38) = stat(iz,38) + Gamma2(ix,iy,iz)*
+!     +               (weit1*(t(ix,iy,2,iz)-txym(iz,2)) +
+!     +                weit*(t(ix,iy,2,izp1)-txym(izp1,2)))
          
 
       enddo
@@ -7555,18 +7664,31 @@ c
       Tpmean(iz) = stat(iz,22)/stat(iz,35)
       Tpmsqr(iz) = sqrt(stat(iz,23)/stat(iz,35)-Tpmean(iz)**2)
       Tfmean(iz) = stat(iz,24)/stat(iz,35)
-      qfmean(iz) = stat(iz,25)/stat(iz,35)
-      wpTpm(iz) = stat(iz,26)/stat(iz,35)-(Tpmean(iz)*vp3mean(iz))
+
+ 
+      !qfmean(iz) = stat(iz,25)/stat(iz,35)
+      !wpTpm(iz) = stat(iz,26)/stat(iz,35)-(Tpmean(iz)*vp3mean(iz))
+      !Tpsrc(iz) = stat(iz,27)*fnxy
+      !radmean(iz) = stat(iz,28)/stat(iz,35) 
+      !rad2mean(iz)= stat(iz,29)/stat(iz,35)
+      !mpmean(iz) = stat(iz,30)/stat(iz,35) !make sure stat matchs with phimp
+      !mwmean(iz) = stat(iz,31)/stat(iz,35) !make sure stat matchs with phimw
+
+      !Debugging:
+      qfmean(iz) = stat(iz,25)*fnxy
+      wpTpm(iz) = stat(iz,26)*fnxy
       Tpsrc(iz) = stat(iz,27)*fnxy
-      radmean(iz) = stat(iz,28)/stat(iz,35) 
-      rad2mean(iz)= stat(iz,29)/stat(iz,35)
- 
-      mpmean(iz) = stat(iz,30)/stat(iz,35) !make sure stat matchs with phimp
-      mwmean(iz) = stat(iz,31)/stat(iz,35) !make sure stat matchs with phimw
-      phimp(iz) = stat(iz,30)/xl/yl/dzw(iz)/rhoa
-      phimw(iz) = stat(iz,31)/xl/yl/dzw(iz)/rhoa
- 
+      radmean(iz) = stat(iz,28)*fnxy
+      rad2mean(iz) = stat(iz,29)*fnxy
+      mpmean(iz) = stat(iz,30)*fnxy
+      mwmean(iz) = stat(iz,31)*fnxy
       Hpsrc(iz) = stat(iz,32)*fnxy
+
+
+      !phimp(iz) = stat(iz,30)/xl/yl/dzw(iz)/rhoa
+      !phimw(iz) = stat(iz,31)/xl/yl/dzw(iz)/rhoa
+ 
+      !Hpsrc(iz) = stat(iz,32)*fnxy
       TEpsrc(iz) = stat(iz,33)*fnxy
       qstarm(iz) = stat(iz,34)*fnxy
 
@@ -7985,7 +8107,11 @@ c          stat(.,3) = Particle: <T' Q'>
           if (iscl == 1) then
           if (iTcouple ==1) then
             qfluc = partTsrc(i,j,iz)-Tpsrc(iz)
+            if (iz==nnz) then
+            qflucp1 = 0.0
+            else
             qflucp1 = partTsrc(i,j,izp1)-Tpsrc(izp1)
+            end if
             stat(iz,3) = stat(iz,3) + 
      +         weit*(qflucp1*Tflucp1) + weit1*(qfluc*Tfluc)
           endif
@@ -7995,7 +8121,11 @@ c          stat(.,3) = Particle: <T' Q'>
           if (iscl == 2) then
           if (iHcouple ==1) then
             qfluc = partHsrc(i,j,iz)-Hpsrc(iz)
+            if (iz==nnz) then
+            qflucp1 = 0.0
+            else
             qflucp1 = partHsrc(i,j,izp1)-Hpsrc(izp1)
+            end if
             stat(iz,3) = stat(iz,3) + 
      +         weit*(qflucp1*Tflucp1) + weit1*(qfluc*Tfluc)
           endif
@@ -8003,7 +8133,11 @@ c          stat(.,3) = Particle: <T' Q'>
 
           if (iscl .eq. 2 .and. iHcouple .eq. 1 ) then
               qfluc = partTEsrc(i,j,iz)-TEpsrc(iz)
+              if (iz==nnz) then
+              qflucp1 = 0.0
+              else
               qflucp1 = partTEsrc(i,j,izp1)-TEpsrc(izp1)
+              end if
               Tv_part2(iz) = Tv_part2(iz) + 
      +          weit*(qflucp1*Tflucp1) + weit1*(qfluc*Tfluc)
   
@@ -8373,13 +8507,25 @@ c
       DwDt = 0.0
       DvDt = 0.0
       DuDt = 0.0
+      allocate(Dwch(nnx,iys:iye,izs-1:ize+1))
+      allocate(Dwch1(nnx,iys:iye,izs-1:ize+1))
+      allocate(Dwch2(nnx,iys:iye,izs-1:ize+1))
+      allocate(Dwch3(nnx,iys:iye,izs-1:ize+1))
+      allocate(Dwch4(nnx,iys:iye,izs-1:ize+1))
+      allocate(Dwch5(nnx,iys:iye,izs-1:ize+1))
+      allocate(Dvch(nnx,iys:iye,izs-1:ize+1))
+      allocate(Duch(nnx,iys:iye,izs-1:ize+1))
+      Dwch = 0.0
+      Dwch1 = 0.0
+      Dwch2 = 0.0
+      Dwch3 = 0.0
+      Dwch4 = 0.0
+      Dwch5 = 0.0
+      Dvch = 0.0
+      Duch = 0.0
       allocate(Gamma2(nnx,iys:iye,izs-1:ize+1))
-      allocate(w_old(nnxp2,iys:iye,izs-1:ize+1))
-      allocate(v_old(nnxp2,iys:iye,izs-1:ize+1))
-      allocate(u_old(nnxp2,iys:iye,izs-1:ize+1))
-      w_old = 0.0
-      v_old = 0.0
-      u_old = 0.0
+      allocate(t_unch(nnx,iys:iye,izs-1:ize+1))
+      t_unch = 0.0
 
 c
 c ------------- allocate extended arrays for interpolation of
@@ -10082,7 +10228,6 @@ c
 c     use fftwk
       include 'mpif.h'
 c
-      !NOTE: CHANGED THIS ON 1/20/17 TO ADD IN DuDt,DvDt,DwDt:
       real fs(nnx,iys:iye,(4+nscl)),fr(nnx,iys:iye,(4+nscl))
       integer istatus(mpi_status_size)
 c
@@ -10677,8 +10822,15 @@ c
       !Loop over the linked list of particles:
       part => first_particle
       do while (associated(part))     
+
+         if (part%xp(3) .gt. 0.0) then
          !First, interpolate to get the fluid velocity part%uf(1:3):
          call uf_interp     
+         else
+         part%uf = 0.0
+         part%Tf = 0.0
+         part%qinf = 0.0
+         end if
 
 
          if (it .LE. 1 ) then 
@@ -12630,21 +12782,35 @@ c      brc_r = 4*(nnz+2)*3*2 !Brian 7/14/14
        if (kwpts(3) == 0) then
           first = 3
           last = 4
+          last = 4
+          kwpts(1) = 1
+          kwpts(2) = 1
        elseif (kwpts(3) .LT. 0) then 
           first = 0
           last = 0
+          kwpts(1) = 1
+          kwpts(2) = 1
+          kwpts(3) = 1
        elseif (kwpts(3) == 1) then 
           first = 2
           last = 5
+          kwpts(1) = 1
        elseif (kwpts(3) == nnz-1) then
           first = 3
           last = 4
+          kwpts(5) = nnz
+          kwpts(6) = nnz
        elseif (kwpts(3) .GE. nnz) then
           first = 0
           last = 0
+          kwpts(3) = nnz
+          kwpts(4) = nnz
+          kwpts(5) = nnz
+          kwpts(6) = nnz
        elseif (kwpts(3) == nnz-2) then
           first = 2
           last = 5
+          kwpts(6) = nnz
        else
           first = 1
           last = 6
