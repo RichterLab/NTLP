@@ -3,7 +3,7 @@
 #$ -M YOUR EMAIL ADDRESS
 #$ -m n
 #$ -pe mpi-16 64
-#$ -q *@@richter,*@@ivybridge
+#$ -q *@@richter
 #$ -N tutorial
 #$ -j y
 
