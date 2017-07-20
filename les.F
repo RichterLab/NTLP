@@ -2886,7 +2886,7 @@ c
 
       !Use Prantdl number for thermal diffusivity:
       vis_s(1:nnx,iys:iye,1,izs-1:ize+1) = nuf/Pra   ! alpha=nu/Prandtl   
-!      vis_s(1:nnx,iys:iye,2,izs-1:ize+1) = nuf/Sc    !Dv =nu/Sc
+      vis_s(1:nnx,iys:iye,2,izs-1:ize+1) = nuf/Sc    !Dv =nu/Sc
       r5 = 0.0
       e = 0.0
 
