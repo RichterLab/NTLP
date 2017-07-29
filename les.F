@@ -15,13 +15,13 @@ c
       integer, parameter :: j_recl=4, k8=8
 
       integer, parameter :: nscl = 2, nvar = (4+nscl)
-      integer, parameter :: maxnx=128,maxny=128,maxnz=128
+      integer, parameter :: maxnx=256,maxny=256,maxnz=256
       integer, parameter :: maxnz1=maxnz+1,
      + maxnz2=maxnz+2,maxnx2=maxnx+2,maxny2=maxny+2
 
       !Boundary conditions and other parameters
       real :: Uo, Ttop(nscl), Tbot(nscl),qstar(nscl),tsfcc(nscl)
-      real :: grav,t00,fcor,zi,zl,xl,yl,zw1,dpdx
+      real :: grav,t00,fcor,zi,zl,xl,yl,zw1,dpdx,dvdr,hurr_rad
       real :: ugcont,vgcont,zo
       integer :: isfc(nscl)
 c     
@@ -1800,8 +1800,16 @@ c
 c
 c ------------ geostrophic wind
 c
-         u_geo = -fcor*vg(iz)
-         v_geo =  fcor*(ug(iz)-ugal)
+ 
+         !Following Bryan et al (2017) for hurricane boundary layer with
+         !mesoscale terms:
+         u_geo = -fcor*vg(iz) - vg(iz)**2/hurr_rad + 
+     +   uxym(iz)**2/hurr_rad + vxym(iz)*vg(iz)/hurr_rad
+
+         v_geo = -uxym(iz)*dvdr - uxym(iz)*vg(iz)/hurr_rad
+
+         !u_geo = -fcor*vg(iz)
+         !v_geo =  fcor*(ug(iz)-ugal)
 c
 c ------------ totals
 c
@@ -12201,7 +12209,7 @@ c
 
       namelist /grid_params/ ncpu_s, Uo, Ttop, Tbot,
      +         qstar, tsfcc, ugcont, vgcont,
-     +         zi, zl, xl, yl, zw1, dpdx
+     +         zi, zl, xl, yl, zw1, dpdx, dvdr, hurr_rad
 
       namelist /path_names/ path_seed,path_part,path_res,
      +         path_sav,path_his,path_viz_xy,path_viz_xz,
