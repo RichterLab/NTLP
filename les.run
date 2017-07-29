@@ -1,18 +1,19 @@
 #!/bin/bash
 
-#$ -M YOUR EMAIL ADDRESS
+#$ -M drichte2@nd.edu
 #$ -m n
 #$ -pe mpi-16 64
 #$ -q *@@richter
-#$ -N tutorial
+# #$ -q gpu@qa-xp-011,gpu@d8civy053,gpu@d8civy054,gpu@d8civy059
+#$ -N HurrPBL
 #$ -j y
 
 case=case1
 time=0000000
 runout=$case.out.$time
 
-datadir=/scratch365/YOUR_NDID/tutorial/$case
-homedir=~/tutorial/$case
+datadir=/scratch365/drichte2/HurrPBL/$case
+homedir=~/Research/HurrPBL/$case
 
 cd $homedir
 
@@ -23,6 +24,6 @@ imachine=0
 echo $imachine > ./mach.file
 echo $datadir >> ./mach.file
 
-mpirun -n 64 $homedir/../build/lesmpi.a $homedir/params.in > $datadir/$runout
+mpirun -n 64 ../build/lesmpi.a $homedir/params.in > $datadir/$runout
 
 
