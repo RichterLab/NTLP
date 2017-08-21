@@ -5,11 +5,11 @@ iti=0
 itmax=500000
 imean=100
 ihst=10
-itape=10000
+itape=5000
 itstr=1
 it_his=1
 it_viz=1
-i_viz=10000
+i_viz=5000
 itn = 0  !Index for "u.le.cou001" files
 /
 
@@ -34,7 +34,7 @@ iInertia=0
 ncpu_s=8
 
 !Time step:
-cfl = 0.3
+cfl = 0.2
 dt_new = 1.0e-4
 
 !Use for DNS:
@@ -47,7 +47,7 @@ dpdx = -0.381289
 !Use for LES:
 tsfcc = 305.15, 100.0    !Surface conditions of (temp, humidity) (used for LES) -- make sure tsfcc is gt than t00 for both isfc=0 or 1
 
-qstar = 0.0, 0.2 !Surface fluxes temp and scalar (despite isfc=1 for scalar, use this on top!)
+qstar = 0.0, 0.2  !Surface fluxes temp and scalar (despite isfc=1 for scalar, use this on top!)
 
 zi = 0.04  !This has to do with grid stretching; make equal to zl for Couette/channel
 zl = 0.04 
@@ -59,22 +59,22 @@ zw1 = 0.00013333  !The first grid point
 
 !Set the paths for code I/O. Must be on the scratch directory, not AFS!
 &path_names
-path_seed="/scratch365/drichte2/profiles/prof2/"
-path_part="/scratch365/drichte2/profiles/prof2/part.le.cou100"
-path_res="/scratch365/drichte2/profiles/prof2/u.le.cou100"
-path_sav="/scratch365/drichte2/profiles/prof2/"
-path_his="/scratch365/drichte2/profiles/prof2/"
-path_viz_xy="/scratch365/drichte2/profiles/prof2/"
-path_viz_xz="/scratch365/drichte2/profiles/prof2/"
-path_viz_yz="/scratch365/drichte2/profiles/prof2/"
-path_stuf="/scratch365/drichte2/profiles/prof2/"
-path_ran="/scratch365/drichte2/profiles/prof2/u.le.cou000"
+path_seed="/scratch365/drichte2/profiles/prof1/"
+path_part="/scratch365/drichte2/profiles/prof1/part.le.cou000"
+path_res="/scratch365/drichte2/profiles/prof1/u.le.cou000"
+path_sav="/scratch365/drichte2/profiles/prof1/"
+path_his="/scratch365/drichte2/profiles/prof1/"
+path_viz_xy="/scratch365/drichte2/profiles/prof1/"
+path_viz_xz="/scratch365/drichte2/profiles/prof1/"
+path_viz_yz="/scratch365/drichte2/profiles/prof1/"
+path_stuf="/scratch365/drichte2/profiles/prof1/"
+path_ran="/scratch365/drichte2/profiles/prof1/u.le.cou000"
 /
 
 
 !Material and particle properties and other constants
 &constants
-grav = 0.981
+grav = 0.0
 t00 = 273.0 !Reference temp for buoyancy
 fcor = 0.0  !Coriolis parameter
 
@@ -90,10 +90,9 @@ Pra = 0.715
 !Particles:
 tnumpart = 10000
 Ntarget = 10000
-!zpart = -0.00013333  !Layer under which particle conc held constant
-zpart = -0.000313
+zpart = -0.000313  !Layer under which particle conc held constant
 rhow=1000.0  !kg/m^3
-part_grav = 0.981
+part_grav = 0.0
 Cpp = 4179.0  !J/kg-K
 Mw = 0.018015  !kg/mol
 Ru = 8.3144
@@ -105,8 +104,8 @@ Ion = 2.0
 Os = 1.093
 
 !Particle initial conditions:
-radius_init=15.0e-6
-radius_mass=15.0e-6
+radius_init=40.0e-6
+radius_mass=40.0e-6
 Tp_init = 300.0
 vp_init = 0.0, 0.0, 0.0
 qf_init = 0.01
