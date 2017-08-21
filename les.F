@@ -15,7 +15,8 @@ c
       integer, parameter :: j_recl=4, k8=8
 
       integer, parameter :: nscl = 2, nvar = (4+nscl)
-      integer, parameter :: maxnx=128,maxny=256,maxnz=128
+      integer, parameter :: maxnx=256,maxny=512,maxnz=256
+      !integer, parameter :: maxnx=128,maxny=256,maxnz=128
       integer, parameter :: maxnz1=maxnz+1,
      + maxnz2=maxnz+2,maxnx2=maxnx+2,maxny2=maxny+2
 
@@ -2880,6 +2881,10 @@ c
       do iz=izs,ize
       izm1 = iz - 1
       izp1 = iz + 1
+      weit  = dzw(iz)/(dzw(iz) + dzw(izp1))
+      weit1 = 1.0 - weit
+      weit3 = dzw(izm1)/(dzw(iz) + dzw(izm1))
+      weit4 = 1.0 - weit3
 
       if (iz==nnz) then  !Must make sure that we have zero flux at top!
 
