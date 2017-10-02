@@ -13594,6 +13594,7 @@ c       -----z component ----------------
      +          (part%sigm_s - sigm_sprev)/dt
         a3 = sigm_sdzp
         us_ran = sqrt(fs*C0*epsn)*gasdev(iseed)
+c       Tinker with this
         part%u_sub(3) = (a1+a2+a3)*dt + us_ran
         if(isnan(part%u_sub(3)))then
         write(*,*)'w-nan',a1,a2,a3,us_ran,part%sigm_s
