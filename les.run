@@ -1,18 +1,18 @@
 #!/bin/bash
 
-#$ -M YOUR EMAIL ADDRESS
+#$ -M hpark6
 #$ -m n
 #$ -pe mpi-16 64
 #$ -q *@@richter
-#$ -N tutorial
+#$ -N E+L-UMabl
 #$ -j y
 
-case=case1
+case=mabl
 time=0000000
 runout=$case.out.$time
 
-datadir=/scratch365/YOUR_NDID/tutorial/$case
-homedir=~/tutorial/$case
+datadir=/scratch365/hpark6/mabl/$case
+homedir=~/NTLP/$case
 
 cd $homedir
 
