@@ -12316,7 +12316,8 @@ c      pi   = 4.0*atan(1.0)
     
 
 c      m_s = Sal/1000.0*4.0/3.0*pi*radius_mass**3*rhow
-      ws = grav*(rhow*(2*radius_max)**2/18.0/nuf/rhoa)
+c      correction factor to match Livia's
+      ws = grav*(rhow*(2*radius_max)**2/18.0/nuf/rhoa)*0.990223
       if (myid==0) write(*,*) 'ws part_setup = ',ws
       
 c       Indrajith 03/13/2017
@@ -13593,6 +13594,7 @@ c       -----z component ----------------
      +          (part%sigm_s - sigm_sprev)/dt
         a3 = sigm_sdzp
         us_ran = sqrt(fs*C0*epsn)*gasdev(iseed)
+c       Tinker with this
         part%u_sub(3) = (a1+a2+a3)*dt + us_ran
         if(isnan(part%u_sub(3)))then
         write(*,*)'w-nan',a1,a2,a3,us_ran,part%sigm_s
