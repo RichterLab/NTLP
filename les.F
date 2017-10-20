@@ -11175,7 +11175,7 @@ c      real :: tlbuf_s(nnz+2,3,2,4),tlbuf_r(nnx+2,2,3,4) !Brian 7/14/14
       real :: trbuf_s(nnz+2,2,2,5),trbuf_r(nnz+2,3,3,5) !Brian 7/14/14
       real :: brbuf_s(nnz+2,2,3,5),brbuf_r(nnz+2,3,2,5) !Brian 7/14/14
       real :: blbuf_s(nnz+2,3,3,5),blbuf_r(nnz+2,2,2,5) !Brian 7/14/14
-      real :: tlbuf_s(nnz+2,3,2,5),tlbuf_r(nnx+2,2,3,5) !Brian 7/14/14
+      real :: tlbuf_s(nnz+2,3,2,5),tlbuf_r(nnz+2,2,3,5) !Brian 7/14/14
 
       !MPI send counts:
       integer :: rc_s,rc_r,trc_s,trc_r,tc_s,tc_r,tlc_s,tlc_r
@@ -11264,7 +11264,7 @@ c      brc_r = 4*(nnz+2)*3*2 !Brian 7/14/14
       trc_s = 5*(nnz+2)*2*2 !Brian 7/14/14
       trc_r = 5*(nnz+2)*3*3 !Brian 7/14/14
       rc_s = 5*(nnz+2)*(mxe-mxs+1)*2 !Brian 7/14/14
-      rc_r = 5*(nnx+2)*(mxe-mxs+1)*3 !Brian 7/14/14
+      rc_r = 5*(nnz+2)*(mxe-mxs+1)*3 !Brian 7/14/14
       tlc_s = 5*(nnz+2)*3*2 !Brian 7/14/14
       tlc_r = 5*(nnz+2)*2*3 !Brian 7/14/14
       bc_s = 5*(nnz+2)*3*(iye-iys+1) !Brian 7/14/14
@@ -11517,7 +11517,7 @@ c       calculations
       trc_s = 4*(nnz+2)*2*2 !Brian 7/14/14
       trc_r = 4*(nnz+2)*3*3 !Brian 7/14/14
       rc_s = 4*(nnz+2)*(mxe-mxs+1)*2 !Brian 7/14/14
-      rc_r = 4*(nnx+2)*(mxe-mxs+1)*3 !Brian 7/14/14
+      rc_r = 4*(nnz+2)*(mxe-mxs+1)*3 !Brian 7/14/14
       tlc_s = 4*(nnz+2)*3*2 !Brian 7/14/14
       tlc_r = 4*(nnz+2)*2*3 !Brian 7/14/14
       bc_s = 4*(nnz+2)*3*(iye-iys+1) !Brian 7/14/14
