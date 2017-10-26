@@ -21,7 +21,7 @@ c
 
       !Boundary conditions and other parameters
       real :: Uo, Ttop(nscl), Tbot(nscl),qstar(nscl),tsfcc(nscl)
-      real :: grav,t00,fcor,zi,zl,xl,yl,zw1,dpdx
+      real :: grav,t00,fcor,zi,zl,xl,yl,zw1,dpdx,dvdr,hurr_rad
       real :: ugcont,vgcont,zo
       integer :: isfc(nscl)
 c     
@@ -1791,17 +1791,25 @@ c
 !         w_buy = batag*(t(ix,iy,1,iz)*weit1 +
 !     +                  t(ix,iy,1,izp1)*weit)
 
-         w_buy = batag*(t(ix,iy,1,iz)*weit1 +
-     +                  t(ix,iy,1,izp1)*weit)*
-     +   (1.0+0.61*(weit1*t(ix,iy,2,iz) + 
-     +    weit*t(ix,iy,2,izp1)))
+!         w_buy = batag*(t(ix,iy,1,iz)*weit1 +
+!     +                  t(ix,iy,1,izp1)*weit)*
+!     +   (1.0+0.61*(weit1*t(ix,iy,2,iz) + 
+!     +    weit*t(ix,iy,2,izp1)))
 
 
 c
 c ------------ geostrophic wind
 c
-         u_geo = -fcor*vg(iz)
-         v_geo =  fcor*(ug(iz)-ugal)
+ 
+         !Following Bryan et al (2017) for hurricane boundary layer with
+         !mesoscale terms:
+         u_geo = -fcor*vg(iz) - vg(iz)**2/hurr_rad + 
+     +   uxym(iz)**2/hurr_rad + vxym(iz)*vg(iz)/hurr_rad
+
+         v_geo = -uxym(iz)*dvdr - uxym(iz)*vg(iz)/hurr_rad
+
+!         u_geo = -fcor*vg(iz)
+!         v_geo =  fcor*(ug(iz)-ugal)
 c
 c ------------ totals
 c
@@ -2886,7 +2894,7 @@ c
 
       !Use Prantdl number for thermal diffusivity:
       vis_s(1:nnx,iys:iye,1,izs-1:ize+1) = nuf/Pra   ! alpha=nu/Prandtl   
-      vis_s(1:nnx,iys:iye,2,izs-1:ize+1) = nuf/Sc    !Dv =nu/Sc
+!      vis_s(1:nnx,iys:iye,2,izs-1:ize+1) = nuf/Sc    !Dv =nu/Sc
       r5 = 0.0
       e = 0.0
 
@@ -5564,7 +5572,8 @@ c
          enddo
       else
         !call vgrid(zw1,zi,zl,nnz,z(0),l_root,l_debug)
-        call vgrid_channel(zw1,zi,zl,nnz,z(0),l_root,l_debug)
+        !call vgrid_channel(zw1,zi,zl,nnz,z(0),l_root,l_debug)
+        call vgrid_open(zw1,zi,zl,nnz,z(0),l_root,l_debug)
       endif
 c
       call get_dz
@@ -5827,6 +5836,54 @@ c
 c
       return
       end subroutine vgrid_channel
+      subroutine vgrid_open(z1,zi,zl,nnz,z,l_root,ldebug)
+c
+      real z(0:nnz+1)
+      integer :: zidx
+      logical l_root, l_debug
+c
+c ----------------- build grid up to sediment height first
+c
+
+      z_frst = z1
+      z_cntr = zl-zi
+      n_pbl  = nnz
+      z_fac1 = z_cntr/z_frst
+      z_fac2 = 1.0/float(n_pbl)
+      z_fac  = 1.1
+      knt = 0
+      tol = 0.00001
+   10 continue
+        knt = knt + 1
+        z_facn = (z_fac1*(z_fac - 1.0) + 1.0)**z_fac2
+        test   = abs(1.0 - z_facn/z_fac)
+        if(knt .gt. 50) then
+            if(l_root) write(6,9000) z_fac, z_facn, knt
+ 9000       format(' Cannot find stretching factor',/,
+     +             ' z_fac = ',e15.6,' z_facn = ',e15.6,' knt = ',i3)
+            stop
+        endif
+        z_fac = z_facn
+        if(test .gt. tol) go to 10
+      if(l_root) write(6,9100) z_fac, z_cntr, z1, knt
+ 9100 format(' Stretching factor = ',e15.6,/,
+     +       ' Match point       = ',e15.6,/,
+     +       ' First z           = ',e15.6,/,
+     +       ' Number of iters   = ',i4)
+      z(1) = zi + z_frst
+      do iz=2,nnz-1
+         z(iz) = zi+z_frst*(z_fac**(float(iz)) - 1.0)/(z_fac - 1.0)
+      enddo
+      z(nnz) = zl
+c
+      if(l_root) write(6,5300) n_pbl
+ 5300 format(' n_pbl = ',i4)
+
+      z(nnz+1) = z(nnz) + (z(nnz) - z(nnz-1))
+c
+
+      return
+      end subroutine vgrid_open
       subroutine get_dz
 c
 c --------------- compute spacing for given vertical
@@ -5996,7 +6053,7 @@ c             make sure ampv is set if free convection so
 c             that we have motions at first time step
 c
          ampv = 0.0
-         ampv = 0.001
+         ampv = 0.2
          ampt = 0.10
 c  
 c ------- simple random field scaled between -0.5 and 0.5
@@ -6030,7 +6087,7 @@ c
          enddo
          facv = ampv/vmaxx
 c
-         if (z(iz) .le. 50.0) then
+         if (z(iz) .le. 1000.0) then
          do iy=iys,iye
          do ix=1,nnx
             u(ix,iy,iz)   = u(ix,iy,iz) - psiy(ix,iy,izs)*facv
@@ -12152,7 +12209,7 @@ c
 
       namelist /grid_params/ ncpu_s, Uo, Ttop, Tbot,
      +         qstar, tsfcc, ugcont, vgcont,
-     +         zi, zl, xl, yl, zw1, dpdx
+     +         zi, zl, xl, yl, zw1, dpdx, dvdr, hurr_rad
 
       namelist /path_names/ path_seed,path_part,path_res,
      +         path_sav,path_his,path_viz_xy,path_viz_xz,

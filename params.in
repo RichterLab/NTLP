@@ -2,7 +2,7 @@
 !Time step information
 &step_params
 iti=0
-itmax=300000
+itmax=600000
 imean=100
 ihst=10
 itape=10000
@@ -19,8 +19,8 @@ ismlt=0, ifree=0, iradup=0, iupwnd=0
 ibuoy=0, ifilt=0, itcut=1, isubs=0, ibrcl=0, iocean=0
 method=3, idebug=1, iz_space=1, ivis0=0, ifix_dt=0, new_vis=-1
 isfc = 0, 1  ! isfc = 0 sets surface flux (qstar), isfc = 1 sets surface condition (Dirichlet through tsfcc)
-iDNS = 1
-ifields = 1  ! if set to 1, reads the initial condition from path_ran below; otherwise calls subroutine random
+iDNS = 0
+ifields = 0  ! if set to 1, reads the initial condition from path_ran below; otherwise calls subroutine random
 ilin = 0   !1 means linear interpolation for particle, 6th order otherwise
 ispray=1
 icouple=0
@@ -42,31 +42,33 @@ Tbot(1) = 300.15, 100.0  !Currently this should be (temperature, relative humidi
 qstar = 0.5, 0.5  !Surface fluxes of (temperature, humidity) (used for LES and DNS)
 tsfcc = 305.15, 100.0    !Surface conditions of (temp, humidity) (used for LES) -- make sure tsfcc is gt than t00 for both isfc=0 or 1
 
-ugcont = 0.0   !The initial u-velocity in the field
-vgcont = 0.0   !The initial v-velocity
+ugcont = 0.0  !Gradient wind in r-dir
+vgcont = 40.0   !Gradient wind in phi-dir
+dvdr = -8.0e-4
+hurr_rad = 40.0e3
 
 dpdx = -0.69325  !The pressure gradient for channel flow (gets put into u_geo for DNS)
 
-zi = 0.04  !This has to do with grid stretching; make equal to zl for Couette/channel
-zl = 0.04 
-xl = 0.251327  !2*pi*zl
-yl = 0.125664  !2*pi*zl
+zi = 0.0  !This has to do with grid stretching; make equal to zl for Couette/channel
+zl = 3000.0
+xl = 2560.0  !2*pi*zl
+yl = 2560.0  !2*pi*zl
 
-zw1 = 0.00008  !The first grid point
+zw1 = 4.0  !The first grid point
 /
 
 !Set the paths for code I/O. Must be on the scratch directory, not AFS!
 &path_names
-path_seed="/scratch365/drichte2/tutorial/case1/"
-path_part="/scratch365/drichte2/tutorial/case1/part.le.cou000"
-path_res="/scratch365/drichte2/tutorial/case1/u.le.cou000"
-path_sav="/scratch365/drichte2/tutorial/case1/"
-path_his="/scratch365/drichte2/tutorial/case1/"
-path_viz_xy="/scratch365/drichte2/tutorial/case1/"
-path_viz_xz="/scratch365/drichte2/tutorial/case1/"
-path_viz_yz="/scratch365/drichte2/tutorial/case1/"
-path_stuf="/scratch365/drichte2/tutorial/case1/"
-path_ran="/scratch365/drichte2/tutorial/case1/u.le.cou000"
+path_seed="/scratch365/drichte2/HurrPBL/case1/"
+path_part="/scratch365/drichte2/HurrPBL/case1/part.le.cou000"
+path_res="/scratch365/drichte2/HurrPBL/case1/u.le.cou000"
+path_sav="/scratch365/drichte2/HurrPBL/case1/"
+path_his="/scratch365/drichte2/HurrPBL/case1/"
+path_viz_xy="/scratch365/drichte2/HurrPBL/case1/"
+path_viz_xz="/scratch365/drichte2/HurrPBL/case1/"
+path_viz_yz="/scratch365/drichte2/HurrPBL/case1/"
+path_stuf="/scratch365/drichte2/HurrPBL/case1/"
+path_ran="/scratch365/drichte2/HurrPBL/case1/u.le.cou000"
 /
 
 
@@ -74,8 +76,8 @@ path_ran="/scratch365/drichte2/tutorial/case1/u.le.cou000"
 &constants
 grav = 9.81
 t00 = 273.0 !Reference temp for buoyancy
-fcor = 0.0  !Coriolis parameter
-zo = 0.1       !Roughness height (for LES)
+fcor = 1.0e-4  !Coriolis parameter
+zo = 0.01       !Roughness height (for LES)
 
 !Air phase:
 rhoa=1.0
@@ -85,7 +87,7 @@ Pra = 0.715
 Sc = 0.615
 
 !Particles:
-tnumpart = 1e5
+tnumpart = 0
 rhow=1000.0  !kg/m^3
 part_grav = 0.0
 Cpp = 4179.0  !J/kg-K
