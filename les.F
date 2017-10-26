@@ -15,7 +15,7 @@ c
       integer, parameter :: j_recl=4, k8=8
 
       integer, parameter :: nscl = 2, nvar = (4+nscl)
-      integer, parameter :: maxnx=256,maxny=256,maxnz=256
+      integer, parameter :: maxnx=128,maxny=128,maxnz=128
       integer, parameter :: maxnz1=maxnz+1,
      + maxnz2=maxnz+2,maxnx2=maxnx+2,maxny2=maxny+2
 
@@ -1791,10 +1791,10 @@ c
 !         w_buy = batag*(t(ix,iy,1,iz)*weit1 +
 !     +                  t(ix,iy,1,izp1)*weit)
 
-         w_buy = batag*(t(ix,iy,1,iz)*weit1 +
-     +                  t(ix,iy,1,izp1)*weit)*
-     +   (1.0+0.61*(weit1*t(ix,iy,2,iz) + 
-     +    weit*t(ix,iy,2,izp1)))
+!         w_buy = batag*(t(ix,iy,1,iz)*weit1 +
+!     +                  t(ix,iy,1,izp1)*weit)*
+!     +   (1.0+0.61*(weit1*t(ix,iy,2,iz) + 
+!     +    weit*t(ix,iy,2,izp1)))
 
 
 c
@@ -1808,8 +1808,8 @@ c
 
          v_geo = -uxym(iz)*dvdr - uxym(iz)*vg(iz)/hurr_rad
 
-         !u_geo = -fcor*vg(iz)
-         !v_geo =  fcor*(ug(iz)-ugal)
+!         u_geo = -fcor*vg(iz)
+!         v_geo =  fcor*(ug(iz)-ugal)
 c
 c ------------ totals
 c
@@ -10894,7 +10894,7 @@ c
       real :: trbuf_s(nnz+2,2,2,5),trbuf_r(nnz+2,3,3,5) 
       real :: brbuf_s(nnz+2,2,3,5),brbuf_r(nnz+2,3,2,5)
       real :: blbuf_s(nnz+2,3,3,5),blbuf_r(nnz+2,2,2,5)
-      real :: tlbuf_s(nnz+2,3,2,5),tlbuf_r(nnx+2,2,3,5)
+      real :: tlbuf_s(nnz+2,3,2,5),tlbuf_r(nnz+2,2,3,5)
 
       !MPI send counts:
       integer :: rc_s,rc_r,trc_s,trc_r,tc_s,tc_r,tlc_s,tlc_r
@@ -10967,7 +10967,7 @@ c
       trc_s = 5*(nnz+2)*2*2
       trc_r = 5*(nnz+2)*3*3
       rc_s = 5*(nnz+2)*(mxe-mxs+1)*2 
-      rc_r = 5*(nnx+2)*(mxe-mxs+1)*3 
+      rc_r = 5*(nnz+2)*(mxe-mxs+1)*3 
       tlc_s = 5*(nnz+2)*3*2 
       tlc_r = 5*(nnz+2)*2*3 
       bc_s = 5*(nnz+2)*3*(iye-iys+1) 
