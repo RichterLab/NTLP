@@ -8,7 +8,7 @@ c     ----------------------------------------------------------------------
       integer :: ismlt,ifree,iradup,
      +     iupwnd,ibuoy,ifilt,itcut,isubs,ibrcl,iocean,method,
      +     idebug,iz_space,ivis0,ifix_dt,new_vis,iDNS,ispray,
-     +     icouple,iTcouple,iHcouple,ievap
+     +     icouple,iTcouple,iHcouple,ievap,istbl
 c     
 c     -------- j_recl = record length in "bytes" for history file
 c     k8     = kind parameter for integers in mpi_io routines
@@ -3353,23 +3353,23 @@ c
          enddo
          enddo
          do iscl=1,nscl
-            dnom3=t10xy(iscl)*windm
-            if(dnom3 .ne. 0.) then
-               dnom_i = 1.0/dnom3
-               do iy=iys,iye
-               do ix=1,nnx
-                  taut3m(ix,iy,iscl)=aut3m(iscl)*
-     +                 (windm*(t(ix,iy,iscl,iz)-t1xy(iscl))+
-     +                  wind(ix,iy)*(t1xy(iscl)-tsfcc(iscl)))*dnom_i
-               enddo
-               enddo
-            else
+c            dnom3=t10xy(iscl)*windm
+c            if(dnom3 .ne. 0.) then
+c               dnom_i = 1.0/dnom3
+c               do iy=iys,iye
+c               do ix=1,nnx
+c                  taut3m(ix,iy,iscl)=aut3m(iscl)*
+c     +                 (windm*(t(ix,iy,iscl,iz)-t1xy(iscl))+
+c     +                  wind(ix,iy)*(t1xy(iscl)-tsfcc(iscl)))*dnom_i
+c               enddo
+c               enddo
+c            else
                do iy=iys,iye
                do ix=1,nnx
                   taut3m(ix,iy,iscl) = aut3m(iscl)
                enddo
                enddo
-            endif
+c            endif
          enddo
 c
       endif
@@ -5196,7 +5196,7 @@ c    +          ' phim = ',e15.6,' psim = ',e15.6)
 c
 c --------- check if neutral surface layer
 c
-      if (ibuoy.eq.0 .or. qstar(1) .eq. 0.) then
+      if (ibuoy.eq.0 .or. istbl .eq. 0.) then
           amonin    = 1000.
           zeta      = 0.0
           utau      = windm*vk/zody
@@ -5245,7 +5245,7 @@ c
 
 c      do iscl=2,nscl
       iscl = 2
-      if (ibuoy.eq.0 .or. qstar(1) .eq. 0.) then
+      if (ibuoy.eq.0 .or. istbl .eq. 0.) then
           thstar(iscl) = 0.0
           t10xy(iscl)  = 0.0
           tsfcc(iscl)  = t1xy(iscl)
@@ -13000,7 +13000,7 @@ c      call particle_stats(ipt,jpt,kwpt,iptc,jptc,kwptc)
       namelist /flags/ ismlt,ifree,isfc,iradup,
      +         iupwnd,ibuoy,ifilt,itcut,isubs,ibrcl,iocean,
      +         method,idebug,iz_space,ivis0,ifix_dt,new_vis,iDNS,
-     +         ispray,icouple,iTcouple,iHcouple,ievap
+     +         ispray,icouple,iTcouple,iHcouple,ievap,istbl
 
 
       namelist /constants/ rhoa, nuf, Cpa, Pra, Sc,
