@@ -105,7 +105,8 @@ c     --- SFS velocity calculation - Indrajith 07/17--------
       real, allocatable :: sigm_s(:,:,:),sigm_sdx(:,:,:),sigm_sdy(:,:,:)
       real, allocatable :: sigm_sdz(:,:,:),sigm_sext(:,:,:)
       real, allocatable :: sigm_sdxext(:,:,:),sigm_sdyext(:,:,:)
-      real, allocatable :: sigm_sdzext(:,:,:) 
+      real, allocatable :: sigm_sdzext(:,:,:)
+      real, allocatable :: vis_ss(:,:,:), vis_sext(:,:,:) 
 c     -----------------------------------------------------
       real, allocatable :: T2ext(:,:,:),T2_t(:,:,:)
       real, allocatable :: partTsrc(:,:,:),partTsrc_t(:,:,:)
@@ -8307,7 +8308,8 @@ c        Indrajith 07/17
       allocate(sigm_s(nnxp2,iys:iye,izs-1:ize+1),
      +         sigm_sdx(nnxp2,iys:iye,izs-1:ize+1),
      +         sigm_sdy(nnxp2,iys:iye,izs-1:ize+1),
-     +         sigm_sdz(nnxp2,iys:iye,izs-1:ize+1))
+     +         sigm_sdz(nnxp2,iys:iye,izs-1:ize+1),
+     +         vis_ss(nnxp2,iys:iye,izs-1:ize+1))
 
 c
 c ------------- allocate extended arrays for interpolation of
@@ -11462,6 +11464,7 @@ c       calculations
       real :: sigm_sdxt(0:nnz+1,iys:iye,mxs:mxe)
       real :: sigm_sdyt(0:nnz+1,iys:iye,mxs:mxe)
       real :: sigm_sdzt(0:nnz+1,iys:iye,mxs:mxe)
+      real :: vis_st(0:nnz+1,iys:iye,mxs:mxe)
       !preceding letter: r=right,l=left,t=top,b=bot.
       !_s: buf of things to send TO r,l,t,b
       !_r: buf of things to recv FROM r,l,t,b
@@ -11501,6 +11504,11 @@ c       calculations
      +                myid,ncpu_s,numprocs)
 
 
+      call xtoz_trans(vis_ss(1:nnx,iys:iye,izs-1:ize+1),vis_st,nnx,
+     +                nnz,mxs,mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,
+     +                myid,ncpu_s,numprocs)
+
+
       sigm_sext(0:nnz+1,iys:iye,mxs:mxe) 
      +                              = sigm_st(0:nnz+1,iys:iye,mxs:mxe)
       sigm_sdxext(0:nnz+1,iys:iye,mxs:mxe) 
@@ -11509,6 +11517,8 @@ c       calculations
      +                              = sigm_sdyt(0:nnz+1,iys:iye,mxs:mxe)
       sigm_sdzext(0:nnz+1,iys:iye,mxs:mxe) 
      +                              = sigm_sdzt(0:nnz+1,iys:iye,mxs:mxe)
+      vis_sext(0:nnz+1,iys:iye,mxs:mxe)
+     +                              = vis_st(0:nnz+1,iys:iye,mxs:mxe)
 
         
       !Fill the send buffers:
@@ -11600,6 +11610,25 @@ c       calculations
      +                          = sigm_sdzt(0:nnz+1,iys:iys+2,mxs:mxe)
       tlbuf_s(1:nnz+2,1:3,1:2,4) 
      +                          = sigm_sdzt(0:nnz+1,iys:iys+2,mxe-1:mxe)
+
+       !vis_s
+      tbuf_s(1:nnz+2,1:iye-iys+1,1:2,5)
+     +                          = vis_st(0:nnz+1,iys:iye,mxe-1:mxe)
+      trbuf_s(1:nnz+2,1:2,1:2,5)
+     +                          = vis_st(0:nnz+1,iye-1:iye,mxe-1:mxe)
+      rbuf_s(1:nnz+2,1:2,1:mxe-mxs+1,5)
+     +                          = vis_st(0:nnz+1,iye-1:iye,mxs:mxe)
+      brbuf_s(1:nnz+2,1:2,1:3,5)
+     +                          = vis_st(0:nnz+1,iye-1:iye,mxs:mxs+2)
+      bbuf_s(1:nnz+2,1:iye-iys+1,1:3,5)
+     +                          = vis_st(0:nnz+1,iys:iye,mxs:mxs+2)
+      blbuf_s(1:nnz+2,1:3,1:3,5)
+     +                          = vis_st(0:nnz+1,iys:iys+2,mxs:mxs+2)
+      lbuf_s(1:nnz+2,1:3,1:mxe-mxs+1,5)
+     +                          = vis_st(0:nnz+1,iys:iys+2,mxs:mxe)
+      tlbuf_s(1:nnz+2,1:3,1:2,5)
+     +                          = vis_st(0:nnz+1,iys:iys+2,mxe-1:mxe)
+
  
       !Zero out recieve buffers
       rbuf_r=0.0;trbuf_r=0.0;tbuf_r=0.0;tlbuf_r=0.0;lbuf_r=0.0
@@ -11958,7 +11987,8 @@ c     Now fill the ext arrays with the recieved buffers:
 
       end subroutine uf_interp 
      
-      subroutine sigm_interp(sigm_sdxp,sigm_sdyp,sigm_sdzp,iz_part)
+      subroutine sigm_interp(sigm_sdxp,sigm_sdyp,sigm_sdzp,
+     +                          vis_sp,iz_part)
       use pars
       use particles
       use fields
@@ -11972,7 +12002,7 @@ c     Now fill the ext arrays with the recieved buffers:
       integer :: ijpts(2,6),kuvpts(6),kwpts(6),iz_part
       real :: wt(4,6)
       real :: ran2
-      real :: sigm_sdxp,sigm_sdyp,sigm_sdzp
+      real :: sigm_sdxp,sigm_sdyp,sigm_sdzp,vis_sp
       !Following Orlando's code, get the "leftmost" node
       !This is just the minimum (i,j,k) on the volume
 
@@ -12158,6 +12188,7 @@ c        part%qinf = 0.0 ! Brian 7/14/14
         sigm_sdxp = 0.0
         sigm_sdyp = 0.0
         sigm_sdzp = 0.0
+        vis_sp = 0.0
         
         do k = 1,6
         do j = 1,6
@@ -12175,7 +12206,12 @@ c     +                   wt(2,j)*wt(3,k)
             sigm_sdyp = sigm_sdyp+sigm_sdyext(izuv,iy,ix)*wt(1,i)*
      +                   wt(2,j)*wt(3,k)
             sigm_sdzp = sigm_sdzp+sigm_sdzext(izuv,iy,ix)*wt(1,i)*
-     +                   wt(2,j)*wt(3,k)  
+     +                   wt(2,j)*wt(3,k) 
+
+            vis_sp = vis_sp+vis_sext(izuv,iy,ix)*wt(1,i)*
+     +                   wt(2,j)*wt(3,k)
+
+ 
          end do
          end do
          end do
@@ -13463,9 +13499,10 @@ c	Calculations assume isotropic turbulece
         use con_stats
         use particles
         implicit none
-        real :: sigm_sdxp,sigm_sdyp,sigm_sdzp
-        real :: sigm_su, sigm_sl,us_ran,gasdev,tot_eng
-        real :: L_flt,epsn,fs,C0,a1,a2,a3,sigm_sprev
+        real :: sigm_sdxp,sigm_sdyp,sigm_sdzp,vis_sp
+        real :: sigm_su, sigm_sl,us_ran,gasdev,tengz,englez_bar
+        real :: engsbz_bar, sigm_w,sigm_ws
+        real :: L_flt,epsn,fs,C0,a1,a2,a3,sigm_sprev, fs1
         real :: weit,weit1,weit3,weit4
         real :: us(3)
         integer :: ix,iy,iz,izp1,izm1,ind,iz_part
@@ -13474,7 +13511,9 @@ c       ---initialize -------
         C0 = 0.0
         l_flt = 0.0
         epsn = 0.0
-        tot_eng = 0.0
+        tengz = 0.0
+        englez_bar = 0.0
+        engsbz_bar =0.0
         sigm_s = 0.0 
         sigm_sdx = 0.0
         sigm_sdy = 0.0
@@ -13483,6 +13522,8 @@ c       ---initialize -------
         sigm_sl  = 0.0
         us_ran = 0.0
         us = 0.0
+        sigm_ws = 0.0
+        sigm_w = 0.0
 c	------------------
 c       compute sigm_s based on subgrid energy field
 c	-----------------       
@@ -13496,9 +13537,10 @@ c	-----------------
         do ix =1,nnx
         do iy = iys,iye
            sigm_s(ix,iy,iz) = 2.0*e(ix,iy,iz)/3.0
-           if (ix.eq.20.and.iy.eq.20.and.iz.eq.20)then
-           write(*,*) ix,iy,iz,sigm_s(ix,iy,iz)
-           end if
+c           if (ix.eq.20.and.iy.eq.20.and.iz.eq.20)then
+c           write(*,*) ix,iy,iz,sigm_s(ix,iy,iz)
+c           end if
+           vis_ss(ix,iy,iz) = vis_s(ix,iy,3,iz)
            sigm_sdx(ix,iy,iz) =  sigm_s(ix,iy,iz)       !for xderiv
            sigm_sdy(ix,iy,iz) =  sigm_s(ix,iy,iz)       !for yderiv
 c	--------------------
@@ -13531,22 +13573,32 @@ c	----------------
         do while (associated(part))
 
         sigm_sprev = part%sigm_s
-        call sigm_interp(sigm_sdxp,sigm_sdyp,sigm_sdzp,iz_part)
+        call sigm_interp(sigm_sdxp,sigm_sdyp,sigm_sdzp,vis_sp,iz_part)
 
 c	-----------------
 c       calculate the subgrid velocity Weil et al ,2004-isotropic turb.
 c	----------------
 c        write(*,*)'sigma',part%sigm_s  ! DEBUG only
         if(part%sigm_s.gt.0.0)then
-        l_flt = (2.25*dx*dy*dzw(iz_part))**(1.0/3.0)
-        epsn = (0.93/l_flt)*(3.0*part%sigm_s/2.0)**(1.5)
-        tot_eng = (engsbz(iz_part) + engz(iz_part))
-        if(tot_eng.gt.0.0)then
-        fs = engsbz(iz_part)/(engsbz(iz_part) + engz(iz_part))
+        l_flt = (2.25*dx*dy*dzw(iz_part))**(1.0/3.0)! Filtered width
+        epsn = (0.93/l_flt)*(3.0*part%sigm_s/2.0)**(1.5)!tub. diss.rate
+c        tot_eng = (engsbz(iz_part) + engz(iz_part))
+        !---Calculate component of sub grid energy at grid center-----
+        englez_bar = 0.5*(englez(iz_part)+englez(iz_part+1))
+        engsbz_bar = 0.5*(engsbz(iz_part)+engsbz(iz_part+1))
+        tengz = englez_bar + engsbz_bar
+
+        ! Calculate fs based on w-component of velocity
+        sigm_w = 0.5*(wps(iz_part)+wps(iz_part+1))
+        sigm_ws = 0.5*(engsbz(iz_part)+engsbz(iz_part+1))/3.0
+
+       if(tengz.gt.0.0)then
+c        fs = engsbz(iz_part)/(engsbz(iz_part) + engz(iz_part))
+        fs = sigm_ws/(sigm_w + sigm_ws)
         else
         fs =0.0
         end if
-        C0 = 0.3
+        C0 = 6.0
         us(1:3) = part%u_sub(1:3)
 c       -----x component ----------------
         a1 = 0.0
@@ -13556,7 +13608,7 @@ c       -----x component ----------------
         a2 =0.5*(1.0/part%sigm_s)*part%u_sub(1)*
      +          (part%sigm_s - sigm_sprev)/dt
         a3 = sigm_sdxp
-        us_ran = sqrt(fs*C0*epsn)*gasdev(iseed)
+        us_ran = sqrt(fs*C0*epsn*dt)*gasdev(iseed)
         part%u_sub(1) = (a1+a2+a3)*dt + us_ran
         if(isnan(part%u_sub(1)))then
         write(*,*)'u-nan',a1,a2,a3,us_ran,part%sigm_s
@@ -13575,7 +13627,7 @@ c       -----y component ----------------
         a2 =0.5*(1.0/part%sigm_s)*part%u_sub(2)*
      +          (part%sigm_s - sigm_sprev)/dt
         a3 = sigm_sdyp
-        us_ran = sqrt(fs*C0*epsn)*gasdev(iseed)
+        us_ran = sqrt(fs*C0*epsn*dt)*gasdev(iseed)
         part%u_sub(2) = (a1+a2+a3)*dt + us_ran
         if(isnan(part%u_sub(2)))then
         write(*,*)'v-nan',a1,a2,a3,us_ran,part%sigm_s
@@ -13593,7 +13645,7 @@ c       -----z component ----------------
         a2 =0.5*(1.0/part%sigm_s)*part%u_sub(3)*
      +          (part%sigm_s - sigm_sprev)/dt
         a3 = sigm_sdzp
-        us_ran = sqrt(fs*C0*epsn)*gasdev(iseed)
+        us_ran = sqrt(fs*C0*epsn*dt)*gasdev(iseed)
 c       Tinker with this
         part%u_sub(3) = (a1+a2+a3)*dt + us_ran
         if(isnan(part%u_sub(3)))then
