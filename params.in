@@ -1,15 +1,15 @@
 
 !Time step information
 &step_params
-iti=0
-itmax=300000
-imean=100
-ihst=10
-itape=10000
+iti=0          !Time step to begin
+itmax=300000   !Max number of time steps
+imean=100    !Number of time steps between writing mean profiles to output log file
+ihst=10     !Number of time steps between writing profiles to history file
+itape=10000  !Number of time steps before opening new history file and writing full 3D volumes
 itstr=1
-it_his=1
-it_viz=1
-i_viz=10000
+it_his=1     !Time step to begin recording history files
+it_viz=1     !Time step to begin recording viz files
+i_viz=10000   !Time steps between writing to viz file
 itn = 0  !Index for "u.le.cou001" files
 /
 
