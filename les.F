@@ -118,6 +118,7 @@ c     -----------------------------------------------------
 c     --- Particle Flux calculations - John 11/17----------
       real, allocatable :: partflux(:,:,:),partflux_t(:,:,:)
       real, allocatable :: partcountU_t(:,:,:),partcountU(:,:,:)
+      real, allocatable :: SGSpartflux_t(:,:,:),SGSpartflux(:,:,:)
 c     -----------------------------------------------------
       real, allocatable :: partcount(:,:,:),partsrc(:,:,:,:)
       real, allocatable :: vpsum(:,:,:,:),vpsqrsum(:,:,:,:)
@@ -804,6 +805,14 @@ c
 
 c       -----------
 c       call subgrid velocity subroutine
+c       2-13-2018 JP Initialize xp_i after RK3 for subgrid fluxes.
+c        part => first_particle
+c        do while (associated(part))
+c           xp_i(1:3) = xp(1:3)
+c           part => part%next
+c        end do
+
+
 
         call SFS_velocity
 
@@ -812,6 +821,13 @@ c       check whether particles are out of domain or cross processors
         call particle_bcs_nonperiodic
         call particle_exchange
         call particle_bcs_periodic
+
+c       2-13-2018 JP Now calculate fluxes based on subgrid components
+c        call SFS_flux
+
+c       -----------
+
+
 
 c       -----------
 c       John ~Sept 2017 particle generation
@@ -6091,6 +6107,8 @@ c     --Particle flux JP--
       partflux_t = 0.0
       partcountU = 0.0
       partcountU_t = 0.0
+      SGSpartflux_t = 0.0
+      SGSpartflux = 0.0
 c     ----------------
       vpsum = 0.0
       vpsum_t = 0.0
@@ -8380,7 +8398,8 @@ c     JP Particle Flux Allocation
       allocate(partflux_t(0:nnz+1,iys:iye,mxs:mxe))
       allocate(partcountU(nnx,iys:iye,izs-1:ize+1))
       allocate(partcountU_t(0:nnz+1,iys:iye,mxs:mxe))
-
+      allocate(SGSpartflux(nnx,iys:iye,izs-1:ize+1))
+      allocate(SGSpartflux_t(0:nnz+1,iys:iye,mxs:mxe))
 c     ----------------------------
       allocate(upwp_t(0:nnz+1,iys:iye,mxs:mxe))
       allocate(upwp(nnx,iys:iye,izs-1:ize+1))
@@ -10306,7 +10325,7 @@ c
       real :: myphip_sum,myphiw_sum,myphiv_sum,Volp      
       real :: TfC,TpC,Lv,Eff_C,Eff_S
       real :: t_s,t_f,t_s1,t_f1
-!Troubleshooting variables
+!     Troubleshooting variables
       real :: check(1:nnz)
 
       g(1:3) = (/0.0, 0.0, part_grav/)
@@ -10322,6 +10341,8 @@ c
 c     JP partflux
       partflux_t = 0.0
       partcountU_t = 0.0
+      SGSpartflux_t = 0.0
+      SGSpartflux = 0.0
 c     ------------
       vpsum_t = 0.0
       upwp_t = 0.0
@@ -10521,7 +10542,7 @@ c      end if
       !if (myid==5) write(*,*) 'time cpl: ', t_f - t_s
 
 
-      call particle_Uflux_statistics
+      call particle_Uflux
 
  
       !Finally, now that coupling and statistics arrays are filled, 
@@ -13919,7 +13940,7 @@ c        Rep_avg = Rep_avg/tnumpart
 
         end subroutine particle_generation
 
-        subroutine particle_Uflux_statistics
+        subroutine particle_Uflux
         use particles
         use pars
         use con_data
@@ -13983,4 +14004,80 @@ c        Rep_avg = Rep_avg/tnumpart
           
 
 
-        end subroutine particle_Uflux_statistics 
+        end subroutine particle_Uflux 
+        
+
+
+
+        subroutine SFS_flux
+!       Same concept as particle_Uflux, now just add another thingamabob
+!       to represent the subgrid flux instead of the uniform flux
+        use particles
+        use pars
+        use con_data
+        use con_stats
+        implicit none
+        include 'mpif.h'
+        integer :: i,j,k,ipt,jpt,kpt,kwpt,kUpt
+        integer :: ix,iy,iz
+        real :: zu_1,zu_nnz
+        integer :: iz_beg,iz_end
+        part => first_particle
+        do while (associated(part))
+        
+        ipt = floor(part%xp(1)/dx) + 1
+        jpt = floor(part%xp(2)/dy) + 1
+
+        !For particles within the domain
+        if (part%xp(3) .gt. 0.0) then
+        kUpt = floor((part%xp(3)-0.0)/dz_U) + 1
+
+        zu_1 = 0.5*zl/nnz
+        zu_nnz = zl - zu_1
+
+        if (part%xp_i(3) .gt. 0.0) then
+        
+        if (part%xp_i(3) .gt. part%xp(3)) then
+          
+           iz_beg = floor((part%xp_i(3)- zu_1)/dz_U) + 2
+           iz_end = floor((part%xp(3)  - zu_1)/dz_U) + 1
+           
+           do iz=iz_beg,iz_end
+              if (iz .lt. 1) then
+              write(*,*) 'up iz<1: ',iz,part%xp(3),part%xp_i(3)
+              end if
+              if (iz .gt. nnz) then
+              write(*,*) 'up iz>nnz: ',iz,part%xp(3),part%xp_i(3)
+              end if
+
+              SGSpartflux_t(iz,jpt,ipt) = SGSpartflux_t(iz,jpt,ipt) + 1.0
+           end do
+        elseif (part%xp_i(3) .gt. part%xp(3)) then
+          iz_beg = floor((part%xp(3)  -zu_1)/dz_U) + 2
+          iz_end = floor((part%xp_i(3)-zu_1)/dz_U) + 1
+          do iz=iz_beg,iz_end
+
+             if (iz .lt. 1) then
+             write(*,*) 'dz iz<1: ',iz,part%xp(3),part%xp_i(3)
+             end if
+             if (iz .gt. nnz) then
+             write(*,*) 'dn iz>nnz: ',iz,part%xp(3),part%xp_i(3)
+             end if
+
+             SGSpartflux_t(iz,jpt,ipt) = SGSpartflux_t(iz,jpt,ipt) - 1.0
+          end do
+        end if
+        end if
+        end if
+        part => part%next
+        end do
+        
+
+      call ztox_trans(SGSpartflux_t(0:nnz+1,iys:iye,mxs:mxe),
+     +                SGSpartflux(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,
+     +                mxs,mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
+     +                ncpu_s,numprocs)
+
+
+
+        end subroutine SFS_flux
