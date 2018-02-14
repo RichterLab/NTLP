@@ -16,8 +16,8 @@ homedir=~/NTLP/$case
 
 cd $homedir
 
-module load mvapich2/2.1-intel-15.0-mlx
-module load intel/15.0
+module load mvapich2
+module load intel
 
 imachine=0
 echo $imachine > ./mach.file
