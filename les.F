@@ -299,6 +299,7 @@ c ----------------------------------------------------------------------
      +           phimp(maxnz),phimw(maxnz),  
      +           Hpsrc(maxnz),TEpsrc(maxnz),
      +           qstarm(maxnz),pflux(maxnz),
+     +           SGSpflux(maxnz),
      +           trip(maxnz),TpSq(maxnz),Tpdqp(maxnz)
         real ::  xkn(maxnx),ykn(maxny),
      +           xk(maxnx),yk(maxny),
@@ -340,6 +341,7 @@ c ----------------------------------------------------------------------
      +           phimp(:),phimw(:), 
      +           Hpsrc(:), TEpsrc(:),
      +           qstarm(:),pflux(:),
+     +           SGSpflux(:),
      +           trip(:),TpSq(:),Tpdqp(:)
         real, pointer ::  
      +           xkn(:), ykn(:), xk(:), yk(:), xks(:,:), wavexy(:,:)
@@ -434,6 +436,7 @@ c
              TEpsrc  => c_s%TEpsrc  ; isize = isize + size(TEpsrc)
              qstarm => c_s%qstarm  ; isize = isize + size(qstarm)
              pflux => c_s%pflux  ; isize = isize + size(pflux)
+             SGSpflux => c_s%SGSpflux; isize = isize + size(SGSpflux)
              trip => c_s%trip; isize = isize + size(trip)
              TpSq => c_s%TpSq; isize = isize + size(TpSq)
              Tpdqp => c_s%Tpdqp; isize = isize + size(Tpdqp)
@@ -7417,6 +7420,7 @@ c
 c         stat(iz,35) =stat(iz,35) +  partcount(ix,iy,iz)
          stat(iz,35) = stat(iz,35) + partcountU(ix,iy,iz)
          stat(iz,36) = stat(iz,36) + partflux(ix,iy,iz)
+         stat(iz,37) = stat(iz,37) + SGSpartflux(ix,iy,iz)
       enddo
       enddo
 c
@@ -7547,6 +7551,7 @@ C     -----------------------------------
       
 !_____DHR:Just want the total sum of +1's and -1's for particle flux
       pflux(iz) = stat(iz,36)
+      SGSpflux(iz) = stat(iz,37)
 
 c
 c ------------ get scalar resolved fluxes and variances
