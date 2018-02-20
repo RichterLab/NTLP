@@ -613,7 +613,7 @@ c     End Troubleshooting
 c      np_write = 0
       part => first_particle
       do while (associated(part))
-c      if (part%pidx == 1 .and. part%procidx ==0) then
+      if (part%pidx == 1 .and. part%procidx ==0) then
 c      if (myid ==0 .and. part%procidx ==1) then
       write(*,'(a7,4e15.6)') 'xp1:  ',time,part%xp(1:3)
       write(*,'(a7,4e15.6)') 'vp1:  ',time,part%vp(1:3)
@@ -627,7 +627,7 @@ c      if (myid ==0 .and. part%procidx ==1) then
       write(*,*)npwrite, part%pidx, part%procidx 
 c      np_write = 1
 
-c      end if
+      end if
 
       part => part%next
 
@@ -13632,7 +13632,7 @@ c        fs = engsbz_bar/tengz
 
 c       ---------Check for single-part----------
          T_lagr = 2*part%sigm_s/(C0*epsn)   ! Lagrangian time scale
-         write(*,*) 'L_time:',part%xp(3),T_lagr
+c         write(*,*) 'L_time:',part%xp(3),T_lagr
 c       -----------------------------------
 c      ------------------
 c        Calculate subgrid velocity components
@@ -13707,8 +13707,8 @@ c        part%u_sub(3) = gasdev(iseed)*sqrt(2*vis_sp/dt)
 c        end if
 c       -------------------------------------------------
 c        part%u_sub(3)= (a2+a3)*dt + us_ran
-         write(*,*)'fs1:',part%xp(3),fs,us_ran
-        write(*,*)'as1:',a1,a2,a3,us_ran
+c         write(*,*)'fs1:',part%xp(3),fs,us_ran
+c        write(*,*)'as1:',a1,a2,a3,us_ran
 c      ------FOR CHECK-INDRAJIT-11/17/2017-----
         if(part%xp(3).lt. 0.1*zi.and.fs.gt.0.5)then
 c        if(part%xp(3).lt. zw1)then
