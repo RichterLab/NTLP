@@ -7,7 +7,7 @@ c     ----------------------------------------------------------------------
       integer :: ismlt,ifree,iradup,
      +     iupwnd,ibuoy,ifilt,itcut,isubs,ibrcl,iocean,method,
      +     idebug,iz_space,ivis0,ifix_dt,new_vis,iDNS,ispray,
-     +     icouple,iTcouple,iHcouple,ievap,ifields,ilin
+     +     icouple,iTcouple,iHcouple,ievap,ifields,ilin,ihurr
 c     
 c     -------- j_recl = record length in "bytes" for history file
 c     k8     = kind parameter for integers in mpi_io routines
@@ -1803,13 +1803,18 @@ c
  
          !Following Bryan et al (2017) for hurricane boundary layer with
          !mesoscale terms:
+         if (ihurr) then
+
          u_geo = -fcor*vg(iz) - vg(iz)**2/hurr_rad + 
      +   uxym(iz)**2/hurr_rad + vxym(iz)*vg(iz)/hurr_rad
 
          v_geo = -uxym(iz)*dvdr - uxym(iz)*vg(iz)/hurr_rad
+         else
 
-!         u_geo = -fcor*vg(iz)
-!         v_geo =  fcor*(ug(iz)-ugal)
+         u_geo = -fcor*vg(iz)
+         v_geo =  fcor*(ug(iz)-ugal)
+
+         end if
 c
 c ------------ totals
 c
@@ -12218,7 +12223,7 @@ c
       namelist /flags/ ismlt,ifree,isfc,iradup,
      +         iupwnd,ibuoy,ifilt,itcut,isubs,ibrcl,iocean,
      +         method,idebug,iz_space,ivis0,ifix_dt,new_vis,iDNS,
-     +         ispray,icouple,iTcouple,iHcouple,ievap,ifields,ilin
+     +         ispray,icouple,iTcouple,iHcouple,ievap,ifields,ilin,ihurr
 
 
       namelist /constants/ rhoa, nuf, Cpa, Pra, Sc,
