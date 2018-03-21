@@ -49,7 +49,7 @@ c     ----------------------------------------------------------------------
       real    ::    windm,u1xy,v1xy,t1xy(nscl),
      +     t10xy(nscl),au13m,au23m,aut3m(nscl),tsfcm(nscl),
      +     thstar(nscl), eavg(maxnz), tr_tau(0:maxnz),
-     +     pxym(0:maxnz1), zi_min
+     +     pxym(0:maxnz1), zi_min, dummy(0:maxnz,maxnz)
       integer ::    izi, iz_min
       real, allocatable ::
      +     wind(:,:), tau13m(:,:), tau23m(:,:), 
@@ -299,7 +299,8 @@ c ----------------------------------------------------------------------
      +           mpmean(maxnz),mwmean(maxnz), 
      +           phimp(maxnz),phimw(maxnz),  
      +           Hpsrc(maxnz),TEpsrc(maxnz),
-     +           qstarm(maxnz),pflux(maxnz),
+     +           qstarm(maxnz),
+     +           pflux(maxnz),pflux_S(maxnz),
      +           trip(maxnz),TpSq(maxnz),Tpdqp(maxnz)
         real ::  xkn(maxnx),ykn(maxny),
      +           xk(maxnx),yk(maxny),
@@ -340,7 +341,8 @@ c ----------------------------------------------------------------------
      +           mpmean(:),mwmean(:),
      +           phimp(:),phimw(:), 
      +           Hpsrc(:), TEpsrc(:),
-     +           qstarm(:),pflux(:),
+     +           qstarm(:),
+     +           pflux(:),pflux_S(:),
      +           trip(:),TpSq(:),Tpdqp(:)
         real, pointer ::  
      +           xkn(:), ykn(:), xk(:), yk(:), xks(:,:), wavexy(:,:)
@@ -435,6 +437,7 @@ c
              TEpsrc  => c_s%TEpsrc  ; isize = isize + size(TEpsrc)
              qstarm => c_s%qstarm  ; isize = isize + size(qstarm)
              pflux => c_s%pflux    ; isize = isize + size(pflux)
+             pflux_S => c_s%pflux_S; isize = isize + size(pflux_S)
              trip => c_s%trip; isize = isize + size(trip)
              TpSq => c_s%TpSq; isize = isize + size(TpSq)
              Tpdqp => c_s%Tpdqp; isize = isize + size(Tpdqp)
@@ -806,18 +809,20 @@ c
       endif
 c
  8999 continue
-
+c       note istage is 4 here.
 c       -----------
 c        call subgrid velocity subroutine
 c       2-13-2018 JP Initialize xp_i after RK3 for subgrid fluxes
-c        part => first_particle
-c        do while (associated(part))
-c           xp_i(1:3) = xp(1:3)
-c           part => part%next
-c        end do
-
+        part => first_particle
+        do while (associated(part))
+           part%xp_i(1:3) = part%xp(1:3)
+           part => part%next
+        end do
+        
+        
         call SFS_velocity
-
+        
+        
 c       check whether particles are out of domain or cross processors
         
         call particle_bcs_nonperiodic
@@ -825,7 +830,42 @@ c       check whether particles are out of domain or cross processors
         call particle_bcs_periodic
 
 c       2-13-2018 JP calculate fluxes based on subgrid components
-c        call SFS_flux
+c        part => first_particle
+c        do while (associated(part))
+c        if(part%pidx == 1 .and. myid==0)then
+c           write(*,*)'part%xp_i(1)',part%xp_i(1),'part%xp(1)',part%xp(1)
+c           write(*,*)'part%xp_i(2)',part%xp_i(2),'part%xp(2)',part%xp(2)
+c           write(*,*)'part%xp_i(3)',part%xp_i(3),'part%xp(3)',part%xp(3)
+c        end if
+c        part => part%next
+c        end do
+
+        call SFS_flux
+
+        call ztox_trans(Spartflux_t(0:nnz+1,iys:iye,mxs:mxe),
+     +                Spartflux(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,
+     +                mxs,mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
+     +                ncpu_s,numprocs)
+
+        !Troubleshoot some shie
+        do iz=izs,ize
+           dummy(iz,37) = 0.0
+        end do
+        do iz=izs,ize
+        do iy=iys,iye
+        do ix=1,nnx
+           dummy(iz,37) = dummy(iz,37) + Spartflux(ix,iy,iz)
+        end do
+        end do
+        end do
+
+        if(myid==0)then
+        write(*,*)'Information on first 3 subgrid fluxes'
+        write(*,*)'First grid spflux ', dummy(1,37)
+        write(*,*)'Second grid spflux ', dummy(2,37)
+        write(*,*)'Third grid spflux ', dummy(3,37)
+        end if
+
 
 
 c       -----------
@@ -7300,7 +7340,7 @@ c ------- indices for indexing array stat(.,.)
 c         js = number of non-scalar stats
 c         ns = number of scalar stats
 c
-      parameter(js = 36, ns = 5, nstat = js + ns*nscl+1)   !Brian 7/30/14  js=25->26
+      parameter(js = 37, ns = 5, nstat = js + ns*nscl+1)   !Brian 7/30/14  js=25->26
       real stat(1:nnz,nstat)
 c
 c -------- stat(.,1) = u*u = ups
@@ -7418,6 +7458,7 @@ c
 c         stat(iz,35) =stat(iz,35) +  partcount(ix,iy,iz)
          stat(iz,35) = stat(iz,35) + partcountU(ix,iy,iz)
          stat(iz,36) = stat(iz,36) + partflux(ix,iy,iz)
+         stat(iz,37) = stat(iz,37) + Spartflux(ix,iy,iz)
       enddo
       enddo
 c
@@ -7538,6 +7579,7 @@ C     -----------------------------------
       qstarm(iz) = stat(iz,34)*fnxy
 
       pflux(iz) = stat(iz,36)
+      pflux_S(iz) = stat(iz,37)
 
 c
 c ------------ get scalar resolved fluxes and variances
@@ -10320,7 +10362,6 @@ c
       partcount_t = 0.0
       partflux_t = 0.0
       partcountU_t = 0.0
-      Spartflux_t = 0.0
       vpsum_t = 0.0
       upwp_t = 0.0
       vpsqrsum_t = 0.0
@@ -13993,6 +14034,9 @@ c        Rep_avg = Rep_avg/tnumpart
          integer :: ix,iy,iz
          real :: zu_1,zu_nnz
          integer :: iz_beg,iz_end
+
+         Spartflux_t = 0.0
+
          part => first_particle
          do while (associated(part))
          
@@ -14008,7 +14052,7 @@ c        Rep_avg = Rep_avg/tnumpart
  
          if (part%xp_i(3) .gt. 0.0) then
          
-         if (part%xp_i(3) .gt. part%xp(3)) then
+         if (part%xp_i(3) .lt. part%xp(3)) then !Up
            
             iz_beg = floor((part%xp_i(3)- zu_1)/dz_U) + 2
             iz_end = floor((part%xp(3)  - zu_1)/dz_U) + 1
@@ -14021,8 +14065,9 @@ c        Rep_avg = Rep_avg/tnumpart
               end if
 
               Spartflux_t(iz,jpt,ipt) = Spartflux_t(iz,jpt,ipt) + 1.0
+c              write(*,*)'I got here (+1 vertical!)'
            end do
-        elseif (part%xp_i(3) .gt. part%xp(3)) then
+        elseif (part%xp_i(3) .gt. part%xp(3)) then !Down
           iz_beg = floor((part%xp(3)  -zu_1)/dz_U) + 2
           iz_end = floor((part%xp_i(3)-zu_1)/dz_U) + 1
           do iz=iz_beg,iz_end
@@ -14035,20 +14080,13 @@ c        Rep_avg = Rep_avg/tnumpart
              end if
 
              Spartflux_t(iz,jpt,ipt) = Spartflux_t(iz,jpt,ipt) - 1.0
+c             write(*,*)'I got here (-1 vertical!)'
           end do
         end if
         end if
         end if
         part => part%next
         end do
-
-
-      call ztox_trans(Spartflux_t(0:nnz+1,iys:iye,mxs:mxe),
-     +                Spartflux(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,
-     +                mxs,mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
-     +                ncpu_s,numprocs)
-
-
 
         end subroutine SFS_flux
  
