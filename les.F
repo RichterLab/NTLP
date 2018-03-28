@@ -49,7 +49,7 @@ c     ----------------------------------------------------------------------
       real    ::    windm,u1xy,v1xy,t1xy(nscl),
      +     t10xy(nscl),au13m,au23m,aut3m(nscl),tsfcm(nscl),
      +     thstar(nscl), eavg(maxnz), tr_tau(0:maxnz),
-     +     pxym(0:maxnz1), zi_min, dummy(0:maxnz,maxnz)
+     +     pxym(0:maxnz1), zi_min
       integer ::    izi, iz_min
       real, allocatable ::
      +     wind(:,:), tau13m(:,:), tau23m(:,:), 
@@ -112,6 +112,7 @@ c     -----------------------------------------------------
       real, allocatable :: partflux(:,:,:),partflux_t(:,:,:)
       real, allocatable :: partcountU_t(:,:,:),partcountU(:,:,:)
       real, allocatable :: Spartflux_t(:,:,:),Spartflux(:,:,:)
+      real, allocatable :: tpartflux_t(:,:,:),tpartflux(:,:,:)
 
 c     --------------------------------------------------------
       real, allocatable :: T2ext(:,:,:),T2_t(:,:,:)
@@ -156,7 +157,7 @@ c     parametera for particle histogram
       integer :: pidx,procidx
       real :: vp(3),xp(3),xp_i(3),uf(3),xrhs(3),vrhs(3),Tp,Tprhs_s
       real :: Tprhs_L,Tf,radius,radrhs,qinf,qstar,T_eq,r_eq,req_init
-      real :: u_sub(3),sigm_s ! SFS velocity, Indrajith,06/07
+      real :: u_sub(3),sigm_s,xp_si(3),xp_ti(3) !SFS vel and total location 3-22
       type(particle), pointer :: prev,next
       end type particle
 
@@ -300,8 +301,9 @@ c ----------------------------------------------------------------------
      +           phimp(maxnz),phimw(maxnz),  
      +           Hpsrc(maxnz),TEpsrc(maxnz),
      +           qstarm(maxnz),
-     +           pflux(maxnz),pflux_S(maxnz),
-     +           trip(maxnz),TpSq(maxnz),Tpdqp(maxnz)
+     +           rk3pflux(maxnz),Spflux(maxnz),
+     +           trip(maxnz),TpSq(maxnz),Tpdqp(maxnz),
+     +           Tpflux(maxnz)
         real ::  xkn(maxnx),ykn(maxny),
      +           xk(maxnx),yk(maxny),
      +           xks(maxnx2,maxny),wavexy(maxnx2,maxny)
@@ -342,8 +344,9 @@ c ----------------------------------------------------------------------
      +           phimp(:),phimw(:), 
      +           Hpsrc(:), TEpsrc(:),
      +           qstarm(:),
-     +           pflux(:),pflux_S(:),
-     +           trip(:),TpSq(:),Tpdqp(:)
+     +           rk3pflux(:),Spflux(:),
+     +           trip(:),TpSq(:),Tpdqp(:),
+     +           Tpflux(:)
         real, pointer ::  
      +           xkn(:), ykn(:), xk(:), yk(:), xks(:,:), wavexy(:,:)
         real, pointer ::  
@@ -436,11 +439,12 @@ c
              Hpsrc   => c_s%Hpsrc    ; isize = isize + size(Hpsrc)
              TEpsrc  => c_s%TEpsrc  ; isize = isize + size(TEpsrc)
              qstarm => c_s%qstarm  ; isize = isize + size(qstarm)
-             pflux => c_s%pflux    ; isize = isize + size(pflux)
-             pflux_S => c_s%pflux_S; isize = isize + size(pflux_S)
+             rk3pflux => c_s%rk3pflux ; isize = isize + size(rk3pflux)
+             Spflux => c_s%Spflux; isize = isize + size(Spflux)
              trip => c_s%trip; isize = isize + size(trip)
              TpSq => c_s%TpSq; isize = isize + size(TpSq)
              Tpdqp => c_s%Tpdqp; isize = isize + size(Tpdqp)
+             Tpflux => c_s%Tpflux; isize = isize + size(Tpflux)
 
 
              xkn     => c_s%xkn
@@ -809,13 +813,12 @@ c
       endif
 c
  8999 continue
-c       note istage is 4 here.
 c       -----------
 c        call subgrid velocity subroutine
 c       2-13-2018 JP Initialize xp_i after RK3 for subgrid fluxes
         part => first_particle
         do while (associated(part))
-           part%xp_i(1:3) = part%xp(1:3)
+           part%xp_si(1:3) = part%xp(1:3)
            part => part%next
         end do
         
@@ -829,17 +832,7 @@ c       check whether particles are out of domain or cross processors
         call particle_exchange
         call particle_bcs_periodic
 
-c       2-13-2018 JP calculate fluxes based on subgrid components
-c        part => first_particle
-c        do while (associated(part))
-c        if(part%pidx == 1 .and. myid==0)then
-c           write(*,*)'part%xp_i(1)',part%xp_i(1),'part%xp(1)',part%xp(1)
-c           write(*,*)'part%xp_i(2)',part%xp_i(2),'part%xp(2)',part%xp(2)
-c           write(*,*)'part%xp_i(3)',part%xp_i(3),'part%xp(3)',part%xp(3)
-c        end if
-c        part => part%next
-c        end do
-
+c       Calculate flux of SFS
         call SFS_flux
 
         call ztox_trans(Spartflux_t(0:nnz+1,iys:iye,mxs:mxe),
@@ -847,26 +840,13 @@ c        end do
      +                mxs,mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
      +                ncpu_s,numprocs)
 
-        !Troubleshoot some shie
-        do iz=izs,ize
-           dummy(iz,37) = 0.0
-        end do
-        do iz=izs,ize
-        do iy=iys,iye
-        do ix=1,nnx
-           dummy(iz,37) = dummy(iz,37) + Spartflux(ix,iy,iz)
-        end do
-        end do
-        end do
+c       Calculate total flux of SFS
+        call total_flux
 
-        if(myid==0)then
-        write(*,*)'Information on first 3 subgrid fluxes'
-        write(*,*)'First grid spflux ', dummy(1,37)
-        write(*,*)'Second grid spflux ', dummy(2,37)
-        write(*,*)'Third grid spflux ', dummy(3,37)
-        end if
-
-
+        call ztox_trans(tpartflux_t(0:nnz+1,iys:iye,mxs:mxe),
+     +                tpartflux(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,
+     +                mxs,mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
+     +                ncpu_s,numprocs)
 
 c       -----------
 c       John ~Sept 2017 particle generation
@@ -6151,6 +6131,8 @@ c     --Particle flux JP--
       partcountU_t = 0.0
       Spartflux_t = 0.0
       Spartflux = 0.0
+      tpartflux_t = 0.0
+      tpartflux = 0.0
 c     --------------------
       vpsum = 0.0
       vpsum_t = 0.0
@@ -7457,9 +7439,10 @@ c
          stat(iz,34) = stat(iz,34) + qstarsum(ix,iy,iz)
 c         stat(iz,35) =stat(iz,35) +  partcount(ix,iy,iz)
          stat(iz,35) = stat(iz,35) + partcountU(ix,iy,iz)
-         stat(iz,36) = stat(iz,36) + partflux(ix,iy,iz)
-         stat(iz,37) = stat(iz,37) + Spartflux(ix,iy,iz)
-      enddo
+         stat(iz,36) = stat(iz,36) + partflux(ix,iy,iz)  !This is RK3
+         stat(iz,37) = stat(iz,37) + Spartflux(ix,iy,iz) !SFS
+         stat(iz,38) = stat(iz,38) + tpartflux(ix,iy,iz) !=Total
+      enddo                                              !
       enddo
 c
 c ------------ get scalar resolved fluxes and variances
@@ -7578,8 +7561,9 @@ C     -----------------------------------
       TEpsrc(iz) = stat(iz,33)*fnxy
       qstarm(iz) = stat(iz,34)*fnxy
 
-      pflux(iz) = stat(iz,36)
-      pflux_S(iz) = stat(iz,37)
+      rk3pflux(iz) = stat(iz,36)
+      Spflux(iz) = stat(iz,37)
+      Tpflux(iz) = stat(iz,38)
 
 c
 c ------------ get scalar resolved fluxes and variances
@@ -8425,6 +8409,8 @@ c      NOTE: allocate even if ispray == 0, since it's in xy_stats
       allocate(partcountU_t(0:nnz+1,iys:iye,mxs:mxe))
       allocate(Spartflux(nnx,iys:iye,izs-1:ize+1))
       allocate(Spartflux_t(0:nnz+1,iys:iye,mxs:mxe))
+      allocate(tpartflux(nnx,iys:iye,izs-1:ize+1))
+      allocate(tpartflux_t(0:nnz+1,iys:iye,mxs:mxe))
       allocate(upwp_t(0:nnz+1,iys:iye,mxs:mxe))
       allocate(upwp(nnx,iys:iye,izs-1:ize+1))
       allocate(vpsum(nnx,iys:iye,izs-1:ize+1,1:3))
@@ -10467,7 +10453,10 @@ c         end if
          !part%radius = radiustmp + dt*gama(istage)*part%radrhs
          end if
  
-         if(istage==1) part%xp_i(1:3) = part%xp(1:3)
+         if(istage==1)then
+         part%xp_i(1:3) = part%xp(1:3)  !RK3 flux reference
+         part%xp_ti(1:3) = part%xp(1:3) !Total flux reference
+         end if
         
          !part%Tprhs_s = -Nup/3.0/Pra*CpaCpp*
 !     +                     rhop/rhow*taup_i*(part%Tp-part%Tf)
@@ -10547,7 +10536,7 @@ c      end if
       !t_f = mpi_wtime()
       !if (myid==5) write(*,*) 'time cpl: ', t_f - t_s
 
-      call particle_Uflux
+      call particle_rk3_Uflux
  
       !Finally, now that coupling and statistics arrays are filled, 
       !Transpose them back to align with the velocities:
@@ -12497,7 +12486,7 @@ c       Indrajith 03/13/2017
       !Set up MPI datatypes for sending particle information
       !MUST UPDATE IF THINGS ARE ADDED/REMOVED FROM PARTICLE STRUCTURE
 
-       num_reals = 7*3+12
+       num_reals = 9*3+12
       blcts(1:3) = (/2,num_reals,2/)
       displs(1) = 0
       types(1) = mpi_integer
@@ -13955,7 +13944,7 @@ c        Rep_avg = Rep_avg/tnumpart
 
 
 
-         subroutine particle_Uflux
+         subroutine particle_rk3_Uflux
          use particles
          use pars
          use con_data
@@ -14019,7 +14008,7 @@ c        Rep_avg = Rep_avg/tnumpart
            
  
  
-         end subroutine particle_Uflux 
+         end subroutine particle_rk3_Uflux 
 
          subroutine SFS_flux
 !       Same concept as particle_Uflux, now just add another thingamabob
@@ -14050,33 +14039,33 @@ c        Rep_avg = Rep_avg/tnumpart
          zu_1 = 0.5*zl/nnz
          zu_nnz = zl - zu_1
  
-         if (part%xp_i(3) .gt. 0.0) then
+         if (part%xp_si(3) .gt. 0.0) then
          
-         if (part%xp_i(3) .lt. part%xp(3)) then !Up
+         if (part%xp_si(3) .lt. part%xp(3)) then !Up
            
-            iz_beg = floor((part%xp_i(3)- zu_1)/dz_U) + 2
+            iz_beg = floor((part%xp_si(3)- zu_1)/dz_U) + 2
             iz_end = floor((part%xp(3)  - zu_1)/dz_U) + 1
            do iz=iz_beg,iz_end
               if (iz .lt. 1) then
-              write(*,*) 'up iz<1: ',iz,part%xp(3),part%xp_i(3)
+              write(*,*) 'up iz<1: ',iz,part%xp(3),part%xp_si(3)
               end if
               if (iz .gt. nnz) then
-              write(*,*) 'up iz>nnz: ',iz,part%xp(3),part%xp_i(3)
+              write(*,*) 'up iz>nnz: ',iz,part%xp(3),part%xp_si(3)
               end if
 
               Spartflux_t(iz,jpt,ipt) = Spartflux_t(iz,jpt,ipt) + 1.0
 c              write(*,*)'I got here (+1 vertical!)'
            end do
-        elseif (part%xp_i(3) .gt. part%xp(3)) then !Down
+        elseif (part%xp_si(3) .gt. part%xp(3)) then !Down
           iz_beg = floor((part%xp(3)  -zu_1)/dz_U) + 2
-          iz_end = floor((part%xp_i(3)-zu_1)/dz_U) + 1
+          iz_end = floor((part%xp_si(3)-zu_1)/dz_U) + 1
           do iz=iz_beg,iz_end
 
              if (iz .lt. 1) then
-             write(*,*) 'dz iz<1: ',iz,part%xp(3),part%xp_i(3)
+             write(*,*) 'dz iz<1: ',iz,part%xp(3),part%xp_si(3)
              end if
              if (iz .gt. nnz) then
-             write(*,*) 'dn iz>nnz: ',iz,part%xp(3),part%xp_i(3)
+             write(*,*) 'dn iz>nnz: ',iz,part%xp(3),part%xp_si(3)
              end if
 
              Spartflux_t(iz,jpt,ipt) = Spartflux_t(iz,jpt,ipt) - 1.0
@@ -14089,4 +14078,67 @@ c             write(*,*)'I got here (-1 vertical!)'
         end do
 
         end subroutine SFS_flux
- 
+
+        subroutine total_flux 
+        use particles
+        use pars
+        use con_data
+        use con_stats
+        implicit none
+        include 'mpif.h'
+        integer :: i,j,k,ipt,jpt,kpt,kwpt,kUpt
+        integer :: ix,iy,iz
+        real :: zu_1,zu_nnz
+        integer :: iz_beg,iz_end
+
+        tpartflux_t=0.0
+        part => first_particle
+        do while (associated(part))
+        ipt = floor(part%xp(1)/dx) + 1
+        jpt = floor(part%xp(2)/dy) + 1
+         !For particles within the domain
+        if (part%xp(3) .gt. 0.0) then
+        kUpt = floor((part%xp(3)-0.0)/dz_U) + 1
+
+        zu_1 = 0.5*zl/nnz
+        zu_nnz = zl - zu_1
+
+        if (part%xp_ti(3) .gt. 0.0) then
+
+        if (part%xp_ti(3) .lt. part%xp(3)) then !Moved up
+
+           iz_beg = floor((part%xp_ti(3)-zu_1)/dz_U) + 2
+           iz_end = floor((part%xp(3) - zu_1)/dz_U) + 1
+
+           do iz=iz_beg,iz_end
+              if (iz .lt. 1) then
+              write(*,*) 'up iz<1:',iz,part%xp(3),part%xp_ti(3)
+              end if
+              if (iz .gt. nnz) then
+              write(*,*) 'up iz>nnz:',iz,part%xp(3),part%xp_ti(3)
+              end if
+
+              tpartflux_t(iz,jpt,ipt) = tpartflux_t(iz,jpt,ipt) + 1.0
+           end do
+        elseif (part%xp_ti(3) .gt. part%xp(3)) then !Moved down
+          iz_beg = floor((part%xp(3)  -zu_1)/dz_U) + 2
+          iz_end = floor((part%xp_ti(3)-zu_1)/dz_U) + 1
+          do iz=iz_beg,iz_end
+
+             if (iz .lt. 1) then
+             write(*,*) 'dz iz<1:',iz,part%xp(3),part%xp_ti(3)
+             end if
+             if (iz .gt. nnz) then
+             write(*,*) 'dn iz>nnz:',iz,part%xp(3),part%xp_ti(3)
+             end if
+
+             tpartflux_t(iz,jpt,ipt) = tpartflux_t(iz,jpt,ipt) - 1.0
+          end do
+        end if
+        end if
+        end if
+        part => part%next
+        end do
+
+        end subroutine total_flux
+
