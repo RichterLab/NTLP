@@ -7322,7 +7322,7 @@ c ------- indices for indexing array stat(.,.)
 c         js = number of non-scalar stats
 c         ns = number of scalar stats
 c
-      parameter(js = 37, ns = 5, nstat = js + ns*nscl+1)   !Brian 7/30/14  js=25->26
+      parameter(js = 38, ns = 5, nstat = js + ns*nscl+1)   !Brian 7/30/14  js=25->26
       real stat(1:nnz,nstat)
 c
 c -------- stat(.,1) = u*u = ups
@@ -10733,6 +10733,7 @@ c      end if
   
       part%xp(1:3) = xp(1:3)
       part%xp_i(1:3) = xp(1:3)
+      part%xp_ti(1:3) = xp(1:3)
       part%vp(1:3) = vp(1:3)
       part%u_sub(1:3) = 0.0     !Indrajith 07/17 SFS vel
       part%sigm_s = 0.0         !Indrajith 07/17 isotropic stress
