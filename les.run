@@ -7,12 +7,13 @@
 #$ -N E+L-UMabl
 #$ -j y
 
-case=mabl
+case_data=mabl
+case_home=mabl
 time=0000000
 runout=$case.out.$time
 
-datadir=/scratch365/hpark6/mabl/$case
-homedir=~/NTLP/$case
+datadir=/scratch365/hpark6/mabl/$case_data
+homedir=~/NTLP/$case_home
 
 cd $homedir
 
