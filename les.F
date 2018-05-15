@@ -56,7 +56,7 @@ c     ----------------------------------------------------------------------
      +     taut3m(:,:,:), t_grnd(:,:,:)
 c     ----------------------------------------------------------------------
       real ::       u_mn(0:maxnz1), v_mn(0:maxnz1),
-     +     w_mn(0:maxnz1), t_mn(0:maxnz1,nscl)
+     +     w_mn(0:maxnz1), t_mn(0:maxnz1,nscl), alphaC(0:maxnz1,nscl)
 c     ----------------------------------------------------------------------
       real ::       dzw(0:maxnz2), dzu(0:maxnz2),
      +     dzw_i(0:maxnz2), dzu_i(0:maxnz2)
@@ -823,7 +823,8 @@ c       2-13-2018 JP Initialize xp_i after RK3 for subgrid fluxes
         end do
         
         
-        call SFS_velocity
+        !call SFS_velocity
+        call SFS_position
         
         
 c       check whether particles are out of domain or cross processors
@@ -4597,6 +4598,7 @@ c
       do iscl=1,nscl
          do iz=0,nnz+1
             t_mn(iz,iscl) = 0.0
+            alphaC(iz,iscl) = 0.0
          enddo
       enddo
       iz_ee = ize
@@ -4620,9 +4622,11 @@ c
             do iy=iys,iye
             do ix=1,nnx
                t_mn(iz,iscl) = t_mn(iz,iscl) + t(ix,iy,iscl,iz)
+               alphaC(iz,iscl) = alphaC(iz,iscl)+vis_s(ix,iy,iscl,iz)
             enddo
             enddo
             t_mn(iz,iscl) = t_mn(iz,iscl)*fnxy
+            alphaC(iz,iscl) = alphaC(iz,iscl)*fnxy
          enddo
       enddo
       call mpi_sum_z(u_mn(0),i_root,myid,nnzp1+1,1)
@@ -4630,6 +4634,7 @@ c
       call mpi_sum_z(w_mn(0),i_root,myid,nnzp1+1,1)
       do iscl=1,nscl
          call mpi_sum_z(t_mn(0,iscl),i_root,myid,nnzp1+1,1)
+         call mpi_sum_z(alphaC(0,iscl),i_root,myid,nnzp1+1,1)
       enddo
 c
 c -------- set e to minimum value 
@@ -10794,7 +10799,7 @@ c         part%xp(3) = zi - (part%xp(3)-zi)
 c       -----for particle histogram --------------
        !Remove the particle fall back, Indrajith,03/02/2017
        ! hist_radclass(part%pidx) = hist_radclass(part%pidx) - 1
-         del_radclass(part%pidx) = del_radclass(part%pidx) + 1
+       !  del_radclass(part%pidx) = del_radclass(part%pidx) + 1
 c         write(*,'(a7,4e15.6)') 'rad1: ',time,part%radius
          call destroy_particle  
          reinject = reinject+1
@@ -11581,6 +11586,11 @@ c       calculations
       sigm_sdyext = 0.0
       sigm_sdzext = 0.0
       vis_sext = 0.0
+      vis_st = 0.0
+      sigm_st = 0.0
+      sigm_sdxt = 0.0
+      sigm_sdyt = 0.0
+      sigm_sdzt = 0.0
       
               !In the column setup, need to tranpose u,v,w first into
               !u_t,v_t,w_t:
@@ -11980,6 +11990,8 @@ c     Now fill the ext arrays with the recieved buffers:
        elseif (kuvpts(3) == 2) then 
           first = 2
           last = 5
+          kuvpts(1) = 1
+          kuvpts(6) = 1
        !Between top cell center and the domain boundary
        elseif (kuvpts(3) == nnz) then
           first = 2
@@ -12164,6 +12176,7 @@ c      iz_part = iz-1
       kwpts(5) = kwpts(4)+1
       kwpts(6) = kwpts(5)+1
       kwpts(2) = kwpts(3)-1
+      kwpts(1) = kwpts(2)-1
  
       !Fill in the weights:
       !First for x and y since they are periodic:
@@ -12204,6 +12217,8 @@ c      iz_part = iz-1
        elseif (kuvpts(3) == 2) then
           first = 2
           last = 5
+          kuvpts(1) = 1
+          kuvpts(6) = 1
        !Between top cell center and the domain boundary
        elseif (kuvpts(3) == nnz) then
           first = 2
@@ -12223,6 +12238,8 @@ c      iz_part = iz-1
        elseif (kuvpts(3) == nnz-2) then
           first = 2
           last = 5
+          kuvpts(1) = nnz
+          kuvpts(6) = nnz
        else
           first = 1
           last = 6
@@ -12308,23 +12325,28 @@ c        part%qinf = 0.0 ! Brian 7/14/14
             iy = ijpts(2,j)
             izuv = kuvpts(k)
             izw = kwpts(k)
-            part%sigm_s = part%sigm_s+sigm_sext(izuv,iy,ix)*wt(1,i)*
-     +                   wt(2,j)*wt(3,k)
-c            part%uf(2) = part%uf(2)+vext(izuv,iy,ix)*wt(1,i)*
-c     +                   wt(2,j)*wt(3,k)
-            sigm_sdxp = sigm_sdxp+ sigm_sdxext(izuv,iy,ix)*wt(1,i)*
-     +                   wt(2,j)*wt(3,k)
-            sigm_sdyp = sigm_sdyp+sigm_sdyext(izuv,iy,ix)*wt(1,i)*
-     +                   wt(2,j)*wt(3,k)
+            part%sigm_s = part%sigm_s+sigm_sext(izw,iy,ix)*wt(1,i)*
+     +                   wt(2,j)*wt(4,k)
+            sigm_sdxp = sigm_sdxp+ sigm_sdxext(izw,iy,ix)*wt(1,i)*
+     +                   wt(2,j)*wt(4,k)
+            sigm_sdyp = sigm_sdyp+sigm_sdyext(izw,iy,ix)*wt(1,i)*
+     +                   wt(2,j)*wt(4,k)
             sigm_sdzp = sigm_sdzp+sigm_sdzext(izuv,iy,ix)*wt(1,i)*
      +                   wt(2,j)*wt(3,k)
 
-            vis_sp =vis_sp +vis_sext(izuv,iy,ix)*wt(1,i)*
-     +                   wt(2,j)*wt(3,k)
+            vis_sp =vis_sp +vis_sext(izw,iy,ix)*wt(1,i)*
+     +                   wt(2,j)*wt(4,k)
+
+         if (isnan(vis_sp)) then
+         write(*,*) 'P:',vis_sext(izw,iy,ix),wt(1,i),wt(2,j),wt(4,k),
+     +   part%xp(3),i,j,k,kwpts(3)
+         end if
+
   
          end do
          end do
          end do
+
 
       end subroutine sigm_interp
 
@@ -13626,7 +13648,6 @@ c	Non isotropic case
 
 
 
-
         subroutine SFS_velocity
 c       This is working code
 c	This subroutine calculate the SFS velocity for spray drops
@@ -13683,12 +13704,13 @@ c	-----------------
            sigm_sdy(ix,iy,iz) =  sigm_s(ix,iy,iz)       !for yderiv
 c	--------------------
 c       calculate z derivative of sigma_s
+c       this will be at the u-point!
 c	--------------------
-           sigm_su =weit*sigm_s(ix,iy,izp1)+weit1*sigm_s(ix,iy,iz) 
-           sigm_sl =weit3*sigm_s(ix,iy,iz)+weit4*sigm_s(ix,iy,izm1)
-           sigm_sdz(ix,iy,iz) = (sigm_su - sigm_sl)*dzw_i(iz)
+           sigm_sdz(ix,iy,iz)=
+     +     (sigm_s(ix,iy,iz)-sigm_s(ix,iy,izm1))*dzw_i(iz)
         end do
         end do
+
 c	-------------------
 c       calculate x derivatives of sigma_s
 c	-------------------
@@ -13824,12 +13846,12 @@ c        part%u_sub(3)= (a2+a3)*dt + us_ran
 c         write(*,*)'fs1:',part%xp(3),fs,us_ran
 c        write(*,*)'as1:',a1,a2,a3,us_ran
 c      ------FOR CHECK-INDRAJIT-11/17/2017-----
-        if(part%xp(3).lt. 0.1*zi.and.fs.gt.0.5)then
+c        if(part%xp(3).lt. 0.1*zi.and.fs.gt.0.5)then
 c        if(part%xp(3).lt. zw1)then
 c        part%u_sub(3) = gasdev(iseed)*sqrt(2*vis_sp/dt)
 c        part%u_sub(3)= part%u_sub(3) + gasdev(iseed)
-          part%u_sub(3)= part%u_sub(3)+9.0*us_ran
-        end if
+c          part%u_sub(3)= part%u_sub(3)+9.0*us_ran
+c        end if
 c      -----------------------------------------
 
         if(isnan(part%u_sub(3)))then
@@ -13856,6 +13878,67 @@ c       ---------------------------------
         end do
 
         end subroutine SFS_velocity
+
+        subroutine SFS_position
+c	Use a more simplistic SFS treatment: Stochastic particle
+c       position rather than velocity
+c       Designed to be consistent with LES subgrid eddy diffusivity
+c       Does not use Weil et al. 2004 formulation at all
+        use pars
+        use fields
+        use fftwk
+        use con_data
+        use con_stats
+        use particles
+        implicit none
+
+        real :: sigm_sdxp,sigm_sdyp,sigm_sdzp,vis_sp
+        real :: dadz,gasdev
+        integer :: ix,iy,iz,izp1,izm1,ind,iz_part
+
+c       ---initialize -------
+        sigm_s = 0.0 
+
+c	------------------
+c       compute sigma squre (sigm_s) based on subgrid energy field
+c	-----------------       
+        do iz =izs,ize
+        izp1 = iz+1
+        izm1 = iz-1
+        do ix =1,nnx
+        do iy = iys,iye
+           sigm_s(ix,iy,iz) = 2.0*e(ix,iy,iz)/3.0
+           vis_ss(ix,iy,iz) = vis_s(ix,iy,3,iz)
+        end do
+        end do
+
+        end do
+
+        call fill_extSFS
+
+        !Loop over the linked list of particles:
+        part => first_particle
+        do while (associated(part))
+
+        ! interpolate sigm_s and its derivative at particle location
+        call sigm_interp(sigm_sdxp,sigm_sdyp,sigm_sdzp,vis_sp,iz_part)
+
+        !Need vertical derivative of average vis_s:
+        !Crude approximation: 0th order interpolation -- simply take
+        !d(alphaC)/dz of the w-points surrounding the particle location
+        dadz = (alphaC(iz_part+1,3)-alphaC(iz_part,3))*dzw_i(iz)
+        
+
+        !Now simply solve Langevin equation:
+        part%xp(1) = part%xp(1) + gasdev(iseed)*sqrt(2.0*abs(vis_sp)*dt)
+        part%xp(2) = part%xp(2) + gasdev(iseed)*sqrt(2.0*abs(vis_sp)*dt)
+        part%xp(3) = part%xp(3) + gasdev(iseed)*sqrt(2.0*abs(vis_sp)*dt)
+     +             + dadz*dt
+
+        part => part%next
+        end do
+
+        end subroutine SFS_position
    
 
         subroutine particle_generation(it)
