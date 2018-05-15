@@ -815,57 +815,24 @@ c
  8999 continue
 c       -----------
 c        call subgrid velocity subroutine
-c       2-13-2018 JP Initialize xp_i after RK3 for subgrid fluxes
-        part => first_particle
-        do while (associated(part))
-           part%xp_si(1:3) = part%xp(1:3)
-           part => part%next
-        end do
-        
         
         !call SFS_velocity
         call SFS_position
         
         
-c       check whether particles are out of domain or cross processors
-        
-        call particle_bcs_nonperiodic
-        call particle_exchange
-        call particle_bcs_periodic
 
 c       Calculate flux of SFS
         call SFS_flux
 
-        call ztox_trans(Spartflux_t(0:nnz+1,iys:iye,mxs:mxe),
-     +                Spartflux(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,
-     +                mxs,mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
-     +                ncpu_s,numprocs)
-
 c       Calculate total flux of SFS
         call total_flux
 
-        call ztox_trans(tpartflux_t(0:nnz+1,iys:iye,mxs:mxe),
-     +                tpartflux(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,
-     +                mxs,mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
-     +                ncpu_s,numprocs)
 
 c       -----------
 c       John ~Sept 2017 particle generation
         call particle_generation(it)
-        reinject = 0
-        tot_reinject =0
-       
-        !We be gettin dem particle count bro:
-        numpart = 0
-        part => first_particle
-        do while (associated(part))
-        numpart = numpart + 1
-        part => part%next
-        end do
-        
-        !Compute total number of particles 
-        call mpi_allreduce(numpart,tnumpart,1,mpi_integer,mpi_sum,
-     +                     mpi_comm_world,ierr)
+
+
 c        !Compute average particle Reynolds number
 c        call mpi_allreduce(myRep_avg,Rep_avg,1,mpi_real8,mpi_sum,
 c     +                     mpi_comm_world,ierr)
@@ -10498,6 +10465,17 @@ c        end if
       !t_f = mpi_wtime()
       !if (myid==5) write(*,*) 'time loop:', t_f-t_s
 
+c     JP 5-15-2018 Initialize xp_i after RK3 for subgrid fluxes
+      part => first_particle
+      do while (associated(part))
+         part%xp_si(1:3) = part%xp(1:3)
+         part => part%next
+      end do
+c
+
+
+
+
       !Enforce nonperiodic bcs (either elastic or destroying particles)
       !t_s = mpi_wtime()
       call particle_bcs_nonperiodic
@@ -13877,6 +13855,12 @@ c       ---------------------------------
         part => part%next
         end do
 
+
+        call particle_bcs_nonperiodic
+        call particle_exchange
+        call particle_bcs_periodic
+
+
         end subroutine SFS_velocity
 
         subroutine SFS_position
@@ -13937,6 +13921,11 @@ c	-----------------
 
         part => part%next
         end do
+
+        call particle_bcs_nonperiodic
+        call particle_exchange
+        call particle_bcs_periodic
+
 
         end subroutine SFS_position
    
@@ -14023,6 +14012,22 @@ c     +                     mpi_comm_world,ierr)
 c        call mpi_allreduce(myRep_avg,Rep_avg,1,mpi_real8,mpi_sum,
 c     +                     mpi_comm_world,ierr)
 c        Rep_avg = Rep_avg/tnumpart
+
+        reinject = 0
+        tot_reinject = 0
+
+        !Particle count bro
+        numpart = 0
+        part => first_particle
+        do while (associated(part))
+        numpart = numpart + 1
+        part => part%next
+        end do
+
+        !Compute total number of particles
+        call mpi_allreduce(numpart,tnumpart,1,mpi_integer,mpi_sum,
+     +                     mpi_comm_world,ierr)
+
 
         end subroutine particle_generation
 
@@ -14161,6 +14166,11 @@ c             write(*,*)'I got here (-1 vertical!)'
         part => part%next
         end do
 
+        call ztox_trans(Spartflux_t(0:nnz+1,iys:iye,mxs:mxe),
+     +                 Spartflux(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,
+     +                 mxs,mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
+     +                 ncpu_s,numprocs)
+
         end subroutine SFS_flux
 
         subroutine total_flux 
@@ -14223,6 +14233,12 @@ c             write(*,*)'I got here (-1 vertical!)'
         end if
         part => part%next
         end do
+
+        call ztox_trans(tpartflux_t(0:nnz+1,iys:iye,mxs:mxe),
+     +                 tpartflux(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,
+     +                 mxs,mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
+     +                 ncpu_s,numprocs)
+
 
         end subroutine total_flux
 
