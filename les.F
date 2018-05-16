@@ -8,7 +8,7 @@ c     ----------------------------------------------------------------------
       integer :: ismlt,ifree,iradup,
      +     iupwnd,ibuoy,ifilt,itcut,isubs,ibrcl,iocean,method,
      +     idebug,iz_space,ivis0,ifix_dt,new_vis,iDNS,ispray,
-     +     icouple,iTcouple,iHcouple,ievap,istbl
+     +     icouple,iTcouple,iHcouple,ievap,istbl,isfs
 c     
 c     -------- j_recl = record length in "bytes" for history file
 c     k8     = kind parameter for integers in mpi_io routines
@@ -818,8 +818,13 @@ c
 c       -----------
 c        call subgrid velocity subroutine
         
-        !call SFS_velocity
-        call SFS_position
+        if (isfs == 1) then
+           !Call Weil et al. (2004) Lagrangian stochastic model
+           call SFS_velocity
+        else
+           !Call stochastic model for the position based on vis_s
+           call SFS_position
+        end if
         
         
 
@@ -13179,7 +13184,7 @@ c      call particle_stats(ipt,jpt,kwpt,iptc,jptc,kwptc)
       namelist /flags/ ismlt,ifree,isfc,iradup,
      +         iupwnd,ibuoy,ifilt,itcut,isubs,ibrcl,iocean,
      +         method,idebug,iz_space,ivis0,ifix_dt,new_vis,iDNS,
-     +         ispray,icouple,iTcouple,iHcouple,ievap,istbl
+     +         ispray,icouple,iTcouple,iHcouple,ievap,istbl,isfs
 
 
       namelist /constants/ rhoa, nuf, Cpa, Pra, Sc,
