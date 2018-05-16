@@ -301,6 +301,7 @@ c ----------------------------------------------------------------------
      +           phimp(maxnz),phimw(maxnz),  
      +           Hpsrc(maxnz),TEpsrc(maxnz),
      +           qstarm(maxnz),
+     +           vismean(maxnz),
      +           rk3pflux(maxnz),Spflux(maxnz),
      +           trip(maxnz),TpSq(maxnz),Tpdqp(maxnz),
      +           Tpflux(maxnz)
@@ -343,7 +344,7 @@ c ----------------------------------------------------------------------
      +           mpmean(:),mwmean(:),
      +           phimp(:),phimw(:), 
      +           Hpsrc(:), TEpsrc(:),
-     +           qstarm(:),
+     +           qstarm(:),vismean(:),
      +           rk3pflux(:),Spflux(:),
      +           trip(:),TpSq(:),Tpdqp(:),
      +           Tpflux(:)
@@ -439,6 +440,7 @@ c
              Hpsrc   => c_s%Hpsrc    ; isize = isize + size(Hpsrc)
              TEpsrc  => c_s%TEpsrc  ; isize = isize + size(TEpsrc)
              qstarm => c_s%qstarm  ; isize = isize + size(qstarm)
+             vismean => c_s%vismean; isize = isize + size(vismean)
              rk3pflux => c_s%rk3pflux ; isize = isize + size(rk3pflux)
              Spflux => c_s%Spflux; isize = isize + size(Spflux)
              trip => c_s%trip; isize = isize + size(trip)
@@ -7327,7 +7329,7 @@ c ------- indices for indexing array stat(.,.)
 c         js = number of non-scalar stats
 c         ns = number of scalar stats
 c
-      parameter(js = 38, ns = 5, nstat = js + ns*nscl+1)   !Brian 7/30/14  js=25->26
+      parameter(js = 39, ns = 5, nstat = js + ns*nscl+1)   !Brian 7/30/14  js=25->26
       real stat(1:nnz,nstat)
 c
 c -------- stat(.,1) = u*u = ups
@@ -7447,6 +7449,7 @@ c         stat(iz,35) =stat(iz,35) +  partcount(ix,iy,iz)
          stat(iz,36) = stat(iz,36) + partflux(ix,iy,iz)  !This is RK3
          stat(iz,37) = stat(iz,37) + Spartflux(ix,iy,iz) !SFS
          stat(iz,38) = stat(iz,38) + tpartflux(ix,iy,iz) !=Total
+         stat(iz,39) = stat(iz,39) + vis_s(ix,iy,3,iz)
       enddo                                              !
       enddo
 c
@@ -7569,6 +7572,9 @@ C     -----------------------------------
       rk3pflux(iz) = stat(iz,36)
       Spflux(iz) = stat(iz,37)
       Tpflux(iz) = stat(iz,38)
+
+      vismean(iz) = stat(iz,39)
+
 
 c
 c ------------ get scalar resolved fluxes and variances
@@ -13893,6 +13899,7 @@ c       Does not use Weil et al. 2004 formulation at all
         implicit none
 
         real :: sigm_sdxp,sigm_sdyp,sigm_sdzp,vis_sp
+        real :: phim,phis,psim,psis,zeta
         real :: dadz,gasdev
         integer :: ix,iy,iz,izp1,izm1,ind,iz_part
 
@@ -13926,14 +13933,21 @@ c	-----------------
         !Need vertical derivative of average vis_s:
         !Crude approximation: 0th order interpolation -- simply take
         !d(alphaC)/dz of the w-points surrounding the particle location
-        dadz = (alphaC(iz_part+1,3)-alphaC(iz_part,3))*dzw_i(iz)
-        
+        if (part%xp(3) .lt. zw1) then
+           !Beneath 1st zw point, use MO to approximate dadz:
+           zeta = part%xp(3)/amonin
+           call fzol(zeta,phim,phis,psim,psis)
+           dadz = utau*vk/phis
+        else
+           dadz = (alphaC(iz_part+1,3)-alphaC(iz_part,3))*dzw_i(iz)
+        end if
 
         !Now simply solve Langevin equation:
         part%xp(1) = part%xp(1) + gasdev(iseed)*sqrt(2.0*abs(vis_sp)*dt)
         part%xp(2) = part%xp(2) + gasdev(iseed)*sqrt(2.0*abs(vis_sp)*dt)
         part%xp(3) = part%xp(3) + gasdev(iseed)*sqrt(2.0*abs(vis_sp)*dt)
      +             + dadz*dt
+
 
         part => part%next
         end do
