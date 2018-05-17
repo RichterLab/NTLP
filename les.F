@@ -7333,6 +7333,11 @@ c          stat(.,31) = mass_w_sum
 c          stat(.,32) = Hpsrc
 c          stat(.,33) = TEpsrc
 c          stat(.,34) = qstarsum
+c          stat(.,35) = total uniform particle count
+c          stat(.,36) = (resolved for LES) advection and gravitational
+c                       flux
+c          stat(.,37) = subgrid particle flux
+c          stat(.,38) = total particle flux
 c          stat(.,m1) = resolved scalar flux wt at zw = wtle
 c          stat(.,m2) = resolved scalar flux ut at zw = utle
 c          stat(.,m3) = resolved scalar flux vt at zw = vtle
