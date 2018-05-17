@@ -28,6 +28,7 @@ iTcouple=0
 iHcouple=0  !iHcouple also controls TE couple
 ievap=0
 istbl =0    ! istbl =0 for neutral, istbl = 1 for unstable/stable
+isfs = 0    ! isfs = 1 for Weil et al. Lagrangian stochastic model, isfs = 0 for stochastic xp based on vis_s
 /
 
 !Grid and domain parameters

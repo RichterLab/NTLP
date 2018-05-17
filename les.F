@@ -8,7 +8,7 @@ c     ----------------------------------------------------------------------
       integer :: ismlt,ifree,iradup,
      +     iupwnd,ibuoy,ifilt,itcut,isubs,ibrcl,iocean,method,
      +     idebug,iz_space,ivis0,ifix_dt,new_vis,iDNS,ispray,
-     +     icouple,iTcouple,iHcouple,ievap,istbl
+     +     icouple,iTcouple,iHcouple,ievap,istbl,isfs
 c     
 c     -------- j_recl = record length in "bytes" for history file
 c     k8     = kind parameter for integers in mpi_io routines
@@ -818,8 +818,13 @@ c
 c       -----------
 c        call subgrid velocity subroutine
         
-        !call SFS_velocity
-        call SFS_position
+        if (isfs == 1) then
+           !Call Weil et al. (2004) Lagrangian stochastic model
+           call SFS_velocity
+        else
+           !Call stochastic model for the position based on vis_s
+           call SFS_position
+        end if
         
         
 
@@ -13202,7 +13207,7 @@ c      call particle_stats(ipt,jpt,kwpt,iptc,jptc,kwptc)
       namelist /flags/ ismlt,ifree,isfc,iradup,
      +         iupwnd,ibuoy,ifilt,itcut,isubs,ibrcl,iocean,
      +         method,idebug,iz_space,ivis0,ifix_dt,new_vis,iDNS,
-     +         ispray,icouple,iTcouple,iHcouple,ievap,istbl
+     +         ispray,icouple,iTcouple,iHcouple,ievap,istbl,isfs
 
 
       namelist /constants/ rhoa, nuf, Cpa, Pra, Sc,
@@ -13654,9 +13659,7 @@ c	Non isotropic case
        end
 
 
-
         subroutine SFS_velocity
-c       This is working code
 c	This subroutine calculate the SFS velocity for spray drops
 c	This use Weil et al. (2004) fromulation
 c	Calculations assume isotropic turbulece
@@ -13743,10 +13746,11 @@ c       ---------------
         sigm_sprev = part%sigm_s
         call sigm_interp(sigm_sdxp,sigm_sdyp,sigm_sdzp,vis_sp,iz_part)
 
+        part%sigm_s = abs(part%sigm_s)  !Interpolation near surface can give small negative numbers
+
 c	-----------------
 c       calculate the subgrid velocity Weil et al ,2004-isotropic turb.
 c	----------------
-         if(part%sigm_s.gt.0.0)then
          l_flt = (2.25*dx*dy*dzw(iz_part+1))**(1.0/3.0)! filtered with
          epsn = (0.93/l_flt)*(3.0*part%sigm_s/2.0)**(1.5) ! tur. dis.rt
          ! TKE : resolved + Subgrid at grid center
@@ -13857,7 +13861,7 @@ c        if(part%xp(3).lt. 0.1*zi.and.fs.gt.0.5)then
 c        if(part%xp(3).lt. zw1)then
 c        part%u_sub(3) = gasdev(iseed)*sqrt(2*vis_sp/dt)
 c        part%u_sub(3)= part%u_sub(3) + gasdev(iseed)
-c          part%u_sub(3)= part%u_sub(3)+9.0*us_ran
+c        part%u_sub(3)= part%u_sub(3)+9.0*us_ran
 c        end if
 c      -----------------------------------------
 
@@ -13870,16 +13874,10 @@ c      -----------------------------------------
 
 c       -------------------
 c       Update particle location and velocity
-c
 c       ------------------
-c        write(*,*)'sub_vel',part%u_sub(1),part%u_sub(2),
-c     +                  part%u_sub(3)          ! DEBUG only
         do ind = 1,3
         part%xp(ind) = part%xp(ind) + part%u_sub(ind)*dt
         end do
-        else
-        part%u_sub(1:3) = 0.0
-        end if
 c       ---------------------------------        
         part => part%next
         end do
