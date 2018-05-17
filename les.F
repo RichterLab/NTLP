@@ -13636,9 +13636,7 @@ c	Non isotropic case
        end
 
 
-
         subroutine SFS_velocity
-c       This is working code
 c	This subroutine calculate the SFS velocity for spray drops
 c	This use Weil et al. (2004) fromulation
 c	Calculations assume isotropic turbulece
@@ -13725,10 +13723,11 @@ c       ---------------
         sigm_sprev = part%sigm_s
         call sigm_interp(sigm_sdxp,sigm_sdyp,sigm_sdzp,vis_sp,iz_part)
 
+        part%sigm_s = abs(part%sigm_s)  !Interpolation near surface can give small negative numbers
+
 c	-----------------
 c       calculate the subgrid velocity Weil et al ,2004-isotropic turb.
 c	----------------
-         if(part%sigm_s.gt.0.0)then
          l_flt = (2.25*dx*dy*dzw(iz_part+1))**(1.0/3.0)! filtered with
          epsn = (0.93/l_flt)*(3.0*part%sigm_s/2.0)**(1.5) ! tur. dis.rt
          ! TKE : resolved + Subgrid at grid center
@@ -13839,7 +13838,7 @@ c        if(part%xp(3).lt. 0.1*zi.and.fs.gt.0.5)then
 c        if(part%xp(3).lt. zw1)then
 c        part%u_sub(3) = gasdev(iseed)*sqrt(2*vis_sp/dt)
 c        part%u_sub(3)= part%u_sub(3) + gasdev(iseed)
-c          part%u_sub(3)= part%u_sub(3)+9.0*us_ran
+c        part%u_sub(3)= part%u_sub(3)+9.0*us_ran
 c        end if
 c      -----------------------------------------
 
@@ -13852,16 +13851,10 @@ c      -----------------------------------------
 
 c       -------------------
 c       Update particle location and velocity
-c
 c       ------------------
-c        write(*,*)'sub_vel',part%u_sub(1),part%u_sub(2),
-c     +                  part%u_sub(3)          ! DEBUG only
         do ind = 1,3
         part%xp(ind) = part%xp(ind) + part%u_sub(ind)*dt
         end do
-        else
-        part%u_sub(1:3) = 0.0
-        end if
 c       ---------------------------------        
         part => part%next
         end do
