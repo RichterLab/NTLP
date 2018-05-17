@@ -10482,22 +10482,10 @@ c     JP 5-15-2018 Initialize xp_i after RK3 for subgrid fluxes
          part%xp_si(1:3) = part%xp(1:3)
          part => part%next
       end do
-c
-
-
-
 
       !Enforce nonperiodic bcs (either elastic or destroying particles)
       !t_s = mpi_wtime()
       call particle_bcs_nonperiodic
-
-c      call particle_generation(it)
-c      reinject = 0
-c      tot_reinject = 0
-
-c      if (myid==0)then
-c      write(*,*) 'time,tnumpart:',time,tnumpart
-c      end if
 
 
       !call mpi_barrier(mpi_comm_world,ierr)
@@ -12868,34 +12856,34 @@ c     partcount_t(kptc,jptc,iptc) = partcount_t(kptc,jptc,iptc) + 1.0
 c     ----------------------------------------------------------
       
       !Get su mean, mean-squared of particle velocities at each level
-      upwp_t(kpt,jpt,ipt) = upwp_t(kpt,jpt,ipt) + part%vp(1)*part%vp(3)
-      do i = 1,3
-      vpsum_t(kpt,jpt,ipt,i) = vpsum_t(kpt,jpt,ipt,i) + part%vp(i)
-      vpsqrsum_t(kpt,jpt,ipt,i)=vpsqrsum_t(kpt,jpt,ipt,i)+part%vp(i)**2
-      end do
+c      upwp_t(kpt,jpt,ipt) = upwp_t(kpt,jpt,ipt) + part%vp(1)*part%vp(3)
+c      do i = 1,3
+c      vpsum_t(kpt,jpt,ipt,i) = vpsum_t(kpt,jpt,ipt,i) + part%vp(i)
+c      vpsqrsum_t(kpt,jpt,ipt,i)=vpsqrsum_t(kpt,jpt,ipt,i)+part%vp(i)**2
+c      end do
 
-      Tpsum_t(kpt,jpt,ipt) = Tpsum_t(kpt,jpt,ipt) + part%Tp
-      Tpsqrsum_t(kpt,jpt,ipt) = Tpsqrsum_t(kpt,jpt,ipt) + part%Tp**2
+c      Tpsum_t(kpt,jpt,ipt) = Tpsum_t(kpt,jpt,ipt) + part%Tp
+c      Tpsqrsum_t(kpt,jpt,ipt) = Tpsqrsum_t(kpt,jpt,ipt) + part%Tp**2
 
-      Tfsum_t(kpt,jpt,ipt) = Tfsum_t(kpt,jpt,ipt) + part%Tf
+c      Tfsum_t(kpt,jpt,ipt) = Tfsum_t(kpt,jpt,ipt) + part%Tf
 
-      qfsum_t(kpt,jpt,ipt) = qfsum_t(kpt,jpt,ipt) + part%qinf
+c      qfsum_t(kpt,jpt,ipt) = qfsum_t(kpt,jpt,ipt) + part%qinf
 
-      wpTpsum_t(kpt,jpt,ipt) = wpTpsum_t(kpt,jpt,ipt) + 
-     +                          part%Tp*part%vp(3)
+c      wpTpsum_t(kpt,jpt,ipt) = wpTpsum_t(kpt,jpt,ipt) + 
+c     +                          part%Tp*part%vp(3)
 
 
-      radsum_t(kpt,jpt,ipt) = radsum_t(kpt,jpt,ipt) + part%radius  !Brian 7/30/14
+c      radsum_t(kpt,jpt,ipt) = radsum_t(kpt,jpt,ipt) + part%radius  !Brian 7/30/14
 
-      rad2sum_t(kpt,jpt,ipt) = rad2sum_t(kpt,jpt,ipt) + part%radius**2  
+c      rad2sum_t(kpt,jpt,ipt) = rad2sum_t(kpt,jpt,ipt) + part%radius**2  
 
-      mpsum_t(kpt,jpt,ipt) = mpsum_t(kpt,jpt,ipt) + 
-     +                rhop*4.0/3.0*pi*part%radius**3  !Brian 7/30/14
+c      mpsum_t(kpt,jpt,ipt) = mpsum_t(kpt,jpt,ipt) + 
+c     +                rhop*4.0/3.0*pi*part%radius**3  !Brian 7/30/14
 
-      mwsum_t(kpt,jpt,ipt) = mwsum_t(kpt,jpt,ipt) + 
-     +                rhow*4.0/3.0*pi*part%radius**3  !Brian 7/30/14
+c      mwsum_t(kpt,jpt,ipt) = mwsum_t(kpt,jpt,ipt) + 
+c     +                rhow*4.0/3.0*pi*part%radius**3  !Brian 7/30/14
 
-      qstarsum_t(kpt,jpt,ipt) = qstarsum_t(kpt,jpt,ipt) + part%qstar
+c      qstarsum_t(kpt,jpt,ipt) = qstarsum_t(kpt,jpt,ipt) + part%qstar
 
 
 
@@ -12911,6 +12899,36 @@ c     ----------------------------------------------------------
       pi   = 4.0*atan(1.0)
 
       partcountU_t(kpt,jpt,ipt) = partcountU_t(kpt,jpt,ipt) + 1.0
+
+      !Get su mean, mean-squared of particle velocities at each level
+      upwp_t(kpt,jpt,ipt) = upwp_t(kpt,jpt,ipt) + part%vp(1)*part%vp(3)
+      do i = 1,3
+      vpsum_t(kpt,jpt,ipt,i) = vpsum_t(kpt,jpt,ipt,i) + part%vp(i)
+      vpsqrsum_t(kpt,jpt,ipt,i)=vpsqrsum_t(kpt,jpt,ipt,i)+part%vp(i)**2
+      end do
+
+      Tpsum_t(kpt,jpt,ipt) = Tpsum_t(kpt,jpt,ipt) + part%Tp
+      Tpsqrsum_t(kpt,jpt,ipt) = Tpsqrsum_t(kpt,jpt,ipt) + part%Tp**2
+
+      Tfsum_t(kpt,jpt,ipt) = Tfsum_t(kpt,jpt,ipt) + part%Tf
+
+      qfsum_t(kpt,jpt,ipt) = qfsum_t(kpt,jpt,ipt) + part%qinf
+
+      wpTpsum_t(kpt,jpt,ipt) = wpTpsum_t(kpt,jpt,ipt) +
+     +                          part%Tp*part%vp(3)
+
+      radsum_t(kpt,jpt,ipt) = radsum_t(kpt,jpt,ipt) + part%radius  !Brian 7/30/14
+
+      rad2sum_t(kpt,jpt,ipt) = rad2sum_t(kpt,jpt,ipt) + part%radius**2
+
+      mpsum_t(kpt,jpt,ipt) = mpsum_t(kpt,jpt,ipt) +
+     +                rhop*4.0/3.0*pi*part%radius**3  !Brian 7/30/14
+
+      mwsum_t(kpt,jpt,ipt) = mwsum_t(kpt,jpt,ipt) +
+     +                rhow*4.0/3.0*pi*part%radius**3  !Brian 7/30/14
+
+      qstarsum_t(kpt,jpt,ipt) = qstarsum_t(kpt,jpt,ipt) + part%qstar
+
 
       end subroutine particle_stats_U
 
