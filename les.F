@@ -13992,7 +13992,7 @@ c	-----------------
 
         if (it .eq. part_init)then
         t(:,:,3,:) = 0.0
-        t(:,:,2,:) = 0.0
+c        t(:,:,2,:) = 0.0
         end if
 
         if (it.gt.part_init)then
