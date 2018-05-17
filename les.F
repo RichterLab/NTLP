@@ -8,7 +8,7 @@ c     ----------------------------------------------------------------------
       integer :: ismlt,ifree,iradup,
      +     iupwnd,ibuoy,ifilt,itcut,isubs,ibrcl,iocean,method,
      +     idebug,iz_space,ivis0,ifix_dt,new_vis,iDNS,ispray,
-     +     icouple,iTcouple,iHcouple,ievap,istbl,isfs
+     +     icouple,iTcouple,iHcouple,ievap,istbl,isfs,iUprod
 c     
 c     -------- j_recl = record length in "bytes" for history file
 c     k8     = kind parameter for integers in mpi_io routines
@@ -13207,7 +13207,8 @@ c      call particle_stats(ipt,jpt,kwpt,iptc,jptc,kwptc)
       namelist /flags/ ismlt,ifree,isfc,iradup,
      +         iupwnd,ibuoy,ifilt,itcut,isubs,ibrcl,iocean,
      +         method,idebug,iz_space,ivis0,ifix_dt,new_vis,iDNS,
-     +         ispray,icouple,iTcouple,iHcouple,ievap,istbl,isfs
+     +         ispray,icouple,iTcouple,iHcouple,ievap,istbl,isfs,
+     +         iUprod
 
 
       namelist /constants/ rhoa, nuf, Cpa, Pra, Sc,
@@ -14002,7 +14003,7 @@ c	-----------------
 
 c       This is where I will be working on making heterogeneous
 c       Lagrangian creation.
-        if(uprod .eq. 1)then
+        if(iUprod .eq. 1)then
         if(myid .eq. 0)then
           do j = 1,numpart_dt+tot_reinject
             xpi(j) = ran2(iseed)*xl
