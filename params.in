@@ -90,6 +90,7 @@ Sc = 0.615
 
 !Particles:
 tnumpart = 0		! Total no of particle initially
+tnumpart_max = 1e6
 Nrp = 9			! number of classes
 numpart_dt = 50  	! particles per dt
 part_init =7200		! time step for particle emmision start

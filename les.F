@@ -135,7 +135,7 @@ c     --------------------------------------------------------
       real, allocatable :: mwsum(:,:,:),mwsum_t(:,:,:)
       real, allocatable :: qstarsum(:,:,:),qstarsum_t(:,:,:) 
       integer :: particletype,pad_diff
-      integer :: numpart,tnumpart,ngidx
+      integer :: numpart,tnumpart,tnumpart_max,ngidx
       integer :: Nrp, numpart_dt,part_init, np_write
       integer :: iseed
       integer :: reinject, tot_reinject
@@ -13212,7 +13212,8 @@ c      call particle_stats(ipt,jpt,kwpt,iptc,jptc,kwptc)
 
 
       namelist /constants/ rhoa, nuf, Cpa, Pra, Sc,
-     +         tnumpart,Nrp,numpart_dt,part_init,rhow,part_grav,
+     +         tnumpart,tnumpart_max,Nrp,numpart_dt,
+     +         part_init,rhow,part_grav,
      +         Cpp,Mw,Ms,Ru,Gam,Ion,Os,Sal,
      +         radius_max,radius_min,delta_vis,
      +         grav, t00,fcor,
@@ -13995,7 +13996,19 @@ c	-----------------
 c        t(:,:,2,:) = 0.0
         end if
 
-        if (it.gt.part_init)then
+        !Particle count
+        numpart = 0
+        part => first_particle
+        do while (associated(part))
+        numpart = numpart + 1
+        part => part%next
+        end do
+
+        call mpi_allreduce(numpart,tnumpart,1,mpi_integer,mpi_sum,
+     +                     mpi_comm_world,ierr)
+
+
+        if (it .gt. part_init .and. tnumpart_max .ge. tnumpart)then
         rpmin = radius_min
         rpmax = radius_max
         pi = 4.0*atan(1.0)
