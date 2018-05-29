@@ -8,7 +8,7 @@ c     ----------------------------------------------------------------------
       integer :: ismlt,ifree,iradup,
      +     iupwnd,ibuoy,ifilt,itcut,isubs,ibrcl,iocean,method,
      +     idebug,iz_space,ivis0,ifix_dt,new_vis,iDNS,ispray,
-     +     icouple,iTcouple,iHcouple,ievap,istbl,isfs
+     +     icouple,iTcouple,iHcouple,ievap,istbl,isfs,iUprod
 c     
 c     -------- j_recl = record length in "bytes" for history file
 c     k8     = kind parameter for integers in mpi_io routines
@@ -135,7 +135,7 @@ c     --------------------------------------------------------
       real, allocatable :: mwsum(:,:,:),mwsum_t(:,:,:)
       real, allocatable :: qstarsum(:,:,:),qstarsum_t(:,:,:) 
       integer :: particletype,pad_diff
-      integer :: numpart,tnumpart,ngidx
+      integer :: numpart,tnumpart,tnumpart_max,ngidx
       integer :: Nrp, numpart_dt,part_init, np_write
       integer :: iseed
       integer :: reinject, tot_reinject
@@ -13184,11 +13184,13 @@ c      call particle_stats(ipt,jpt,kwpt,iptc,jptc,kwptc)
       namelist /flags/ ismlt,ifree,isfc,iradup,
      +         iupwnd,ibuoy,ifilt,itcut,isubs,ibrcl,iocean,
      +         method,idebug,iz_space,ivis0,ifix_dt,new_vis,iDNS,
-     +         ispray,icouple,iTcouple,iHcouple,ievap,istbl,isfs
+     +         ispray,icouple,iTcouple,iHcouple,ievap,istbl,isfs,
+     +         iUprod
 
 
       namelist /constants/ rhoa, nuf, Cpa, Pra, Sc,
-     +         tnumpart,Nrp,numpart_dt,part_init,rhow,part_grav,
+     +         tnumpart,tnumpart_max,Nrp,numpart_dt,
+     +         part_init,rhow,part_grav,
      +         Cpp,Mw,Ms,Ru,Gam,Ion,Os,Sal,
      +         radius_max,radius_min,delta_vis,
      +         grav, t00,fcor,
@@ -13973,14 +13975,30 @@ c	-----------------
 
         if (it .eq. part_init)then
         t(:,:,3,:) = 0.0
-        t(:,:,2,:) = 0.0
+c        t(:,:,2,:) = 0.0
         end if
 
-        if (it.gt.part_init)then
+        !Particle count
+        numpart = 0
+        part => first_particle
+        do while (associated(part))
+        numpart = numpart + 1
+        part => part%next
+        end do
+
+        call mpi_allreduce(numpart,tnumpart,1,mpi_integer,mpi_sum,
+     +                     mpi_comm_world,ierr)
+
+
+        if (it .gt. part_init .and. tnumpart_max .ge. tnumpart)then
         rpmin = radius_min
         rpmax = radius_max
         pi = 4.0*atan(1.0)
         rp_init = 0.0
+
+c       This is where I will be working on making heterogeneous
+c       Lagrangian creation.
+        if(iUprod .eq. 1)then
         if(myid .eq. 0)then
           do j = 1,numpart_dt+tot_reinject
             xpi(j) = ran2(iseed)*xl
@@ -14019,6 +14037,45 @@ c             zv = ran2(iseed)*(zwpi-zw1)+ zw1
             call particle_eq_radius
             end if
           end do
+        else
+c       Heterogeneous particle creation
+        if(myid .eq. 0) then
+          do j = 1,numpart_dt+tot_reinject
+c       This is where the circle-based restriction will happen!
+          end do
+        end if
+
+        call mpi_bcast(xpi,2*(numpart_dt+tot_reinject),mpi_real8,0,
+     +                  mpi_comm_world,ierr)
+        do idx = 1,numpart_dt+tot_reinject
+          if(xpi(idx).ge.xmin .and. xpi(idx).lt.xmax .and.
+     +          xpi(idx+numpart_dt+tot_reinject).ge.ymin .and.
+     +          xpi(idx+numpart_dt+tot_reinject).le.ymax) then
+            xv = xpi(idx)
+            yv = xpi(idx+numpart_dt+tot_reinject)
+            zv = ran2(iseed)*(zw1)
+
+            Nr_ran = floor(Nrp*ran2(iseed))
+            rp_init = bin_radclass(Nr_ran+2)
+            rp_init = radius_max
+            radius_mass = rp_init
+            m_s = Sal/1000.0*3.0/4.0*pi*radius_mass**3.0*rhow
+            Npdx = Npdx + 1
+            init_radclass(Nr_ran+2) = init_radclass(Nr_ran+2) + 1
+
+        !Indrajith's initial random SFS velocity
+            vp_init(1) = ran2(iseed)
+            vp_init(2) = ran2(iseed)
+            vp_init(3) = ran2(iseed)
+
+        call create_particle((/xv,yv,zv/),vp_init,
+     +          Tp_init,qf_init,Nr_ran,rp_init,Npdx)
+            part => first_particle
+            call particle_eq_radius
+          end if
+        end do
+
+        end if
         end if
 
 

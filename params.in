@@ -29,6 +29,7 @@ iHcouple=0  !iHcouple also controls TE couple
 ievap=0
 istbl =0    ! istbl =0 for neutral, istbl = 1 for unstable/stable
 isfs = 0    ! isfs = 1 for Weil et al. Lagrangian stochastic model, isfs = 0 for stochastic xp based on vis_s
+iUprod = 1  ! iUprod =1 for uniform particle generation, = 0 for heterogeneous generation (not working atm)
 /
 
 !Grid and domain parameters
@@ -44,7 +45,7 @@ Tbot(1) = 300.15, 100.0  !Currently this should be (temperature, relative humidi
 qstar = 0.24, 2.0e-7, 2.0e-7 !Surface fluxes of (temperature, humidity) (used for LES and DNS)
 tsfcc = 305.15, 1.0, 1.0   !Surface conditions of (temp, humidity) (used for LES) -- make sure tsfcc is gt than t00 for both isfc=0 or 1
 
-zi = 570.0  !This has to do with grid stretching; make equal to zl for Couette/channel
+zi = 570.0  !This has to do with grid stretching; make equal to total z for Couette/channel
 zl = 1000.0
 xl = 3000.0
 yl = 3000.0
@@ -89,6 +90,7 @@ Sc = 0.615
 
 !Particles:
 tnumpart = 0		! Total no of particle initially
+tnumpart_max = 1e6	! maximum allowable particle count
 Nrp = 9			! number of classes
 numpart_dt = 50  	! particles per dt
 part_init =7200		! time step for particle emmision start
