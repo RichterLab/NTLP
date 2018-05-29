@@ -5223,6 +5223,7 @@ c
           thstar(1) = 0.0
           t10xy(1)  = 0.0
           tsfcc(1)  = t1xy(1)
+          dnom = zody
       else
          utau = windm*vk/(zody-psim)
          dnom = (zody-psis)*vk74in
@@ -5263,43 +5264,23 @@ c
 
 !Now that temperature and momentum have been done, apply BCs on remaining scalars:
 
-c      do iscl=2,nscl
       iscl = 2
-      if (ibuoy.eq.0 .or.istbl .eq. 0.) then
-          thstar(iscl) = 0.0
-          t10xy(iscl)  = 0.0
-          tsfcc(iscl)  = t1xy(iscl)
+      if(isfc(iscl) .eq. 0) then
+         thstar(iscl) = -qstar(iscl)/utau
+         tsfcc(iscl)  = t1xy(iscl)-thstar(iscl)*dnom
+         t10xy(iscl)  = thstar(iscl)*dnom
       else
-         dnom = (zody-psis)*vk74in
-         if(isfc(iscl) .eq. 0) then
-            thstar(iscl) = -qstar(iscl)/utau
-            tsfcc(iscl)  = t1xy(iscl)-thstar(iscl)*dnom
-            t10xy(iscl)  = thstar(iscl)*dnom
-         else
 !----------------------------------------------------------------------------------------------
-! added to set lower broundary constant RH , 01/05/2016 Indrajith
-!            tsfcc(2) = Mw*610.94*exp(17.625*tsfcc(1)/(243.04+tsfcc(1))/(tsfcc(1)*Ru*rhoa)
          tsfcc(2) = 1.0* Mw/Ru/tsfcc(1)*610.94*
      +               EXP(17.6257*(tsfcc(1)-273.15)/(tsfcc(1)-
      +               273.15+243.04))/rhoa
-c         tsfcc(2) = 0.02218 ! 100% RH at 300K
-!this was inserted to set the bottom boundarylayer q value to saturated RH 
+!this was inserted to set the bottom boundarylayer q value to saturated RH  -- assumes 100% RH!
 !----------------------------------------------------------------------------------------------	
-            thstar(iscl) = (t1xy(iscl) - tsfcc(iscl))/dnom
-            t10xy(iscl)  = thstar(iscl)*dnom
-            qstar(iscl)  = -utau*thstar(iscl)
-         endif
-         amonin = -utau**3/(batagk*qstar(iscl))
-         zeta   = z1/amonin
+         thstar(iscl) = (t1xy(iscl) - tsfcc(iscl))/dnom
+         t10xy(iscl)  = thstar(iscl)*dnom
+         qstar(iscl)  = -utau*thstar(iscl)
       endif
-c---------------------------------------------------------------
-c   set surface humidity to 100% Indrajith 08/18/17 
-         tsfcc(2) =1.0* Mw/Ru/tsfcc(1)*610.94*
-     +               EXP(17.6257*(tsfcc(1)-273.15)/(tsfcc(1)-
-     +               273.15+243.04))/rhoa
-c--------------------------------------------------------------
 
-c      enddo
 
 c---------John Park Sept 2017 Added David's Eulerian Conc.
 c---------Computing BCs for spray concentration
@@ -5319,10 +5300,6 @@ c---------Computing BCs for spray concentration
          thstar(iscl) = -qstar(iscl)/utau
          t10xy(iscl)  = thstar(iscl)*dnom
       end if
-
-
-
-
 
 
 
@@ -13846,6 +13823,11 @@ c       -----z component ----------------
         a3 = 0.5*sigm_sdzp
         us_ran = sqrt(fs*C0*epsn*dt)*gasdev(iseed)
         part%u_sub(3) = (a1+a2+a3)*dt + us_ran
+
+!        if (myid==0 .and. part%xp(3) .lt. 8.0) then
+!        write(*,'(a3,5e15.6,i)') 'T:',a3,us_ran,us_ran/a3,part%u_sub(3),
+!     +  part%xp(3),iz_part
+!        end if
         
 c       ------- increase the u_sub close to surface -------
 c        if(fs.gt.0.5)then
