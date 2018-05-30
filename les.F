@@ -13976,10 +13976,11 @@ c	-----------------
         include 'mpif.h'
         real :: xv,yv,zv,ran2
         real :: rpmax, rpmin, rp_init
-        real :: pi
+        real :: pi,xdummy,ydummy
+        real :: src_rad
         integer :: idx,Npdx,j,ierr
         integer :: Nr_ran,it
-        integer :: values(8)
+        integer :: values(8),xy_found
         real, allocatable :: xpi(:)
         
         Npdx = 0
@@ -14007,15 +14008,23 @@ c        t(:,:,2,:) = 0.0
         call mpi_allreduce(numpart,tnumpart,1,mpi_integer,mpi_sum,
      +                     mpi_comm_world,ierr)
 
+c        not sure if this is currently needed       
+c        if(iUprod .eq 1)then
+c        else
+        !Define our circular boundaries for heterogeneous source
+        !production
+
+c        end if
 
         if (it .gt. part_init .and. tnumpart_max .ge. tnumpart)then
         rpmin = radius_min
         rpmax = radius_max
         pi = 4.0*atan(1.0)
         rp_init = 0.0
+c        hard code this for now
+        src_rad = 267.62 
 
-c       This is where I will be working on making heterogeneous
-c       Lagrangian creation.
+c       Heterogeneous Lagrangian creation?
         if(iUprod .eq. 1)then
         if(myid .eq. 0)then
           do j = 1,numpart_dt+tot_reinject
@@ -14056,10 +14065,36 @@ c             zv = ran2(iseed)*(zwpi-zw1)+ zw1
             end if
           end do
         else
+
+c        call bw_change
+
 c       Heterogeneous particle creation
         if(myid .eq. 0) then
+c          write(*,*) 'Heterogeneous production'
           do j = 1,numpart_dt+tot_reinject
 c       This is where the circle-based restriction will happen!
+c       Theres a ton of extensions you can do with this, but just
+c       get a base model working and continually add more stuff to it
+c       (such as different geometries, number of sources, time-dependent
+c       and spatially stochastic..)
+            xy_found =0;
+            do while(xy_found .eq. 0)
+              xdummy=ran2(iseed)*xl
+              ydummy=ran2(iseed)*yl
+c       Is it within radius of the prescribed circles?
+              if((xdummy-0.25*xl)**2+(ydummy-0.25*yl)**2.lt.src_rad**2
+     +       .or.(xdummy-0.25*xl)**2+(ydummy-0.75*yl)**2.lt.src_rad**2
+     +       .or.(xdummy-0.75*xl)**2+(ydummy-0.25*yl)**2.lt.src_rad**2
+     +       .or.(xdummy-0.75*xl)**2+(ydummy-0.75*yl)**2.lt.src_rad**2)
+     +        then
+c       Is it within a currently occurring white-cap?
+c                if(whitecap.active_wc==1)then
+c                  xy_found = 1
+c                end if
+c              end if
+            end do
+            xpi(j) = xdummy
+            xpi(j+numpart_dt+tot_reinject) = ydummy
           end do
         end if
 
@@ -14093,8 +14128,8 @@ c       This is where the circle-based restriction will happen!
           end if
         end do
 
-        end if
-        end if
+        end if !Whether heterogeneous or homogeneous?
+        end if !If creating any particles?
 
 
         deallocate(xpi)
@@ -14334,3 +14369,19 @@ c             write(*,*)'I got here (-1 vertical!)'
 
         end subroutine total_flux
 
+        subroutine bw_change
+        implicit none
+        include 'mpif.h'
+        !Have all processors contacted within this subroutine
+        !(MPI stuff)
+        integer ::
+        real ::
+        
+        !Change spatial characteristics (Future)
+        !Change temporal characteristics (Right meow)
+          !-Active or steady?
+        if(t_life .gt. bw%time) then
+          bw%active = 0
+        end
+
+        end subroutine bw_change
