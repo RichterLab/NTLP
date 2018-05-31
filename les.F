@@ -7247,7 +7247,7 @@ c
  
       Hpsrc(iz) = stat(iz,32)*fnxy
       TEpsrc(iz) = stat(iz,33)*fnxy
-      qstarm(iz) = stat(iz,34)*fnxy
+      qstarm(iz) = stat(iz,34)/stat(iz,11)
 
 c
 c ------------ get scalar resolved fluxes and variances
