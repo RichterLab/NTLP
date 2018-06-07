@@ -8,7 +8,8 @@ c     ----------------------------------------------------------------------
       integer :: ismlt,ifree,iradup,
      +     iupwnd,ibuoy,ifilt,itcut,isubs,ibrcl,iocean,method,
      +     idebug,iz_space,ivis0,ifix_dt,new_vis,iDNS,ispray,
-     +     icouple,iTcouple,iHcouple,ievap,istbl,isfs,iUprod
+     +     icouple,iTcouple,iHcouple,ievap,istbl,isfs,iUprod,
+     +     ipolydisp
 c     
 c     -------- j_recl = record length in "bytes" for history file
 c     k8     = kind parameter for integers in mpi_io routines
@@ -139,6 +140,8 @@ c     --------------------------------------------------------
       integer :: Nrp, numpart_dt,part_init, np_write
       integer :: iseed
       integer :: reinject, tot_reinject
+      integer :: tot_died
+      integer :: died !Following how many particles died at timestep..
       real :: Rep_avg,part_grav,ws,dz_U
       real :: vp_init(3),Tp_init,qf_init
 
@@ -605,6 +608,7 @@ c            t(:,:,2,:) = 0.0
  
          if (ispray==1) then
          call particle_setup
+         call particle_init !JP 6/6 ORGANIZE THIS!!
          call read_part_res
          end if
       endif
@@ -8042,12 +8046,18 @@ c
      +         wtle(mid,1),wtsb(mid,1),wt_tot(mid,1),
      +         englez(mid),eavg(mid), wabs,
      +         maxval(partcount(1:nnx,iys:iye,1)),
-     +         Rep_avg,phip,phiw,phiv
+     +         Rep_avg,phip,phiw,phiv,
 c    +         tps(mid,2), tps(mid,3),
 c    +         wtle(mid,2),wtsb(mid,2),wt_tot(mid,2),
 c    +         wtle(mid,3),wtsb(mid,3),wt_tot(mid,3)
+
+c     Eddy Covariance method writing stuff out on ascii
+     +         t(64,64,3,2),w(64,64,2),partcount(64,64,2)
+        
+
+c       format(number of quantities,e17.8 output style)
 c 6000 format(5e17.8)
- 6000 format(37e17.8)
+ 6000 format(40e17.8)
 c
 c -------------- write profile information
 c
@@ -10757,11 +10767,18 @@ c         part%xp(3) = zi - (part%xp(3)-zi)
       elseif (part%xp(3) .LT. bot) then
 c       -----for particle histogram --------------
        !Remove the particle fall back, Indrajith,03/02/2017
-       ! hist_radclass(part%pidx) = hist_radclass(part%pidx) - 1
-       !  del_radclass(part%pidx) = del_radclass(part%pidx) + 1
-c         write(*,'(a7,4e15.6)') 'rad1: ',time,part%radius
-         call destroy_particle  
-         reinject = reinject+1
+        hist_radclass(part%pidx) = hist_radclass(part%pidx) - 1
+         del_radclass(part%pidx) = del_radclass(part%pidx) + 1
+         write(*,'(a7,4e15.6)') 'rad1: ',time,part%radius
+         call destroy_particle 
+         died = died + 1
+c       This reinject is in order to take account into particle loss
+c       (We did this back for Livia's validation) 
+c         reinject = reinject+1
+
+
+
+c       periodic vertical boundary condition
 c        part%xp(3) = bot + (bot-part%xp(3))
 c        part%vp(3) = -part%vp(3)
 c        part%u_sub(3) = -part%u_sub(3)
@@ -12393,9 +12410,10 @@ c      zv = ran2(iseed)*(zwpi) + zw1
       ! Indrajith 02-17-2017
  
       ! Calculate particle radius
-      Nr_ran =floor(Nrp*ran2(iseed)) !Indraith 03/01/2017
+c      Nr_ran =floor(Nrp*ran2(iseed)) !Indraith 03/01/2017
       ! For single size particles use largest size
       Nr_ran = Nrp
+
       rp_init = bin_radclass(Nr_ran+2)
 
       rp_init = radius_max   ! TO MAKE SINGLE PARTICLE ONLY---REMOVE
@@ -13185,7 +13203,7 @@ c      call particle_stats(ipt,jpt,kwpt,iptc,jptc,kwptc)
      +         iupwnd,ibuoy,ifilt,itcut,isubs,ibrcl,iocean,
      +         method,idebug,iz_space,ivis0,ifix_dt,new_vis,iDNS,
      +         ispray,icouple,iTcouple,iHcouple,ievap,istbl,isfs,
-     +         iUprod
+     +         iUprod,ipolydisp
 
 
       namelist /constants/ rhoa, nuf, Cpa, Pra, Sc,
@@ -13966,11 +13984,21 @@ c	-----------------
         real, allocatable :: xpi(:)
         
         Npdx = 0
+c       If we want to reinject lost particles
         call mpi_allreduce(reinject,tot_reinject,1,mpi_integer,mpi_sum,
      +         mpi_comm_world,ierr)
+c        if (myid == 0 .and. it .gt. part_init)then
+c        write(*,*) 'total died at this timestep',tot_reinject
+c        end if
+
+c       Simply tracking how many died
+        call mpi_allreduce(died,tot_died,1,mpi_integer,mpi_sum,
+     +         mpi_comm_world,ierr)
         if (myid == 0 .and. it .gt. part_init)then
-        write(*,*) 'total died at this timestep',tot_reinject
-        end if
+        write(*,*) 'total died at this timestep', tot_died
+        end if        
+
+
         
         allocate(xpi(2*(numpart_dt+tot_reinject)))
 
@@ -14073,7 +14101,10 @@ c       Is it within a currently occurring white-cap?
 c                if(whitecap.active_wc==1)then
 c                  xy_found = 1
 c                end if
-c              end if
+
+c             currently just finding its position
+              xy_found=1
+              end if
             end do
             xpi(j) = xdummy
             xpi(j+numpart_dt+tot_reinject) = ydummy
@@ -14122,8 +14153,12 @@ c        call mpi_allreduce(myRep_avg,Rep_avg,1,mpi_real8,mpi_sum,
 c     +                     mpi_comm_world,ierr)
 c        Rep_avg = Rep_avg/tnumpart
 
+
         reinject = 0
         tot_reinject = 0
+        died = 0
+        tot_died =0
+
 
         !Particle count bro
         numpart = 0
@@ -14137,6 +14172,9 @@ c        Rep_avg = Rep_avg/tnumpart
         call mpi_allreduce(numpart,tnumpart,1,mpi_integer,mpi_sum,
      +                     mpi_comm_world,ierr)
 
+c        if(myid==0)then
+c        write(*,*)'past mpi, if this fails then idfk'
+c        end if
 
         end subroutine particle_generation
 
@@ -14356,14 +14394,14 @@ c             write(*,*)'I got here (-1 vertical!)'
         include 'mpif.h'
         !Have all processors contacted within this subroutine
         !(MPI stuff)
-        integer ::
-        real ::
+        integer :: stuff
+        real :: stuff2
         
         !Change spatial characteristics (Future)
         !Change temporal characteristics (Right meow)
           !-Active or steady?
-        if(t_life .gt. bw%time) then
-          bw%active = 0
-        end
+c        if(t_life .gt. bw%time) then
+c          bw%active = 0
+c        end
 
         end subroutine bw_change

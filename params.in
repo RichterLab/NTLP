@@ -30,6 +30,7 @@ ievap=0
 istbl =0    ! istbl =0 for neutral, istbl = 1 for unstable/stable
 isfs = 0    ! isfs = 1 for Weil et al. Lagrangian stochastic model, isfs = 0 for stochastic xp based on vis_s
 iUprod = 1  ! iUprod =1 for uniform particle generation, = 0 for heterogeneous generation (not working atm)
+ipolydisp=0 ! ipolydisp=1 enables polydisperse particles, otherwise sets to radius_max
 /
 
 !Grid and domain parameters
