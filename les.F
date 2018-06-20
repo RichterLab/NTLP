@@ -8053,7 +8053,9 @@ c    +         wtle(mid,3),wtsb(mid,3),wt_tot(mid,3)
 
 c     Eddy Covariance method writing stuff out on ascii
      +         t(64,64,3,2),w(64,64,2),partcount(64,64,2)
-        
+     
+c    Instantaneous statistics at some height in the boundary layer
+ 
 
 c       format(number of quantities,e17.8 output style)
 c 6000 format(5e17.8)
