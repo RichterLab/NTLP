@@ -1,4 +1,4 @@
-# LES-GPU
+# NTLP
 
 ## Compilation
 To build on the CRC machines you must run the following commands:
