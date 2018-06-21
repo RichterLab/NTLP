@@ -9,7 +9,7 @@ c     ----------------------------------------------------------------------
      +     iupwnd,ibuoy,ifilt,itcut,isubs,ibrcl,iocean,method,
      +     idebug,iz_space,ivis0,ifix_dt,new_vis,iDNS,ispray,
      +     icouple,iTcouple,iHcouple,ievap,istbl,isfs,iUprod,
-     +     ipolydisp
+     +     ipolydisp, ishift
 c     
 c     -------- j_recl = record length in "bytes" for history file
 c     k8     = kind parameter for integers in mpi_io routines
@@ -13205,7 +13205,7 @@ c      call particle_stats(ipt,jpt,kwpt,iptc,jptc,kwptc)
      +         iupwnd,ibuoy,ifilt,itcut,isubs,ibrcl,iocean,
      +         method,idebug,iz_space,ivis0,ifix_dt,new_vis,iDNS,
      +         ispray,icouple,iTcouple,iHcouple,ievap,istbl,isfs,
-     +         iUprod,ipolydisp
+     +         iUprod,ipolydisp,ishift
 
 
       namelist /constants/ rhoa, nuf, Cpa, Pra, Sc,
@@ -13215,6 +13215,8 @@ c      call particle_stats(ipt,jpt,kwpt,iptc,jptc,kwptc)
      +         radius_max,radius_min,delta_vis,
      +         grav, t00,fcor,
      +         dtdzf,zo,ugcont,vgcont,
+     +         cond_shift_init, ugcont_new,
+     +         vgcont_new, qstar_new,
      +         vp_init,Tp_init,qf_init
 
 

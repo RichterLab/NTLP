@@ -31,6 +31,7 @@ istbl =0    ! istbl =0 for neutral, istbl = 1 for unstable/stable
 isfs = 0    ! isfs = 1 for Weil et al. Lagrangian stochastic model, isfs = 0 for stochastic xp based on vis_s
 iUprod = 1  ! iUprod =1 for uniform particle generation, = 0 for heterogeneous generation (not working atm)
 ipolydisp=0 ! ipolydisp=1 enables polydisperse particles, otherwise sets to radius_max
+ishift   =0 ! ishift=1 enables shift in wind-speed & heat flux after some time
 /
 
 !Grid and domain parameters
@@ -81,6 +82,12 @@ dtdzf(1) = 0.1,0.0,0.0
 zo = 0.001
 ugcont = 10.0
 vgcont = 0.0
+
+!shifting condition parameters (only for neumann currently)
+cond_shift_init = 10800.0
+ugcont_new = 0.0
+vgcont_new = 0.0
+qstar_new = 0.24, 2.0e-7, 2.0e-7
 
 !Air phase:
 rhoa=1.1
