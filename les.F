@@ -742,14 +742,14 @@ c
 c---------particle_histogram-indrajith 03/08/2017---Removed for SFS vel
 c EXPERIMENTS:
 c
-c       if(part_save .and. istage .eq. 1)then
-c        call particle_sizeclass
-c        call req_sizeclass 
-c       end if
+       if(ipolydisp .and. part_save .and. istage .eq. 1)then
+        call particle_sizeclass
+        call req_sizeclass 
+       end if
 
-c       if(part_save .and. istage .eq. 1)then 
-c        call particle_histogram(it-iphist+1)
-c       end if
+       if(ipolydisp .and. part_save .and. istage .eq. 1)then 
+        call particle_histogram(it-iphist+1)
+       end if
          
 c
 c --------- get rhs for all equations
@@ -10769,9 +10769,11 @@ c         part%xp(3) = zi - (part%xp(3)-zi)
       elseif (part%xp(3) .LT. bot) then
 c       -----for particle histogram --------------
        !Remove the particle fall back, Indrajith,03/02/2017
-        hist_radclass(part%pidx) = hist_radclass(part%pidx) - 1
+       if (ipolydisp .eq. 1)then
+         hist_radclass(part%pidx) = hist_radclass(part%pidx) - 1
          del_radclass(part%pidx) = del_radclass(part%pidx) + 1
          write(*,'(a7,4e15.6)') 'rad1: ',time,part%radius
+       end if
          call destroy_particle 
          died = died + 1
 c       This reinject is in order to take account into particle loss
@@ -12366,6 +12368,9 @@ c      write(*,*)'num-part',tnumpart     !DEBUG ONLY
       
       ! For particle histogram calculations
       ! Indrajith 21/03/2017
+      ! Restrict this.. JP 6/22
+      if (ipolydisp .eq. 0)then
+
       allocate (hist_radclass(Nrp+2))
       allocate (del_radclass(Nrp+2))
       allocate (hist_req_init(Nrp+2))
@@ -12395,6 +12400,7 @@ c      write(*,*)'num-part',tnumpart     !DEBUG ONLY
           end if
        end do
        class_maxr(1)= class_minr(2)
+      end if
 
       !Now initialize all particles with a random location on that processor
       maxx=0.0
@@ -12412,18 +12418,20 @@ c      zv = ran2(iseed)*(zwpi) + zw1
       ! Indrajith 02-17-2017
  
       ! Calculate particle radius
-c      Nr_ran =floor(Nrp*ran2(iseed)) !Indraith 03/01/2017
+      ! 6/22 ipolydisp flag..
+      if (ipolydisp .eq. 1)then
+      Nr_ran =floor(Nrp*ran2(iseed)) !Indraith 03/01/2017
+      rp_init = bin_radclass(Nr_ran+2)
+      init_radclass(Nr_ran+2) = init_radclass(Nr_ran+2) +1
+      else
       ! For single size particles use largest size
       Nr_ran = Nrp
-
-      rp_init = bin_radclass(Nr_ran+2)
-
-      rp_init = radius_max   ! TO MAKE SINGLE PARTICLE ONLY---REMOVE
+      rp_init = radius_max
+      end if
 
       radius_mass = rp_init
       pi = 4.0*atan(1.0)
       m_s = Sal/1000.0*3.0/4.0*pi*radius_mass**3.0 *rhow
-      init_radclass(Nr_ran+2) = init_radclass(Nr_ran+2) + 1    
       Npdx =Npdx+1        
       call create_particle((/xv,yv,zv/),vp_init,
      +         Tp_init,qf_init,Nr_ran,rp_init,Npdx) 
