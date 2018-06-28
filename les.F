@@ -3485,7 +3485,7 @@ c
       do ix=1,nnx
 !        u(ix,iy,izp1)  = 2.0*Uo-u(ix,iy,iz)
          u(ix,iy,izp1) = u(ix,iy,iz)  !Open channel has no-flux at top
-         v(ix,iy,izp1)  = -v(ix,iy,iz) 
+         v(ix,iy,izp1)  = v(ix,iy,iz) 
          w(ix,iy,izp1)  = 0.0 
          r3(ix,iy,izp1) = 0.0
          DwDt(ix,iy,izp1) = 0.0
