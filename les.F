@@ -25,6 +25,8 @@ c
       real :: Uo, Ttop(nscl), Tbot(nscl),qstar(nscl),tsfcc(nscl)
       real :: grav,t00,fcor,zi,zl,xl,yl,zw1,zwpi
       real :: dtdzf(nscl),zo,ugcont,vgcont,tbc_top(2)
+      real :: cond_shift_init,ugcont_new,vgcont_new
+      real :: qstar_new(nscl)
       integer :: isfc(nscl)
 c     
 c     ------------ leave following definitions as is
@@ -38,11 +40,12 @@ c     ----------------------------------------------------------------------
       character case*3
 c     ----------------------------------------------------------------------
       integer  ::   nvel, npre, nhis1, nprt,
-     +     nhisp, nvelc, 
+     +     nhisp, nvelc, nprobe
      +     nviz_z, nviz_y, 
      +     nviz_x, nviz_s,
      +     kfile, jfile, ibcl, ibcu,
-     +     igrdr, imach, itn, it_his_nxt, it_viz_nxt
+     +     igrdr, imach, itn, it_his_nxt, it_viz_nxt,
+     +     iploc, probe_loc!Probe Location JP 2018
       real :: dt_con
       logical ::    mnout, micut, mtape, mhis, msave,mtrans,
      +     l_root, l_debug, msave_v, mviz,mphist,part_save
@@ -817,6 +820,15 @@ c
          if(mhis  .and. istage .eq. 1)  call write_his(itop)
          if(mhis  .and. istage .eq. 1 .and. mtape) call close_his
       endif
+
+c       CODA
+c     Probe recorder JP 6-28-18 JP
+      if(istage .eq. 1)then
+        if(myid .eq. probe_loc)then
+            write(*,*)'instantaneous u = ',u(ixs,iys,iploc-1)
+            call write_probe
+        endif
+      endif
 c
  8999 continue
 c       -----------
@@ -859,6 +871,7 @@ c       ----------
       go to 9000
 c
 99000 continue
+      close(nprobe)
       te_mpi = mpi_wtime()
       write(6,9997) (te_mpi - ts_mpi)
  9997 format(' Job Execution Time = ',e15.6)
@@ -5852,6 +5865,33 @@ c
      +         ,cdbtm,ugcont
       endif
 c
+
+c     Virutal probe placement/locator 6/27/2018 JP
+      do iz=0,maxnz
+        if(z(iz) .lt. 500)then
+          iploc = iz
+        end if
+      enddo
+      if(myid==0)then
+        write(*,*)'iploc is ',iploc
+      end if
+      probe_loc = -1
+c     Virtual probe locator
+      if(izs .le. iploc .and. ize .gt. iploc)then
+        if(iys .eq. 1)then
+          write(*,*),'rank location ',myid
+          probe_loc = myid
+          open(nprobe,file='probe.out',form='unformatted',
+     +            status='replace')
+        end if
+      end if
+
+
+
+
+
+
+
       return
 c ------------------------
    2  format(10x,' WT =',e12.4,',  U* =',e12.4,',  L =',e12.4,/,
@@ -8325,6 +8365,8 @@ c
  7002 format(' 7002 gridd nnx = ',i4,' nny = ',i4,' nnz = ',i4)
 c
       num_y = iye + 1 - iys
+
+
 c
 c ------------- allocate solution arrays
 c               account for nnxp2 for fields but not in rhs
@@ -9298,6 +9340,7 @@ c
       nhis1 = 40
       nvelc = 50
       nhisp = 60
+      nprobe = 61 !SET SOMEWHERE ELSE
       nviz_z = 80
       nviz_y = 82
       nviz_x = 84
@@ -14417,3 +14460,19 @@ c          bw%active = 0
 c        end
 
         end subroutine bw_change
+
+      subroutine write_probe
+      use pars
+      use fields
+      use con_data
+      use con_stats
+      use particles
+
+       
+      write(nprobe) u(1,1,iploc-1),v(1,1,iploc-1),
+     +        w(1,1,iploc-1), t(1,1,3,iploc-1), partcount(1,1,iploc-1)
+              
+
+      return
+      end
+        

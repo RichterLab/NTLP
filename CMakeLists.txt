@@ -7,6 +7,8 @@ if (NOT CMAKE_BUILD_TYPE)
   set (CMAKE_BUILD_TYPE Release CACHE STRING "Choose the type of build, options are: None Debug Release." FORCE)
 endif (NOT CMAKE_BUILD_TYPE)
 
+set(CMAKE_EXE_LINKER_FLAGS "-static-intel")
+
 # Require MPI
 find_package(MPI REQUIRED)
 set( CMAKE_Fortran_COMPILER ${MPI_Fortran_COMPILER})
