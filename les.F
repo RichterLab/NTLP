@@ -40,7 +40,7 @@ c     ----------------------------------------------------------------------
       character case*3
 c     ----------------------------------------------------------------------
       integer  ::   nvel, npre, nhis1, nprt,
-     +     nhisp, nvelc, nprobe
+     +     nhisp, nvelc, nprobe1, nprobe2, nprobe3,
      +     nviz_z, nviz_y, 
      +     nviz_x, nviz_s,
      +     kfile, jfile, ibcl, ibcu,
@@ -76,6 +76,7 @@ c     ----------------------------------------------------------------------
      +     umax,vmax,wmax, wabs, vismax,
      +     cfl, tzero,
      +     ucfl, vcfl, wcfl
+      real, dimension (3) :: probe_z_locations
 c     ----------------------------------------------------------------------
       character*80  path_res, path_sav, path_his, path_prt,
      +     path_hp, path_sav_hp, path_part, path_ran,
@@ -724,7 +725,6 @@ c
         call pbltop(itop)
       endif
 
-
 c
 c ------------ save velocity field
 c
@@ -825,8 +825,12 @@ c       CODA
 c     Probe recorder JP 6-28-18 JP
       if(istage .eq. 1)then
         if(myid .eq. probe_loc)then
-            write(*,*)'instantaneous u = ',u(ixs,iys,iploc-1)
-            call write_probe
+          call probe_locator(probe_z_locations(1))
+          call write_probe(nprobe1)
+          call probe_locator(probe_z_locations(2))
+          call write_probe(nprobe2)
+          call probe_locator(probe_z_locations(3))
+          call write_probe(nprobe3)
         endif
       endif
 c
@@ -871,7 +875,9 @@ c       ----------
       go to 9000
 c
 99000 continue
-      close(nprobe)
+      close(nprobe1)
+      close(nprobe2)
+      close(nprobe3)
       te_mpi = mpi_wtime()
       write(6,9997) (te_mpi - ts_mpi)
  9997 format(' Job Execution Time = ',e15.6)
@@ -5866,29 +5872,18 @@ c
       endif
 c
 
-c     Virutal probe placement/locator 6/27/2018 JP
-      do iz=0,maxnz
-        if(z(iz) .lt. 500)then
-          iploc = iz
-        end if
-      enddo
-      if(myid==0)then
-        write(*,*)'iploc is ',iploc
-      end if
+c     Virtual probe placement/locator 6/27/2018 JP
       probe_loc = -1
-c     Virtual probe locator
-      if(izs .le. iploc .and. ize .gt. iploc)then
-        if(iys .eq. 1)then
-          write(*,*),'rank location ',myid
-          probe_loc = myid
-          open(nprobe,file='probe.out',form='unformatted',
-     +            status='replace')
-        end if
-      end if
-
-
-
-
+      probe_z_locations=(/ 10, 300, 500 /)
+      call probe_locator(probe_z_locations(1))
+      call prob_proc(nprobe1,iploc)
+      call probe_locator(probe_z_locations(2))
+      call prob_proc(nprobe2,iploc)
+      call probe_locator(probe_z_locations(3))
+      call prob_proc(nprobe3,iploc)
+c      if(myid==0)then
+c        write(*,*)'iploc is ',iploc
+c      end if
 
 
 
@@ -7364,6 +7359,7 @@ c          stat(.,36) = (resolved for LES) advection and gravitational
 c                       flux
 c          stat(.,37) = subgrid particle flux
 c          stat(.,38) = total particle flux
+c          stat(.,39) = scalar viscosity..?
 c          stat(.,m1) = resolved scalar flux wt at zw = wtle
 c          stat(.,m2) = resolved scalar flux ut at zw = utle
 c          stat(.,m3) = resolved scalar flux vt at zw = vtle
@@ -7572,8 +7568,7 @@ C     -----------------------------------
       Tpflux(iz) = stat(iz,38)
 
       vismean(iz) = stat(iz,39)
-
-
+     
 c
 c ------------ get scalar resolved fluxes and variances
 c
@@ -7922,11 +7917,9 @@ c          stat(.,3) = Particle: <T' Q'>
       call xderivp(tx_tmp(1,iys),trigx(1,1),xk(1),nnx,iys,iye)
       tx(1:nnx,iys:iye,iz) = tx_tmp(1:nnx,iys:iye)
       enddo
-
       call yd_mpi(ty(1,iys,izs-1),trigx(1,2),yk(1),
      +           nnx,nny,ixs,ixe,ix_s,ix_e,
      +           iys,iye,iy_s,iy_e,izs-1,ize+1,myid,ncpu_s,numprocs)
-       
 
       stat = 0.0
       Tv_part2 = 0.0
@@ -9340,7 +9333,9 @@ c
       nhis1 = 40
       nvelc = 50
       nhisp = 60
-      nprobe = 61 !SET SOMEWHERE ELSE
+      nprobe1 = 61 !SET SOMEWHERE ELSE
+      nprobe2 = 62
+      nprobe3 = 63
       nviz_z = 80
       nviz_y = 82
       nviz_x = 84
@@ -14461,7 +14456,7 @@ c        end
 
         end subroutine bw_change
 
-      subroutine write_probe
+      subroutine write_probe(nprobe)
       use pars
       use fields
       use con_data
@@ -14475,4 +14470,43 @@ c        end
 
       return
       end
+
+      subroutine probe_locator(height)
+      use pars
+      use fields
+      use con_stats
+      
+c     Identifying probe in physical space
+      do iz=0,maxnz
+        if(z(iz) .lt. height)then
+          iploc = iz
+        end if
+      enddo
+      end
+      
+      subroutine prob_proc(nprb,iplocd)
+      use pars
+      use fields
+      use con_stats
+      
+      character(len=500) :: fname
+      if(izs .le. iplocd .and. ize .ge. iplocd)then
+        if(iys .eq. 1) then
+          write(*,*),'rank location ',myid
+          probe_loc = myid
+          write(fname,"(A,I0.3,A)")'probe',probe_loc,'.out'
+          open(nprb,file=fname,form='unformatted',
+     +            status='replace')
+        end if
+      end if
+      
+      
+      
+      
+      end
+      
+      
+      
+      
+      
         
