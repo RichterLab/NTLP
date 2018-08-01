@@ -833,6 +833,10 @@ c     Probe recorder JP 6-28-18 JP
           call write_probe(nprobe3)
         endif
       endif
+
+      if(it .eq. cond_shift_init .and. ishift .eq. 1)then
+        call shifting_conditions
+      endif
 c
  8999 continue
 c       -----------
@@ -14505,8 +14509,22 @@ c     Identifying probe in physical space
       
       end
       
+c     This subroutine shifts the wind speeds and subsequently
+c     the concentration flux of aerosols based on Monahan's whitecap
+c     data
+      subroutine shifting_conditions
+      use pars
+      use fields
+      use con_stats
       
-      
-      
-      
+      do iz=1,nnz
+         ug(iz)   = ugcont_new
+         vg(iz)   = vgcont_new
         
+      enddo 
+      if(myid==0)then
+        write(*,*)'I SHIFTED DUDE'
+      end if
+      end
+      
+      
