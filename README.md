@@ -1,4 +1,4 @@
-# LES-GPU
+# NCAR Turbulence with Lagrangian Particles (Richter Research Group)
 
 ## Compilation
 To build on the CRC machines you must run the following commands:
