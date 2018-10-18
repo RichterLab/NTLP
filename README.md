@@ -1,4 +1,4 @@
-# NCAR Turbulence with Lagrangian Particles: An Eulerian-Lagrangian of the Atmospheric Boundary Layer (Richter Research Group)
+# NCAR Turbulence with Lagrangian Particles: An Eulerian-Lagrangian Representation of the Atmospheric Boundary Layer (Richter Research Group)
 
 ## Compilation
 To build on the CRC machines you must run the following commands:
