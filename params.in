@@ -1,18 +1,18 @@
 
 !Time step information
 &step_params
-iti=0
-itmax=15000
-imean=100       ! originally 100 change to see the q
-ihst=10
-itape=5000
-iphist = 5000	! output step for particle histogram
-itstr=1
-it_his=1
-it_viz=1
-i_viz=5000
-itn = 0  !Index for "u.le.cou001" files
-dt_con =0.5 
+iti    = 0	 ! Starting timestep
+itmax  = 15000	 ! Maximum timestep 
+imean  = 100	 ! originally 100 change to see the q
+ihst   = 10	 ! number of timesteps after to take a history reading (for hist files)
+itape  = 100	 ! Number of timesteps after to write files
+iphist = 100	 ! Output step for particle histogram
+itstr  = 1	 ! At what time to start writing files
+it_his = 1	 ! time step where history files start, incremented by itape
+it_viz = 1	 ! time step where viz files start, incremented by itape
+i_viz  = 5000	 ! 
+itn    = 0	 ! Index for "u.le.cou001" files
+dt_con = 0.5	 ! fixed timestep amount of time (does not use CFL condition)
 /
 
 !Flags for various features
@@ -21,17 +21,21 @@ ismlt=0, ifree=0, iradup=1, iupwnd=1
 ibuoy=1, ifilt=0, itcut=1, isubs=0, ibrcl=0, iocean=0
 method=3, idebug=0, iz_space=1, ivis0=1, ifix_dt=1, new_vis=-1
 isfc = 0, 0, 0  ! isfc = 0 sets surface flux (qstar), isfc = 1 sets surface condition (Dirichlet through tsfcc)
-iDNS = 0
-ispray=1
-icouple=0
-iTcouple=0
-iHcouple=0  !iHcouple also controls TE couple
-ievap=0
-istbl =0    ! istbl =0 for neutral, istbl = 1 for unstable/stable
-isfs = 0    ! isfs = 1 for Weil et al. Lagrangian stochastic model, isfs = 0 for stochastic xp based on vis_s
-iUprod = 1  ! iUprod =1 for uniform particle generation, = 0 for heterogeneous generation (not working atm)
-ipolydisp=0 ! ipolydisp=1 enables polydisperse particles, otherwise sets to radius_max
-ishift   =0 ! ishift=1 enables shift in wind-speed & heat flux after some time
+iDNS         = 0! DNS or LES (subgrid computation or molecular visc and diffusivity)
+ispray       = 1! particles?
+icouple      = 0! particle momentum coupling
+iTcouple     = 0! particle thermal coupling
+iHcouple     = 0! iHcouple also controls TE couple (humidity coupling??)
+ievap        = 0! Hygroscopicity
+istbl        = 0! istbl =0 for neutral, istbl = 1 for unstable/stable
+isfs         = 0! isfs = 1 for Weil et al. Lagrangian stochastic model, isfs = 0 for stochastic xp based on vis_s
+iUprod       = 1! iUprod =1 for uniform particle generation, = 0 for heterogeneous generation (not working atm)
+ipolydisp    = 0! ipolydisp=1 enables polydisperse particles, otherwise sets to radius_max
+ishift       = 0! ishift=1 enables shift in wind-speed & heat flux after some time
+ifields      = 0! if set to 1, reads the initial condition from path_ran below; otherwise calls subroutine random
+iPprod       = 0! if set to 1, will be an inital point source (Thomas's project)
+iSSGF        = 0! 0=Monahans, 1=Smith, 2= etc.. (Only works for polydispersity == 1)
+inonperiodic = 0! 0=particles bouncing from surface, 1 for death at surface
 /
 
 !Grid and domain parameters
@@ -39,86 +43,86 @@ ishift   =0 ! ishift=1 enables shift in wind-speed & heat flux after some time
 ncpu_s=8
 
 !Use for DNS:
-Uo = 1.59  !Used when top and bottom are equal and opposite in DNS of Couette flow
+Uo      = 1.59  !Used when top and bottom are equal and opposite in DNS of Couette flow
 Ttop(1) = 300.15, 95.0  !Currently this should be (temperature, relative humidity) (used in DNS)
 Tbot(1) = 300.15, 100.0  !Currently this should be (temperature, relative humidity) (used in DNS)
 
 !Use for LES:
-qstar = 0.24, 2.0e-7, 2.0e-7 !Surface fluxes of (temperature, humidity) (used for LES and DNS)
+qstar = 0.02, 2.0e-7, 2.0e-7 !Surface fluxes of (temperature, humidity) (used for LES and DNS)
 tsfcc = 305.15, 1.0, 1.0   !Surface conditions of (temp, humidity) (used for LES) -- make sure tsfcc is gt than t00 for both isfc=0 or 1
 
 zi = 570.0  !This has to do with grid stretching; make equal to total z for Couette/channel
-zl = 1000.0
-xl = 3000.0
-yl = 3000.0
+zl = 850.0
+xl = 1000.0
+yl = 1000.0
 
-zw1 =3.12  !The first grid point
-zwpi = 1.5 ! particle relese domain height 
+zw1  = 3.12 !The first grid point
+zwpi = 1.5  !particle relese domain height 
 /
 
 !Set the paths for code I/O. Must be on the scratch directory, not AFS!
 &path_names
-path_seed="/scratch365/hpark6/mabl/mabl2/"
-path_part="/scratch365/hpark6/mabl/mabl2/part.le.cou000"
-path_res="/scratch365/hpark6/mabl/mabl2/u.le.cou000"
-path_sav="/scratch365/hpark6/mabl/mabl2/"
-path_his="/scratch365/hpark6/mabl/mabl2/"
-path_viz_xy="/scratch365/hpark6/mabl/mabl2/"
-path_viz_xz="/scratch365/hpark6/mabl/mabl2/"
-path_viz_yz="/scratch365/hpark6/mabl/mabl2/"
-path_stuf="/scratch365/hpark6/mabl/mabl2/"
-path_ran="/scratch365/hpark6/mabl/mabl2/u.le.cou000"
-part_hist="/scratch365/hpark6/mabl/mabl2/"
+path_seed   = "/scratch365/hpark6/mabl/mabl1/"
+path_part   = "/scratch365/hpark6/mabl/mabl1/part.le.cou000"
+path_res    = "/scratch365/hpark6/mabl/mabl1/u.le.cou000"
+path_sav    = "/scratch365/hpark6/mabl/mabl1/"
+path_his    = "/scratch365/hpark6/mabl/mabl1/"
+path_viz_xy = "/scratch365/hpark6/mabl/mabl1/"
+path_viz_xz = "/scratch365/hpark6/mabl/mabl1/"
+path_viz_yz = "/scratch365/hpark6/mabl/mabl1/"
+path_stuf   = "/scratch365/hpark6/mabl/mabl1/"
+path_ran    = "/scratch365/hpark6/mabl/mabl1/u.le.cou000"
+part_hist   = "/scratch365/hpark6/mabl/mabl1/"
 /
 
 
 !Material and particle properties and other constants
 &constants
 grav = 9.81
-t00 = 273.0 !Reference temp for buoyancy
+t00  = 273.0 !Reference temp for buoyancy
 fcor = 1.0e-4  !Coriolis parameter
 
-dtdzf(1) = 0.1,0.0,0.0
-zo = 0.001
-ugcont = 10.0
-vgcont = 0.0
+dtdzf(1) = 0.15,0.0,0.0
+zo       = 0.001
+ugcont   = 10.0
+vgcont   = 0.0
 
 !shifting condition parameters (only for neumann currently)
 cond_shift_init = 10800.0
-ugcont_new = 0.0
-vgcont_new = 0.0
-qstar_new = 0.24, 2.0e-7, 2.0e-7
+ugcont_new      = 0.0
+vgcont_new      = 0.0
+qstar_new       = 0.02, 2.0e-7, 2.0e-7
 
 !Air phase:
-rhoa=1.1
-nuf=1.537e-5  !m^2/s
-Cpa=1006.0  !J/kg-K
-Pra = 0.715
-Sc = 0.615
+rhoa   = 1.1
+nuf    = 1.537e-5  !m^2/s
+Cpa    = 1006.0  !J/kg-K
+Pra    = 0.715
+Sc     = 0.615
 
 !Particles:
-tnumpart = 0		! Total no of particle initially
-tnumpart_max = 1e6	! maximum allowable particle count
-Nrp = 9			! number of classes
-numpart_dt = 50  	! particles per dt
-part_init =7200		! time step for particle emmision start
-rhow=2500.0  		!kg/m^3
-part_grav = 9.81
-Cpp = 4179.0  		!J/kg-K
-Mw = 0.018015  		!kg/mol
-Ru = 8.3144
-Ms = 0.05844  		!kg/mol: molecular weight of salt
-delta_vis=0.000163 	!Bounce-back distance from wall
-Sal = 34.0
-Gam = 7.28e-2
-Ion = 2.0
-Os = 1.093
+tnumpart      = 1e6	 ! Total no of particle initially
+tnumpart_max  = 2e6	 ! maximum allowable particle count
+Nrp           = 9	 ! number of classes
+numpart_dt    = 50  	 ! particles per dt
+part_init     = 000	 ! time step for particle emmision start
+rhow          = 1000.0   !kg/m^3
+part_grav     = 9.81
+Cpp           = 4179.0   !J/kg-K
+Mw            = 0.018015 !kg/mol
+Ru            = 8.3144   
+Ms            = 0.05844  !kg/mol: molecular weight of salt
+delta_vis     = 0.000163 !Bounce-back distance from wall
+Sal           = 34.0     !Salinity content
+Gam           = 7.28e-2
+Ion           = 2.0
+Os            = 1.093
 
 !Particle initial conditions:
-radius_max =5.0e-6
-radius_min =5.0e-6
-Tp_init = 300.15
-vp_init = 0.0, 0.0, 0.0
-qf_init = 0.01
+radius_max = 10.0e-6
+radius_min = 2.5e-6
+Tp_init    = 300.15
+vp_init    = 0.0, 0.0, 0.0
+qf_init    = 0.01
 
 /
