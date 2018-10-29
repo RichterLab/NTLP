@@ -85,8 +85,7 @@ c     ----------------------------------------------------------------------
      +     path_v, path_c, path_p, path_h,
      +     path_sav_v, path_sav_c,
      +     path_sav_p, path_sav_h, path_sav_part,
-     +     part_hist,path_sav_hist,
-     +     bad_news
+     +     part_hist,path_sav_hist
       character case_inp*3
       character*80 path_viz_xy, path_viz_xz, path_viz_yz, path_stuf,
      +             path_seed
@@ -118,6 +117,7 @@ c     -----------------------------------------------------
 
       real, allocatable :: partflux(:,:,:),partflux_t(:,:,:)
       real, allocatable :: partcountU_t(:,:,:),partcountU(:,:,:)
+      real, allocatable :: pcountrange_t(:,:,:),pcountrange(:,:,:)
       real, allocatable :: Spartflux_t(:,:,:),Spartflux(:,:,:)
       real, allocatable :: tpartflux_t(:,:,:),tpartflux(:,:,:)
       real, allocatable :: tupartflux_t(:,:,:),tupartflux(:,:,:)
@@ -148,7 +148,7 @@ c     --------------------------------------------------------
       real, allocatable :: qstarsum(:,:,:),qstarsum_t(:,:,:) 
       integer :: particletype,pad_diff
       integer :: numpart,tnumpart,tnumpart_max,ngidx
-      integer :: Nrp, numpart_dt,part_init, np_write
+      integer :: Nrp, numpart_dt,part_init
       integer :: iseed,Npdx
       integer :: reinject, tot_reinject, all_died !all timesteps
       integer :: tot_died !For a particular timestep
@@ -329,7 +329,8 @@ c ----------------------------------------------------------------------
      +           rk3pflux(maxnz),Spflux(maxnz),
      +           trip(maxnz),TpSq(maxnz),Tpdqp(maxnz),
      +           Tpflux(maxnz), TUpflux(maxnz),
-     +           TDpflux(maxnz),probepflux(maxnz)
+     +           TDpflux(maxnz),probepflux(maxnz),
+     +           zconc_range(maxnz)
         real ::  xkn(maxnx),ykn(maxny),
      +           xk(maxnx),yk(maxny),
      +           xks(maxnx2,maxny),wavexy(maxnx2,maxny)
@@ -373,7 +374,8 @@ c ----------------------------------------------------------------------
      +           rk3pflux(:),Spflux(:),
      +           trip(:),TpSq(:),Tpdqp(:),
      +           Tpflux(:),TUpflux(:),
-     +           TDpflux(:),probepflux(:)
+     +           TDpflux(:),probepflux(:),
+     +           zconc_range(:)
         real, pointer ::  
      +           xkn(:), ykn(:), xk(:), yk(:), xks(:,:), wavexy(:,:)
         real, pointer ::  
@@ -392,91 +394,132 @@ c -------------- pointer association for stat arrays and get size
 c                of stat arrays isize for history files
 c
              isize = 0 
-             wwsb    => c_s%wwsb     ; isize = isize + size(wwsb)
-             engz    => c_s%engz     ; isize = isize + size(engz)
-             engsbz  => c_s%engsbz   ; isize = isize + size(engsbz)
-             englez  => c_s%englez   ; isize = isize + size(englez)
-             uxym    => c_s%uxym     ; isize = isize + size(uxym)
-             vxym    => c_s%vxym     ; isize = isize + size(vxym)
-             wxym    => c_s%wxym     ; isize = isize + size(wxym)
-             txym    => c_s%txym     ; isize = isize + size(txym)
-             divz    => c_s%divz     ; isize = isize + size(divz)
-             utle    => c_s%utle     ; isize = isize + size(utle)
-             utsb    => c_s%utsb     ; isize = isize + size(utsb)
-             vtle    => c_s%vtle     ; isize = isize + size(vtle)
-             vtsb    => c_s%vtsb     ; isize = isize + size(vtsb)
-             wtle    => c_s%wtle     ; isize = isize + size(wtle)
-             wtsb    => c_s%wtsb     ; isize = isize + size(wtsb)
-             wt_tot  => c_s%wt_tot   ; isize = isize + size(wt_tot)
-             z       => c_s%z        ; isize = isize + size(z)
-             zz      => c_s%zz       ; isize = isize + size(zz)
-             shrz    => c_s%shrz     ; isize = isize + size(shrz)
-             buyz    => c_s%buyz     ; isize = isize + size(buyz)
-             triz    => c_s%triz     ; isize = isize + size(triz)
-             uwsb    => c_s%uwsb     ; isize = isize + size(uwsb)
-             vwsb    => c_s%vwsb     ; isize = isize + size(vwsb)
-             uwle    => c_s%uwle     ; isize = isize + size(uwle)
-             vwle    => c_s%vwle     ; isize = isize + size(vwle)
-             uw_tot  => c_s%uw_tot   ; isize = isize + size(uw_tot)
-             vw_tot  => c_s%vw_tot   ; isize = isize + size(vw_tot)
-             wcube   => c_s%wcube    ; isize = isize + size(wcube)
-             wfour   => c_s%wfour    ; isize = isize + size(wfour)
-             tcube   => c_s%tcube    ; isize = isize + size(tcube)
-             ups     => c_s%ups      ; isize = isize + size(ups)
-             vps     => c_s%vps      ; isize = isize + size(vps)
-             wps     => c_s%wps      ; isize = isize + size(wps)
-             tps     => c_s%tps      ; isize = isize + size(tps)
-             t_rprod => c_s%t_rprod  ; isize = isize + size(t_rprod)
-             t_wq    => c_s%t_wq     ; isize = isize + size(t_wq)
-             t_wp    => c_s%t_wp     ; isize = isize + size(t_wp)
-             t_tau   => c_s%t_tau    ; isize = isize + size(t_tau)
-             t_tran  => c_s%t_tran   ; isize = isize + size(t_tran)
-             t_buoy  => c_s%t_buoy   ; isize = isize + size(t_buoy)
-             t_diss  => c_s%t_diss   ; isize = isize + size(t_diss)
-             t_sprod => c_s%t_sprod  ; isize = isize + size(t_sprod)
-             zconc   => c_s%zconc    ; isize = isize + size(zconc)
-             zconc_U => c_s%zconc_U  ; isize = isize + size(zconc_U)
-             vp1mean  => c_s%vp1mean ; isize = isize + size(vp1mean)
-             vp2mean  => c_s%vp2mean ; isize = isize + size(vp2mean)
-             vp3mean  => c_s%vp3mean ; isize = isize + size(vp3mean)
-             vp1msqr  => c_s%vp1msqr ; isize = isize + size(vp1msqr)
-             vp2msqr  => c_s%vp2msqr ; isize = isize + size(vp2msqr)
-             vp3msqr  => c_s%vp3msqr ; isize = isize + size(vp3msqr)
-             m1src   => c_s%m1src    ; isize = isize + size(m1src)
-             m2src   => c_s%m2src    ; isize = isize + size(m2src)
-             m3src   => c_s%m3src    ; isize = isize + size(m3src)
-             upwpm   => c_s%upwpm    ; isize = isize + size(upwpm)
-             Tpmean  => c_s%Tpmean   ; isize = isize + size(Tpmean)
-             Tpmsqr  => c_s%Tpmsqr   ; isize = isize + size(Tpmsqr)
-             Tfmean  => c_s%Tfmean   ; isize = isize + size(Tfmean)
-             qfmean  => c_s%qfmean   ; isize = isize + size(qfmean)
-             wpTpm   => c_s%wpTpm    ; isize = isize + size(wpTpm)
-             Tpsrc   => c_s%Tpsrc    ; isize = isize + size(Tpsrc)
-             Tv_tran => c_s%Tv_tran  ; isize = isize + size(Tv_tran)
-             Tv_prod => c_s%Tv_prod  ; isize = isize + size(Tv_prod)
-             Tv_diss => c_s%Tv_diss  ; isize = isize + size(Tv_diss)
-             Tv_part1 => c_s%Tv_part1  ; isize = isize + size(Tv_part1)
-             Tv_part2 => c_s%Tv_part2  ; isize = isize + size(Tv_part2)
-             radmean => c_s%radmean  ; isize = isize + size(radmean)
-             rad2mean => c_s%rad2mean  ; isize = isize + size(rad2mean)
-             mpmean => c_s%mpmean    ; isize = isize + size(mpmean)
-             mwmean => c_s%mwmean    ; isize = isize + size(mwmean) 
-             phimp => c_s%phimp    ; isize = isize + size(phimp) 
-             phimw => c_s%phimw    ; isize = isize + size(phimw)
-             Hpsrc   => c_s%Hpsrc    ; isize = isize + size(Hpsrc)
-             TEpsrc  => c_s%TEpsrc  ; isize = isize + size(TEpsrc)
-             qstarm => c_s%qstarm  ; isize = isize + size(qstarm)
-             vismean => c_s%vismean; isize = isize + size(vismean)
-             rk3pflux => c_s%rk3pflux ; isize = isize + size(rk3pflux)
-             Spflux => c_s%Spflux; isize = isize + size(Spflux)
-             trip => c_s%trip; isize = isize + size(trip)
-             TpSq => c_s%TpSq; isize = isize + size(TpSq)
-             Tpdqp => c_s%Tpdqp; isize = isize + size(Tpdqp)
-             Tpflux => c_s%Tpflux; isize = isize + size(Tpflux)
-             TUpflux => c_s%TUpflux; isize = isize + size(TUpflux)
-             TDpflux => c_s%TDpflux; isize = isize + size(TDpflux)
-             probepflux => c_s%probepflux; isize = isize + size(
-     +       probepflux)
+             wwsb        => c_s%wwsb       ; isize = isize + size(wwsb)
+             engz        => c_s%engz       ; isize = isize + size(engz)
+             engsbz      => c_s%engsbz     ; isize = isize + 
+     +                                               size(engsbz)
+             englez      => c_s%englez     ; isize = isize + 
+     +                                               size(englez)
+             uxym        => c_s%uxym       ; isize = isize + size(uxym)
+             vxym        => c_s%vxym       ; isize = isize + size(vxym)
+             wxym        => c_s%wxym       ; isize = isize + size(wxym)
+             txym        => c_s%txym       ; isize = isize + size(txym)
+             divz        => c_s%divz       ; isize = isize + size(divz)
+             utle        => c_s%utle       ; isize = isize + size(utle)
+             utsb        => c_s%utsb       ; isize = isize + size(utsb)
+             vtle        => c_s%vtle       ; isize = isize + size(vtle)
+             vtsb        => c_s%vtsb       ; isize = isize + size(vtsb)
+             wtle        => c_s%wtle       ; isize = isize + size(wtle)
+             wtsb        => c_s%wtsb       ; isize = isize + size(wtsb)
+             wt_tot      => c_s%wt_tot     ; isize = isize + 
+     +                                               size(wt_tot)
+             z           => c_s%z          ; isize = isize + size(z)
+             zz          => c_s%zz         ; isize = isize + size(zz)
+             shrz        => c_s%shrz       ; isize = isize + size(shrz)
+             buyz        => c_s%buyz       ; isize = isize + size(buyz)
+             triz        => c_s%triz       ; isize = isize + size(triz)
+             uwsb        => c_s%uwsb       ; isize = isize + size(uwsb)
+             vwsb        => c_s%vwsb       ; isize = isize + size(vwsb)
+             uwle        => c_s%uwle       ; isize = isize + size(uwle)
+             vwle        => c_s%vwle       ; isize = isize + size(vwle)
+             uw_tot      => c_s%uw_tot     ; isize = isize + 
+     +                                               size(uw_tot)
+             vw_tot      => c_s%vw_tot     ; isize = isize + 
+     +                                               size(vw_tot)
+             wcube       => c_s%wcube      ; isize = isize + size(wcube)
+             wfour       => c_s%wfour      ; isize = isize + size(wfour)
+             tcube       => c_s%tcube      ; isize = isize + size(tcube)
+             ups         => c_s%ups        ; isize = isize + size(ups)
+             vps         => c_s%vps        ; isize = isize + size(vps)
+             wps         => c_s%wps        ; isize = isize + size(wps)
+             tps         => c_s%tps        ; isize = isize + size(tps)
+             t_rprod     => c_s%t_rprod    ; isize = isize + 
+     +                                               size(t_rprod)
+             t_wq        => c_s%t_wq       ; isize = isize + size(t_wq)
+             t_wp        => c_s%t_wp       ; isize = isize + size(t_wp)
+             t_tau       => c_s%t_tau      ; isize = isize + size(t_tau)
+             t_tran      => c_s%t_tran     ; isize = isize + 
+     +                                               size(t_tran)
+             t_buoy      => c_s%t_buoy     ; isize = isize + 
+     +                                               size(t_buoy)
+             t_diss      => c_s%t_diss     ; isize = isize + 
+     +                                               size(t_diss)
+             t_sprod     => c_s%t_sprod    ; isize = isize + 
+     +                                               size(t_sprod)
+             zconc       => c_s%zconc      ; isize = isize + 
+     +                                               size(zconc)
+             zconc_U     => c_s%zconc_U    ; isize = isize + 
+     +                                               size(zconc_U)
+             vp1mean     => c_s%vp1mean    ; isize = isize + 
+     +                                               size(vp1mean)
+             vp2mean     => c_s%vp2mean    ; isize = isize + 
+     +                                               size(vp2mean)
+             vp3mean     => c_s%vp3mean    ; isize = isize + 
+     +                                               size(vp3mean)
+             vp1msqr     => c_s%vp1msqr    ; isize = isize + 
+     +                                               size(vp1msqr)
+             vp2msqr     => c_s%vp2msqr    ; isize = isize + 
+     +                                               size(vp2msqr)
+             vp3msqr     => c_s%vp3msqr    ; isize = isize + 
+     +                                               size(vp3msqr)
+             m1src       => c_s%m1src      ; isize = isize + size(m1src)
+             m2src       => c_s%m2src      ; isize = isize + size(m2src)
+             m3src       => c_s%m3src      ; isize = isize + size(m3src)
+             upwpm       => c_s%upwpm      ; isize = isize + size(upwpm)
+             Tpmean      => c_s%Tpmean     ; isize = isize + 
+     +                                               size(Tpmean)
+             Tpmsqr      => c_s%Tpmsqr     ; isize = isize + 
+     +                                               size(Tpmsqr)
+             Tfmean      => c_s%Tfmean     ; isize = isize + 
+     +                                               size(Tfmean)
+             qfmean      => c_s%qfmean     ; isize = isize + 
+     +                                               size(qfmean)
+             wpTpm       => c_s%wpTpm      ; isize = isize + size(wpTpm)
+             Tpsrc       => c_s%Tpsrc      ; isize = isize + size(Tpsrc)
+             Tv_tran     => c_s%Tv_tran    ; isize = isize + 
+     +                                               size(Tv_tran)
+             Tv_prod     => c_s%Tv_prod    ; isize = isize + 
+     +                                               size(Tv_prod)
+             Tv_diss     => c_s%Tv_diss    ; isize = isize + 
+     +                                               size(Tv_diss)
+             Tv_part1    => c_s%Tv_part1   ; isize = isize + 
+     +                                               size(Tv_part1)
+             Tv_part2    => c_s%Tv_part2   ; isize = isize +
+     +                                               size(Tv_part2)
+             radmean     => c_s%radmean    ; isize = isize + 
+     +                                               size(radmean)
+             rad2mean    => c_s%rad2mean   ; isize = isize + 
+     +                                               size(rad2mean)
+             mpmean      => c_s%mpmean     ; isize = isize + 
+     +                                               size(mpmean)
+             mwmean      => c_s%mwmean     ; isize = isize + 
+     +                                               size(mwmean)
+             phimp       => c_s%phimp      ; isize = isize + size(phimp)
+             phimw       => c_s%phimw      ; isize = isize + size(phimw)
+             Hpsrc       => c_s%Hpsrc      ; isize = isize + size(Hpsrc)
+             TEpsrc      => c_s%TEpsrc     ; isize = isize + 
+     +                                               size(TEpsrc)
+             qstarm      => c_s%qstarm     ; isize = isize + 
+     +                                               size(qstarm)
+             vismean     => c_s%vismean    ; isize = isize + 
+     +                                               size(vismean)
+             rk3pflux    => c_s%rk3pflux   ; isize = isize + 
+     +                                               size(rk3pflux)
+             Spflux      => c_s%Spflux     ; isize = isize + 
+     +                                               size(Spflux)
+             trip        => c_s%trip       ; isize = isize + size(trip)
+             TpSq        => c_s%TpSq       ; isize = isize + size(TpSq)
+             Tpdqp       => c_s%Tpdqp      ; isize = isize + size(Tpdqp)
+             Tpflux      => c_s%Tpflux     ; isize = isize + 
+     +                                               size(Tpflux)
+             TUpflux     => c_s%TUpflux    ; isize = isize + 
+     +                                               size(TUpflux)
+             TDpflux     => c_s%TDpflux    ; isize = isize + 
+     +                                               size(TDpflux)
+             probepflux  => c_s%probepflux ; isize = isize + 
+     +                                               size(probepflux)
+             zconc_range => c_s%zconc_range; isize = isize + 
+     +                                               size(zconc_range)
 
 
              xkn     => c_s%xkn
@@ -655,11 +698,9 @@ c
       if (myid==0) then
         write(*,*) 'Starting time loop'
         write(*,*) 'it,time = ',it,time
-        write(*,*) 'Field Settling = ',ws
       end if
       if(ispray==1)then
         if(it == 1) numpart = 0
-c      np_write = 0
         part => first_particle
         do while (associated(part))
           if (part%pidx == 1 .and. part%procidx ==0) then
@@ -673,8 +714,7 @@ c            if (myid ==0 .and. part%procidx ==1) then
             write(*,'(a7,4e15.6)') 'rad1: ',part%radius 
             write(*,'(a7,4e15.6)') 'qinf1:',part%qinf 
             write(*,'(a7,4e15.6)') 'qstr1:',part%qstar
-            write(*,*)npwrite, part%pidx, part%procidx 
-c      np_write = 1
+            write(*,*) part%pidx, part%procidx 
 
           end if
           part => part%next
@@ -682,7 +722,7 @@ c      np_write = 1
           if(it==1) numpart = numpart + 1
         end do
         if (myid==0 .and. tnumpart .ne. 0) then
-          write(*,*) 'time,tnumpart:',time,tnumpart
+          write(*,*) 'tnumpart:',tnumpart
           write(*,*) 'dpmean :',dpmean
           write(*,*) 'dpmax :',dpmax
           write(*,*) 'dpmin :',dpmin
@@ -752,7 +792,7 @@ c
         
 
 c
-c ------------ save velocity field
+c ------------ save velocity field and particle data
 c
       if(msave .and. istage .eq. 1)then
         if(myid==0)then
@@ -817,14 +857,6 @@ c
 c      
 c -------- update particles
 c
-!      Comment this out for the channel case - no generation needed
-!      Just randomly initiating particles and having reflective boundaries
-!      if ( (ispray==1) .AND. (iss == 0)) then
-!        call particle_generate(istage)
-!      end if
-!-------------------------------------------------------------
-!     ---ADDED FOR PARTICLE_SFS-VEL TEST REMOVE LATER*********
-!----------------------------------------------------------------------
 
       if(ispray==1)then
         !t_s = mpi_wtime()
@@ -6180,6 +6212,8 @@ c     --Particle flux JP--
       partflux_t    = 0.0
       partcountU    = 0.0
       partcountU_t  = 0.0
+      pcountrange   = 0.0
+      pcountrange_t = 0.0
       Spartflux_t   = 0.0
       Spartflux     = 0.0
       tpartflux_t   = 0.0
@@ -7381,7 +7415,7 @@ c ------- indices for indexing array stat(.,.)
 c         js = number of non-scalar stats
 c         ns = number of scalar stats
 c
-      parameter(js = 44, ns = 5, nstat = js + ns*nscl+1)
+      parameter(js = 45, ns = 5, nstat = js + ns*nscl+1)
       real stat(1:nnz,nstat)
 c
 c -------- stat(.,1) = u*u = ups
@@ -7517,6 +7551,7 @@ c         stat(iz,35) =stat(iz,35) +  partcount(ix,iy,iz)
          stat(iz,42) = stat(iz,42) + xytpartflux(ix,iy,iz)
          stat(iz,43) = stat(iz,43) + xyutpartflux(ix,iy,iz)
          stat(iz,44) = stat(iz,44) + xydtpartflux(ix,iy,iz)
+         stat(iz,45) = stat(iz,45) + pcountrange(ix,iy,iz)
       enddo                                              !
       enddo
 c
@@ -7588,24 +7623,19 @@ c ------ fill arrays for printout and constant file
 c
       do iz=1,nnz
 c 
-      ups(iz)    = stat(iz,1)*fnxy
-      vps(iz)    = stat(iz,2)*fnxy
-      wps(iz)    = stat(iz,3)*fnxy
-      wcube(iz)  = stat(iz,4)*fnxy
-      wfour(iz)  = stat(iz,5)*fnxy
-      englez(iz) = stat(iz,6)*fnxy
-      engsbz(iz) = stat(iz,7)*fnxy
-      eavg(iz)   = stat(iz,8)*fnxy
-      uwle(iz)   = stat(iz,9)*fnxy
-      vwle(iz)   = stat(iz,10)*fnxy
-      zconc(iz)  = stat(iz,11)/xl/yl/dzw(iz)
-c     jp zconc_u 2-12
-      zconc_U(iz)= stat(iz,35)/xl/yl/dz_U
-
-C     ---ONLY FOR SFS-VEL TEST -ROMOVE LATER
-c      zconc(iz)  = stat(iz,35)/xl/yl/dzw(iz) 
-C     -----------------------------------    
-
+      ups(iz)        = stat(iz,1)*fnxy
+      vps(iz)        = stat(iz,2)*fnxy
+      wps(iz)        = stat(iz,3)*fnxy
+      wcube(iz)      = stat(iz,4)*fnxy
+      wfour(iz)      = stat(iz,5)*fnxy
+      englez(iz)     = stat(iz,6)*fnxy
+      engsbz(iz)     = stat(iz,7)*fnxy
+      eavg(iz)       = stat(iz,8)*fnxy
+      uwle(iz)       = stat(iz,9)*fnxy
+      vwle(iz)       = stat(iz,10)*fnxy
+      zconc(iz)      = stat(iz,11)/xl/yl/dzw(iz)
+      zconc_U(iz)    = stat(iz,35)/xl/yl/dz_U
+      zconc_range(iz)= stat(iz,45)/xl/yl/dzw(iz)
       vp1mean(iz)    = stat(iz,12)/stat(iz,11)
       vp2mean(iz)    = stat(iz,13)/stat(iz,11)
       vp3mean(iz)    = stat(iz,14)/stat(iz,11)
@@ -7625,7 +7655,7 @@ C     -----------------------------------
       wpTpm(iz)      = stat(iz,26)/stat(iz,11)-(Tpmean(iz)*vp3mean(iz))
       Tpsrc(iz)      = stat(iz,27)*fnxy
       radmean(iz)    = stat(iz,28)/stat(iz,11) 
-      rad2mean(iz)   = stat(iz,29)/stat(iz,11)
+      rad2mean(iz )  = stat(iz,29)/stat(iz,11)
  
       mpmean(iz)     = stat(iz,30)/stat(iz,11) !make sure stat matchs with phimp
       mwmean(iz)     = stat(iz,31)/stat(iz,11) !make sure stat matchs with phimw
@@ -8495,6 +8525,8 @@ c      NOTE: allocate even if ispray == 0, since it's in xy_stats
       allocate(partflux_t(0:nnz+1,iys:iye,mxs:mxe))
       allocate(partcountU(nnx,iys:iye,izs-1:ize+1))
       allocate(partcountU_t(0:nnz+1,iys:iye,mxs:mxe))
+      allocate(pcountrange(nnx,iys:iye,izs-1:ize+1))
+      allocate(pcountrange_t(0:nnz+1,iys:iye,mxs:mxe))
       allocate(Spartflux(nnx,iys:iye,izs-1:ize+1))
       allocate(Spartflux_t(0:nnz+1,iys:iye,mxs:mxe))
       allocate(tpartflux(nnx,iys:iye,izs-1:ize+1))
@@ -10459,29 +10491,30 @@ c
       !call mpi_barrier(mpi_comm_world,ierr)
       !if (myid==5) write(*,*) 'time fill_ext:',t_f-t_s
 
-      partcount_t = 0.0
-      partflux_t = 0.0
-      partcountU_t = 0.0
-      vpsum_t = 0.0
-      upwp_t = 0.0
-      vpsqrsum_t = 0.0
-      Tpsum_t = 0.0
-      Tfsum_t = 0.0
-      qfsum_t = 0.0
-      radsum_t = 0.0  
-      rad2sum_t = 0.0  
-      mpsum_t = 0.0
-      mwsum_t = 0.0
-      Tpsqrsum_t = 0.0
-      wpTpsum_t = 0.0
-      myRep_avg = 0.0
-      myphip_sum = 0.0
-      myphiw_sum = 0.0
-      myphiv_sum = 0.0
-      qstarsum_t = 0.0 
-      mydpmean = 0.0
-      mydpmin = 2.0*radius_max
-      mydpmax = 2.0*radius_min
+      partcount_t     = 0.0
+      partflux_t      = 0.0
+      partcountU_t    = 0.0
+      pcountrange_t   = 0.0
+      vpsum_t         = 0.0
+      upwp_t          = 0.0
+      vpsqrsum_t      = 0.0
+      Tpsum_t         = 0.0
+      Tfsum_t         = 0.0
+      qfsum_t         = 0.0
+      radsum_t        = 0.0  
+      rad2sum_t       = 0.0  
+      mpsum_t         = 0.0
+      mwsum_t         = 0.0
+      Tpsqrsum_t      = 0.0
+      wpTpsum_t       = 0.0
+      myRep_avg       = 0.0
+      myphip_sum      = 0.0
+      myphiw_sum      = 0.0
+      myphiv_sum      = 0.0
+      qstarsum_t      = 0.0 
+      mydpmean        = 0.0
+      mydpmin         = 2.0*radius_max
+      mydpmax         = 2.0*radius_min
 
       !t_s = mpi_wtime()
 
@@ -10671,18 +10704,22 @@ c     JP 5-15-2018 Initialize xp_i after RK3 for subgrid fluxes
      +                partsrc(1:nnx,iys:iye,izs-1:ize+1,1),nnx,nnz,mxs,
      +                mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
      +                ncpu_s,numprocs)
+
       call ztox_trans(partsrc_t(0:nnz+1,iys:iye,mxs:mxe,2),
      +                partsrc(1:nnx,iys:iye,izs-1:ize+1,2),nnx,nnz,mxs,
      +                mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
      +                ncpu_s,numprocs)
+
       call ztox_trans(partsrc_t(0:nnz+1,iys:iye,mxs:mxe,3),
      +                partsrc(1:nnx,iys:iye,izs-1:ize+1,3),nnx,nnz,mxs,
      +                mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
      +                ncpu_s,numprocs)
+
       call ztox_trans(partTsrc_t(0:nnz+1,iys:iye,mxs:mxe),
      +                partTsrc(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,mxs,
      +                mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
      +                ncpu_s,numprocs)
+
       call ztox_trans(partHsrc_t(0:nnz+1,iys:iye,mxs:mxe),
      +                partHsrc(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,mxs,
      +                mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
@@ -10697,96 +10734,109 @@ c     JP 5-15-2018 Initialize xp_i after RK3 for subgrid fluxes
       !Try only calling these when the history data is being written:
       if(mtrans) then
       call ztox_trans(upwp_t(0:nnz+1,iys:iye,mxs:mxe),
-     +                upwp(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,mxs,
-     +                mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
-     +                ncpu_s,numprocs)
+     +               upwp(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,mxs,
+     +               mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
+     +               ncpu_s,numprocs)
 
       call ztox_trans(vpsum_t(0:nnz+1,iys:iye,mxs:mxe,1),
-     +                vpsum(1:nnx,iys:iye,izs-1:ize+1,1),nnx,nnz,mxs,
-     +                mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
-     +                ncpu_s,numprocs)
+     +               vpsum(1:nnx,iys:iye,izs-1:ize+1,1),nnx,nnz,mxs,
+     +               mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
+     +               ncpu_s,numprocs)
+
       call ztox_trans(vpsum_t(0:nnz+1,iys:iye,mxs:mxe,2),
-     +                vpsum(1:nnx,iys:iye,izs-1:ize+1,2),nnx,nnz,mxs,
-     +                mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
-     +                ncpu_s,numprocs)
+     +               vpsum(1:nnx,iys:iye,izs-1:ize+1,2),nnx,nnz,mxs,
+     +               mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
+     +               ncpu_s,numprocs)
+
       call ztox_trans(vpsum_t(0:nnz+1,iys:iye,mxs:mxe,3),
-     +                vpsum(1:nnx,iys:iye,izs-1:ize+1,3),nnx,nnz,mxs,
-     +                mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
-     +                ncpu_s,numprocs)
+     +               vpsum(1:nnx,iys:iye,izs-1:ize+1,3),nnx,nnz,mxs,
+     +               mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
+     +               ncpu_s,numprocs)
 
       call ztox_trans(vpsqrsum_t(0:nnz+1,iys:iye,mxs:mxe,1),
-     +                vpsqrsum(1:nnx,iys:iye,izs-1:ize+1,1),nnx,nnz,mxs,
-     +                mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
-     +                ncpu_s,numprocs)
+     +               vpsqrsum(1:nnx,iys:iye,izs-1:ize+1,1),nnx,nnz,mxs,
+     +               mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
+     +               ncpu_s,numprocs)
+
       call ztox_trans(vpsqrsum_t(0:nnz+1,iys:iye,mxs:mxe,2),
-     +                vpsqrsum(1:nnx,iys:iye,izs-1:ize+1,2),nnx,nnz,mxs,
-     +                mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
-     +                ncpu_s,numprocs)
+     +               vpsqrsum(1:nnx,iys:iye,izs-1:ize+1,2),nnx,nnz,mxs,
+     +               mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
+     +               ncpu_s,numprocs)
+
       call ztox_trans(vpsqrsum_t(0:nnz+1,iys:iye,mxs:mxe,3),
-     +                vpsqrsum(1:nnx,iys:iye,izs-1:ize+1,3),nnx,nnz,mxs,
-     +                mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
-     +                ncpu_s,numprocs)
+     +               vpsqrsum(1:nnx,iys:iye,izs-1:ize+1,3),nnx,nnz,mxs,
+     +               mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
+     +               ncpu_s,numprocs)
 
       call ztox_trans(Tpsum_t(0:nnz+1,iys:iye,mxs:mxe),
-     +                Tpsum(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,mxs,
-     +                mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
-     +                ncpu_s,numprocs)
+     +               Tpsum(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,mxs,
+     +               mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
+     +               ncpu_s,numprocs)
+
       call ztox_trans(Tpsqrsum_t(0:nnz+1,iys:iye,mxs:mxe),
-     +                Tpsqrsum(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,mxs,
-     +                mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
-     +                ncpu_s,numprocs)
+     +               Tpsqrsum(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,mxs,
+     +               mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
+     +               ncpu_s,numprocs)
+
       call ztox_trans(Tfsum_t(0:nnz+1,iys:iye,mxs:mxe),
-     +                Tfsum(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,mxs,
-     +                mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
-     +                ncpu_s,numprocs)
+     +               Tfsum(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,mxs,
+     +               mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
+     +               ncpu_s,numprocs)
+
       call ztox_trans(qfsum_t(0:nnz+1,iys:iye,mxs:mxe),
-     +                qfsum(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,mxs,
-     +                mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
-     +                ncpu_s,numprocs)
+     +               qfsum(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,mxs,
+     +               mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
+     +               ncpu_s,numprocs)
+
       call ztox_trans(wpTpsum_t(0:nnz+1,iys:iye,mxs:mxe),
-     +                wpTpsum(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,mxs,
-     +                mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
-     +                ncpu_s,numprocs)
+     +               wpTpsum(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,mxs,
+     +               mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
+     +               ncpu_s,numprocs)
 
       call ztox_trans(partcount_t(0:nnz+1,iys:iye,mxs:mxe),
-     +                partcount(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,mxs,
-     +                mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
-     +                ncpu_s,numprocs)
+     +               partcount(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,mxs,
+     +               mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
+     +               ncpu_s,numprocs)
 
       call ztox_trans(radsum_t(0:nnz+1,iys:iye,mxs:mxe),
-     +                radsum(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,mxs,
-     +                mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
-     +                ncpu_s,numprocs)
+     +               radsum(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,mxs,
+     +               mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
+     +               ncpu_s,numprocs)
 
       call ztox_trans(rad2sum_t(0:nnz+1,iys:iye,mxs:mxe),
-     +                rad2sum(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,mxs,
-     +                mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
-     +                ncpu_s,numprocs) 
+     +               rad2sum(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,mxs,
+     +               mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
+     +               ncpu_s,numprocs) 
 
       call ztox_trans(mpsum_t(0:nnz+1,iys:iye,mxs:mxe),
-     +                mpsum(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,mxs,
-     +                mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
-     +                ncpu_s,numprocs)
+     +               mpsum(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,mxs,
+     +               mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
+     +               ncpu_s,numprocs)
 
       call ztox_trans(mwsum_t(0:nnz+1,iys:iye,mxs:mxe),
-     +                mwsum(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,mxs,
-     +                mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
-     +                ncpu_s,numprocs)
+     +               mwsum(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,mxs,
+     +               mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
+     +               ncpu_s,numprocs)
 
       call ztox_trans(qstarsum_t(0:nnz+1,iys:iye,mxs:mxe),
-     +                qstarsum(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,mxs,
-     +                mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
-     +                ncpu_s,numprocs)
+     +               qstarsum(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,mxs,
+     +               mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
+     +               ncpu_s,numprocs)
 
       call ztox_trans(partflux_t(0:nnz+1,iys:iye,mxs:mxe),
-     +                partflux(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,mxs,
-     +                mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
-     +                ncpu_s,numprocs)
+     +               partflux(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,mxs,
+     +               mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
+     +               ncpu_s,numprocs)
 
       call ztox_trans(partcountU_t(0:nnz+1,iys:iye,mxs:mxe),
-     +                partcountU(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,mxs,
-     +                mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
-     +                ncpu_s,numprocs)
+     +               partcountU(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,mxs,
+     +               mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
+     +               ncpu_s,numprocs)
+
+      call ztox_trans(pcountrange_t(0:nnz+1,iys:iye,mxs:mxe),
+     +               pcountrange(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,mxs,
+     +               mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
+     +               ncpu_s,numprocs)
 
 
 
@@ -12715,13 +12765,15 @@ c      pi   = 4.0*atan(1.0)
     
 
 c      m_s = Sal/1000.0*4.0/3.0*pi*radius_mass**3*rhow
+
+c     settling velocity for eulerian information based on radius_max
       ws = grav*(rhow*(2*radius_max)**2/18.0/nuf/rhoa)
 
 c       **************************************************************
 c      ws = 1e-6  !***************************************REMOVE LATER
 c       *************************************************************
 
-      if (myid==0) write(*,*) 'ws part_setup = ',ws
+      if (myid==0) write(*,*) 'ws (Eulerian) part_setup = ',ws
       
 c       Indrajith 03/13/2017
       if (myid==0) write(*,*) 'Init Particle max_radius = ',radius_max  
@@ -13103,8 +13155,13 @@ c      integer :: iptc,jptc,kptc ! Indrajit-for SFS vel test
       !(i.e. the node in the negative direction for x,y,z)
       !and computes quantities needed to get particle statistics
 
-      partcount_t(kpt,jpt,ipt) = partcount_t(kpt,jpt,ipt) + 1.0 !ORIGINAL     
-      
+      partcount_t(kpt,jpt,ipt) = partcount_t(kpt,jpt,ipt) + 1.0 !ORIGINAL
+
+c     "Particle Sizers", determine the range
+      if(part%radius .gt. 7.5e-6 .and. part%radius .lt. 15.5e-6)then
+        pcountrange_t(kpt,jpt,ipt) = pcountrange_t(kpt,jpt,ipt) + 1.0
+      end if
+
 c      ----CHANGED FOR PARTICLE SFS VEL TEST RMOVE LATER INDRAJITH
 c     partcount_t(kptc,jptc,iptc) = partcount_t(kptc,jptc,iptc) + 1.0
 c     ----------------------------------------------------------
@@ -13295,26 +13352,26 @@ c      call particle_stats(ipt,jpt,kwpt,iptc,jptc,kwptc)
       !fluid only through drag term - NOT the gravity term as well
       if (icouple == 1) then
       !drag momentum coupling
-      partsrc_t(iz,iy,ix,1:3) =
+        partsrc_t(iz,iy,ix,1:3) =
      +     partsrc_t(iz,iy,ix,1:3) +
      +     partmass/rhoa*(part%vrhs(1:3)+g(1:3))*wtt/dV
 
       !vapor momentum coupling
-      partsrc_t(iz,iy,ix,1:3) =
+        partsrc_t(iz,iy,ix,1:3) =
      +     partsrc_t(iz,iy,ix,1:3) +
      +     rhow/rhoa*pi2*2*part%radius**2*
      +     part%radrhs*part%vp(1:3)*wtt/dV
       endif
 
       if (iTcouple == 1) then
-      partTsrc_t(iz,iy,ix) =
+        partTsrc_t(iz,iy,ix) =
      +     partTsrc_t(iz,iy,ix) +
      +     (part%Tprhs_s*6.0*rhow/rhop/CpaCpp/taup_i*
      +     (pi2/2.0)*part%radius*nuf)*wtt/dV
       endif
 
       if (iHcouple == 1) then
-      partHsrc_t(iz,iy,ix) =     !Brian 8/5/14
+        partHsrc_t(iz,iy,ix) =     !Brian 8/5/14
      +     partHsrc_t(iz,iy,ix) +  !minus comes later
      +     rhow/rhoa*pi2*2*part%radius**2*part%radrhs*wtt/dV
 
@@ -13322,11 +13379,11 @@ c      call particle_stats(ipt,jpt,kwpt,iptc,jptc,kwptc)
 
 !      http://eesc.columbia.edu/courses/ees/climate/SI_Units.pdf
 !      or http://catalog.conveyorspneumatic.com/Asset/FLS%20Specific%20Heat%20Capacities%20of%20Gases.pdf
-       Cvv = 1463.0 !J/degkg
-       Cpv = 1952.0 !from E. Toolbox -> 1864.0 !J/degkg
+         Cvv = 1463.0 !J/degkg
+         Cpv = 1952.0 !from E. Toolbox -> 1864.0 !J/degkg
        !Cva = 717.0 !J/degkg
        !lref = (25.0 - 0.02274*20.0)*10.0**5
-       partTEsrc_t(iz,iy,ix) = 
+         partTEsrc_t(iz,iy,ix) = 
      +     partTEsrc_t(iz,iy,ix) +  !minus comes later
      +         rhow/rhoa*pi2*2*part%radius**2*
      +                  part%radrhs*Cpv/Cpa*part%Tp*wtt/dV -
