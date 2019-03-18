@@ -3,16 +3,17 @@
 &step_params
 iti    = 0	 ! Starting timestep
 itmax  = 15000	 ! Maximum timestep 
-imean  = 100	 ! originally 100 change to see the q
+imean  = 100	 ! originally 100 change to see the q (shows means in the output files)
 ihst   = 10	 ! number of timesteps after to take a history reading (for hist files)
 itape  = 100	 ! Number of timesteps after to write files
 iphist = 100	 ! Output step for particle histogram
 itstr  = 1	 ! At what time to start writing files
 it_his = 1	 ! time step where history files start, incremented by itape
 it_viz = 1	 ! time step where viz files start, incremented by itape
-i_viz  = 5000	 ! 
+i_viz  = 5000	 ! I have no idea or desire to know what this is atm 
 itn    = 0	 ! Index for "u.le.cou001" files
 dt_con = 0.5	 ! fixed timestep amount of time (does not use CFL condition)
+it_probe = 1	 ! Time step in which to write probe data
 /
 
 !Flags for various features
@@ -29,13 +30,14 @@ iHcouple     = 0! iHcouple also controls TE couple (humidity coupling??)
 ievap        = 0! Hygroscopicity
 istbl        = 0! istbl =0 for neutral, istbl = 1 for unstable/stable
 isfs         = 0! isfs = 1 for Weil et al. Lagrangian stochastic model, isfs = 0 for stochastic xp based on vis_s
-iUprod       = 1! iUprod =1 for uniform particle generation, = 0 for heterogeneous generation (not working atm)
+iUprod       = 1! iUprod =1 for uniform particle generation, = 0 for heterogeneous generation
 ipolydisp    = 0! ipolydisp=1 enables polydisperse particles, otherwise sets to radius_max
 ishift       = 0! ishift=1 enables shift in wind-speed & heat flux after some time
 ifields      = 0! if set to 1, reads the initial condition from path_ran below; otherwise calls subroutine random
 iPprod       = 0! if set to 1, will be an inital point source (Thomas's project)
 iSSGF        = 0! 0=Monahans, 1=Smith, 2= etc.. (Only works for polydispersity == 1)
 inonperiodic = 0! 0=particles bouncing from surface, 1 for death at surface
+iaircraft    = 0! if set to 1, initializes an aircraft probe reader (apr) 
 /
 
 !Grid and domain parameters
@@ -56,7 +58,7 @@ zl = 850.0
 xl = 1000.0
 yl = 1000.0
 
-zw1  = 3.12 !The first grid point
+zw1  = 3.12 !The edge of the first grid point (zw, as compared to zu which is center)
 zwpi = 1.5  !particle relese domain height 
 /
 
@@ -73,6 +75,7 @@ path_viz_yz = "/scratch365/hpark6/mabl/mabl1/"
 path_stuf   = "/scratch365/hpark6/mabl/mabl1/"
 path_ran    = "/scratch365/hpark6/mabl/mabl1/u.le.cou000"
 part_hist   = "/scratch365/hpark6/mabl/mabl1/"
+path_probe  = "/scratch365/hpark6/mabl/mabl1/"
 /
 
 
@@ -124,5 +127,9 @@ radius_min = 2.5e-6
 Tp_init    = 300.15
 vp_init    = 0.0, 0.0, 0.0
 qf_init    = 0.01
+
+apr_v      = 50.0,0.0,0		!Aircraft speed in m/s
+apr_rad    = 1			!Radial range of particle count in m
+apr_init   = 0.0,0.0,300	!Height of aircraft in m
 
 /

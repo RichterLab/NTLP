@@ -10,7 +10,7 @@
 case_data=mabl
 case_home=mabl
 time=0000000
-runout=$case.out.$time
+runout=$case_data.out.$time
 
 datadir=/scratch365/hpark6/mabl/$case_data
 homedir=~/NTLP/$case_home

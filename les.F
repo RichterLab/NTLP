@@ -3,14 +3,14 @@ c     ----------------------------------------------------------------------
 c     ----------------------------------------------------------------------
       integer :: iti,itmax,imean,ihst,itape
       integer :: itstr,it_his,it_viz,i_viz
-      integer :: iphist
+      integer :: iphist,it_probe
 
       integer :: ismlt,ifree,iradup,
      +     iupwnd,ibuoy,ifilt,itcut,isubs,ibrcl,iocean,method,
      +     idebug,iz_space,ivis0,ifix_dt,new_vis,iDNS,ispray,
      +     icouple,iTcouple,iHcouple,ievap,istbl,isfs,iUprod,
      +     ipolydisp,ishift,ifields,iPprod,iSSGF,
-     +     inonperiodic
+     +     inonperiodic,iaircraft
 c     
 c     -------- j_recl = record length in "bytes" for history file
 c     k8     = kind parameter for integers in mpi_io routines
@@ -42,14 +42,34 @@ c     ----------------------------------------------------------------------
 c     ----------------------------------------------------------------------
       integer  ::   nvel, npre, nhis1, nprt,
      +     nhisp, nvelc, nprobe1, nprobe2, nprobe3,
+     +     nprobe4,  nprobe5,  nprobe6,  nprobe7,
+     +     nprobe8,  nprobe9,  nprobe10, nprobe11,
+     +     nprobe12, nprobe13, nprobe14, nprobe15,
+     +     nprobe16, nprobe17, nprobe18, nprobe19,
+     +     nprobe20, nprobe21, nprobe22, nprobe23,
+     +     nprobe24, nprobe25, nprobe26, nprobe27,
+     +     nprobe28, nprobe29, nprobe30, nprobe31,
+     +     nprobe32, nprobe33, nprobe34, nprobe35,
+     +     nprobe36, nprobe37, nprobe38, nprobe39,
+     +     nprobe40, nprobe41, nprobe42, nprobe43,
+     +     nprobe44, nprobe45, nprobe46, nprobe47,
+     +     nprobe48, nprobe49, nprobe50, nprobe51,
+     +     nprobe52, nprobe53, nprobe54, nprobe55,
+     +     nprobe56, nprobe57, nprobe58, nprobe59,
+     +     nprobe60, nprobe61, nprobe62, nprobe63,
+     +     nprobe64, !total number of probes is 64
      +     nviz_z, nviz_y, 
      +     nviz_x, nviz_s, nparts,
      +     kfile, jfile, ibcl, ibcu,
      +     igrdr, imach, itn, it_his_nxt, it_viz_nxt,
-     +     iploc, probe_loc, p_l, ipointsource!Probe Location JP 2018
+     +     it_pro_nxt, probe_id,
+     +     iploc, probe_loc, p_l, ipointsource,
+     +     aircraft_moved2, !New proc responsible for aircraft probe
+     +     init_apr_id
       real :: dt_con
       logical ::    mnout, micut, mtape, mhis, msave,mtrans,
-     +     l_root, l_debug, msave_v, mviz,mphist,part_save
+     +     l_root, l_debug, msave_v, mviz,mphist,part_save,
+     +     mprobe,probe_save
 c     ----------------------------------------------------------------------
       real    ::    windm,u1xy,v1xy,t1xy(nscl),
      +     t10xy(nscl),au13m,au23m,aut3m(nscl),tsfcm(nscl),
@@ -75,7 +95,7 @@ c     ----------------------------------------------------------------------
 c     ----------------------------------------------------------------------
       real ::       zetas(3), gama(3), etas(4), dt_new,
      +     umax,vmax,wmax, wabs, vismax,
-     +     cfl, tzero,
+     +     cfl, tzero, debug_var,
      +     ucfl, vcfl, wcfl
       real, dimension (3) :: probe_z_locations
       real, allocatable   :: CDF(:), Snscl(:), rpcrop(:), Sn(:)
@@ -85,7 +105,8 @@ c     ----------------------------------------------------------------------
      +     path_v, path_c, path_p, path_h,
      +     path_sav_v, path_sav_c,
      +     path_sav_p, path_sav_h, path_sav_part,
-     +     part_hist,path_sav_hist
+     +     part_hist,path_sav_hist,
+     +     path_sav_probe, path_probe
       character case_inp*3
       character*80 path_viz_xy, path_viz_xz, path_viz_yz, path_stuf,
      +             path_seed
@@ -104,6 +125,7 @@ c     ----------------------------------------------------------------------
       integer :: pr_r,pl_r,pt_r,pb_r,ptr_r,ptl_r,pbl_r,pbr_r
       integer :: pr_s,pl_s,pt_s,pb_s,ptr_s,ptl_s,pbl_s,pbr_s
       real :: ymin,ymax,zmin,zmax,xmax,xmin
+      real :: root_xmin,root_xmax,root_ymin,root_ymax
       real, allocatable :: uext(:,:,:), vext(:,:,:), wext(:,:,:)
       real, allocatable :: u_t(:,:,:), v_t(:,:,:), w_t(:,:,:)
       real, allocatable :: Text(:,:,:),T_t(:,:,:)
@@ -125,6 +147,24 @@ c     -----------------------------------------------------
       real, allocatable :: xytpartflux_t(:,:,:),xytpartflux(:,:,:)
       real, allocatable :: xyutpartflux_t(:,:,:),xyutpartflux(:,:,:)
       real, allocatable :: xydtpartflux_t(:,:,:),xydtpartflux(:,:,:)
+
+      real, allocatable :: pp1flux_t(:,:,:),pp1flux(:,:,:)
+      real, allocatable :: pp2flux_t(:,:,:),pp2flux(:,:,:)
+      real, allocatable :: pp3flux_t(:,:,:),pp3flux(:,:,:)
+      real, allocatable :: pp4flux_t(:,:,:),pp4flux(:,:,:)
+      real, allocatable :: pp5flux_t(:,:,:),pp5flux(:,:,:)
+      real, allocatable :: pp6flux_t(:,:,:),pp6flux(:,:,:)
+      real, allocatable :: pp7flux_t(:,:,:),pp7flux(:,:,:)
+      real, allocatable :: pp8flux_t(:,:,:),pp8flux(:,:,:)
+      real, allocatable :: pp9flux_t(:,:,:),pp9flux(:,:,:)
+      real, allocatable :: pp10flux_t(:,:,:),pp10flux(:,:,:)
+      real, allocatable :: pp11flux_t(:,:,:),pp11flux(:,:,:)
+      real, allocatable :: pp12flux_t(:,:,:),pp12flux(:,:,:)
+      real, allocatable :: pp13flux_t(:,:,:),pp13flux(:,:,:)
+      real, allocatable :: pp14flux_t(:,:,:),pp14flux(:,:,:)
+      real, allocatable :: pp15flux_t(:,:,:),pp15flux(:,:,:)
+      real, allocatable :: pp16flux_t(:,:,:),pp16flux(:,:,:)
+
         
 c     --------------------------------------------------------
       real, allocatable :: T2ext(:,:,:),T2_t(:,:,:)
@@ -151,8 +191,10 @@ c     --------------------------------------------------------
       integer :: Nrp, numpart_dt,part_init
       integer :: iseed,Npdx
       integer :: reinject, tot_reinject, all_died !all timesteps
-      integer :: tot_died !For a particular timestep
-      integer :: died !Following how many particles died at timestep..
+      integer :: tot_died            !For a particular timestep
+      integer :: died                !Following how many particles died at timestep..
+      integer :: apr_count_t,apr_id  !total particle count from aircraft,
+      integer :: apr_id_new          !and aircraft id (on which proc)
       real :: Rep_avg,part_grav,ws,dz_U
       real :: dpmean, dpmax, dpmin
       real :: vp_init(3),Tp_init,qf_init
@@ -161,6 +203,7 @@ c     --------------------------------------------------------
       real :: radius_mass 
       real :: CpaCpp,Cpa,Cpp,Pra,Sc,Mw,Ru,rhoa
       real :: m_s,Sal,Ms,delta_vis,Gam,Ion,Os
+      real :: apr_v(3),apr_rad,apr_init(3),apr_loc(3)
 
 c     parameters for particle histogram
       integer, allocatable ::hist_radclass(:),init_radclass(:)
@@ -169,11 +212,11 @@ c     parameters for particle histogram
       
       !REMEMBER: IF ADDING ANYTHING, MUST UPDATE MPI DATATYPE!
       type :: particle
-      integer :: pidx,procidx
+      integer :: pidx,procidx,type_part,dummy
       real :: vp(3),xp(3),xp_i(3),uf(3),xrhs(3),vrhs(3),Tp,Tprhs_s
       real :: Tprhs_L,Tf,radius,radrhs,qinf,qstar,T_eq,r_eq,req_init
       real :: birth_time, death_time, z_highest
-      real :: tot_dist, max_speed
+      real :: tot_dist, max_speed,type_p
       real :: u_sub(3),sigm_s,xp_si(3),xp_ti(3) !SFS vel and total location 3-22
       type(particle), pointer :: prev,next
       end type particle
@@ -330,7 +373,11 @@ c ----------------------------------------------------------------------
      +           trip(maxnz),TpSq(maxnz),Tpdqp(maxnz),
      +           Tpflux(maxnz), TUpflux(maxnz),
      +           TDpflux(maxnz),probepflux(maxnz),
-     +           zconc_range(maxnz)
+     +           zconc_range(maxnz),
+     +           pp1(maxnz),pp2(maxnz),pp3(maxnz),pp4(maxnz),
+     +           pp5(maxnz),pp6(maxnz),pp7(maxnz),pp8(maxnz),
+     +           pp9(maxnz),pp10(maxnz),pp11(maxnz),pp12(maxnz),
+     +           pp13(maxnz),pp14(maxnz),pp15(maxnz),pp16(maxnz)
         real ::  xkn(maxnx),ykn(maxny),
      +           xk(maxnx),yk(maxny),
      +           xks(maxnx2,maxny),wavexy(maxnx2,maxny)
@@ -375,7 +422,11 @@ c ----------------------------------------------------------------------
      +           trip(:),TpSq(:),Tpdqp(:),
      +           Tpflux(:),TUpflux(:),
      +           TDpflux(:),probepflux(:),
-     +           zconc_range(:)
+     +           zconc_range(:),
+     +           pp1(:),pp2(:),pp3(:),pp4(:),
+     +           pp5(:),pp6(:),pp7(:),pp8(:),
+     +           pp9(:),pp10(:),pp11(:),pp12(:),
+     +           pp13(:),pp14(:),pp15(:),pp16(:)
         real, pointer ::  
      +           xkn(:), ykn(:), xk(:), yk(:), xks(:,:), wavexy(:,:)
         real, pointer ::  
@@ -520,6 +571,23 @@ c
      +                                               size(probepflux)
              zconc_range => c_s%zconc_range; isize = isize + 
      +                                               size(zconc_range)
+             pp1         => c_s%pp1        ; isize = isize + size(pp1)
+             pp2         => c_s%pp2        ; isize = isize + size(pp2)
+             pp3         => c_s%pp3        ; isize = isize + size(pp3)
+             pp4         => c_s%pp4        ; isize = isize + size(pp4)
+             pp5         => c_s%pp5        ; isize = isize + size(pp5)
+             pp6         => c_s%pp6        ; isize = isize + size(pp6)
+             pp7         => c_s%pp7        ; isize = isize + size(pp7)
+             pp8         => c_s%pp8        ; isize = isize + size(pp8)
+             pp9         => c_s%pp9        ; isize = isize + size(pp9)
+             pp10         => c_s%pp10      ; isize = isize + size(pp10)
+             pp11         => c_s%pp11      ; isize = isize + size(pp11)
+             pp12         => c_s%pp12      ; isize = isize + size(pp12)
+             pp13         => c_s%pp13      ; isize = isize + size(pp13)
+             pp14         => c_s%pp14      ; isize = isize + size(pp14)
+             pp15         => c_s%pp15      ; isize = isize + size(pp15)
+             pp16         => c_s%pp16      ; isize = isize + size(pp16)
+
 
 
              xkn     => c_s%xkn
@@ -560,47 +628,47 @@ c
 c ------------- definition of internal flags
 c
 c
-c       iDNS    = 0; call the subgrid computation of vis_m and vis_s
-c               = 1; call the molecular viscosity and diffusivity
+c       iDNS    =  0; call the subgrid computation of vis_m and vis_s
+c               =  1; call the molecular viscosity and diffusivity
 c
 c       igrdr   =  3; data comes from restart file
 c               =  2; data comes from initialization (random)
 c               =  1; data comes from coarser grid (or otherwise)
 c
-c       ibcu    = 1 ; upper boundary condition set by radiation bc
-c               = 0 ; fixed value = 0.
+c       ibcu    =  1; upper boundary condition set by radiation bc
+c               =  0; fixed value = 0.
 c               = -1; value defined by coarser mesh for all variables
 c
-c       ibcl    = 0 ; lower boundary condition set by similarity theory (sr. setup)
+c       ibcl    =  0; lower boundary condition set by similarity theory (sr. setup)
 c               = -1; value defined by coarser mesh for all variables
 c
-c       ifix_dt = 0 ; variable time step with fixed cfl number in setcon
-c               = 1 ; fixed time step set in sr. get_dt
+c       ifix_dt =  0; variable time step with fixed cfl number in setcon
+c               =  1; fixed time step set in sr. get_dt
 c
-c       ifree   = 0 ; use spatially averaged surface conditions for MO (call lower)
-c               = 1 ; use point-by-point conditions for MO free convection (call lower_free)
+c       ifree   =  0; use spatially averaged surface conditions for MO (call lower)
+c               =  1; use point-by-point conditions for MO free convection (call lower_free)
 c
 c       ihst    = nn; frequency at which global variables are output in history file
-c               < 0 ; no history files
+c               <  0; no history files
 c
 c       it_his  = time step where history files start, incremented by itape
 c
 c       it_viz  = time step where viz files start, incremented by itape
 c
-c       ismlt   = 1 ; use businger formulas in MO 
-c                 0 ; use large and everyone elses formulas in MO 
+c       ismlt   =  1; use businger formulas in MO 
+c                  0; use large and everyone elses formulas in MO 
 c
-c       iupwnd  = 0;  use skew symmetric formulas for all derivatives
+c       iupwnd  =  0; use skew symmetric formulas for all derivatives
 c                     in scalar equations
-c               = 1;  use hybrid upwind scheme for all derivatives
+c               =  1; use hybrid upwind scheme for all derivatives
 c                     in scalar equations
 c
-c       ivis0   = 0; old eddy viscosity model 
-c               = 1; new eddy viscosity model 
+c       ivis0   =  0; old eddy viscosity model 
+c               =  1; new eddy viscosity model 
 c
 c       new_vis = step; the iteration step for which the new model
 c                       is turned on when ivis0=1
-c               < 0; new model is on at all steps for ivis0=1
+c               <  0; new model is on at all steps for ivis0=1
 c
 c       nscl  .ge. 1   number of scalars to be followed set in parameter statements
 c                      change entries in sr. init, and sr. suft for surface bc's
@@ -693,9 +761,9 @@ c --------------- time loop ------------
 c
       tzero = time
       call get_dt
- 9000 continue
+ 9000 continue    
       call set_sav(it,iti)
-      if (myid==0) then
+      if(myid==0)then
         write(*,*) 'Starting time loop'
         write(*,*) 'it,time = ',it,time
       end if
@@ -703,33 +771,24 @@ c
         if(it == 1) numpart = 0
         part => first_particle
         do while (associated(part))
-          if (part%pidx == 1 .and. part%procidx ==0) then
-c            if (myid ==0 .and. part%procidx ==1) then
-            write(*,'(a7,4e15.6)') 'xp1:  ',part%xp(1:3)
-            write(*,'(a7,4e15.6)') 'vp1:  ',part%vp(1:3)
-            write(*,'(a7,4e15.6)') 'uf1:  ',part%uf(1:3)
-            write(*,'(a7,4e15.6)') 'usub1:  ',part%u_sub(1:3)
-            write(*,'(a7,4e15.6)') 'Tp1:  ',part%Tp
-            write(*,'(a7,4e15.6)') 'Tf1:  ',part%Tf
-            write(*,'(a7,4e15.6)') 'rad1: ',part%radius 
-            write(*,'(a7,4e15.6)') 'qinf1:',part%qinf 
-            write(*,'(a7,4e15.6)') 'qstr1:',part%qstar
-            write(*,*) part%pidx, part%procidx 
-
+!         Aircraft implementation JP 11/15/2018
+          if(part%type_part .eq. 1)then !Aircraft probe output
+            write(*,'(a9,4e15.4)') 'apr loc:',part%xp(1:3)
+            write(*,'(a10,i)') 'apr count:'   ,apr_count_t
+            write(*,'(a9,4e15.4)') 'apr w:'  ,part%uf(3)
           end if
           part => part%next
-
           if(it==1) numpart = numpart + 1
         end do
-        if (myid==0 .and. tnumpart .ne. 0) then
-          write(*,*) 'tnumpart:',tnumpart
-          write(*,*) 'dpmean :',dpmean
-          write(*,*) 'dpmax :',dpmax
-          write(*,*) 'dpmin :',dpmin
+        if(myid==0 .and. tnumpart .ne. 0)then
+          write(*,'(a9,i)     ') 'tnumpart: ',tnumpart
+          write(*,'(a9,4e15.4)') 'dpmean: ',dpmean
+          write(*,'(a9,4e15.4)') 'dpmax : ',dpmax
+          write(*,'(a9,4e15.4)') 'dpmin : ',dpmin
         end if
       end if
 
-      if(it .ge. new_vis .and. ivis0 .eq. 1) then
+      if(it .ge. new_vis .and. ivis0 .eq. 1)then
           ivis = 1
       else
           ivis = 0
@@ -747,7 +806,6 @@ c
 c
 c ---------- compute derivatives of (u,v,w)
 c
-
       call exchange
       call get_derv
 
@@ -777,6 +835,14 @@ c
       call bcast_pbc
       call get_means(istage)
       if(ivis == 1) then
+c        if(istage==1 .and. it .GT. 10)then
+c          do check=0,numprocs-1
+c            if(myid==check)then
+c              write(*,*)'myid: ',myid
+c            end if
+c          end do
+c        end if
+
          call iso(it)
          call surfvis(it)
       endif
@@ -789,7 +855,6 @@ c
         call extra_flux_terms
         call pbltop(itop)
       endif
-        
 
 c
 c ------------ save velocity field and particle data
@@ -799,10 +864,10 @@ c
           write(*,*)'remember slab and proc number..'
         end if
         call save_v(it)
-        if(ispray==1) call save_particles
+c        if(ispray==1) call save_particles
       endif
       if(msave_v .and. istage .eq. 1)then
-        call save_viz(it)
+c        call save_viz(it) idk wtf is going on with this right now
       endif
 c
 c ------------ save pressure field
@@ -858,6 +923,7 @@ c
 c -------- update particles
 c
 
+
       if(ispray==1)then
         !t_s = mpi_wtime()
          
@@ -878,13 +944,56 @@ c
          if(mhis .and. istage .eq. 1 .and. mtape) call close_his
       endif
 
+c ------------ save probe data cleanly
+c              jp 10/29/2018
+c     Send information first to root proc
+c      call root_gather
+
+c      if(l_root)then
+c        if(ispray.and.istage .eq. 1)then
+c          if(mprobe)then
+c            call write_probe(it)
+c          end if
+c        end if
+c      end if
+
+
+
+
+c     Improved poor-mans probe recorder 10/30/2018
+      if(istage.eq.1)then
+        if(myid .eq. probe_loc)then
+c       Now decompose into heights
+          call probe_locator(probe_z_locations(1))
+          if(probe_id.eq.iploc)then
+            call write_probe_bit(nprobe1)
+          end if
+          call probe_locator(probe_z_locations(2))
+          if(probe_id.eq.iploc)then
+            call write_probe_bit(nprobe2)
+          end if
+          call probe_locator(probe_z_locations(3))
+          if(probe_id.eq.iploc)then
+            call write_probe_bit(nprobe3)
+          end if
+        end if
+      end if
+
+c     Aircraft Particle Reader
+c      if(istage.eq.1)then
+c        call APR_update
+c      end if
+
+
+
+
 c     Probe recorder JP 6-28-18 JP
 c      if(istage .eq. 1)then
 c        if(myid .eq. probe_loc)then
 c          call probe_locator(probe_z_locations(1))
-c          call write_probe(nprobe1)
+c          call write_probe_bit(nprobe1)
 c          call probe_locator(probe_z_locations(2))
-c          call write_probe(nprobe2)
+c         call write_probe(nprobe2)
 c          call probe_locator(probe_z_locations(3))
 c          call write_probe(nprobe3)
 c        endif
@@ -909,14 +1018,14 @@ c        call shifting_conditions
       end if  
       
 c     9/6/2018 JP moved probe recorder here
-      if(myid .eq. probe_loc) then
-        call probe_locator(probe_z_locations(1))
-        call write_probe(nprobe1)
-        call probe_locator(probe_z_locations(2))
-        call write_probe(nprobe2)
-        call probe_locator(probe_z_locations(3))
-        call write_probe(nprobe3)
-      end if
+c      if(myid .eq. probe_loc) then
+c        call probe_locator(probe_z_locations(1))
+c        call write_probe_bit(nprobe1)
+c        call probe_locator(probe_z_locations(2))
+c        call write_probe_bit(nprobe2)
+c        call probe_locator(probe_z_locations(3))
+c        call write_probe_bit(nprobe3)
+c      end if
 
       if(ispray == 1)then
 c       Calculate flux of SFS
@@ -959,6 +1068,9 @@ c
       close(nprobe2)
       close(nprobe3)
       close(nparts+myid)
+      do i=1,3
+        call end_probe(probe_id,i)
+      enddo
       te_mpi = mpi_wtime()
       if(myid==0)then
         write(*,*)'Total died: ',all_died
@@ -1209,6 +1321,7 @@ c ----------- start step for history files
 c
       it_his_nxt = it_his
       it_viz_nxt = it_viz
+      it_pro_nxt = it_probe
 c
 c ---------------- set min value of e
 c
@@ -1529,6 +1642,9 @@ c
       include 'mpif.h'
 c
       real sfk(1:nnz)
+
+
+
 c
 c ---- get isotropy factor and scale it to match at the matching
 c      height. uses boundary conditions from lower and upper. 
@@ -1599,6 +1715,7 @@ c     if(l_root) write(6,6001) iz,sfk(iz),smk,dfac(iz)
  6001 format(' iz = ',i3,' sfk = ',e15.6,
      +       ' smk = ',e15.6,' dfac = ',e15.6)
       enddo
+
 c
 c
 c ---- rescale ratio to give unity at match height
@@ -1609,6 +1726,7 @@ c
          dfacm = dfac(nmatch)
       endif
 c
+
       call mpi_bcast(dfacm,1,mpi_real8,
      +              myid_newvis,mpi_comm_world,ierr)
 c
@@ -1621,6 +1739,7 @@ c
 c --------- gather dfac on all processes for printing and use in tke_vis
 c           use reduce and divide by number of slab cpus
 c
+
       call mpi_sum_z(dfac,i_root,myid,nnz,1)
       fncpu_s = 1.0/float(ncpu_s)
       do iz=1,nnz
@@ -1755,6 +1874,7 @@ c     if(l_root) write(6,6000) dfac(1), xkavg, xkz1, vise, xksurf
      +       ' vise = ',e12.4,' xksurf = ',e12.4)
 c
       endif
+
 c
 c ---------- broadcast values to other processes
 c
@@ -5747,6 +5867,7 @@ c
       real :: RHT,RHB
       character(len=50) :: wname
 
+      debug_var = 1
       pi   = 4.0*atan(1.0)
       pi2  = 2.0*pi
       bfac = 1.0
@@ -5960,6 +6081,7 @@ c
 
 c     Virtual probe placement/locator 6/27/2018 JP
       probe_loc = -1
+      probe_id  = -1
       probe_z_locations=(/ 10, 300, 500 /)
       call probe_locator(probe_z_locations(1))
       call prob_proc(nprobe1,iploc)
@@ -5967,9 +6089,9 @@ c     Virtual probe placement/locator 6/27/2018 JP
       call prob_proc(nprobe2,iploc)
       call probe_locator(probe_z_locations(3))
       call prob_proc(nprobe3,iploc)
-c      if(myid==0)then
-c        write(*,*)'iploc is ',iploc
-c      end if
+      if(myid==0)then
+        write(*,*)'first flux plane locagtion z: ',0.5*zl/nnz
+      end if
 
       write(wname,"(A,I0.3,A)")'part',myid,'.out'
       open(nparts+myid,file=wname,form='unformatted',
@@ -7085,11 +7207,13 @@ c
       micut = (mod(it,itcut).eq.0)
       mviz  = (mod(it,i_viz).eq.0)
       mphist = (mod(it,iphist).eq.0)
+      
       if(ihst .lt. 0) then
          mhis = .false.
       else
          mhis = (mod(it,ihst).eq.0 .and. it .ge. it_his)
       endif
+c     mtrans - transpose for the particle quantities from z to x
        mtrans = (mod(it+1,ihst).eq.0)
 
       if (i_viz .lt. 0) then
@@ -7134,6 +7258,17 @@ c
       part_save = .false.
       if(it .ge. itstr .and. mphist) then   
          part_save = .true.
+      endif
+ 
+c
+c ------probe reading specifications (3 different locations)
+c
+
+      mprobe = (mod(it,it_probe).eq.0 .and. it .ge. itstr)
+
+      if((it .ge. itstr) .and. (it .ge. it_pro_nxt)) then
+c        call open_probe(it)
+        it_pro_nxt = it_pro_nxt + itape
       endif
 
       return
@@ -7415,7 +7550,7 @@ c ------- indices for indexing array stat(.,.)
 c         js = number of non-scalar stats
 c         ns = number of scalar stats
 c
-      parameter(js = 45, ns = 5, nstat = js + ns*nscl+1)
+      parameter(js = 61, ns = 5, nstat = js + ns*nscl+1)
       real stat(1:nnz,nstat)
 c
 c -------- stat(.,1) = u*u = ups
@@ -7552,6 +7687,27 @@ c         stat(iz,35) =stat(iz,35) +  partcount(ix,iy,iz)
          stat(iz,43) = stat(iz,43) + xyutpartflux(ix,iy,iz)
          stat(iz,44) = stat(iz,44) + xydtpartflux(ix,iy,iz)
          stat(iz,45) = stat(iz,45) + pcountrange(ix,iy,iz)
+         stat(iz,46) = stat(iz,46) + pp1flux(ix,iy,iz)
+         stat(iz,47) = stat(iz,47) + pp2flux(ix,iy,iz)
+         stat(iz,48) = stat(iz,48) + pp3flux(ix,iy,iz)
+         stat(iz,49) = stat(iz,49) + pp4flux(ix,iy,iz)
+         stat(iz,50) = stat(iz,50) + pp5flux(ix,iy,iz)
+         stat(iz,51) = stat(iz,51) + pp6flux(ix,iy,iz)
+         stat(iz,52) = stat(iz,52) + pp7flux(ix,iy,iz)
+         stat(iz,53) = stat(iz,53) + pp8flux(ix,iy,iz)
+         stat(iz,54) = stat(iz,54) + pp9flux(ix,iy,iz)
+         stat(iz,55) = stat(iz,55) + pp10flux(ix,iy,iz)
+         stat(iz,56) = stat(iz,56) + pp11flux(ix,iy,iz)
+         stat(iz,57) = stat(iz,57) + pp12flux(ix,iy,iz)
+         stat(iz,58) = stat(iz,58) + pp13flux(ix,iy,iz)
+         stat(iz,59) = stat(iz,59) + pp14flux(ix,iy,iz)
+         stat(iz,60) = stat(iz,60) + pp15flux(ix,iy,iz)
+         stat(iz,61) = stat(iz,61) + pp16flux(ix,iy,iz)
+
+
+
+
+
       enddo                                              !
       enddo
 c
@@ -7655,7 +7811,7 @@ c
       wpTpm(iz)      = stat(iz,26)/stat(iz,11)-(Tpmean(iz)*vp3mean(iz))
       Tpsrc(iz)      = stat(iz,27)*fnxy
       radmean(iz)    = stat(iz,28)/stat(iz,11) 
-      rad2mean(iz )  = stat(iz,29)/stat(iz,11)
+      rad2mean(iz)   = stat(iz,29)/stat(iz,11)
  
       mpmean(iz)     = stat(iz,30)/stat(iz,11) !make sure stat matchs with phimp
       mwmean(iz)     = stat(iz,31)/stat(iz,11) !make sure stat matchs with phimw
@@ -7674,6 +7830,29 @@ c
       TUpflux(iz)    = stat(iz,40)
       TDpflux(iz)    = stat(iz,41)
       probepflux(iz) = stat(iz,42)
+
+
+
+      pp1(iz)        = stat(iz,46)
+      pp2(iz)        = stat(iz,47)
+      pp3(iz)        = stat(iz,48)
+      pp4(iz)        = stat(iz,49)
+      pp5(iz)        = stat(iz,50)
+      pp6(iz)        = stat(iz,51)
+      pp7(iz)        = stat(iz,52)
+      pp8(iz)        = stat(iz,53)
+      pp9(iz)        = stat(iz,54)
+      pp10(iz)       = stat(iz,55)
+      pp11(iz)       = stat(iz,56)
+      pp12(iz)       = stat(iz,57)
+      pp13(iz)       = stat(iz,58)
+      pp14(iz)       = stat(iz,59)
+      pp15(iz)       = stat(iz,60)
+      pp16(iz)       = stat(iz,61)
+
+
+
+      
      
 c
 c ------------ get scalar resolved fluxes and variances
@@ -8541,6 +8720,39 @@ c      NOTE: allocate even if ispray == 0, since it's in xy_stats
       allocate(xyutpartflux_t(0:nnz+1,iys:iye,mxs:mxe))
       allocate(xydtpartflux(nnx,iys:iye,izs-1:ize+1))
       allocate(xydtpartflux_t(0:nnz+1,iys:iye,mxs:mxe))
+
+      allocate(pp1flux(nnx,iys:iye,izs-1:ize+1))
+      allocate(pp1flux_t(0:nnz+1,iys:iye,mxs:mxe))
+      allocate(pp2flux(nnx,iys:iye,izs-1:ize+1))
+      allocate(pp2flux_t(0:nnz+1,iys:iye,mxs:mxe))
+      allocate(pp3flux(nnx,iys:iye,izs-1:ize+1))
+      allocate(pp3flux_t(0:nnz+1,iys:iye,mxs:mxe))
+      allocate(pp4flux(nnx,iys:iye,izs-1:ize+1))
+      allocate(pp4flux_t(0:nnz+1,iys:iye,mxs:mxe))
+      allocate(pp5flux(nnx,iys:iye,izs-1:ize+1))
+      allocate(pp5flux_t(0:nnz+1,iys:iye,mxs:mxe))
+      allocate(pp6flux(nnx,iys:iye,izs-1:ize+1))
+      allocate(pp6flux_t(0:nnz+1,iys:iye,mxs:mxe))
+      allocate(pp7flux(nnx,iys:iye,izs-1:ize+1))
+      allocate(pp7flux_t(0:nnz+1,iys:iye,mxs:mxe))
+      allocate(pp8flux(nnx,iys:iye,izs-1:ize+1))
+      allocate(pp8flux_t(0:nnz+1,iys:iye,mxs:mxe))
+      allocate(pp9flux(nnx,iys:iye,izs-1:ize+1))
+      allocate(pp9flux_t(0:nnz+1,iys:iye,mxs:mxe))
+      allocate(pp10flux(nnx,iys:iye,izs-1:ize+1))
+      allocate(pp10flux_t(0:nnz+1,iys:iye,mxs:mxe))
+      allocate(pp11flux(nnx,iys:iye,izs-1:ize+1))
+      allocate(pp11flux_t(0:nnz+1,iys:iye,mxs:mxe))
+      allocate(pp12flux(nnx,iys:iye,izs-1:ize+1))
+      allocate(pp12flux_t(0:nnz+1,iys:iye,mxs:mxe))
+      allocate(pp13flux(nnx,iys:iye,izs-1:ize+1))
+      allocate(pp13flux_t(0:nnz+1,iys:iye,mxs:mxe))
+      allocate(pp14flux(nnx,iys:iye,izs-1:ize+1))
+      allocate(pp14flux_t(0:nnz+1,iys:iye,mxs:mxe))
+      allocate(pp15flux(nnx,iys:iye,izs-1:ize+1))
+      allocate(pp15flux_t(0:nnz+1,iys:iye,mxs:mxe))
+      allocate(pp16flux(nnx,iys:iye,izs-1:ize+1))
+      allocate(pp16flux_t(0:nnz+1,iys:iye,mxs:mxe))
 
 
       allocate(upwp_t(0:nnz+1,iys:iye,mxs:mxe))
@@ -9456,6 +9668,8 @@ c
       nprobe1 = 61 !SET SOMEWHERE ELSE
       nprobe2 = 62
       nprobe3 = 63
+      nprobe4 = 64
+      nprobe5 = 65
       nviz_z = 80
       nviz_y = 82
       nviz_x = 84
@@ -9492,6 +9706,10 @@ c
       call blnk(path_sav_p)
       call blnk(path_sav_c)
       call blnk(path_sav_part)
+
+c     JP Probe 10/29/2018
+c      call blnk(path_sav_probe)
+
       path_sav_v = path_sav(1:iblnk-1)//'/u'//
      +                 cgrid(1:4)//case(1:3)//num(1:3)
       path_sav_p = path_sav(1:iblnk-1)//'/p'//
@@ -9502,6 +9720,11 @@ c
      +                 cgrid(1:4)//case(1:3)//num(1:3)
       path_sav_hist = path_sav(1:iblnk-1)//'/hist'//
      +                 cgrid(1:4)//case(1:3)//num(1:3)
+
+c     JP Probe 10/29/2018
+c      path_sav_probe = path_sav(1:iblnk-1)//'/probe'//
+c     +                 cgrid(1:4)//case(1:3)//num(1:3)
+
 
 c
       return
@@ -10474,6 +10697,7 @@ c
       real :: g(3)
       real :: denom,dtl,sigma,ttest
       integer :: ix,iy,iz,ind
+      integer :: apr_count
       real :: Rep,diff(3),diffnorm,corrfac,myRep_avg
       real :: mydpmean, mydpmin, mydpmax
       real :: xtmp(3),vtmp(3),Tptmp,radiustmp
@@ -10515,20 +10739,23 @@ c
       mydpmean        = 0.0
       mydpmin         = 2.0*radius_max
       mydpmax         = 2.0*radius_min
+      apr_count_t     = 0
 
       !t_s = mpi_wtime()
 
-
+      
       !Loop over the linked list of particles:
       part => first_particle
-      do while (associated(part))     
+      do while (associated(part))
+
+      if(part%type_part .eq. 0)then !Aerosol or aircraft? 
         !First, interpolate to get the fluid velocity part%uf(1:3):
         call uf_interp
         if(it .LE. 1 )then 
           !part%xrhs(1:3) = part%vp(1:3)
           !part%xp(1:3) = xtmp(1:3) + dt*gama(istage)*part%xrhs(1:3)
           part%vp(1:3) = part%uf
-          part%Tp = part%Tf
+          part%Tp      = part%Tf
         endif
 
         !Now advance the particle and position via RK3 (same as velocity)
@@ -10537,12 +10764,12 @@ c
         call particle_eq_radius        ! partical equ. radius
  
         !Intermediate Values
-        diff(1:3) = part%vp - part%uf
-        diffnorm = sqrt(diff(1)**2 + diff(2)**2 + diff(3)**2)
-        Rep = 2.0*part%radius*diffnorm/nuf  
-        Volp = pi2*2.0/3.0*part%radius**3
-        rhop = (m_s+Volp*rhow)/Volp
-        taup_i = 18.0*rhoa*nuf/rhop/(2.0*part%radius)**2
+        diff(1:3)  = part%vp - part%uf
+        diffnorm   = sqrt(diff(1)**2 + diff(2)**2 + diff(3)**2)
+        Rep        = 2.0*part%radius*diffnorm/nuf  
+        Volp       = pi2*2.0/3.0*part%radius**3
+        rhop       = (m_s+Volp*rhow)/Volp
+        taup_i     = 18.0*rhoa*nuf/rhop/(2.0*part%radius)**2
 
 
 c       Correction here
@@ -10551,17 +10778,17 @@ c       write(*,*) 'Tau_p = ', taup_i
 c       end if  
 
         mydpmean = mydpmean + 2.0*part%radius
-        if (2.0*part%radius .lt. mydpmin) then
+        if(2.0*part%radius .lt. mydpmin)then
           mydpmin = 2.0*part%radius
         endif
 
-        if (2.0*part%radius .gt. mydpmax) then
+        if(2.0*part%radius .gt. mydpmax)then
           mydpmax = 2.0*part%radius
         endif 
 
 
-        myRep_avg = myRep_avg + Rep
-        corrfac = (1.0 + 0.15*Rep**(0.687))
+        myRep_avg  = myRep_avg + Rep
+        corrfac    = (1.0 + 0.15*Rep**(0.687))
         myphip_sum = myphip_sum + Volp*rhop
         myphiw_sum = myphiw_sum + Volp*rhow
         myphiv_sum = myphiv_sum + Volp
@@ -10571,12 +10798,22 @@ c       end if
         Nup = 2.0 + 0.6*Rep**(1.0/2.0)*Pra**(1.0/3.0)
         Shp = 2.0 + 0.6*Rep**(1.0/2.0)*Sc**(1.0/3.0)
 
+        !Aircraft measurements based on particle location
+        !exact position in the code is variable..
+        if(istage .eq. 3)then
+          if(sqrt((part%xp(1)-apr_loc(1))**2+(part%xp(2)-apr_loc(2))**2
+     +             +(part%xp(3)-apr_loc(3))**2).lt.apr_rad)then
+            apr_count = apr_count+1
+          end if
+        end if
+
+
 
         !Mass Transfer calculations
-        TfC = part%Tf-273.15
-        einf = 610.94*EXP(17.6257*TfC/(TfC+243.04))
-        TpC = part%Tp-273.15
-        Lv =(25.0 - 0.02274*26.0)*10.0**5
+        TfC   = part%Tf-273.15
+        einf  = 610.94*EXP(17.6257*TfC/(TfC+243.04))
+        TpC   = part%Tp-273.15
+        Lv    = (25.0 - 0.02274*26.0)*10.0**5
 
         Eff_C = 2.0*Mw*Gam/(Ru*rhow*part%radius*part%Tp)
         Eff_S = Ion*Os*m_s*Mw/Ms/(Volp*rhop-m_s)
@@ -10585,11 +10822,11 @@ c       end if
         part%qstar = Mw/Ru*estar/part%Tp/rhoa
 
   
-        xtmp(1:3) = part%xp(1:3) + dt*zetas(istage)*part%xrhs(1:3)
-        vtmp(1:3) = part%vp(1:3) + dt*zetas(istage)*part%vrhs(1:3) 
+        xtmp(1:3)  = part%xp(1:3) + dt*zetas(istage)*part%xrhs(1:3)
+        vtmp(1:3)  = part%vp(1:3) + dt*zetas(istage)*part%vrhs(1:3) 
         !Tptmp = part%Tp + dt*zetas(istage)*part%Tprhs_s
         !Tptmp = Tptmp + dt*zetas(istage)*part%Tprhs_L
-        radiustmp = part%radius + dt*zetas(istage)*part%radrhs
+        radiustmp  = part%radius + dt*zetas(istage)*part%radrhs
 
         part%xrhs(1:3) = part%vp(1:3)
         part%vrhs(1:3) = corrfac*taup_i*(part%uf(1:3)-part%vp(1:3))
@@ -10611,7 +10848,7 @@ c       end if
         end if
  
         if(istage==1)then
-          part%xp_i(1:3) = part%xp(1:3)  !RK3 flux reference
+          part%xp_i(1:3)  = part%xp(1:3)  !RK3 flux reference
           part%xp_ti(1:3) = part%xp(1:3) !Total flux reference
         end if
         
@@ -10624,14 +10861,14 @@ c       end if
           part%tot_dist = part%tot_dist + xtmp(ind)+
      +                    dt*gama(istage)*part%xrhs(ind)
         end do
-        part%vp(1:3) = vtmp(1:3) + dt*gama(istage)*part%vrhs(1:3)
-        !part%Tp = Tptmp + dt*gama(istage)*part%Tprhs_s
-        !part%Tp = part%Tp + dt*gama(istage)*part%Tprhs_L
-        part%radius = radiustmp + dt*gama(istage)*part%radrhs
+        part%vp(1:3)    = vtmp(1:3) + dt*gama(istage)*part%vrhs(1:3)
+        !part%Tp         = Tptmp + dt*gama(istage)*part%Tprhs_s
+        !part%Tp         = part%Tp + dt*gama(istage)*part%Tprhs_L
+        part%radius     = radiustmp + dt*gama(istage)*part%radrhs
 
         !--------Velocity of the particle not resolved
-        part%vp(1:3) = part%uf(1:3) - g(1:3)/taup_i
-c       part%vp(1:3) = part%uf(1:3)    ! make particles tracers
+        part%vp(1:3)    = part%uf(1:3) - g(1:3)/taup_i
+c       part%vp(1:3)     = part%uf(1:3)    ! make particles tracers
 
 
         ! part%Tp = part%Tf
@@ -10646,6 +10883,19 @@ c       -------------REMOVE FOR CENCENTRATION PROFILE CALCULATIONS
 c        if(part%radius .lt.part%r_eq)then
 c            part%radius = part%r_eq
 c        end if
+
+      else !Aircraft particles!
+        if(istage==3)then
+          call uf_interp
+          part%xp(1:3) = part%xp(1:3) + dt*part%vp(1:3)
+!          write(*,*)'current proc:',myid
+!          write(*,*)'xmin xmax: ',xmin,xmax
+          apr_loc(1:3) = part%xp(1:3)
+        end if
+
+
+
+      end if !For aircraft probes
         part => part%next
       end do
       !t_f1 = mpi_wtime()
@@ -10654,21 +10904,22 @@ c        end if
       !t_f = mpi_wtime()
       !if (myid==5) write(*,*) 'time loop:', t_f-t_s
 
+
+      call mpi_bcast(apr_loc,3,mpi_real8,
+     +               apr_id,mpi_comm_world,ierr)
+
+
 c     JP 5-15-2018 Initialize xp_i after RK3 for subgrid fluxes
       part => first_particle
       do while (associated(part))
-        part%xp_si(1:3) = part%xp(1:3)
-        part => part%next
+        if(part%type_part==0)then
+          part%xp_si(1:3) = part%xp(1:3)
+        end if
+          part => part%next
       end do
 
       !Enforce nonperiodic bcs (either elastic or destroying particles)
-      !t_s = mpi_wtime()
       call particle_bcs_nonperiodic
-
-
-      !call mpi_barrier(mpi_comm_world,ierr)
-      !t_f = mpi_wtime()
-      !if (myid==5) write(*,*) 'time bc_non:', t_f - t_s
 
       !Check to see if particles left processor
       !If they did, remove from one list and add to another
@@ -10680,22 +10931,11 @@ c     JP 5-15-2018 Initialize xp_i after RK3 for subgrid fluxes
 
       !Now enforce periodic bcs 
       !just updates x,y locations if over xl,yl or under 0
-      !t_s = mpi_wtime()
       call particle_bcs_periodic
-      !call mpi_barrier(mpi_comm_world,ierr)
-      !t_f = mpi_wtime()
-      !if (myid==5) write(*,*) 'time bc_per:', t_f - t_s
-
-
 
       !Now that particles are in their updated position, 
       !compute their contribution to the momentum coupling:
-      !t_s = mpi_wtime()
       call particle_coupling_update
-      !call mpi_barrier(mpi_comm_world,ierr)
-      !t_f = mpi_wtime()
-      !if (myid==5) write(*,*) 'time cpl: ', t_f - t_s
-
       call particle_rk3_Uflux
  
       !Finally, now that coupling and statistics arrays are filled, 
@@ -10884,7 +11124,9 @@ c     JP 5-15-2018 Initialize xp_i after RK3 for subgrid fluxes
       call mpi_allreduce(myphiv_sum,phiv,1,mpi_real8,mpi_sum,
      +                   mpi_comm_world,ierr)
 
-      
+      call mpi_allreduce(apr_count,apr_count_t,1,mpi_integer,
+     +                   mpi_sum,mpi_comm_world,ierr)
+ 
       phip = phip/xl/yl/zl/rhoa
       phiw = phiw/xl/yl/zl/rhoa
       phiv = phiv/xl/yl/zl
@@ -10895,14 +11137,15 @@ c     JP 5-15-2018 Initialize xp_i after RK3 for subgrid fluxes
 
       end subroutine particle_update_rk3
 
-      subroutine create_particle(xp,vp,Tp,qinfp,idx,rp_init,Pid,time) !Currently ignoring Tp and qinfp
+      subroutine create_particle(xp,vp,Tp,qinfp,idx,rp_init,Pid,time,
+     +                           type_p ) !Currently ignoring Tp and qinfp
       use particles
       use pars
       implicit none
 
       real :: xp(3),vp(3),Tp,qinfp  !Brian 7/29/14
       real :: rp_init,time
-      integer :: idx,Pid
+      integer :: idx,Pid,type_p
 
       if (.NOT. associated(first_particle)) then
         allocate(first_particle)
@@ -10918,27 +11161,28 @@ c     JP 5-15-2018 Initialize xp_i after RK3 for subgrid fluxes
         nullify(part%prev)
       end if
   
-      part%xp(1:3) = xp(1:3)
-      part%xp_i(1:3) = xp(1:3)
+      part%xp(1:3)    = xp(1:3)
+      part%xp_i(1:3)  = xp(1:3)
       part%xp_ti(1:3) = xp(1:3)
-      part%vp(1:3) = vp(1:3)
+      part%vp(1:3)    = vp(1:3)
       part%u_sub(1:3) = 0.0     !Indrajith 07/17 SFS vel
-      part%sigm_s = 0.0         !Indrajith 07/17 isotropic stress
-      part%Tp = Tp
-      part%radius = rp_init 
-      part%uf(1:3) = 0.0
-      part%qinf = qinfp  !Brian 7/14/14
-      part%xrhs(1:3) = 0.0
-      part%vrhs(1:3) = 0.0 
-      part%Tprhs_s = 0.0
-      part%Tprhs_L = 0.0
-      part%radrhs = 0.0
-      part%pidx = idx 
-      part%procidx = Pid
-      part%birth_time=time 
-      part%max_speed=0.0
-      part%tot_dist=0.0
-      part%z_highest=0.0
+      part%sigm_s     = 0.0     !Indrajith 07/17 isotropic stress
+      part%Tp         = Tp
+      part%radius     = rp_init 
+      part%uf(1:3)    = 0.0
+      part%qinf       = qinfp  !Brian 7/14/14
+      part%xrhs(1:3)  = 0.0
+      part%vrhs(1:3)  = 0.0 
+      part%Tprhs_s    = 0.0
+      part%Tprhs_L    = 0.0
+      part%radrhs     = 0.0
+      part%pidx       = idx 
+      part%procidx    = Pid
+      part%birth_time = time 
+      part%max_speed  = 0.0
+      part%tot_dist   = 0.0
+      part%z_highest  = 0.0
+      part%type_part  = type_p !whether aerosol, aircraft, or w/e
       
       end subroutine create_particle
 
@@ -11005,7 +11249,7 @@ c             figure out which particle size this range is under.
 !        reinject = reinject+1
           else
          !periodic vertical boundary condition
-            part%xp(3) = bot+zwpi
+            part%xp(3) = bot+zwpi/2 !Half of plane flux
             part%vp(3) = -part%vp(3)
             if(isfs==1)part%u_sub(3) = -part%u_sub(3)
             part => part%next
@@ -11014,7 +11258,6 @@ c             figure out which particle size this range is under.
           part => part%next
         end if
       end do
-
       end subroutine particle_bcs_nonperiodic
 
       subroutine particle_bcs_periodic
@@ -11045,9 +11288,8 @@ c             figure out which particle size this range is under.
       part => part%next
 
       end do
-
-
       end subroutine particle_bcs_periodic
+      
       subroutine destroy_particle
       use particles
       implicit none
@@ -11099,7 +11341,14 @@ c             figure out which particle size this range is under.
       type(particle), allocatable :: lbuf_r(:),blbuf_r(:)
       type(particle), allocatable :: bbuf_r(:),brbuf_r(:)
       type(particle), allocatable :: totalbuf(:)
-      
+      integer :: aircraft_moved1,apr_id_old
+        
+
+c     Currently only for one aircraft, if multiple aircraft this will
+c     not work!!!
+      aircraft_moved1 = 0
+      aircraft_moved2 = 0
+      apr_id_old = apr_id
       !Zero out the counters for how many particles to send each dir.
       pr_s=0;ptr_s=0;pt_s=0;ptl_s=0;pl_s=0;pbl_s=0;pb_s=0;pbr_s=0
       
@@ -11108,31 +11357,77 @@ c             figure out which particle size this range is under.
       part => first_particle
       do while (associated(part))     
 
+
+
+
          !First get numbers being sent to all sides:
          if (part%xp(2) .GT. ymax) then 
-            if (part%xp(1) .GT. xmax) then !top right
-               ptr_s = ptr_s + 1
-            elseif (part%xp(1) .LT. xmin) then !bottom right
-               pbr_s = pbr_s + 1
-            else  !right
-               pr_s = pr_s + 1
-            end if
+           if (part%xp(1) .GT. xmax) then !top right (1)
+             ptr_s = ptr_s + 1
+               if(part%type_part == 1)then
+                 aircraft_moved1=trproc 
+               end if
+           elseif (part%xp(1) .LT. xmin) then !bottom right (3)
+             pbr_s = pbr_s + 1
+               if(part%type_part == 1)then
+                 aircraft_moved1=brproc
+               end if
+           else  !right (2)
+             pr_s = pr_s + 1
+               if(part%type_part == 1)then
+                 aircraft_moved1=rproc
+               end if
+         end if
+
+c_________________________
+c            write(*,*)'ptr_s pbr_s pr_s'
+c_________________________
+
          elseif (part%xp(2) .LT. ymin) then
-            if (part%xp(1) .GT. xmax) then !top left
-               ptl_s = ptl_s + 1
-            else if (part%xp(1) .LT. xmin) then !bottom left
-               pbl_s = pbl_s + 1
-            else  !left
-               pl_s = pl_s + 1
-            end if
+           if (part%xp(1) .GT. xmax) then !top left (7)
+             ptl_s = ptl_s + 1
+               if(part%type_part == 1)then
+                 aircraft_moved1=tlproc
+               end if
+           else if (part%xp(1) .LT. xmin) then !bottom left (5)
+             pbl_s = pbl_s + 1
+               if(part%type_part == 1)then
+                 aircraft_moved1=blproc
+               end if
+           else  !left (6)
+             pl_s = pl_s + 1
+               if(part%type_part == 1)then
+                 aircraft_moved1=lproc
+               end if
+           end if
+
+c_________________________
+c            write(*,*)'ptl_s pbl_s pl_s'
+c_________________________
+
          elseif ( (part%xp(1) .GT. xmax) .AND.
      +           (part%xp(2) .LT. ymax) .AND.
-     +           (part%xp(2) .GT. ymin) ) then !top
+     +           (part%xp(2) .GT. ymin) ) then !top (8)
             pt_s = pt_s + 1
+               if(part%type_part == 1)then
+                 aircraft_moved1=tproc
+               end if
+c_________________________
+c            write(*,*)'pt_s'
+c_________________________
+
          elseif ( (part%xp(1) .LT. xmin) .AND.
      +           (part%xp(2) .LT. ymax) .AND.
-     +           (part%xp(2) .GT. ymin) ) then !bottom
+     +           (part%xp(2) .GT. ymin) ) then !bottom (4)
             pb_s = pb_s + 1
+               if(part%type_part == 1)then
+                 aircraft_moved1=bproc
+               end if
+
+c_________________________
+c            write(*,*)'pb_s'
+c_________________________
+
          end if
          
          part => part%next
@@ -11285,6 +11580,7 @@ c             figure out which particle size this range is under.
 
       !Send to top:
       if (pt_s .GT. 0) then
+!      write(*,*)'particle information sent from proc: ',myid
       call mpi_isend(tbuf_s,pt_s,particletype,tproc,13,
      +                mpi_comm_world,req(5),ierr)
       else
@@ -11293,6 +11589,7 @@ c             figure out which particle size this range is under.
       
       !Receive from bottom:
       if (pb_r .GT. 0) then
+!      write(*,*)'particle information received to proc: ',myid
       call mpi_irecv(bbuf_r,pb_r,particletype,bproc,13,
      +                mpi_comm_world,req(6),ierr)
       else
@@ -11399,6 +11696,7 @@ c             figure out which particle size this range is under.
       if (pt_r .GT. 0) then 
          totalbuf(csum+1:csum+pt_r) = tbuf_r(1:pt_r)
          csum = csum + pt_r
+!         write(*,*)'pt_r, myid: ',pt_r,myid
       end if
       if (ptl_r .GT. 0) then 
          totalbuf(csum+1:csum+ptl_r) = tlbuf_r(1:ptl_r)
@@ -11420,7 +11718,9 @@ c             figure out which particle size this range is under.
          totalbuf(csum+1:csum+pbr_r) = brbuf_r(1:pbr_r)
          csum = csum + pbr_r
       end if
-
+      if(csum .GT. 0)then
+!        write(*,*)'csum, myid: ',csum, myid
+      end if
       do idx = 1,psum
         if (.NOT. associated(first_particle)) then
            allocate(first_particle)
@@ -11442,6 +11742,20 @@ c             figure out which particle size this range is under.
       deallocate(rbuf_r,trbuf_r,tbuf_r,tlbuf_r)
       deallocate(lbuf_r,blbuf_r,bbuf_r,brbuf_r)
       deallocate(totalbuf)
+
+      call mpi_allreduce(aircraft_moved1,aircraft_moved2,1,mpi_integer,
+     +                   mpi_sum,mpi_comm_world,ierr)
+      if(myid==0)then
+        apr_id = apr_id_old
+        if(apr_loc(1) .GE. xmax .or. apr_loc(2) .GE. ymax)then !Outside
+c       the bounds of root
+          if(aircraft_moved2 .NE. 0)then
+            apr_id = aircraft_moved2
+          end if
+        end if
+      end if
+     
+      call mpi_bcast(apr_id,1,mpi_integer,0,mpi_comm_world,ierr)
 
       end subroutine particle_exchange
 
@@ -12564,7 +12878,7 @@ c        part%qinf = 0.0 ! Brian 7/14/14
       real :: maxx,maxy,maxz
       real :: rpmax,rpmin,rp_init !max radius, min radius, particle radiuis
       real :: clssize_log, log_ri
-      real :: pi
+      real :: pi,init_apr_loc1
       !Create the seed for the random number generator:
      
       call date_and_time(VALUES=values)
@@ -12573,6 +12887,7 @@ c        part%qinf = 0.0 ! Brian 7/14/14
       !Initialize ngidx, the particle global index
       ngidx = 1
       Npdx  = 0 !set all Npdx to 0 at first particle init
+      init_apr_loc1=0
       !Set the radius range Indrajith 01/03/2017
       rpmax = radius_max  ! maximum initial particle radius
       rpmin = radius_min  ! minimum initial particle radius
@@ -12585,39 +12900,12 @@ c      write(*,*)'num-part',tnumpart     !DEBUG ONLY
           numpart = numpart + MOD(tnumpart,numprocs)
         end if
       else
-c     Designate which processor has the point location (p_l)
-c     But first, determine where the point location is
-c        if(myid==0)then
-c          write(*,*)'myid',myid
-c          write(*,*)'ixs: ',ixs
-c          write(*,*)'ixe: ',ixe
-c          write(*,*)'iys: ',iys
-c          write(*,*)'iye: ',iye
-c          write(*,*)'ix_s: ',ix_s
-c          write(*,*)'ix_e: ',ix_e
-c          write(*,*)'iy_s: ',iy_s
-c          write(*,*)'iy_e: ',iy_e
-c          write(*,*)'mxs: ',mxs
-c          write(*,*)'mxe: ',mxe
-c        end if
-c        call mpi_barrier(mpi_comm_world,ierr)
-c
 c       Making p_l (point location) at the center of the grid
         p_l=xl/2.0
         ipointsource=0
         if(xmin .le. p_l .and. xmax .gt. p_l)then
           if(ymin .le. p_l .and. ymax .gt. p_l)then
-c           For the sake of sourcing at the surface only atm.. (maybe
-c           add complexity at a higher height later
             write(*,*)'proc_id',myid
-c            write(*,*)'ixs: ',ixs
-c            write(*,*)'ixe: ',ixe
-c            write(*,*)'iys: ',iys
-c            write(*,*)'iye: ',iye
-c            write(*,*)'ix_s: ',ix_s
-c            write(*,*)'ix_e: ',ix_e
-c            write(*,*)'iy_s: ',iy_s
-c            write(*,*)'iy_e: ',iy_e 
             ipointsource=1
           end if
         end if
@@ -12628,8 +12916,8 @@ c            write(*,*)'iy_e: ',iy_e
       
       
       ! For particle histogram calculations
-      if (ipolydisp == 1)then
-
+c____________________________________________
+      if(ipolydisp == 1)then
         allocate (hist_radclass(Nrp+2))
         allocate (del_radclass(Nrp+2))
         allocate (hist_req_init(Nrp+2))
@@ -12649,13 +12937,12 @@ c            write(*,*)'iy_e: ',iy_e
         bin_radclass(1) = rpmin/2.0 ! dummy class
 
         !Checking params are fine..
-        if (rpmin .gt. rpmax)then
+        if(rpmin .gt. rpmax)then
           write(*,*)'how is your rpmin greater than rpmax'
           stop
         end if
-      !----------------------------
         clssize_log = (log10(rpmax)-log10(rpmin))/Nrp
-        do ind =2 ,Nrp + 2
+        do ind =2,Nrp + 2
           log_ri = log10(rpmin) +(ind-2)*clssize_log
           class_maxr(ind) = 10**(log_ri+clssize_log)
           class_minr(ind) = 10**(log_ri)
@@ -12669,14 +12956,37 @@ c            write(*,*)'iy_e: ',iy_e
         end do
         class_maxr(1)= class_minr(2)
       end if
-
+c____________________________________________
 
       !Now initialize all particles with a random (or specified)  location on that processor
       maxx=0.0
       maxy=0.0
       maxz=0.0
       rp_init = 0.0 
-c      Npdx = 0
+
+!     Aircraft particle creation
+      if(iaircraft .eq. 1)then
+!       Restrict within the bounds of the processor
+        if(   xmin<=apr_init(1) .and. apr_init(1)<=xmax
+     +  .and. ymin<=apr_init(2) .and. apr_init(2)<ymax)then
+          write(*,*)'myid and zmin zmax',myid,zmin,zmax
+          write(*,*)'myid and xmin xmax',myid,xmin,xmax
+          write(*,*)'myid and ymin ymax',myid,ymin,ymax
+          Npdx = Npdx + 1
+          init_apr_id = myid
+          call create_particle(apr_init,apr_v,
+     +         0,0,Npdx,radius_max,myid,time,1)
+          write(*,*)'myid for aircraft: ',myid
+          write(*,*)'aircraft velocity: ',apr_v(1),apr_v(2),apr_v(3)
+          write(*,*)'Npdx: ',Npdx
+        end if
+
+        call mpi_allreduce(init_apr_id,apr_id,1,mpi_integer8,
+     +                     mpi_sum,mpi_comm_world,ierr)
+        call mpi_bcast(apr_id,1,mpi_integer8,0,mpi_comm_world,ierr)
+      end if
+
+
       !Whether a point source
       if(iPprod==0)then
         do idx=1,numpart
@@ -12699,7 +13009,7 @@ c           random distribution within the size bins
           m_s         = Sal/1000.0*3.0/4.0*pi*radius_mass**3.0*rhow
           Npdx        = Npdx + 1        
           call create_particle((/xv,yv,zv/),vp_init,
-     +         Tp_init,qf_init,Npdx,rp_init,myid,time)
+     +         Tp_init,qf_init,Npdx,rp_init,myid,time,0.0)
         end do
       else
         if(ipointsource==1)then
@@ -12725,7 +13035,7 @@ c             random distribution within the size bins
             m_s         = Sal/1000.0*3.0/4.0*pi*radius_mass**3.0*rhow
             Npdx        = Npdx + 1
             call create_particle((/xv,yv,zv/),vp_init,
-     +           Tp_init,qf_init,Npdx,rp_init,myid,time)
+     +           Tp_init,qf_init,Npdx,rp_init,myid,time,0.0)
 
           end do
         end if
@@ -12737,7 +13047,7 @@ c             random distribution within the size bins
       partHsrc_t = 0.0
       partTEsrc = 0.0
       partTEsrc_t = 0.0
-      
+
       end subroutine particle_init
 
 
@@ -12759,7 +13069,7 @@ c             random distribution within the size bins
       call assign_nbrs
 
       !Also assign the x,y,z max and mins to track particles leaving
-      call set_bounds
+      call set_part_bounds
 
 c      pi   = 4.0*atan(1.0)  
     
@@ -12792,14 +13102,15 @@ c       Indrajith 03/13/2017
       !Set up MPI datatypes for sending particle information
       !MUST UPDATE IF THINGS ARE ADDED/REMOVED FROM PARTICLE STRUCTURE
 
-       num_reals = 9*3+17
-      blcts(1:3) = (/2,num_reals,2/)
+       num_reals = 9*3+18
+      blcts(1:3) = (/4,num_reals,2/)
       displs(1) = 0
       types(1) = mpi_integer
       call mpi_type_get_extent(mpi_integer,lb,extent,ierr)
       
-      !Displace 2*size of mpi_integer (2 integer: pidx,procidx)
-      displs(2) = extent*2
+      !Displace 4*size of mpi_integer (4 integer:
+      !pidx,procidx,type_part,dummy)
+      displs(2) = extent*4
       types(2) = mpi_real8
       call mpi_type_get_extent(mpi_real8,lb,extent,ierr)
       !Displace num_reals*size of mpi_real8
@@ -12966,23 +13277,45 @@ c       Indrajith 03/13/2017
 
       return
       end subroutine assign_nbrs
-      subroutine set_bounds  
-        use pars
-        use particles
-        use con_data
-        use con_stats
-        implicit none
-        include 'mpif.h'
+      subroutine set_part_bounds  
+      use pars
+      use particles
+      use con_data
+      use con_stats
+      implicit none
+      include 'mpif.h'
+      integer :: ierr
 
       !Each processor must figure out at what ymin,ymax,zmin,zmax a particle leaves
-      ymin = dy*(iys-1)
-      ymax = dy*(iye)
-      zmin = z(izs-1)
-      zmax = z(ize)  
-      xmin = dx*(mxs-1)
-      xmax = dx*(mxe)
+      ymin        = dy*(iys-1)
+      ymax        = dy*(iye)
+!     Apparently this is [0 zl] for vertical extent..
+      zmin        = z(izs-1)
+      zmax        = z(ize)  
+      xmin        = dx*(mxs-1)
+      xmax        = dx*(mxe)
+      if(myid==0)then
+        root_xmin = xmin
+        root_xmax = xmax
+        root_ymin = ymin
+        root_ymax = ymax
+      end if
+      call mpi_bcast(root_xmin,1,mpi_real8,
+     +               0,mpi_comm_world,ierr)
+      call mpi_bcast(root_xmax,1,mpi_real8,
+     +               0,mpi_comm_world,ierr)
+      call mpi_bcast(root_ymin,1,mpi_real8,
+     +               0,mpi_comm_world,ierr)
+      call mpi_bcast(root_ymax,1,mpi_real8,
+     +               0,mpi_comm_world,ierr)
+      if(myid==0)then
+        write(*,*)'base xmin, xmax, ymin, ymax: '
+        write(*,*) root_xmin, ' ',root_xmax, ' ',root_ymin,
+     +             ' ',root_ymax
+      end if
 
-      end subroutine set_bounds
+
+      end subroutine set_part_bounds
       subroutine save_particles
       use particles
       use pars
@@ -13275,7 +13608,6 @@ c     Reset all quantities for new readings
 
       part => first_particle
       do while (associated(part))
-
       !First, as done in uf_interp, must find the "leftmost" node
       !of volume where particle belongs:
       !(must repeat since now particle locations have been updated)
@@ -13341,6 +13673,8 @@ c      call particle_stats(ipt,jpt,kwpt,iptc,jptc,kwptc)
       iy = jpt+j
       iz = kpt+k
 
+      !This error is saying that a particle is outside the bounds
+      !of a CPU
       if (ix .gt. mxe+1) write(*,*) 'proc',myid,'has ix = ',ix,mxe+1
       if (ix .lt. mxs) write(*,*) 'proc',myid,'has ix = ',ix,mxs
       if (iy .gt. iye+1) write(*,*) 'proc',myid,'has iy = ',iy,iye+1
@@ -13503,7 +13837,8 @@ c      call particle_stats(ipt,jpt,kwpt,iptc,jptc,kwptc)
       character(48) :: label
       character(180) :: params_dir
       namelist /step_params/ iti,itmax,imean,ihst,itape,iphist,
-     +                       itstr,it_his,it_viz,i_viz,itn,dt_con
+     +                       itstr,it_his,it_viz,i_viz,itn,dt_con,
+     +                       it_probe
 
       namelist /grid_params/ ncpu_s, Uo, Ttop, Tbot,
      +         qstar, tsfcc,
@@ -13511,14 +13846,16 @@ c      call particle_stats(ipt,jpt,kwpt,iptc,jptc,kwptc)
 
       namelist /path_names/ path_seed,path_part,path_res,
      +         path_sav,path_his,path_viz_xy,path_viz_xz,
-     +         path_viz_yz,path_stuf,path_ran,part_hist
+     +         path_viz_yz,path_stuf,path_ran,part_hist,
+     +         path_probe
 
       namelist /flags/ ismlt,ifree,isfc,iradup,
      +         iupwnd,ibuoy,ifilt,itcut,isubs,ibrcl,iocean,
      +         method,idebug,iz_space,ivis0,ifix_dt,new_vis,iDNS,
      +         ispray,icouple,iTcouple,iHcouple,ievap,istbl,isfs,
      +         iUprod,ipolydisp,ishift,ifields,iPprod,
-     +         iSSGF, inonperiodic
+     +         iSSGF, inonperiodic,
+     +         iaircraft !Aircraft probe
 
 
       namelist /constants/ rhoa, nuf, Cpa, Pra, Sc,
@@ -13530,8 +13867,8 @@ c      call particle_stats(ipt,jpt,kwpt,iptc,jptc,kwptc)
      +         dtdzf,zo,ugcont,vgcont,
      +         cond_shift_init, ugcont_new,
      +         vgcont_new, qstar_new,
-     +         vp_init,Tp_init,qf_init
-
+     +         vp_init,Tp_init,qf_init,
+     +         apr_v,apr_rad,apr_init
 
       !params.in contains namelists to read
       !open(12, file="./params.in", status="old")
@@ -14281,30 +14618,33 @@ c     -----------------
       !Loop over the linked list of particles:
       part => first_particle
       do while (associated(part))
+        if(part%type_part == 0)then
+          ! interpolate sigm_s and its derivative at particle location
+          call sigm_interp(sigm_sdxp,sigm_sdyp,sigm_sdzp,vis_sp,iz_part)
 
-        ! interpolate sigm_s and its derivative at particle location
-        call sigm_interp(sigm_sdxp,sigm_sdyp,sigm_sdzp,vis_sp,iz_part)
+          !Need vertical derivative of average vis_s:
+          !Crude approximation: 0th order interpolation -- simply take
+          !d(alphaC)/dz of the w-points surrounding the particle location
+          if (part%xp(3) .lt. zw1) then
+            !Beneath 1st zw point, use MO to approximate dadz:
+            zeta = part%xp(3)/amonin
+            call fzol(zeta,phim,phis,psim,psis)
+            dadz = utau*vk/phis
+          else
+            dadz = (alphaC(iz_part+1,3)-alphaC(iz_part,3))*dzw_i(iz)
+          end if
 
-        !Need vertical derivative of average vis_s:
-        !Crude approximation: 0th order interpolation -- simply take
-        !d(alphaC)/dz of the w-points surrounding the particle location
-        if (part%xp(3) .lt. zw1) then
-           !Beneath 1st zw point, use MO to approximate dadz:
-           zeta = part%xp(3)/amonin
-           call fzol(zeta,phim,phis,psim,psis)
-           dadz = utau*vk/phis
-        else
-           dadz = (alphaC(iz_part+1,3)-alphaC(iz_part,3))*dzw_i(iz)
-        end if
-
-        !Now simply solve Langevin equation:
-        part%xp(1) = part%xp(1) + gasdev(iseed)*sqrt(2.0*abs(vis_sp)*dt)
-        part%xp(2) = part%xp(2) + gasdev(iseed)*sqrt(2.0*abs(vis_sp)*dt)
-        part%xp(3) = part%xp(3) + gasdev(iseed)*sqrt(2.0*abs(vis_sp)*dt)
+          !Now simply solve Langevin equation:
+          part%xp(1) = part%xp(1)+gasdev(iseed)*sqrt(2.0*abs(vis_sp)*dt)
+          part%xp(2) = part%xp(2)+gasdev(iseed)*sqrt(2.0*abs(vis_sp)*dt)
+          part%xp(3) = part%xp(3)+gasdev(iseed)*sqrt(2.0*abs(vis_sp)*dt)
      +             + dadz*dt
 
 
-        part => part%next
+          part => part%next
+        else
+          part => part%next
+        end if
       end do
 
       call particle_bcs_nonperiodic
@@ -14343,7 +14683,7 @@ c      end if
 c       Simply tracking how many died
       call mpi_allreduce(died,tot_died,1,mpi_integer,mpi_sum,
      +     mpi_comm_world,ierr)
-      if(myid == 0)then
+      if(myid == 0 .and. inonperiodic == 1)then
         write(*,*) 'total died at this timestep', tot_died
         all_died=all_died+tot_died
       end if  
@@ -14394,7 +14734,7 @@ c     Homogeneous Particle creation?
               yv     = xpi(idx+numpart_dt+tot_reinject)
 
               !Decide which heights particles need to be injected 
-              zv     = ran2(iseed)*(zwpi)
+              zv     = zwpi
 c              zv     = ran2(iseed)*(zwpi-zw1)+ zw1
               if(ipolydisp .eq. 1)then
                 call create_random_partsize(rp_init)
@@ -14416,7 +14756,7 @@ c              zv     = ran2(iseed)*(zwpi-zw1)+ zw1
               vp_init(3) = ran2(iseed)
 
               call create_particle((/xv,yv,zv/),vp_init,
-     +        Tp_init,qf_init,Npdx,rp_init,myid,time)
+     +        Tp_init,qf_init,Npdx,rp_init,myid,time,0.0)
               part => first_particle
               call particle_eq_radius
 
@@ -14466,7 +14806,7 @@ c             currently just finding its position
               xv     = xpi(idx)
               yv     = xpi(idx+numpart_dt+tot_reinject)
               !Decide at which heights particles should be injected
-              zv     = ran2(iseed)*(zw1)
+              zv     = zwpi
 
               if(ipolydisp .eq. 1)then
                 call create_random_partsize(rp_init)
@@ -14488,7 +14828,7 @@ c             currently just finding its position
               vp_init(3) = ran2(iseed)
 
               call create_particle((/xv,yv,zv/),vp_init,
-     +          Tp_init,qf_init,Npdx,rp_init,myid,time)
+     +          Tp_init,qf_init,Npdx,rp_init,myid,time,0.0)
 
               part => first_particle
 
@@ -14521,6 +14861,9 @@ c        Rep_avg = Rep_avg/tnumpart
       part => first_particle
       do while (associated(part))
         numpart = numpart + 1
+        if(part%type_part==1)then
+          numpart = numpart - 1 !Aircraft particle
+        end if
         part => part%next
       end do
 
@@ -14531,7 +14874,8 @@ c        Rep_avg = Rep_avg/tnumpart
       end subroutine particle_generation
 
 
-
+!     3/18/2019, Now finally break it into 
+!     advective and gravitational components.
       subroutine particle_rk3_Uflux
       use particles
       use pars
@@ -14544,7 +14888,8 @@ c        Rep_avg = Rep_avg/tnumpart
       real :: zu_1,zu_nnz
       integer :: iz_beg,iz_end
       part => first_particle
-      do while (associated(part)) 
+      do while (associated(part))
+      if(part%type_part==0)then 
         ipt = floor(part%xp(1)/dx) + 1
         jpt = floor(part%xp(2)/dy) + 1
  
@@ -14586,6 +14931,9 @@ c        Rep_avg = Rep_avg/tnumpart
           end if
         end if
         part => part%next
+      else
+        part => part%next
+      end if
       end do
       end subroutine particle_rk3_Uflux 
 
@@ -14606,6 +14954,7 @@ c        Rep_avg = Rep_avg/tnumpart
       Spartflux_t = 0.0
       part => first_particle
       do while (associated(part))
+      if(part%type_part==0)then  
         ipt = floor(part%xp(1)/dx) + 1
         jpt = floor(part%xp(2)/dy) + 1
  
@@ -14629,7 +14978,7 @@ c        Rep_avg = Rep_avg/tnumpart
                   write(*,*) 'up iz>nnz: ',iz,part%xp(3),part%xp_si(3)
                 end if
                 Spartflux_t(iz,jpt,ipt) = Spartflux_t(iz,jpt,ipt) + 1.0
-c              write(*,*)'I got here (+1 vertical!)'
+c              write(*,*)' (+1 vertical!)'
               end do
             elseif(part%xp_si(3) .gt. part%xp(3))then !Down
               iz_beg = floor((part%xp(3)  -zu_1)/dz_U) + 2
@@ -14642,12 +14991,15 @@ c              write(*,*)'I got here (+1 vertical!)'
                   write(*,*) 'dn iz>nnz: ',iz,part%xp(3),part%xp_si(3)
                 end if
                 Spartflux_t(iz,jpt,ipt) = Spartflux_t(iz,jpt,ipt) - 1.0
-c               write(*,*)'I got here (-1 vertical!)'
+c               write(*,*)' (-1 vertical!)'
               end do
             end if
           end if
         end if
         part => part%next
+      else
+        part => part%next
+      end if
       end do
 
       call ztox_trans(Spartflux_t(0:nnz+1,iys:iye,mxs:mxe),
@@ -14664,6 +15016,10 @@ c     the former mentioned total flux)
 
 c     Now contains a subsection "probe" that reads
 c     up to some dx dy
+
+c     Now contains 16 square "probes" that reads
+c     some dx dy, all of these should add to be
+c     the TOTAL flux - 12/1/2018 JP
       subroutine total_flux 
       use particles
       use pars
@@ -14673,6 +15029,7 @@ c     up to some dx dy
       include 'mpif.h'
       integer :: i,j,k,ipt,jpt,kpt,kwpt,kUpt
       integer :: ix,iy,iz
+      integer :: plane_d, plane_u
       real :: zu_1,zu_nnz
       integer :: iz_beg,iz_end
 
@@ -14682,9 +15039,29 @@ c     up to some dx dy
       xytpartflux_t = 0.0
       xyutpartflux_t= 0.0
       xydtpartflux_t= 0.0
+
+      pp1flux_t     = 0.0
+      pp2flux_t     = 0.0
+      pp3flux_t     = 0.0
+      pp4flux_t     = 0.0
+      pp5flux_t     = 0.0
+      pp6flux_t     = 0.0
+      pp7flux_t     = 0.0
+      pp8flux_t     = 0.0
+      pp9flux_t     = 0.0
+      pp10flux_t    = 0.0
+      pp11flux_t    = 0.0
+      pp12flux_t    = 0.0
+      pp13flux_t    = 0.0
+      pp14flux_t    = 0.0
+      pp15flux_t    = 0.0
+      pp16flux_t    = 0.0
+
+
 !     for a discretized dx and dy of a *probe*'
       part => first_particle
       do while (associated(part))
+      if(part%type_part==0)then
         ipt = floor(part%xp(1)/dx) + 1
         jpt = floor(part%xp(2)/dy) + 1
         !For particles within the domain
@@ -14706,6 +15083,14 @@ c     up to some dx dy
                 end if
                 tpartflux_t (iz,jpt,ipt) = tpartflux_t (iz,jpt,ipt) + 1.0
                 tupartflux_t(iz,jpt,ipt) = tupartflux_t(iz,jpt,ipt) + 1.0
+
+c               multiple up surface checks
+                do plane_u=1,16
+                  call pp_flux(plane_u,1,iz,jpt,ipt)
+                end do
+  
+
+
 c               Probe at a set surface dx dy
                 if(part%xp(1) .ge. p_l .and. part%xp(1) .le. 
      +            p_l+4.0*dx)then
@@ -14732,6 +15117,12 @@ c               Probe at a set surface dx dy
                 end if
                 tpartflux_t (iz,jpt,ipt) = tpartflux_t (iz,jpt,ipt) - 1.0
                 tdpartflux_t(iz,jpt,ipt) = tdpartflux_t(iz,jpt,ipt) + 1.0
+
+c               multiple down surface checks
+                do plane_d=1,16
+                  call pp_flux(plane_d,2,iz,jpt,ipt)
+                end do
+
 c               Probe at a set surface dx dy
                 if(part%xp(1) .ge. p_l .and. part%xp(1) .le. 
      +            p_l+4.0*dx)then
@@ -14750,6 +15141,9 @@ c               Probe at a set surface dx dy
           end if
         end if
         part => part%next
+      else
+        part => part%next
+      end if
       end do
 
 !       This is where I write down probe data to get a
@@ -14793,6 +15187,328 @@ c        end if
      +               mxs,mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
      +               ncpu_s,numprocs)
 
+      call ztox_trans(pp1flux_t(0:nnz+1,iys:iye,mxs:mxe),
+     +               pp1flux(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,
+     +               mxs,mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
+     +               ncpu_s,numprocs)
+
+      call ztox_trans(pp2flux_t(0:nnz+1,iys:iye,mxs:mxe),
+     +               pp2flux(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,
+     +               mxs,mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
+     +               ncpu_s,numprocs)
+
+      call ztox_trans(pp3flux_t(0:nnz+1,iys:iye,mxs:mxe),
+     +               pp3flux(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,
+     +               mxs,mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
+     +               ncpu_s,numprocs)
+
+      call ztox_trans(pp4flux_t(0:nnz+1,iys:iye,mxs:mxe),
+     +               pp4flux(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,
+     +               mxs,mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
+     +               ncpu_s,numprocs)
+
+      call ztox_trans(pp5flux_t(0:nnz+1,iys:iye,mxs:mxe),
+     +               pp5flux(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,
+     +               mxs,mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
+     +               ncpu_s,numprocs)
+
+      call ztox_trans(pp6flux_t(0:nnz+1,iys:iye,mxs:mxe),
+     +               pp6flux(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,
+     +               mxs,mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
+     +               ncpu_s,numprocs)
+
+      call ztox_trans(pp7flux_t(0:nnz+1,iys:iye,mxs:mxe),
+     +               pp7flux(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,
+     +               mxs,mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
+     +               ncpu_s,numprocs)
+
+      call ztox_trans(pp8flux_t(0:nnz+1,iys:iye,mxs:mxe),
+     +               pp8flux(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,
+     +               mxs,mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
+     +               ncpu_s,numprocs)
+
+      call ztox_trans(pp9flux_t(0:nnz+1,iys:iye,mxs:mxe),
+     +               pp9flux(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,
+     +               mxs,mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
+     +               ncpu_s,numprocs)
+
+      call ztox_trans(pp10flux_t(0:nnz+1,iys:iye,mxs:mxe),
+     +               pp10flux(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,
+     +               mxs,mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
+     +               ncpu_s,numprocs)
+
+      call ztox_trans(pp11flux_t(0:nnz+1,iys:iye,mxs:mxe),
+     +               pp11flux(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,
+     +               mxs,mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
+     +               ncpu_s,numprocs)
+
+      call ztox_trans(pp12flux_t(0:nnz+1,iys:iye,mxs:mxe),
+     +               pp12flux(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,
+     +               mxs,mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
+     +               ncpu_s,numprocs)
+
+      call ztox_trans(pp13flux_t(0:nnz+1,iys:iye,mxs:mxe),
+     +               pp13flux(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,
+     +               mxs,mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
+     +               ncpu_s,numprocs)
+
+      call ztox_trans(pp14flux_t(0:nnz+1,iys:iye,mxs:mxe),
+     +               pp14flux(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,
+     +               mxs,mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
+     +               ncpu_s,numprocs)
+
+      call ztox_trans(pp15flux_t(0:nnz+1,iys:iye,mxs:mxe),
+     +               pp15flux(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,
+     +               mxs,mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
+     +               ncpu_s,numprocs)
+
+      call ztox_trans(pp16flux_t(0:nnz+1,iys:iye,mxs:mxe),
+     +               pp16flux(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,
+     +               mxs,mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
+     +               ncpu_s,numprocs)
+
+!      call ztox_trans(pp17flux_t(0:nnz+1,iys:iye,mxs:mxe),
+!     +               pp17flux(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,
+!     +               mxs,mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
+!     +               ncpu_s,numprocs)
+
+!      call ztox_trans(pp18flux_t(0:nnz+1,iys:iye,mxs:mxe),
+!     +               pp18flux(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,
+!     +               mxs,mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
+!     +               ncpu_s,numprocs)
+
+!      call ztox_trans(pp19flux_t(0:nnz+1,iys:iye,mxs:mxe),
+!     +               pp19flux(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,
+!     +               mxs,mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
+!     +               ncpu_s,numprocs)
+
+!      call ztox_trans(pp20flux_t(0:nnz+1,iys:iye,mxs:mxe),
+!     +               pp20flux(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,
+!     +               mxs,mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
+!     +               ncpu_s,numprocs)
+
+!      call ztox_trans(pp21flux_t(0:nnz+1,iys:iye,mxs:mxe),
+!     +               pp21flux(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,
+!     +               mxs,mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
+!     +               ncpu_s,numprocs)
+
+!      call ztox_trans(pp22flux_t(0:nnz+1,iys:iye,mxs:mxe),
+!     +               pp22flux(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,
+!     +               mxs,mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
+!     +               ncpu_s,numprocs)
+
+!      call ztox_trans(pp23flux_t(0:nnz+1,iys:iye,mxs:mxe),
+!     +               pp23flux(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,
+!     +               mxs,mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
+!     +               ncpu_s,numprocs)
+
+!      call ztox_trans(pp24flux_t(0:nnz+1,iys:iye,mxs:mxe),
+!     +               pp24flux(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,
+!     +               mxs,mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
+!     +               ncpu_s,numprocs)
+
+!      call ztox_trans(pp25flux_t(0:nnz+1,iys:iye,mxs:mxe),
+!     +               pp25flux(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,
+!     +               mxs,mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
+!     +               ncpu_s,numprocs)
+
+!      call ztox_trans(pp26flux_t(0:nnz+1,iys:iye,mxs:mxe),
+!     +               pp26flux(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,
+!     +               mxs,mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
+!     +               ncpu_s,numprocs)
+
+!      call ztox_trans(pp27flux_t(0:nnz+1,iys:iye,mxs:mxe),
+!     +               pp27flux(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,
+!     +               mxs,mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
+!     +               ncpu_s,numprocs)
+
+!      call ztox_trans(pp28flux_t(0:nnz+1,iys:iye,mxs:mxe),
+!     +               pp28flux(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,
+!     +               mxs,mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
+!     +               ncpu_s,numprocs)
+
+!      call ztox_trans(pp29flux_t(0:nnz+1,iys:iye,mxs:mxe),
+!     +               pp29flux(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,
+!     +               mxs,mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
+!     +               ncpu_s,numprocs)
+
+!      call ztox_trans(pp30flux_t(0:nnz+1,iys:iye,mxs:mxe),
+!     +               pp30flux(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,
+!     +               mxs,mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
+!     +               ncpu_s,numprocs)
+
+!      call ztox_trans(pp31flux_t(0:nnz+1,iys:iye,mxs:mxe),
+!     +               pp31flux(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,
+!     +               mxs,mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
+!     +               ncpu_s,numprocs)
+
+!      call ztox_trans(pp32flux_t(0:nnz+1,iys:iye,mxs:mxe),
+!     +               pp32flux(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,
+!     +               mxs,mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
+!     +               ncpu_s,numprocs)
+
+!      call ztox_trans(pp33flux_t(0:nnz+1,iys:iye,mxs:mxe),
+!     +               pp33flux(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,
+!     +               mxs,mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
+!     +               ncpu_s,numprocs)
+
+!      call ztox_trans(pp34flux_t(0:nnz+1,iys:iye,mxs:mxe),
+!     +               pp34flux(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,
+!     +               mxs,mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
+!     +               ncpu_s,numprocs)
+
+!      call ztox_trans(pp35flux_t(0:nnz+1,iys:iye,mxs:mxe),
+!     +               pp35flux(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,
+!     +               mxs,mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
+!     +               ncpu_s,numprocs)
+
+!      call ztox_trans(pp36flux_t(0:nnz+1,iys:iye,mxs:mxe),
+!     +               pp36flux(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,
+!     +               mxs,mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
+!     +               ncpu_s,numprocs)
+
+!      call ztox_trans(pp37flux_t(0:nnz+1,iys:iye,mxs:mxe),
+!     +               pp37flux(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,
+!     +               mxs,mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
+!     +               ncpu_s,numprocs)
+
+!      call ztox_trans(pp38flux_t(0:nnz+1,iys:iye,mxs:mxe),
+!     +               pp38flux(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,
+!     +               mxs,mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
+!     +               ncpu_s,numprocs)
+
+!      call ztox_trans(pp39flux_t(0:nnz+1,iys:iye,mxs:mxe),
+!     +               pp39flux(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,
+!     +               mxs,mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
+!     +               ncpu_s,numprocs)
+
+!      call ztox_trans(pp40flux_t(0:nnz+1,iys:iye,mxs:mxe),
+!     +               pp40flux(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,
+!     +               mxs,mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
+!     +               ncpu_s,numprocs)
+
+!      call ztox_trans(pp41flux_t(0:nnz+1,iys:iye,mxs:mxe),
+!     +               pp41flux(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,
+!     +               mxs,mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
+!     +               ncpu_s,numprocs)
+
+!      call ztox_trans(pp42flux_t(0:nnz+1,iys:iye,mxs:mxe),
+!     +               pp42flux(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,
+!     +               mxs,mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
+!     +               ncpu_s,numprocs)
+
+!      call ztox_trans(pp43flux_t(0:nnz+1,iys:iye,mxs:mxe),
+!     +               pp43flux(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,
+!     +               mxs,mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
+!     +               ncpu_s,numprocs)
+
+!      call ztox_trans(pp44flux_t(0:nnz+1,iys:iye,mxs:mxe),
+!     +               pp44flux(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,
+!     +               mxs,mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
+!     +               ncpu_s,numprocs)
+
+!      call ztox_trans(pp45flux_t(0:nnz+1,iys:iye,mxs:mxe),
+!     +               pp45flux(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,
+!     +               mxs,mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
+!     +               ncpu_s,numprocs)
+
+!      call ztox_trans(pp46flux_t(0:nnz+1,iys:iye,mxs:mxe),
+!     +               pp46flux(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,
+!     +               mxs,mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
+!     +               ncpu_s,numprocs)
+
+!      call ztox_trans(pp47flux_t(0:nnz+1,iys:iye,mxs:mxe),
+!     +               pp47flux(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,
+!     +               mxs,mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
+!     +               ncpu_s,numprocs)
+
+!      call ztox_trans(pp48flux_t(0:nnz+1,iys:iye,mxs:mxe),
+!     +               pp48flux(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,
+!     +               mxs,mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
+!     +               ncpu_s,numprocs)
+
+!      call ztox_trans(pp49flux_t(0:nnz+1,iys:iye,mxs:mxe),
+!     +               pp49flux(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,
+!     +               mxs,mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
+!     +               ncpu_s,numprocs)
+
+!      call ztox_trans(pp50flux_t(0:nnz+1,iys:iye,mxs:mxe),
+!     +               pp50flux(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,
+!     +               mxs,mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
+!     +               ncpu_s,numprocs)
+
+!      call ztox_trans(pp51flux_t(0:nnz+1,iys:iye,mxs:mxe),
+!     +               pp51flux(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,
+!     +               mxs,mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
+!     +               ncpu_s,numprocs)
+
+!      call ztox_trans(pp52flux_t(0:nnz+1,iys:iye,mxs:mxe),
+!     +               pp52flux(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,
+!     +               mxs,mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
+!     +               ncpu_s,numprocs)
+
+!      call ztox_trans(pp53flux_t(0:nnz+1,iys:iye,mxs:mxe),
+!     +               pp53flux(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,
+!     +               mxs,mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
+!     +               ncpu_s,numprocs)
+
+!      call ztox_trans(pp54flux_t(0:nnz+1,iys:iye,mxs:mxe),
+!     +               pp54flux(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,
+!     +               mxs,mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
+!     +               ncpu_s,numprocs)
+
+!      call ztox_trans(pp55flux_t(0:nnz+1,iys:iye,mxs:mxe),
+!     +               pp55flux(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,
+!     +               mxs,mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
+!     +               ncpu_s,numprocs)
+
+!      call ztox_trans(pp56flux_t(0:nnz+1,iys:iye,mxs:mxe),
+!     +               pp56flux(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,
+!     +               mxs,mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
+!     +               ncpu_s,numprocs)
+
+!      call ztox_trans(pp57flux_t(0:nnz+1,iys:iye,mxs:mxe),
+!     +               pp57flux(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,
+!     +               mxs,mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
+!     +               ncpu_s,numprocs)
+
+!      call ztox_trans(pp58flux_t(0:nnz+1,iys:iye,mxs:mxe),
+!     +               pp58flux(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,
+!     +               mxs,mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
+!     +               ncpu_s,numprocs)
+
+!      call ztox_trans(pp59flux_t(0:nnz+1,iys:iye,mxs:mxe),
+!     +               pp59flux(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,
+!     +               mxs,mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
+!     +               ncpu_s,numprocs)
+
+!      call ztox_trans(pp60flux_t(0:nnz+1,iys:iye,mxs:mxe),
+!     +               pp60flux(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,
+!     +               mxs,mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
+!     +               ncpu_s,numprocs)
+
+!      call ztox_trans(pp61flux_t(0:nnz+1,iys:iye,mxs:mxe),
+!     +               pp61flux(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,
+!     +               mxs,mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
+!     +               ncpu_s,numprocs)
+
+!      call ztox_trans(pp62flux_t(0:nnz+1,iys:iye,mxs:mxe),
+!     +               pp62flux(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,
+!     +               mxs,mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
+!     +               ncpu_s,numprocs)
+
+!      call ztox_trans(pp63flux_t(0:nnz+1,iys:iye,mxs:mxe),
+!     +               pp63flux(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,
+!     +               mxs,mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
+!     +               ncpu_s,numprocs)
+
+!      call ztox_trans(pp64flux_t(0:nnz+1,iys:iye,mxs:mxe),
+!     +               pp64flux(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,
+!     +               mxs,mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
+!     +               ncpu_s,numprocs)
+
+
+
 
       end subroutine total_flux
 
@@ -14813,17 +15529,42 @@ cc     end
 c
 c      end subroutine bw_change
 
-      subroutine write_probe(nprobe)
+      subroutine write_probe_bit(nprobe)
       use pars
       use fields
       use con_data
       use con_stats
       use particles
+      integer :: d_x,pcount
+      real :: dummy,dummy2
 
-       
-      write(nprobe) u(1,1,iploc-1),v(1,1,iploc-1),
-     +        w(1,1,iploc-1), t(1,1,3,iploc-1), partcount(iploc-1,1,1)
-              
+c     only write if it matches the same iploc and height
+      d_x = 2
+c     dummy is particle count for 3 grid locations
+c     dummy2 is the mean w (fluctuation) for 3 grid locations
+      dummy=0
+      do i=0,d_x
+        dummy = dummy+partcount(ixs+i,1,iploc-1)
+      enddo
+c      write(*,*)'dummy:',dummy
+
+      do i=0,d_x
+        dummy2 = dummy2+w(ixs+i,1,iploc-1)
+      enddo
+      dummy2=dummy2/d_x !normalize by how many points added
+
+      write(nprobe) u(ixs,iys,iploc),v(ixs,iys,iploc),
+     + w(ixs,iys,iploc-1), w(ixs,iys,iploc), t(ixs,iys,3,iploc),
+     + partcount(ixs,iys,iploc),
+     + dummy, dummy2
+
+c      write(*,*)'pcount(1,1,iploc-1):',partcount(ixs,1,iploc-1)
+c      write(*,*)'pcount(1,1,iploc):',partcount(ixs+1,1,iploc)
+c      write(*,*)'pcount(1,1,iploc+1):',partcount(ixs+2,1,iploc+1)
+c      write(*,*)'w(ixs,iys,iploc-1)',w(ixs,iys,iploc-1)
+c      write(*,*)'mean w of fluc',dummy2
+
+      
 
       return
       end
@@ -14847,10 +15588,17 @@ c     Identifying probe in physical space
       use con_stats
    
       character(len=500) :: fname
+!     Locate proc that is responsible for izs and ize
       if(izs .le. iplocd .and. ize .ge. iplocd)then
+!     Currently set probe location to y=0 (arbitrary for now)
         if(iys .eq. 1) then
-          write(*,*),'probe rank location ',myid
-          probe_loc = myid
+          write(*,*),'proc,zz,izs,iplocd,ize:',
+     +            myid,zz(iplocd),izs,iplocd,ize
+          if(myid==0)then
+            write(*,*)'wbc: ',w(1,1,0)
+          end if
+          probe_loc = myid !assign processor id to global variable
+          probe_id  = iplocd !
           write(fname,"(A,I0.3,A)")'probe',probe_loc,'.out'
           open(nprb,file=fname,form='unformatted',
      +            status='replace')
@@ -14945,6 +15693,9 @@ c     Using a gaussian distribution
       end function
 
       !Calculates the truncated Cumulative Density Function
+      !Must make sample radius size large enough, if not
+      !then radius max/min might not be at close enough
+      !locations to consider
       subroutine calc_truncated_CDF
       use pars
       use fields
@@ -15070,20 +15821,458 @@ c     + sum(Sn(irad_min:irad_max))
 
 
 
+      subroutine write_probe
+      use pars
+      use fields
+      use con_data
+      use con_stats
+      use fftwk
+      use particles
+#if defined(SWAP)
+      use module_byteswap
+#endif
+      include 'mpif.h'
+
+!     Call a bunch of mpi_send receive communications
+
+!     Get the 3 probe informations
+
+
+c      write(nprobe4,7072) u, v, w, partcount,
+c     +     u, v, w, partcount, 
+c     +     u, v, w, partcount
+c 7072 format(12e17.8)
+      end
+
+
+      subroutine open_probe(istep)
+      use pars
+      include 'mpif.h'
+      character cgrid*4, iblks*16
+      logical there
+
+c
+c ------------------ build character strings for ascii probe file name
+c
+      cgrid = '.le.'
+      call blnk(iblks)
+      write(iblks(1:7),'(i7.7)') istep
+      iblks(8:8) = '_'
+      write(iblks(9:15),'(i7.7)') (istep+itape)
+      iblnk = index(path_probe,' ')
+      call blnk(path_sav_probe)
+      path_sav_probe = path_probe(1:iblnk-1)//'/probe'//
+     +             cgrid(1:4)//case(1:3)//'.'//iblks(1:15)
+
+c------------------- save data in directory
+      if(l_root) then
+      close(nprobe4)
+      open(nprobe4,err=5000,file=path_sav_probe,form='formatted')
+      endif
+
+      return
+ 5000 continue
+      write(6,6367) nprobe4, path_sav_probe
+ 6367 format(' 6367, SR. OPEN_PROBE:',/,
+     +       '    cannot open probe history profile on unit = ',i2,/,
+     +       '    path = ',a80)  
+      stop
+      end
+
+c      !APR - Airborne particle reader
+c      !Know when to take the reading
+c      subroutine APR_update
+c      use pars
+c      use fields
+c      use con_data
+c      use con_stats
+c      use fftwk
+c      use particles
+c#if defined(SWAP)
+c      use module_byteswap
+c#endif
+c      include 'mpif.h'
+c      character cgrid*4
+c!     pseudocode:
+c!     make sure to update and record locations equivalently as 
+c!     the other particle recording information so things are in "phase"
+c!     update aircraft particle location
+c!     get particle count based off a specific "range"
+c!     
+c
+c
+c
+c      end
 
 
 
 
 
 
+c      subroutine root_gather
+c      use pars
+c      use fields
+c      use con_data
+c      use con_stats
+c      use fftwk
+c      use particles
+c#if defined(SWAP)
+c      use module_byteswap
+c#endif
+c      include 'mpif.h'
+c
+c      call probe_locator(probe_z_locations(1))
+c      if(probe_id .eq. iploc)then
+c      !Proceed to send u v w partcount information to root
+c        call mpi_sendrecv(
+c        
+c      end if
+c
+c      call probe_locator(probe_z_locations(2))
+c      if(probe_id .eq. iploc)then
+c        call mpi_sendrecv(
+c      end if
+c
+c      call probe_locator(probe_z_locations(3))
+c      if(probe_id .eq. iploc)then
+c        call mpi_sendrecv(
+c      end if
+c
+c
+c      end
+c
 
 
+       subroutine pp_flux(dxdy,type_f,iz,jpt,ipt)
+       use particles
+       use pars
+       use con_data
+       use con_stats
+       implicit none
+       include 'mpif.h'
+       integer :: dxdy, x_p, y_p
+       integer :: type_f !type of flux: 1 = up, 2 = down, 3 = total
+       integer :: iz, jpt, ipt
+       integer :: per_plane
+       real    :: x_d, y_d
+       real    :: xleft, xright
+       real    :: yleft, yright
 
+       per_plane = 4 !How many planes per one dimension?
+                     !currently assuming a perfect square here.
+       y_p = dxdy/per_plane + 1 !Figure out which plane located
+       x_p = dxdy
 
+       x_d = xl/per_plane
+       y_d = yl/per_plane
+       if(mod(dxdy,per_plane) .eq. 0)then
+         y_p = dxdy/per_plane
+       end if
+       if(x_p .gt. per_plane)then
+         x_p = dxdy-(y_p-1)*per_plane
+       end if
 
+       xleft  = x_d*(x_p-1)
+       xright = x_d*(x_p)
+       yleft  = y_d*(y_p-1)
+       yright = y_d*(y_p)
 
+       if(type_f .eq. 1)then !+1 up flux
+         if(part%xp(1) .ge. xleft .and. part%xp(1) .lt. xright)then
+           if(part%xp(2) .ge. yleft .and. part%xp(2) .lt. yright)then
+             select case (dxdy)
+               case(1)
+                 pp1flux_t(iz,jpt,ipt) = pp1flux_t(iz,jpt,ipt) + 1.0
+               case(2)
+                 pp2flux_t(iz,jpt,ipt) = pp2flux_t(iz,jpt,ipt) + 1.0
+               case(3)
+                 pp3flux_t(iz,jpt,ipt) = pp3flux_t(iz,jpt,ipt) + 1.0
+               case(4)
+                 pp4flux_t(iz,jpt,ipt) = pp4flux_t(iz,jpt,ipt) + 1.0
+               case(5)
+                 pp5flux_t(iz,jpt,ipt) = pp5flux_t(iz,jpt,ipt) + 1.0
+               case(6)
+                 pp6flux_t(iz,jpt,ipt) = pp6flux_t(iz,jpt,ipt) + 1.0
+               case(7)
+                 pp7flux_t(iz,jpt,ipt) = pp7flux_t(iz,jpt,ipt) + 1.0
+               case(8)
+                 pp8flux_t(iz,jpt,ipt) = pp8flux_t(iz,jpt,ipt) + 1.0
+               case(9)
+                 pp9flux_t(iz,jpt,ipt) = pp9flux_t(iz,jpt,ipt) + 1.0
+               case(10)
+                 pp10flux_t(iz,jpt,ipt) = pp10flux_t(iz,jpt,ipt) + 1.0
+               case(11)
+                 pp11flux_t(iz,jpt,ipt) = pp11flux_t(iz,jpt,ipt) + 1.0
+               case(12)
+                 pp12flux_t(iz,jpt,ipt) = pp12flux_t(iz,jpt,ipt) + 1.0
+               case(13)
+                 pp13flux_t(iz,jpt,ipt) = pp13flux_t(iz,jpt,ipt) + 1.0
+               case(14)
+                 pp14flux_t(iz,jpt,ipt) = pp14flux_t(iz,jpt,ipt) + 1.0
+               case(15)
+                 pp15flux_t(iz,jpt,ipt) = pp15flux_t(iz,jpt,ipt) + 1.0
+               case(16)
+                 pp16flux_t(iz,jpt,ipt) = pp16flux_t(iz,jpt,ipt) + 1.0
+!               case(17)
+!                 pp17flux_t(iz,jpt,ipt) = pp17flux_t(iz,jpt,ipt) + 1.0
+!               case(18)
+!                 pp18flux_t(iz,jpt,ipt) = pp18flux_t(iz,jpt,ipt) + 1.0
+!               case(19)
+!                 pp19flux_t(iz,jpt,ipt) = pp19flux_t(iz,jpt,ipt) + 1.0
+!               case(20)
+!                 pp20flux_t(iz,jpt,ipt) = pp20flux_t(iz,jpt,ipt) + 1.0
+!               case(21)
+!                 pp21flux_t(iz,jpt,ipt) = pp21flux_t(iz,jpt,ipt) + 1.0
+!               case(22)
+!                 pp22flux_t(iz,jpt,ipt) = pp22flux_t(iz,jpt,ipt) + 1.0
+!               case(23)
+!                 pp23flux_t(iz,jpt,ipt) = pp23flux_t(iz,jpt,ipt) + 1.0
+!               case(24)
+!                 pp24flux_t(iz,jpt,ipt) = pp24flux_t(iz,jpt,ipt) + 1.0
+!               case(25)
+!                 pp25flux_t(iz,jpt,ipt) = pp25flux_t(iz,jpt,ipt) + 1.0
+!               case(26)
+!                 pp26flux_t(iz,jpt,ipt) = pp26flux_t(iz,jpt,ipt) + 1.0
+!               case(27)
+!                 pp27flux_t(iz,jpt,ipt) = pp27flux_t(iz,jpt,ipt) + 1.0
+!               case(28)
+!                 pp28flux_t(iz,jpt,ipt) = pp28flux_t(iz,jpt,ipt) + 1.0
+!               case(29)
+!                 pp29flux_t(iz,jpt,ipt) = pp29flux_t(iz,jpt,ipt) + 1.0
+!               case(30)
+!                 pp30flux_t(iz,jpt,ipt) = pp30flux_t(iz,jpt,ipt) + 1.0
+!               case(31)
+!                 pp31flux_t(iz,jpt,ipt) = pp31flux_t(iz,jpt,ipt) + 1.0
+!               case(32)
+!                 pp32flux_t(iz,jpt,ipt) = pp32flux_t(iz,jpt,ipt) + 1.0
+!               case(33)
+!                 pp33flux_t(iz,jpt,ipt) = pp33flux_t(iz,jpt,ipt) + 1.0
+!               case(34)
+!                 pp34flux_t(iz,jpt,ipt) = pp34flux_t(iz,jpt,ipt) + 1.0
+!               case(35)
+!                 pp35flux_t(iz,jpt,ipt) = pp35flux_t(iz,jpt,ipt) + 1.0
+!               case(36)
+!                 pp36flux_t(iz,jpt,ipt) = pp36flux_t(iz,jpt,ipt) + 1.0
+!               case(37)
+!                 pp37flux_t(iz,jpt,ipt) = pp37flux_t(iz,jpt,ipt) + 1.0
+!               case(38)
+!                 pp38flux_t(iz,jpt,ipt) = pp38flux_t(iz,jpt,ipt) + 1.0
+!               case(39)
+!                 pp39flux_t(iz,jpt,ipt) = pp39flux_t(iz,jpt,ipt) + 1.0
+!               case(40)
+!                 pp40flux_t(iz,jpt,ipt) = pp40flux_t(iz,jpt,ipt) + 1.0
+!               case(41)
+!                 pp41flux_t(iz,jpt,ipt) = pp41flux_t(iz,jpt,ipt) + 1.0
+!               case(42)
+!                 pp42flux_t(iz,jpt,ipt) = pp42flux_t(iz,jpt,ipt) + 1.0
+!               case(43)
+!                 pp43flux_t(iz,jpt,ipt) = pp43flux_t(iz,jpt,ipt) + 1.0
+!               case(44)
+!                 pp44flux_t(iz,jpt,ipt) = pp44flux_t(iz,jpt,ipt) + 1.0
+!               case(45)
+!                 pp45flux_t(iz,jpt,ipt) = pp45flux_t(iz,jpt,ipt) + 1.0
+!               case(46)
+!                 pp46flux_t(iz,jpt,ipt) = pp46flux_t(iz,jpt,ipt) + 1.0
+!               case(47)
+!                 pp47flux_t(iz,jpt,ipt) = pp47flux_t(iz,jpt,ipt) + 1.0
+!               case(48)
+!                 pp48flux_t(iz,jpt,ipt) = pp48flux_t(iz,jpt,ipt) + 1.0
+!               case(49)
+!                 pp49flux_t(iz,jpt,ipt) = pp49flux_t(iz,jpt,ipt) + 1.0
+!               case(50)
+!                 pp50flux_t(iz,jpt,ipt) = pp50flux_t(iz,jpt,ipt) + 1.0
+!               case(51)
+!                 pp51flux_t(iz,jpt,ipt) = pp51flux_t(iz,jpt,ipt) + 1.0
+!               case(52)
+!                 pp52flux_t(iz,jpt,ipt) = pp52flux_t(iz,jpt,ipt) + 1.0
+!               case(53)
+!                 pp53flux_t(iz,jpt,ipt) = pp53flux_t(iz,jpt,ipt) + 1.0
+!               case(54)
+!                 pp54flux_t(iz,jpt,ipt) = pp54flux_t(iz,jpt,ipt) + 1.0
+!               case(55)
+!                 pp55flux_t(iz,jpt,ipt) = pp55flux_t(iz,jpt,ipt) + 1.0
+!               case(56)
+!                 pp56flux_t(iz,jpt,ipt) = pp56flux_t(iz,jpt,ipt) + 1.0
+!               case(57)
+!                 pp57flux_t(iz,jpt,ipt) = pp57flux_t(iz,jpt,ipt) + 1.0
+!               case(58)
+!                 pp58flux_t(iz,jpt,ipt) = pp58flux_t(iz,jpt,ipt) + 1.0
+!               case(59)
+!                 pp59flux_t(iz,jpt,ipt) = pp59flux_t(iz,jpt,ipt) + 1.0
+!               case(60)
+!                 pp60flux_t(iz,jpt,ipt) = pp60flux_t(iz,jpt,ipt) + 1.0
+!               case(61)
+!                 pp61flux_t(iz,jpt,ipt) = pp61flux_t(iz,jpt,ipt) + 1.0
+!               case(62)
+!                 pp62flux_t(iz,jpt,ipt) = pp62flux_t(iz,jpt,ipt) + 1.0
+!               case(63)
+!                 pp63flux_t(iz,jpt,ipt) = pp63flux_t(iz,jpt,ipt) + 1.0
+!               case(64)
+!                 pp64flux_t(iz,jpt,ipt) = pp64flux_t(iz,jpt,ipt) + 1.0
 
+             end select
+           end if
+         end if
+       end if
 
+       if(type_f .eq. 2)then !-1 down flux
+         if(part%xp(1) .ge. xleft .and. part%xp(1) .lt. xright)then
+           if(part%xp(2) .ge. yleft .and. part%xp(2) .lt. yright)then
+             select case (dxdy)
+               case(1)
+                 pp1flux_t(iz,jpt,ipt) = pp1flux_t(iz,jpt,ipt) - 1.0
+               case(2)
+                 pp2flux_t(iz,jpt,ipt) = pp2flux_t(iz,jpt,ipt) - 1.0
+               case(3)
+                 pp3flux_t(iz,jpt,ipt) = pp3flux_t(iz,jpt,ipt) - 1.0
+               case(4)
+                 pp4flux_t(iz,jpt,ipt) = pp4flux_t(iz,jpt,ipt) - 1.0
+               case(5)
+                 pp5flux_t(iz,jpt,ipt) = pp5flux_t(iz,jpt,ipt) - 1.0
+               case(6)
+                 pp6flux_t(iz,jpt,ipt) = pp6flux_t(iz,jpt,ipt) - 1.0
+               case(7)
+                 pp7flux_t(iz,jpt,ipt) = pp7flux_t(iz,jpt,ipt) - 1.0
+               case(8)
+                 pp8flux_t(iz,jpt,ipt) = pp8flux_t(iz,jpt,ipt) - 1.0
+               case(9)
+                 pp9flux_t(iz,jpt,ipt) = pp9flux_t(iz,jpt,ipt) - 1.0
+               case(10)
+                 pp10flux_t(iz,jpt,ipt) = pp10flux_t(iz,jpt,ipt) - 1.0
+               case(11)
+                 pp11flux_t(iz,jpt,ipt) = pp11flux_t(iz,jpt,ipt) - 1.0
+               case(12)
+                 pp12flux_t(iz,jpt,ipt) = pp12flux_t(iz,jpt,ipt) - 1.0
+               case(13)
+                 pp13flux_t(iz,jpt,ipt) = pp13flux_t(iz,jpt,ipt) - 1.0
+               case(14)
+                 pp14flux_t(iz,jpt,ipt) = pp14flux_t(iz,jpt,ipt) - 1.0
+               case(15)
+                 pp15flux_t(iz,jpt,ipt) = pp15flux_t(iz,jpt,ipt) - 1.0
+               case(16)
+                 pp16flux_t(iz,jpt,ipt) = pp16flux_t(iz,jpt,ipt) - 1.0
+!               case(17)
+!                 pp17flux_t(iz,jpt,ipt) = pp17flux_t(iz,jpt,ipt) - 1.0
+!               case(18)
+!                 pp18flux_t(iz,jpt,ipt) = pp18flux_t(iz,jpt,ipt) - 1.0
+!               case(19)
+!                 pp19flux_t(iz,jpt,ipt) = pp19flux_t(iz,jpt,ipt) - 1.0
+!               case(20)
+!                 pp20flux_t(iz,jpt,ipt) = pp20flux_t(iz,jpt,ipt) - 1.0
+!               case(21)
+!                 pp21flux_t(iz,jpt,ipt) = pp21flux_t(iz,jpt,ipt) - 1.0
+!               case(22)
+!                 pp22flux_t(iz,jpt,ipt) = pp22flux_t(iz,jpt,ipt) - 1.0
+!               case(23)
+!                 pp23flux_t(iz,jpt,ipt) = pp23flux_t(iz,jpt,ipt) - 1.0
+!               case(24)
+!                 pp24flux_t(iz,jpt,ipt) = pp24flux_t(iz,jpt,ipt) - 1.0
+!               case(25)
+!                 pp25flux_t(iz,jpt,ipt) = pp25flux_t(iz,jpt,ipt) - 1.0
+!               case(26)
+!                 pp26flux_t(iz,jpt,ipt) = pp26flux_t(iz,jpt,ipt) - 1.0
+!               case(27)
+!                 pp27flux_t(iz,jpt,ipt) = pp27flux_t(iz,jpt,ipt) - 1.0
+!               case(28)
+!                 pp28flux_t(iz,jpt,ipt) = pp28flux_t(iz,jpt,ipt) - 1.0
+!               case(29)
+!                 pp29flux_t(iz,jpt,ipt) = pp29flux_t(iz,jpt,ipt) - 1.0
+!               case(30)
+!                 pp30flux_t(iz,jpt,ipt) = pp30flux_t(iz,jpt,ipt) - 1.0
+!               case(31)
+!                 pp31flux_t(iz,jpt,ipt) = pp31flux_t(iz,jpt,ipt) - 1.0
+!               case(32)
+!                 pp32flux_t(iz,jpt,ipt) = pp32flux_t(iz,jpt,ipt) - 1.0
+!               case(33)
+!                 pp33flux_t(iz,jpt,ipt) = pp33flux_t(iz,jpt,ipt) - 1.0
+!               case(34)
+!                 pp34flux_t(iz,jpt,ipt) = pp34flux_t(iz,jpt,ipt) - 1.0
+!               case(35)
+!                 pp35flux_t(iz,jpt,ipt) = pp35flux_t(iz,jpt,ipt) - 1.0
+!               case(36)
+!                 pp36flux_t(iz,jpt,ipt) = pp36flux_t(iz,jpt,ipt) - 1.0
+!               case(37)
+!                 pp37flux_t(iz,jpt,ipt) = pp37flux_t(iz,jpt,ipt) - 1.0
+!               case(38)
+!                 pp38flux_t(iz,jpt,ipt) = pp38flux_t(iz,jpt,ipt) - 1.0
+!               case(39)
+!                 pp39flux_t(iz,jpt,ipt) = pp39flux_t(iz,jpt,ipt) - 1.0
+!               case(40)
+!                 pp40flux_t(iz,jpt,ipt) = pp40flux_t(iz,jpt,ipt) - 1.0
+!               case(41)
+!                 pp41flux_t(iz,jpt,ipt) = pp41flux_t(iz,jpt,ipt) - 1.0
+!               case(42)
+!                 pp42flux_t(iz,jpt,ipt) = pp42flux_t(iz,jpt,ipt) - 1.0
+!               case(43)
+!                 pp43flux_t(iz,jpt,ipt) = pp43flux_t(iz,jpt,ipt) - 1.0
+!               case(44)
+!                 pp44flux_t(iz,jpt,ipt) = pp44flux_t(iz,jpt,ipt) - 1.0
+!               case(45)
+!                 pp45flux_t(iz,jpt,ipt) = pp45flux_t(iz,jpt,ipt) - 1.0
+!               case(46)
+!                 pp46flux_t(iz,jpt,ipt) = pp46flux_t(iz,jpt,ipt) - 1.0
+!               case(47)
+!                 pp47flux_t(iz,jpt,ipt) = pp47flux_t(iz,jpt,ipt) - 1.0
+!               case(48)
+!                 pp48flux_t(iz,jpt,ipt) = pp48flux_t(iz,jpt,ipt) - 1.0
+!               case(49)
+!                 pp49flux_t(iz,jpt,ipt) = pp49flux_t(iz,jpt,ipt) - 1.0
+!               case(50)
+!                 pp50flux_t(iz,jpt,ipt) = pp50flux_t(iz,jpt,ipt) - 1.0
+!               case(51)
+!                 pp51flux_t(iz,jpt,ipt) = pp51flux_t(iz,jpt,ipt) - 1.0
+!               case(52)
+!                 pp52flux_t(iz,jpt,ipt) = pp52flux_t(iz,jpt,ipt) - 1.0
+!               case(53)
+!                 pp53flux_t(iz,jpt,ipt) = pp53flux_t(iz,jpt,ipt) - 1.0
+!               case(54)
+!                 pp54flux_t(iz,jpt,ipt) = pp54flux_t(iz,jpt,ipt) - 1.0
+!               case(55)
+!                 pp55flux_t(iz,jpt,ipt) = pp55flux_t(iz,jpt,ipt) - 1.0
+!               case(56)
+!                 pp56flux_t(iz,jpt,ipt) = pp56flux_t(iz,jpt,ipt) - 1.0
+!               case(57)
+!                 pp57flux_t(iz,jpt,ipt) = pp57flux_t(iz,jpt,ipt) - 1.0
+!               case(58)
+!                 pp58flux_t(iz,jpt,ipt) = pp58flux_t(iz,jpt,ipt) - 1.0
+!               case(59)
+!                 pp59flux_t(iz,jpt,ipt) = pp59flux_t(iz,jpt,ipt) - 1.0
+!               case(60)
+!                 pp60flux_t(iz,jpt,ipt) = pp60flux_t(iz,jpt,ipt) - 1.0
+!               case(61)
+!                 pp61flux_t(iz,jpt,ipt) = pp61flux_t(iz,jpt,ipt) - 1.0
+!               case(62)
+!                 pp62flux_t(iz,jpt,ipt) = pp62flux_t(iz,jpt,ipt) - 1.0
+!               case(63)
+!                 pp63flux_t(iz,jpt,ipt) = pp63flux_t(iz,jpt,ipt) - 1.0
+!               case(64)
+!                 pp64flux_t(iz,jpt,ipt) = pp64flux_t(iz,jpt,ipt) - 1.0
+
+             end select
+           end if
+         end if
+       end if
+
+       
+       end 
+
+       subroutine end_probe(p1,p2)
+       use pars
+       use fields
+       use con_stats
+       integer :: p1, p2
+!      p1 represents probe_id (izs<=probe_id<=ize)
+!      p2 is the do loop for p3=1:3
+         call probe_locator(probe_z_locations(p2))
+         if(iploc .eq. p1)then
+           write(*,*)'proc, p1, zz, izs, iploc,ize: ',
+     +           myid,p1,zz(iploc),izs,iploc,ize
+           write(*,*)'id,w(0),w(1),w(2),w(3),w(4),w(5)',
+     +           myid,w(1,1,0),w(1,1,1),w(1,1,2),w(1,1,3),
+     +           w(1,1,4),w(1,1,5)
+         end if
+
+       end
 
 
 
