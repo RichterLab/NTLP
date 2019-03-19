@@ -19,7 +19,7 @@ set (CMAKE_Fortran_FLAGS_DEBUG   "${CMAKE_Fortran_FLAGS_DEBUG} -i4 -r8")
 add_library (fft STATIC "fft.f")
 
 # Build Executable
-file(GLOB SRC *.F)
+file(GLOB SRC subroutines/*.F)
 set_source_files_properties( ${SRC} COMPILE_FLAGS "-assume byterecl")
 
 add_executable (lesmpi.a ${SRC})
