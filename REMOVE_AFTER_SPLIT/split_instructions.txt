@@ -1,0 +1,24 @@
+
+cd REMOVE_AFTER_SPLIT
+# Download splitter
+wget https://people.sc.fsu.edu/~jburkardt/c_src/f90split/f90split.c
+
+# Edit f90split.c
+# Change mktemp to mkstemp in f90split.c
+
+gcc -o f90split f90split.c
+cd ..
+
+# Automatically split file into modules and subroutines
+REMOVE_AFTER_SPLIT/f90split les.F
+
+# Remove les.F
+rm les.F
+
+# Rename all .f90 files to .F
+python REMOVE_AFTER_SPLIT/rename.py
+
+# Edit CMakeLists.txt (as in commit) to recognize any .F file as source
+
+# Done
+
