@@ -864,7 +864,7 @@ c
           write(*,*)'remember slab and proc number..'
         end if
         call save_v(it)
-c        if(ispray==1) call save_particles
+        if(ispray==1) call save_particles
       endif
       if(msave_v .and. istage .eq. 1)then
 c        call save_viz(it) idk wtf is going on with this right now

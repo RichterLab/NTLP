@@ -16,7 +16,7 @@
 
 !     Call a bunch of mpi_send receive communications
 
-!     Get the 3 probe informations
+!     Get the 3 probe information
 
 
 c      write(nprobe4,7072) u, v, w, partcount,
