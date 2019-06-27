@@ -130,9 +130,9 @@ c     ----------------------------------------------------------------------
       
       !REMEMBER: IF ADDING ANYTHING, MUST UPDATE MPI DATATYPE!
       type :: particle
-      integer :: pidx,procidx
+      integer :: pidx,procidx,nbr_pidx,nbr_procidx
       real :: vp(3),xp(3),uf(3),xrhs(3),vrhs(3),Tp,Tprhs_s
-      real :: Tprhs_L,Tf,radius,radrhs,qinf,qstar
+      real :: Tprhs_L,Tf,radius,radrhs,qinf,qstar,dist
       type(particle), pointer :: prev,next
       end type particle
 
@@ -735,13 +735,13 @@ c
 !        call particle_generate(istage)
 !      end if
       if (ispray==1) then
-         !t_s = mpi_wtime()
+         t_s = mpi_wtime()
          !call particle_update_cn(it,istage) 
          call particle_update_rk3(it,istage) 
 
-         !t_f = mpi_wtime()
-         !call mpi_barrier(mpi_comm_world,ierr)
-         !if (myid==5) write(*,*) 'time part: ',t_f-t_s
+         t_f = mpi_wtime()
+         call mpi_barrier(mpi_comm_world,ierr)
+         if (myid==5) write(*,*) 'time part: ',t_f-t_s
       end if
       if(mnout .and. istage .eq. 1)  then
           if(l_debug) then
@@ -10017,7 +10017,7 @@ c
       myphiv_sum = 0.0
       qstarsum_t = 0.0 
 
-      !t_s = mpi_wtime()
+      t_s = mpi_wtime()
 
 
       !Loop over the linked list of particles:
@@ -10111,9 +10111,9 @@ c
 
       !t_f1 = mpi_wtime()
       !write(*,*) 'proc,loop time: ',myid,t_f1-t_s
-      !call mpi_barrier(mpi_comm_world,ierr)
-      !t_f = mpi_wtime()
-      !if (myid==5) write(*,*) 'time loop:', t_f-t_s
+      call mpi_barrier(mpi_comm_world,ierr)
+      t_f = mpi_wtime()
+      if (myid==5) write(*,*) 'time loop:', t_f-t_s
 
       !Enforce nonperiodic bcs (either elastic or destroying particles)
       !t_s = mpi_wtime()
@@ -10124,11 +10124,11 @@ c
 
       !Check to see if particles left processor
       !If they did, remove from one list and add to another
-      !t_s = mpi_wtime()
+      t_s = mpi_wtime()
       call particle_exchange
-      !call mpi_barrier(mpi_comm_world,ierr)
-      !t_f = mpi_wtime()
-      !if (myid==5) write(*,*) 'time exchg:', t_f - t_s
+      call mpi_barrier(mpi_comm_world,ierr)
+      t_f = mpi_wtime()
+      if (myid==5) write(*,*) 'time exchg:', t_f - t_s
 
       !Now enforce periodic bcs 
       !just updates x,y locations if over xl,yl or under 0
@@ -10137,6 +10137,22 @@ c
       !call mpi_barrier(mpi_comm_world,ierr)
       !t_f = mpi_wtime()
       !if (myid==5) write(*,*) 'time bc_per:', t_f - t_s
+
+      !Get particle count:
+      numpart = 0
+      part => first_particle
+      do while (associated(part))
+      numpart = numpart + 1
+      part => part%next
+      end do
+
+
+      t_s = mpi_wtime()
+      call particle_neighbor_search_kd
+      !call particle_neighbor_search_brute
+      call mpi_barrier(mpi_comm_world,ierr)
+      t_f = mpi_wtime()
+      if (myid==5) write(*,*) 'time neighbor:', t_f - t_s
 
 
 
@@ -10417,6 +10433,149 @@ c
 
 
       end subroutine particle_bcs_periodic
+      subroutine particle_neighbor_search_kd
+      use particles
+      use pars
+      use kd_tree
+      implicit none 
+
+      type(particle), pointer :: part_tmp
+      type(tree_master_record), pointer :: tree
+
+      real, allocatable :: xp_data(:,:),distances(:)
+      integer, allocatable :: index_data(:,:),indexes(:)
+
+      integer :: i,nq,idx_check,idx_diff
+      real :: qv(3),dist_check,dist_tmp,xdist,ydist,zdist,dist_diff
+
+      !For whatever reason, the kd-search sometimes misses edge cases if
+      !nq = 2. nq = 3 fixes it
+      nq = 3
+
+      allocate(xp_data(numpart,3),index_data(numpart,2))
+      allocate(distances(nq),indexes(nq))
+
+      !Loop over particles and fill arrays
+      i = 1
+      part_tmp => first_particle
+      do while (associated(part_tmp))
+
+         xp_data(i,1:3) = part_tmp%xp(1:3) 
+         index_data(i,1) = part_tmp%pidx
+         index_data(i,2) = part_tmp%procidx
+
+      i = i+1   
+      part_tmp => part_tmp%next
+      end do
+
+      !Build the kd-tree
+      tree => create_tree(xp_data) 
+
+      !Do the search for each of the particles
+      part_tmp => first_particle
+      do i=1,numpart
+
+         qv(1:3) = xp_data(i,1:3)
+         call n_nearest_to(tree,qv,nq,indexes,distances)
+         !call n_nearest_to_brute_force(tree,qv,nq,indexes,distances)
+ 
+         !Go back through and assign the shortest distance and index
+         !NOTE: Must use 2nd one since it finds itself as nearest neighbor
+         part_tmp%dist = sqrt(distances(2))
+         part_tmp%nbr_pidx = index_data(indexes(2),1)
+         part_tmp%nbr_procidx = index_data(indexes(2),2)
+
+         !if (myid==0) write(*,*) 'dist = ',part_tmp%dist
+         !if (myid==0) write(*,*) 'index = ',part_tmp%pidx
+
+      part_tmp => part_tmp%next
+      end do
+
+
+      !Do a check on the first particle in the array that a brute force
+      !search finds the same particle and distance
+      dist_check = 1.0e6
+      part_tmp => first_particle%next
+      do while (associated(part_tmp))
+
+            xdist = first_particle%xp(1) - part_tmp%xp(1)
+            ydist = first_particle%xp(2) - part_tmp%xp(2)
+            zdist = first_particle%xp(3) - part_tmp%xp(3)
+
+            dist_tmp = sqrt(xdist**2 + ydist**2 + zdist**2)
+
+         if (dist_tmp .lt. dist_check) then
+            dist_check = dist_tmp
+            idx_check = part_tmp%pidx
+          end if
+
+      part_tmp => part_tmp%next
+      end do
+
+      idx_diff = idx_check-first_particle%nbr_pidx
+      dist_diff = abs(dist_check - first_particle%dist)
+      if (idx_diff .ne. 0) then
+         write(*,'(a30,3i)') 'WARNING in neighbor,idx:',
+     +   idx_check,first_particle%nbr_pidx,myid
+      end if
+      if (dist_diff .gt. 1.0e-8) then
+         write(*,'(a30,2e15.6,i)') 'WARNING in neighbor,dist:',
+     +   dist_check,first_particle%dist,myid
+      end if
+
+      deallocate(xp_data,index_data)
+
+
+      end subroutine particle_neighbor_search_kd
+      subroutine particle_neighbor_search_brute
+      use particles
+      use pars
+      implicit none 
+
+      type(particle), pointer :: part_ref,part_query
+      real :: dist_tmp,xdist,ydist,zdist,distance
+      integer :: nbr_pidx,nbr_procidx,ip
+
+      
+      !Loop over the points that need to perform search
+      part_query => first_particle
+      do while (associated(part_query))
+
+
+         distance = 1.0e6
+         ip = 1
+         !Loop over points to be searched
+         part_ref => first_particle
+         do while (associated(part_ref))
+
+            xdist = part_query%xp(1) - part_ref%xp(1)
+            ydist = part_query%xp(2) - part_ref%xp(2)
+            zdist = part_query%xp(3) - part_ref%xp(3)
+
+            dist_tmp = sqrt(xdist**2 + ydist**2 + zdist**2)
+
+
+            !Record distance and ID of nearest particle
+            if (dist_tmp .lt. part_query%dist) then
+               distance = dist_tmp
+               nbr_pidx = part_ref%pidx
+               nbr_procidx = part_ref%procidx
+            end if
+
+         ip = ip + 1
+         part_ref => part_ref%next
+         end do
+
+         part_query%dist = distance
+         part_query%nbr_pidx = nbr_pidx
+         part_query%nbr_procidx = nbr_procidx
+         
+
+      part_query => part_query%next
+      end do
+
+
+      end subroutine particle_neighbor_search_brute
       subroutine destroy_particle
       use particles
       implicit none
@@ -11505,15 +11664,15 @@ c
       !Set up MPI datatypes for sending particle information
       !MUST UPDATE IF THINGS ARE ADDED/REMOVED FROM PARTICLE STRUCTURE
 
-      num_reals = 5*3+8
+      num_reals = 5*3+9
       
-      blcts(1:3) = (/2,num_reals,2/)
+      blcts(1:3) = (/4,num_reals,2/)
       displs(1) = 0
       types(1) = mpi_integer
       call mpi_type_get_extent(mpi_integer,lb,extent,ierr)
       
-      !Displace 2*size of mpi_integer (2 integer: pidx,procidx)
-      displs(2) = extent*2
+      !Displace 4*size of mpi_integer (4 integer: pidx,procidx,nbr_pidx,nbr_procidx)
+      displs(2) = extent*4
       types(2) = mpi_real8
       call mpi_type_get_extent(mpi_real8,lb,extent,ierr)
       !Displace num_reals*size of mpi_real8
