@@ -7,7 +7,7 @@ c     ----------------------------------------------------------------------
       integer :: ismlt,ifree,iradup,
      +     iupwnd,ibuoy,ifilt,itcut,isubs,ibrcl,iocean,method,
      +     idebug,iz_space,ivis0,ifix_dt,new_vis,iDNS,ispray,
-     +     icouple,iTcouple,iHcouple,ievap,ifields,ilin
+     +     icouple,iTcouple,iHcouple,ievap,ifields,ilin,ineighbor
 c     
 c     -------- j_recl = record length in "bytes" for history file
 c     k8     = kind parameter for integers in mpi_io routines
@@ -10148,8 +10148,10 @@ c
 
 
       t_s = mpi_wtime()
+      if (ineighbor) then
       call particle_neighbor_search_kd
       !call particle_neighbor_search_brute
+      end if
       call mpi_barrier(mpi_comm_world,ierr)
       t_f = mpi_wtime()
       if (myid==5) write(*,*) 'time neighbor:', t_f - t_s
@@ -12320,7 +12322,8 @@ c
       namelist /flags/ ismlt,ifree,isfc,iradup,
      +         iupwnd,ibuoy,ifilt,itcut,isubs,ibrcl,iocean,
      +         method,idebug,iz_space,ivis0,ifix_dt,new_vis,iDNS,
-     +         ispray,icouple,iTcouple,iHcouple,ievap,ifields,ilin
+     +         ispray,icouple,iTcouple,iHcouple,ievap,ifields,ilin,
+     +         ineighbor
 
 
       namelist /constants/ rhoa, nuf, Cpa, Pra, Sc,
