@@ -28,11 +28,16 @@ iTcouple=0
 iHcouple=0  !iHcouple also controls TE couple
 ievap=0
 ineighbor=0
+icoalesce=1
 /
 
 !Grid and domain parameters
 &grid_params
 ncpu_s=8
+
+!Time step
+cfl = 0.4
+dt_new = 0.1
 
 !Use for DNS:
 Uo = 0.0  !Sets the magnitude of the top and bottom plate velocities (Couette flow -- assumes equal and opposite)
@@ -87,6 +92,7 @@ Sc = 0.615
 
 !Particles:
 tnumpart = 1e5
+mult_init = 1e8
 rhow=1000.0  !kg/m^3
 part_grav = 0.0
 Cpp = 4179.0  !J/kg-K

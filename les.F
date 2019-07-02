@@ -7,7 +7,8 @@ c     ----------------------------------------------------------------------
       integer :: ismlt,ifree,iradup,
      +     iupwnd,ibuoy,ifilt,itcut,isubs,ibrcl,iocean,method,
      +     idebug,iz_space,ivis0,ifix_dt,new_vis,iDNS,ispray,
-     +     icouple,iTcouple,iHcouple,ievap,ifields,ilin,ineighbor
+     +     icouple,iTcouple,iHcouple,ievap,ifields,ilin,ineighbor,
+     +     icoalesce
 c     
 c     -------- j_recl = record length in "bytes" for history file
 c     k8     = kind parameter for integers in mpi_io routines
@@ -123,6 +124,7 @@ c     ----------------------------------------------------------------------
       integer :: iseed
       real :: Rep_avg,part_grav
       real :: vp_init(3),Tp_init,qf_init
+      integer :: mult_init
 
       real :: radius_init,rhow,nuf 
       real :: CpaCpp,Cpa,Cpp,Pra,Sc,Mw,Ru,rhoa
@@ -131,6 +133,7 @@ c     ----------------------------------------------------------------------
       !REMEMBER: IF ADDING ANYTHING, MUST UPDATE MPI DATATYPE!
       type :: particle
       integer :: pidx,procidx,nbr_pidx,nbr_procidx
+      integer :: to_destroy,mult
       real :: vp(3),xp(3),uf(3),xrhs(3),vrhs(3),Tp,Tprhs_s
       real :: Tprhs_L,Tf,radius,radrhs,qinf,qstar,dist
       type(particle), pointer :: prev,next
@@ -594,11 +597,12 @@ c
       write(*,'(a7,4e15.6)') 'xp1:  ',time,part%xp(1:3)
       write(*,'(a7,4e15.6)') 'vp1:  ',time,part%vp(1:3)
       write(*,'(a7,4e15.6)') 'uf1:  ',time,part%uf(1:3)
-      write(*,'(a7,4e15.6)') 'Tp1:  ',time,part%Tp
-      write(*,'(a7,4e15.6)') 'Tf1:  ',time,part%Tf
-      write(*,'(a7,4e15.6)') 'rad1: ',time,part%radius 
-      write(*,'(a7,4e15.6)') 'qinf1:',time,part%qinf 
-      write(*,'(a7,4e15.6)') 'qstr1:',time,part%qstar 
+      write(*,'(a7,2e15.6)') 'Tp1:  ',time,part%Tp
+      write(*,'(a7,2e15.6)') 'Tf1:  ',time,part%Tf
+      write(*,'(a7,2e15.6)') 'rad1: ',time,part%radius 
+      write(*,'(a7,2e15.6)') 'qinf1:',time,part%qinf 
+      write(*,'(a7,2e15.6)') 'qstr1:',time,part%qstar 
+      write(*,'(a7,e15.6,i)') 'mult1:',time,part%mult
 
       end if
 
@@ -882,7 +886,7 @@ c
 c
 c ------------- if used, change to fit your problem
 c
-        dt_new = 0.5
+!        dt_new = 0.5  !Now in input file
       else
 c
 c ------------------- new estimate of best time step
@@ -1068,9 +1072,6 @@ c ----------- a full step, at the new time
 c
       etas(4)  =  0.0
 c
-      cfl = 0.40
-      !cfl = 0.2  !For phi0.25_rho1000_r100_Mun_Tcpl
-c     cfl = 0.50
 c
       return
 c
@@ -5563,8 +5564,8 @@ c
             z(iz) = dz*float(iz) + zwstrt
          enddo
       else
-        !call vgrid(zw1,zi,zl,nnz,z(0),l_root,l_debug)
-        call vgrid_channel(zw1,zi,zl,nnz,z(0),l_root,l_debug)
+        call vgrid(zw1,zi,zl,nnz,z(0),l_root,l_debug)
+        !call vgrid_channel(zw1,zi,zl,nnz,z(0),l_root,l_debug)
       endif
 c
       call get_dz
@@ -5910,10 +5911,10 @@ c
       radsum_t = 0.0 
       rad2sum = 0.0 
       rad2sum_t = 0.0 
-      mpsum = 0.0 !Brian 7/30/14
-      mpsum_t = 0.0 !Brian 7/30/14
-      mwsum = 0.0 !Brian 7/30/14
-      mwsum_t = 0.0 !Brian 7/30/14
+      mpsum = 0.0
+      mpsum_t = 0.0
+      mwsum = 0.0
+      mwsum_t = 0.0
       qstarsum = 0.0
       qstarsum_t = 0.0 
 
@@ -5950,35 +5951,30 @@ c           u(ix,iy,iz) = ug(iz) - ugal
            do iy=iys,iye
            do ix=1,nnx
               t(ix,iy,1,iz) = t_lower
-              !t(ix,iy,1,iz) = tsfcc(1) - 5.0 !Brian 5/28/14
-
            enddo
            enddo
          elseif(z(iz) .ge. z_upper) then
            do iy=iys,iye
            do ix=1,nnx
               t(ix,iy,1,iz) = t_upper + (zz(iz+1) - z_upper)*dtdzf(1)
-              !t(ix,iy,1,iz) = tsfcc(1) - 5.0
            enddo
            enddo
          else
            do iy=iys,iye
            do ix=1,nnx
               t(ix,iy,1,iz) = t_lower + slope*(zz(iz+1) - z_lower)
-              !t(ix,iy,1,iz) = tsfcc(1) - 5.0 
            enddo
            enddo
          endif
          do iy=iys,iye
          do ix=1,nnx
-            t(ix,iy,1,iz) = t_lower
-            t(ix,iy,2,iz) = 0.  !For now just set the initial humidity field to zero
+            t(ix,iy,2,iz) = 0.01
             w(ix,iy,iz)   = 0.
             r1(ix,iy,iz)  = 0.
             r2(ix,iy,iz)  = 0.
             r3(ix,iy,iz)  = 0.
             r4(ix,iy,1,iz)= 0.
-            !r4(ix,iy,2,iz)= 0.
+            r4(ix,iy,2,iz)= 0.
             r5(ix,iy,iz)  = 0.
          enddo 
          enddo 
@@ -10097,11 +10093,13 @@ c
      +                     rhop/rhow*taup_i*(part%Tp-part%Tf)
          part%Tprhs_L = 3.0*Lv/Cpp/part%radius*part%radrhs
   
-         part%xp(1:3) = xtmp(1:3) + dt*gama(istage)*part%xrhs(1:3)
-         part%vp(1:3) = vtmp(1:3) + dt*gama(istage)*part%vrhs(1:3)
-         part%Tp = Tptmp + dt*gama(istage)*part%Tprhs_s
-         part%Tp = part%Tp + dt*gama(istage)*part%Tprhs_L
-         part%radius = radiustmp + dt*gama(istage)*part%radrhs
+         !part%xp(1:3) = xtmp(1:3) + dt*gama(istage)*part%xrhs(1:3)
+         !part%vp(1:3) = vtmp(1:3) + dt*gama(istage)*part%vrhs(1:3)
+         !part%Tp = Tptmp + dt*gama(istage)*part%Tprhs_s
+         !part%Tp = part%Tp + dt*gama(istage)*part%Tprhs_L
+         !part%radius = radiustmp + dt*gama(istage)*part%radrhs
+
+         part%vp(3) = -g(3)/taup_i
 
 
         part => part%next
@@ -10143,18 +10141,40 @@ c
       part => first_particle
       do while (associated(part))
       numpart = numpart + 1
+      part%to_destroy = 0
       part => part%next
       end do
 
 
-      t_s = mpi_wtime()
       if (ineighbor) then
+      t_s = mpi_wtime()
       call particle_neighbor_search_kd
       !call particle_neighbor_search_brute
-      end if
       call mpi_barrier(mpi_comm_world,ierr)
       t_f = mpi_wtime()
       if (myid==5) write(*,*) 'time neighbor:', t_f - t_s
+      end if
+
+      
+      if (icoalesce) then
+      t_s = mpi_wtime()
+      call particle_coalesce(istage)
+      call mpi_barrier(mpi_comm_world,ierr)
+      t_f = mpi_wtime()
+      if (myid==5) write(*,*) 'time coalescence:', t_f - t_s
+      end if
+
+      !Remove dead particles from coalescence
+      numpart = 0
+      part => first_particle
+      do while (associated(part))
+         if (part%to_destroy) then
+            call destroy_particle
+         else
+            numpart = numpart + 1
+          end if
+      part => part%next
+      end do
 
 
 
@@ -10361,6 +10381,10 @@ c
       part%radrhs = 0.0
       part%pidx = idx 
       part%procidx = myid
+      part%nbr_pidx = -1
+      part%nbr_procidx = -1
+      part%mult = mult_init
+      part%to_destroy = 0
       
       end subroutine create_particle
       function dFdr_uniform(r)
@@ -10435,6 +10459,232 @@ c
 
 
       end subroutine particle_bcs_periodic
+      subroutine particle_coalesce(istage)
+      use particles
+      use pars
+      use kd_tree
+      use pars
+      use con_data
+      implicit none 
+
+      type(particle), pointer :: part_tmp
+      type(tree_master_record), pointer :: tree
+
+      real, allocatable :: xp_data(:,:),distances(:),rad_data(:)
+      real, allocatable :: vel_data(:,:)
+      integer, allocatable :: index_data(:,:),indexes(:),mult_data(:)
+      integer, allocatable :: destroy_data(:)
+      integer, allocatable :: coal_data(:),ran_nq(:)
+
+      integer :: i,nq,coal_idx,j,ran_idx,tmp_int,gm,gam_til
+      integer :: istage, xi_j, xi_k,ns,k_idx,j_idx
+      real :: qv(3),dist_tmp,xdist,ydist,zdist,ran2
+      real :: phi,K,Pjk,veldiff,E,dV,dt_tofix,p_alpha
+      real :: rad_j_tmp,rad_k_tmp
+
+      !For whatever reason, the kd-search sometimes misses edge cases,
+      !and you should do nq+1 if you actually want nq
+      nq = 11
+
+      allocate(xp_data(numpart,3),index_data(numpart,2))
+      allocate(vel_data(numpart,3))
+      allocate(distances(nq),indexes(nq),ran_nq(2:nq-1))
+      allocate(rad_data(numpart),mult_data(numpart),coal_data(numpart))
+      allocate(destroy_data(numpart))
+
+      !Loop over particles and fill arrays
+      i = 1
+      part_tmp => first_particle
+      do while (associated(part_tmp))
+
+         xp_data(i,1:3) = part_tmp%xp(1:3) 
+         index_data(i,1) = part_tmp%pidx
+         index_data(i,2) = part_tmp%procidx
+
+         rad_data(i) = part_tmp%radius
+         mult_data(i) = part_tmp%mult
+         coal_data(i) = 0
+
+         vel_data(i,1:3) = part_tmp%vp(1:3)
+
+      i = i+1   
+      part_tmp => part_tmp%next
+      end do
+
+      !Build the kd-tree
+      tree => create_tree(xp_data) 
+
+      !Do the search for each of the particles
+      part_tmp => first_particle
+      do i=1,numpart
+
+         qv(1:3) = xp_data(i,1:3)
+         call n_nearest_to(tree,qv,nq,indexes,distances)
+         !call n_nearest_to_brute_force(tree,qv,nq,indexes,distances)
+ 
+         !Go back through and assign the shortest distance and index
+         !NOTE: Must use 2nd one since it finds itself as nearest neighbor
+         !Keep this turned on despite "ineighbor" flag -- consider it a bonus
+         part_tmp%dist = sqrt(distances(2))
+         part_tmp%nbr_pidx = index_data(indexes(2),1)
+         part_tmp%nbr_procidx = index_data(indexes(2),2)
+
+         !Okay, now the particle knows who the nearest nq particles are
+         !--> pick one at random and apply coalescence rules
+         !Loop over all nq until you find one that hasn't coalesced
+         !Don't coalesce if all nq nearby have already done so
+
+         !Set up an array 2,3,...,nq-1
+         do j=2,nq-1
+            ran_nq(j) = j
+         end do
+
+         !Get a random permutation of this array
+         do j=2,nq-1
+            ran_idx = floor(ran2(iseed)*(nq-3)) + 2 !Get a number between 2 and nq-1
+            tmp_int = ran_nq(j) 
+            ran_nq(j) = ran_nq(ran_idx)
+            ran_nq(ran_idx) = tmp_int
+         end do
+
+         !Now loop through these coalescence candidates and take first one that hasn't already coalesced
+         coal_idx = -1
+         do j=2,nq-1
+
+             if (.not. coal_data(indexes(ran_nq(j)))) then        !Found one that has not already coalesced
+                coal_idx = indexes(ran_nq(j))              !The index of the coalescence candidate in the arrays
+                goto 101
+             end if
+         
+         end do
+   
+101   continue
+
+
+      !Now apply the coalescence rules to the pair (i,coal_idx) assuming a coal_idx was found (.ne. -1)
+      if (coal_idx .ge. 1) then
+
+         phi = ran2(iseed) 
+         dV = 2*pi2/3.0*(sqrt(distances(nq-1)))**3  !The volume will be the sphere formed by outermost droplet considered
+         dt_tofix = dt*gama(istage)
+         E = 1.0  !Collision efficiency -- obviously this needs to be updated from 1.0
+         
+         veldiff = sqrt( (vel_data(i,1)-vel_data(coal_idx,1))**2 + 
+     +                   (vel_data(i,2)-vel_data(coal_idx,2))**2 +  
+     +                   (vel_data(i,3)-vel_data(coal_idx,3))**2 )
+ 
+         K = pi2/2.0*E*veldiff*(rad_data(i) + rad_data(coal_idx))**2
+
+
+         if (mult_data(i) .ge. mult_data(coal_idx)) then
+            xi_j = mult_data(i)
+            xi_k = mult_data(coal_idx)
+            j_idx = i
+            k_idx = coal_idx
+         else
+            xi_j = mult_data(coal_idx)
+            xi_k = mult_data(i)
+            j_idx = coal_idx
+            k_idx = i
+         end if
+
+         Pjk = K*dt_tofix/dV*xi_j
+
+         ns = nq-1   !This would be the number of particles in the "cell" according to Shima et al. 2009
+         p_alpha = Pjk*(real(ns)*(real(ns)-1.0)/2.0)/(real(ns)/2.0)
+
+         if (phi .lt. p_alpha-floor(p_alpha)) then
+            gm = floor(p_alpha) + 1
+         else
+            gm = floor(p_alpha)
+         end if
+
+         if (myid==0 .and. i==1) then
+         write(*,'(a5,7e15.6)'),'DHR1:',Pjk,p_alpha,K,dV,phi,veldiff,
+     +    real(ns)*real(xi_j)/dV
+         write(*,'(a5,5i)'),'DHR2:',floor(p_alpha),gm,ns
+         end if
+
+         if (gm .gt. 0) then  !Only update radii and multiplicities if the coin flip indicates
+       
+            gam_til = min(gm,floor(real(xi_j)/real(xi_k)))
+
+
+            if (xi_j - gam_til*xi_k .gt. 0) then
+
+            !Update particle j's multiplicity
+            mult_data(j_idx) = mult_data(j_idx)-gam_til*mult_data(k_idx)
+               
+            !Update particle k's radius
+            rad_data(k_idx) = (gam_til*rad_data(j_idx)**3 + 
+     +                         rad_data(k_idx)**3)**(1.0/3.0)
+
+            write(*,'(a5,8i)') 'DHR3:',gm,gam_til,xi_j,xi_k,
+     +      mult_data(j_idx),mult_data(k_idx),j_idx,k_idx
+         write(*,'(a5,5e15.6)') 'DHR3:',rad_data(k_idx),rad_data(j_idx),
+     +      Pjk,p_alpha,K
+
+            elseif (xi_j - gam_til*xi_k .eq. 0) then
+       
+            mult_data(j_idx) = floor(real(mult_data(j_idx))/2.0)
+            mult_data(k_idx) = floor(real(mult_data(k_idx))/2.0)
+
+            rad_j_tmp = (gam_til*rad_data(j_idx)**3 +
+     +                         rad_data(k_idx)**3)**(1.0/3.0)
+            rad_k_tmp = (gam_til*rad_data(j_idx)**3 +
+     +                         rad_data(k_idx)**3)**(1.0/3.0)
+
+            rad_data(j_idx) = rad_j_tmp
+            rad_data(k_idx) = rad_k_tmp
+
+            write(*,'(a5,8i)') 'DHR4:',gm,gam_til,xi_j,xi_k,
+     +      mult_data(j_idx),mult_data(k_idx),j_idx,k_idx
+         write(*,'(a5,5e15.6)') 'DHR4:',rad_data(k_idx),rad_data(j_idx),
+     +      Pjk,p_alpha,K
+
+            end if
+
+          !Now both of these have coalesced
+          coal_data(coal_idx) = 1
+          coal_data(i) = 1
+
+          end if !gm .gt. 0
+
+      end if  !coal_idx .gt. 1
+         
+         
+
+      part_tmp => part_tmp%next
+      end do
+
+      !Now finally update the particle linked list
+      i = 1
+      part_tmp => first_particle
+      do while (associated(part_tmp))
+
+         !Only things which should change are radius and multiplicity
+         part_tmp%radius = rad_data(i)
+         part_tmp%mult = mult_data(i)
+
+         !Finally, indicate that particle should be killed if
+         !multiplicity is zero:
+         if (mult_data(i) .eq. 0) then
+            part_tmp%to_destroy = 1
+         end if
+
+
+      i = i+1   
+      part_tmp => part_tmp%next
+      end do
+
+
+      call destroy_tree(tree)
+      deallocate(xp_data,index_data)
+      deallocate(vel_data,distances,indexes,ran_nq)
+      deallocate(rad_data,mult_data,coal_data,destroy_data)
+
+
+      end subroutine particle_coalesce
       subroutine particle_neighbor_search_kd
       use particles
       use pars
@@ -11608,7 +11858,7 @@ c
       do idx=1,numpart
       xv = ran2(iseed)*(xmax-xmin) + xmin
       yv = ran2(iseed)*(ymax-ymin) + ymin
-      zv = ran2(iseed)*(zl-2.0*radius_init) + radius_init
+      zv = ran2(iseed)*(zi-zw1) + zw1
       xp_init = (/xv,yv,zv/)
       call create_particle(xp_init,vp_init,
      +         Tp_init,qf_init,idx) 
@@ -11637,7 +11887,7 @@ c
       real :: pi
       integer(kind=MPI_ADDRESS_KIND) :: extent,lb
       integer(kind=MPI_ADDRESS_KIND) :: extent2,lb2,displs(3)
-      integer :: num_reals
+      integer :: num_reals,num_integers
 
       !First set up the neighbors for the interpolation stage:
       call assign_nbrs
@@ -11651,10 +11901,8 @@ c
       m_s = Sal/1000.0*4.0/3.0*pi*radius_init**3*rhow
 
 
-      if (myid==0) write(*,*) 'Init Particle radius = ',radius_init  !Brian 7/14/14
+      if (myid==0) write(*,*) 'Init Particle radius = ',radius_init
       if (myid==0) write(*,*) 'Particle Salinity = ',Sal     
-      !if (myid==0) write(*,*) 'Particle density = ',rhop !rhop is not calculated yet
-      !if (myid==0) write(*,*) 'Particle taup = ',1.0/taup_i
       if (myid==0) write(*,*) 'Particle gravity = ',part_grav
       if (myid==0) write(*,*) 'nuf = ',nuf
       if (myid==0) write(*,*) 'CpaCpp = ',CpaCpp
@@ -11667,14 +11915,15 @@ c
       !MUST UPDATE IF THINGS ARE ADDED/REMOVED FROM PARTICLE STRUCTURE
 
       num_reals = 5*3+9
+      num_integers = 6
       
-      blcts(1:3) = (/4,num_reals,2/)
+      blcts(1:3) = (/num_integers,num_reals,2/)
       displs(1) = 0
       types(1) = mpi_integer
       call mpi_type_get_extent(mpi_integer,lb,extent,ierr)
       
-      !Displace 4*size of mpi_integer (4 integer: pidx,procidx,nbr_pidx,nbr_procidx)
-      displs(2) = extent*4
+      !Displace num_integers*mpi_integer
+      displs(2) = extent*num_integers
       types(2) = mpi_real8
       call mpi_type_get_extent(mpi_real8,lb,extent,ierr)
       !Displace num_reals*size of mpi_real8
@@ -12154,7 +12403,10 @@ c
       if (iy .gt. iye+1) write(*,*) 'proc',myid,'has iy = ',iy
       if (iy .lt. iys) write(*,*) 'proc',myid,'has iy = ',iy
       if (iz .gt. nnz+1) write(*,*) 'proc',myid,'has iz = ',iz
-      if (iz .lt. 0) write(*,*) 'proc',myid,'has iz = ',iz
+      if (iz .lt. 0) then
+          write(*,*) 'proc',myid,'has iz = ',iz
+          write(*,*) 'DHR:',part%radius,part%xp(3),part%mult,part%vp(3)
+      end if
 
       !Recall to subtract minus g (add g) since momentum is extracted form
       !fluid only through drag term - NOT the gravity term as well
@@ -12313,7 +12565,8 @@ c
 
       namelist /grid_params/ ncpu_s, Uo, Ttop, Tbot,
      +         qstar, tsfcc, ugcont, vgcont,
-     +         zi, zl, xl, yl, zw1, dpdx
+     +         zi, zl, xl, yl, zw1, dpdx,
+     +         cfl,dt_new
 
       namelist /path_names/ path_seed,path_part,path_res,
      +         path_sav,path_his,path_viz_xy,path_viz_xz,
@@ -12323,11 +12576,11 @@ c
      +         iupwnd,ibuoy,ifilt,itcut,isubs,ibrcl,iocean,
      +         method,idebug,iz_space,ivis0,ifix_dt,new_vis,iDNS,
      +         ispray,icouple,iTcouple,iHcouple,ievap,ifields,ilin,
-     +         ineighbor
+     +         ineighbor,icoalesce
 
 
       namelist /constants/ rhoa, nuf, Cpa, Pra, Sc,
-     +         tnumpart,rhow,part_grav,
+     +         tnumpart,mult_init,rhow,part_grav,
      +         Cpp,Mw,Ms,Ru,Gam,Ion,Os,Sal,
      +         radius_init,
      +         grav, t00,fcor,zo,

@@ -13,7 +13,7 @@ set( CMAKE_Fortran_COMPILER ${MPI_Fortran_COMPILER})
 
 # Setup Compile Flags
 set (CMAKE_Fortran_FLAGS_RELEASE "${CMAKE_Fortran_FLAGS_RELEASE} -i4 -r8")
-set (CMAKE_Fortran_FLAGS_DEBUG   "${CMAKE_Fortran_FLAGS_DEBUG} -g -traceback -check pointer -i4 -r8")
+set (CMAKE_Fortran_FLAGS_DEBUG   "${CMAKE_Fortran_FLAGS_DEBUG} -g -traceback -check pointer -check bounds -i4 -r8")
 
 # Build Library
 add_library (fft STATIC "fft.f")
