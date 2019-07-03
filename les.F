@@ -8,7 +8,7 @@ c     ----------------------------------------------------------------------
      +     iupwnd,ibuoy,ifilt,itcut,isubs,ibrcl,iocean,method,
      +     idebug,iz_space,ivis0,ifix_dt,new_vis,iDNS,
      +     icouple,iTcouple,iHcouple,ievap,ifields,ilin,ineighbor,
-     +     icoalesce
+     +     icoalesce,ipart_method
 c     
 c     -------- j_recl = record length in "bytes" for history file
 c     k8     = kind parameter for integers in mpi_io routines
@@ -742,7 +742,9 @@ c -------- update particles
 c
          t_s = mpi_wtime()
          !call particle_update_cn(it,istage) 
+         if (ipart_method .eq. 1) then
          call particle_update_rk3(it,istage) 
+         end if
 
          t_f = mpi_wtime()
          call mpi_barrier(mpi_comm_world,ierr)
@@ -763,6 +765,24 @@ c
  8999 continue
       t_stage_f = mpi_wtime()
       !if (myid==5) write(*,*) 'time stage: ',t_stage_f - t_stage_s
+
+!      if (ipart_method .eq. 3) then
+!         call particle_update_BE(it)
+!      end if
+
+      !Call coalescence outside of RK loop since it's not appropriate as
+      !part of RK scheme
+      if (icoalesce) then
+      t_s = mpi_wtime()
+
+      call particle_coalesce
+
+      call mpi_barrier(mpi_comm_world,ierr)
+      t_f = mpi_wtime()
+      if (myid==5) write(*,*) 'time coalescence:', t_f - t_s
+      end if
+
+
      
       call get_max
       call get_dt
@@ -10049,6 +10069,20 @@ c
       t_s = mpi_wtime()
 
 
+      !If you want, you can have the particles calculate nearest neighbor
+      !Brute is there for checking, but WAY slower
+      if (ineighbor) then
+      !t_s = mpi_wtime()
+
+      call particle_neighbor_search_kd
+      !call particle_neighbor_search_brute
+
+      !call mpi_barrier(mpi_comm_world,ierr)
+      !t_f = mpi_wtime()
+      !if (myid==5) write(*,*) 'time neighbor:', t_f - t_s
+      end if
+
+
       !Loop over the linked list of particles:
       part => first_particle
       do while (associated(part))     
@@ -10169,49 +10203,10 @@ c
       !t_f = mpi_wtime()
       !if (myid==5) write(*,*) 'time bc_per:', t_f - t_s
 
-      !Get particle count:
-      numpart = 0
-      part => first_particle
-      do while (associated(part))
-      numpart = numpart + 1
-      part%to_destroy = 0
-      part => part%next
-      end do
 
 
-      if (ineighbor) then
-      t_s = mpi_wtime()
-      call particle_neighbor_search_kd
-      !call particle_neighbor_search_brute
-      call mpi_barrier(mpi_comm_world,ierr)
-      t_f = mpi_wtime()
-      if (myid==5) write(*,*) 'time neighbor:', t_f - t_s
-      end if
 
       
-      if (icoalesce) then
-      t_s = mpi_wtime()
-      call particle_coalesce(istage)
-      call mpi_barrier(mpi_comm_world,ierr)
-      t_f = mpi_wtime()
-      if (myid==5) write(*,*) 'time coalescence:', t_f - t_s
-      end if
-
-      !Remove dead particles from coalescence and add stats
-      if (istage .eq. 1) hist_rad = 0
-      numpart = 0
-      part => first_particle
-      do while (associated(part))
-         if (part%to_destroy) then
-            call destroy_particle
-         else
-            numpart = numpart + 1
-         end if
-         call add_histogram(bins_rad,hist_rad,
-     +    histbins+2,part%radius)
-      part => part%next
-      end do
-
 
 
       !Now that particles are in their updated position, 
@@ -10495,7 +10490,7 @@ c
 
 
       end subroutine particle_bcs_periodic
-      subroutine particle_coalesce(istage)
+      subroutine particle_coalesce
       use particles
       use pars
       use kd_tree
@@ -10513,9 +10508,9 @@ c
       integer, allocatable :: coal_data(:),ran_nq(:)
 
       integer :: i,nq,coal_idx,j,ran_idx,tmp_int,gm,gam_til
-      integer :: istage, xi_j, xi_k,ns,k_idx,j_idx
+      integer :: xi_j, xi_k,ns,k_idx,j_idx
       real :: qv(3),dist_tmp,xdist,ydist,zdist,ran2
-      real :: phi,K,Pjk,veldiff,E,dV,dt_tofix,p_alpha
+      real :: phi,K,Pjk,veldiff,E,dV,p_alpha
       real :: rad_j_tmp,rad_k_tmp
 
       !For whatever reason, the kd-search sometimes misses edge cases,
@@ -10602,7 +10597,6 @@ c
 
          phi = ran2(iseed) 
          dV = 2*pi2/3.0*(sqrt(distances(nq-1)))**3  !The volume will be the sphere formed by outermost droplet considered
-         dt_tofix = dt*gama(istage)
          E = 1.0  !Collision efficiency -- obviously this needs to be updated from 1.0
          
          veldiff = sqrt( (vel_data(i,1)-vel_data(coal_idx,1))**2 + 
@@ -10624,7 +10618,7 @@ c
             k_idx = i
          end if
 
-         Pjk = K*dt_tofix/dV*xi_j
+         Pjk = K*dt/dV*xi_j
 
          ns = nq-1   !This would be the number of particles in the "cell" according to Shima et al. 2009
          p_alpha = Pjk*(real(ns)*(real(ns)-1.0)/2.0)/(real(ns)/2.0)
@@ -10712,6 +10706,22 @@ c
       i = i+1   
       part_tmp => part_tmp%next
       end do
+
+      !Finally remove dead particles from coalescence and add stats
+      hist_rad = 0
+      numpart = 0
+      part => first_particle
+      do while (associated(part))
+         if (part%to_destroy) then
+            call destroy_particle
+         else
+            numpart = numpart + 1
+         end if
+         call add_histogram(bins_rad,hist_rad,
+     +    histbins+2,part%radius)
+      part => part%next
+      end do
+
 
 
       call destroy_tree(tree)
@@ -12730,7 +12740,7 @@ c       Add the current event to the histogram
      +         iupwnd,ibuoy,ifilt,itcut,isubs,ibrcl,iocean,
      +         method,idebug,iz_space,ivis0,ifix_dt,new_vis,iDNS,
      +         icouple,iTcouple,iHcouple,ievap,ifields,ilin,
-     +         ineighbor,icoalesce
+     +         ineighbor,icoalesce,ipart_method
 
 
       namelist /constants/ rhoa, nuf, Cpa, Pra, Sc,

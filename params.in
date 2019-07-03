@@ -28,6 +28,7 @@ iHcouple=0  !iHcouple also controls TE couple
 ievap=0
 ineighbor=0
 icoalesce=1
+ipart_method=1   !1 = same RK3 as flow
 /
 
 !Grid and domain parameters
