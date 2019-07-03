@@ -22,7 +22,6 @@ isfc = 0, 1  ! isfc = 0 sets surface flux (qstar), isfc = 1 sets surface conditi
 iDNS = 1
 ifields = 1  ! if set to 1, reads the initial condition from path_ran below; otherwise calls subroutine random
 ilin = 0   !1 means linear interpolation for particle, 6th order otherwise
-ispray=1
 icouple=0
 iTcouple=0
 iHcouple=0  !iHcouple also controls TE couple
@@ -73,6 +72,7 @@ path_viz_xz="/scratch365/drichte2/tutorial/case1/"
 path_viz_yz="/scratch365/drichte2/tutorial/case1/"
 path_stuf="/scratch365/drichte2/tutorial/case1/"
 path_ran="/scratch365/drichte2/tutorial/case1/u.le.cou000"
+path_histog="/scratch365/drichte2/tutorial/case1/"
 /
 
 

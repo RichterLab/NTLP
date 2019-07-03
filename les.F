@@ -6,7 +6,7 @@ c     ----------------------------------------------------------------------
 
       integer :: ismlt,ifree,iradup,
      +     iupwnd,ibuoy,ifilt,itcut,isubs,ibrcl,iocean,method,
-     +     idebug,iz_space,ivis0,ifix_dt,new_vis,iDNS,ispray,
+     +     idebug,iz_space,ivis0,ifix_dt,new_vis,iDNS,
      +     icouple,iTcouple,iHcouple,ievap,ifields,ilin,ineighbor,
      +     icoalesce
 c     
@@ -36,7 +36,7 @@ c     ----------------------------------------------------------------------
 c     ----------------------------------------------------------------------
       character case*3
 c     ----------------------------------------------------------------------
-      integer  ::   nvel, npre, nhis1, nprt,
+      integer  ::   nvel, npre, nhis1, nprt,nrad,
      +     nhisp, nvelc, 
      +     nviz_z, nviz_y, 
      +     nviz_x, nviz_s,
@@ -77,6 +77,7 @@ c     ----------------------------------------------------------------------
      +     path_v, path_c, path_p, path_h,
      +     path_sav_v, path_sav_c,
      +     path_sav_p, path_sav_h, path_sav_part,
+     +     path_histog, path_sav_hist,
      +     bad_news
       character case_inp*3
       character*80 path_viz_xy, path_viz_xz, path_viz_yz, path_stuf,
@@ -123,12 +124,19 @@ c     ----------------------------------------------------------------------
       integer :: numpart,tnumpart,ngidx
       integer :: iseed
       real :: Rep_avg,part_grav
+      real :: radavg,radmin,radmax
       real :: vp_init(3),Tp_init,qf_init
       integer :: mult_init
 
       real :: radius_init,rhow,nuf 
       real :: CpaCpp,Cpa,Cpp,Pra,Sc,Mw,Ru,rhoa
       real :: m_s,Sal,Ms,Gam,Ion,Os
+
+      integer, parameter :: histbins = 512
+      integer :: hist_flag=0
+      real :: hist_rad(histbins+2)
+      real :: bins_rad(histbins+2)      
+
       
       !REMEMBER: IF ADDING ANYTHING, MUST UPDATE MPI DATATYPE!
       type :: particle
@@ -539,11 +547,9 @@ c
          call init
          call setup(it)
 
-         if (ispray==1) then
          call particle_setup
          call particle_init 
          !call read_part_res !comment out usually 
-         endif
 
 c
 c ---------- choose routine for getting initial guess
@@ -571,10 +577,8 @@ c
          call get_max
 
  
-         if (ispray==1) then
          call particle_setup
          call read_part_res
-         end if
       endif
 
 
@@ -589,7 +593,6 @@ c
       write(*,*) 'Starting time loop'
       write(*,*) 'it,time = ',it,time
       end if
-      if (ispray==1) then
       if (it == 1) numpart = 0
       part => first_particle
       do while (associated(part))
@@ -611,7 +614,6 @@ c
       if (it == 1) numpart = numpart + 1
       end do
       if (myid==0) write(*,*) 'time,tnumpart:',time,tnumpart
-      end if
 
 
       if(it .ge. new_vis .and. ivis0 .eq. 1) then
@@ -683,7 +685,7 @@ c ------------ save velocity field
 c
       if(msave .and. istage .eq. 1) then
          call save_v(it)
-         if (ispray==1) call save_particles
+         call save_particles
       endif
       if(msave_v .and. istage .eq. 1) then
          call save_viz(it)
@@ -694,6 +696,11 @@ c
       if(msave .and. istage .eq. 1) then
          call save_p
       endif
+
+      if(mhis  .and. istage .eq. 1) then
+          call write_histograms
+      end if
+
 c
 c --------- get rhs for all equations
 c
@@ -733,12 +740,6 @@ c
 c      
 c -------- update particles
 c
-!      Comment this out for the channel case - no generation needed
-!      Just randomly initiating particles and having reflective boundaries
-!      if ( (ispray==1) .AND. (iss == 0)) then
-!        call particle_generate(istage)
-!      end if
-      if (ispray==1) then
          t_s = mpi_wtime()
          !call particle_update_cn(it,istage) 
          call particle_update_rk3(it,istage) 
@@ -746,7 +747,8 @@ c
          t_f = mpi_wtime()
          call mpi_barrier(mpi_comm_world,ierr)
          if (myid==5) write(*,*) 'time part: ',t_f-t_s
-      end if
+
+
       if(mnout .and. istage .eq. 1)  then
           if(l_debug) then
              call print(nprt,it,izs,ize)
@@ -7761,11 +7763,8 @@ c
      +         wtle(mid,1),wtsb(mid,1),wt_tot(mid,1),
      +         englez(mid),eavg(mid), wabs,
      +         maxval(partcount(1:nnx,iys:iye,1)),
-     +         Rep_avg,phip,phiw,phiv
-c    +         tps(mid,2), tps(mid,3),
-c    +         wtle(mid,2),wtsb(mid,2),wt_tot(mid,2),
-c    +         wtle(mid,3),wtsb(mid,3),wt_tot(mid,3)
-c 6000 format(5e17.8)
+     +         Rep_avg,radavg,radmin,radmax
+
  6000 format(37e17.8)
 c
 c -------------- write profile information
@@ -7806,6 +7805,7 @@ c ---- root closes and checks the files
 c
       close(nhis1)
       close(nhisp)
+      close(nrad)
       inquire(file=path_sav_h,exist=there)
       if(.not.there) then
          write(6,8000) path_sav_h
@@ -7818,16 +7818,25 @@ c
          call mpi_finalize(ierr)
          stop
       endif
+      inquire(file=path_sav_hist,exist=there)
+      if(.not.there) then
+         write(6,8200) path_sav_hist
+         call mpi_finalize(ierr)
+         stop
+      endif
       write(6,7000) path_sav_h
       write(6,7100) path_sav_hp
+      write(6,7200) path_sav_hist
 c
       return
 c -------------------- process write errors
  7000 format(' HISTORY DATA IS WRITTEN IN FILE  ',a80)
  7100 format(' PROFILE HISTORY DATA IS WRITTEN IN FILE  ',a80)
+ 7200 format(' RADHIST DATA IS WRITTEN IN FILE  ',a80)
  8000 format(' SR. SAVE_HIS: Trouble history file not in path =',a80)
  8100 format(' SR. SAVE_HIS: Trouble profile history file',
      +       ' not in path =',a80)
+ 8200 format(' SR. SAVE_RADPDF: Trouble rad histogram file =',a80)
       end
       subroutine dealias
 c
@@ -8051,7 +8060,6 @@ c
 c ------------- allocate extended arrays for interpolation of
 c               particle/spray location
 c
-      if (ispray==1) then
       allocate(uext(0:nnz+1,iys-2:iye+3,mxs-2:mxe+3), 
      +         vext(0:nnz+1,iys-2:iye+3,mxs-2:mxe+3), 
      +         wext(0:nnz+1,iys-2:iye+3,mxs-2:mxe+3),
@@ -8064,9 +8072,7 @@ c     +         Text(0:nnz+1,iys-2:iye+3,mxs-2:mxe+3))
      +         w_t(0:nnz+1,iys:iye,mxs:mxe), 
      +         T_t(0:nnz+1,iys:iye,mxs:mxe),!Brian 7/14/14 
      +         T2_t(0:nnz+1,iys:iye,mxs:mxe)) !Brian 7/14/14 
-      end if
       !Keep track of particle counts at each node (its surrounding volume)
-      !NOTE: allocate even if ispray == 0, since it's in xy_stats
       allocate(partcount(nnx,iys:iye,izs-1:ize+1))
       allocate(partcount_t(0:nnz+1,iys:iye,mxs:mxe))
       allocate(upwp_t(0:nnz+1,iys:iye,mxs:mxe))
@@ -8970,6 +8976,7 @@ c
       nvel  = 20 
       npre  = 30
       nhis1 = 40
+      nrad = 45
       nvelc = 50
       nhisp = 60
       nviz_z = 80
@@ -9027,6 +9034,7 @@ c
       include 'mpif.h'
       character cgrid*4, iblks*16
       logical there
+     
 c
 c --------------- build character strings for ascii history file name
 c
@@ -9053,6 +9061,21 @@ c
       call blnk(path_sav_hp)
       path_sav_hp = path_his(1:iblnk-1)//'/his'//
      +         cgrid(1:4)//case(1:3)//'.'//iblks(1:15)//'.ieee'
+
+      !Do it again for radius pdf file:
+      cgrid = '.le.'
+      write(num,'(i3.3)') itn
+
+      iblnk = index(path_histog,' ')
+      call blnk(iblks)
+      write(iblks(1:7),'(i7.7)') istep
+      iblks(8:8) = '_'
+      write(iblks(9:15),'(i7.7)') (istep+itape)
+      call blnk(path_sav_hist)
+
+
+      path_sav_hist = path_histog(1:iblnk-1)//'/radhist'//
+     +          cgrid(1:4)//case(1:3)//'.'//iblks(1:15)//'.txt'      
 c
 c ----------------- save data in directory
 c
@@ -9065,6 +9088,9 @@ c
       open(nhisp,err=4000,file=path_sav_hp,
      +        form='unformatted',access='direct',recl=isize*j_recl,
      +        status='unknown')
+
+      close(nrad)
+      open(nrad,err=4500,file=path_sav_hist,form='formatted')
       endif
 c
       return
@@ -9080,6 +9106,13 @@ c-------------------
       write(6,6302) nhisp, path_sav_hp
  6302 format(' 6302, SR. OPEN_HIS:',/,
      +       '    cannot open history profile file on unit = ',i2,/,
+     +       '    path = ',a80)
+      stop
+
+ 4500 continue
+      write(6,6303) nrad, path_sav_hist
+ 6303 format(' 6303, SR. OPEN_RADPDF:',/,
+     +       '    cannot open radhist file on unit = ',i2,/,
      +       '    path = ',a80)
       stop
       end
@@ -10164,7 +10197,8 @@ c
       if (myid==5) write(*,*) 'time coalescence:', t_f - t_s
       end if
 
-      !Remove dead particles from coalescence
+      !Remove dead particles from coalescence and add stats
+      if (istage .eq. 1) hist_rad = 0
       numpart = 0
       part => first_particle
       do while (associated(part))
@@ -10172,7 +10206,9 @@ c
             call destroy_particle
          else
             numpart = numpart + 1
-          end if
+         end if
+         call add_histogram(bins_rad,hist_rad,
+     +    histbins+2,part%radius)
       part => part%next
       end do
 
@@ -11900,6 +11936,8 @@ c
 
       m_s = Sal/1000.0*4.0/3.0*pi*radius_init**3*rhow
 
+      call set_binsdata(bins_rad,histbins+2,1.0e-8,1.0e-2)
+
 
       if (myid==0) write(*,*) 'Init Particle radius = ',radius_init
       if (myid==0) write(*,*) 'Particle Salinity = ',Sal     
@@ -12551,6 +12589,122 @@ c
 !      end do
 
       end subroutine particle_coupling_update
+      subroutine write_histograms
+      use pars
+      use fields
+      use con_data
+      use con_stats
+      use particles
+      implicit none
+
+      include 'mpif.h'
+      integer :: i,j
+      integer :: ierr
+      logical :: isfirst
+
+      integer :: iblnk
+      integer :: num_entries
+
+      real :: sumbuf_rad(histbins+2)
+      real :: binval_rad(histbins+2)
+
+      character :: fformat*10, num*3
+
+
+c -------------- record bins for histogram file -----------
+        binval_rad = bins_rad(:)
+
+
+c -------------- Collect all histogram from different processors
+        num_entries = (histbins+2)
+        call mpi_reduce(hist_rad,sumbuf_rad,num_entries,
+     +   mpi_real8,mpi_sum,0,mpi_comm_world,ierr)
+
+        if (l_root) then
+
+
+c ---------------- save data 
+
+        write(num,'(i3.3)') histbins+2
+        fformat = '('//num//'e15.6)'
+
+        write(nrad,fformat),sumbuf_rad(1:histbins+2)
+
+        end if
+
+      end subroutine write_histograms
+      subroutine set_binsdata(binsdata,sizea,rmin,rmax)
+      use pars
+      use fields
+      use con_data
+      use con_stats
+      use particles
+      implicit none
+
+      integer :: i,nbin,ibin,nbinnew
+      real :: dh
+
+      integer,intent(in) :: sizea
+      real,intent(inout) :: binsdata(sizea)
+
+      real :: rmin,rmax,rmin10,rmax10
+
+        nbin = histbins !From Module Particle 
+
+        rmin10 = log10(rmin)
+        rmax10 = log10(rmax)
+
+c       Calculate size of interval
+        dh = (rmax10-rmin10)/(nbin-1)
+
+c       ===== update x-axis for each bin ===== 
+        binsdata(1) = rmin10-dh
+        do i = 1,histbins+1
+          binsdata(i+1)= dh+binsdata(i)
+        end do
+
+
+      end subroutine set_binsdata
+      subroutine add_histogram(binsdata,histdata,sizea,val1)
+
+      use pars
+      use fields
+      use con_data
+      use con_stats
+      use particles
+      implicit none
+
+      integer :: i,nbin,nbinnew,ibin
+      real :: dh
+      real,intent(in) :: val1
+
+      integer,intent(in) :: sizea
+      real,intent(in) :: binsdata(sizea)
+      real,intent(inout) :: histdata(sizea)
+
+      real :: rmin,rmax,logval1
+
+        rmin = binsdata(2)
+        nbin = histbins !From Module Particle 
+        rmax = binsdata(nbin+1)
+
+c       Calculate size of interval
+        dh = (rmax-rmin)/(nbin-1)
+
+        logval1 = log10(val1)
+        if (logval1 .gt. rmax+0.5*dh) then
+                ibin = nbin + 2
+        elseif (logval1 .lt. rmin-0.5*dh) then
+                ibin = 1
+        else
+                ibin = (floor((logval1-(rmin-0.5*dh))/dh)+1)+1
+        end if
+
+
+c       Add the current event to the histogram
+        histdata(ibin) = histdata(ibin) + 1.0
+
+      end subroutine add_histogram
 
       subroutine read_input_file
       use pars
@@ -12570,12 +12724,12 @@ c
 
       namelist /path_names/ path_seed,path_part,path_res,
      +         path_sav,path_his,path_viz_xy,path_viz_xz,
-     +         path_viz_yz,path_stuf,path_ran
+     +         path_viz_yz,path_stuf,path_ran,path_histog
 
       namelist /flags/ ismlt,ifree,isfc,iradup,
      +         iupwnd,ibuoy,ifilt,itcut,isubs,ibrcl,iocean,
      +         method,idebug,iz_space,ivis0,ifix_dt,new_vis,iDNS,
-     +         ispray,icouple,iTcouple,iHcouple,ievap,ifields,ilin,
+     +         icouple,iTcouple,iHcouple,ievap,ifields,ilin,
      +         ineighbor,icoalesce
 
 
