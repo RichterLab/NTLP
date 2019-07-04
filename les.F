@@ -921,6 +921,7 @@ c     dt_new = amin1(dt_new, 10.0)
 
 c ---------------- compare against viscous stability limit
 c
+      if (ifix_dt .eq. 0) then
       if(vismax*dt_new .gt. 0.5) then
          dt_cfl = dt_new
          dt_new = 0.5/vismax
@@ -931,6 +932,7 @@ c
      +      ' cfl time step = ',e15.6,' vismax = ',e15.6)
          endif
       endif
+      end if
 c
 c -------- for safety if restart set timestep = saved timestep in
 c          restart file
@@ -10166,6 +10168,7 @@ c
          !part%Tp = part%Tp + dt*gama(istage)*part%Tprhs_L
          !part%radius = radiustmp + dt*gama(istage)*part%radrhs
 
+         part%vp(1:2) = 0.0
          part%vp(3) = -g(3)/taup_i
 
 
@@ -10202,11 +10205,6 @@ c
       !call mpi_barrier(mpi_comm_world,ierr)
       !t_f = mpi_wtime()
       !if (myid==5) write(*,*) 'time bc_per:', t_f - t_s
-
-
-
-
-      
 
 
       !Now that particles are in their updated position, 
@@ -10375,12 +10373,12 @@ c
       !if (myid==5) write(*,*) 'time mpi_allreduce: ', t_f - t_s
 
       end subroutine particle_update_rk3
-      subroutine create_particle(xp,vp,Tp,qinfp,idx) !Currently ignoring Tp and qinfp
+      subroutine create_particle(xp,vp,Tp,qinfp,rad_init,idx)
       use particles
       use pars
       implicit none
 
-      real :: xp(3),vp(3),Tp,qinfp  !Brian 7/29/14
+      real :: xp(3),vp(3),Tp,qinfp,rad_init
       integer :: idx
 
       if (.NOT. associated(first_particle)) then
@@ -10400,11 +10398,9 @@ c
       part%xp(1:3) = xp(1:3)
       part%vp(1:3) = vp(1:3)
       part%Tp = Tp
-      part%radius = radius_init !Brian 7/9/14
-!      part%vp0(1:3) = 0.0
-!      part%uf0(1:3) = 0.0
+      part%radius = rad_init
       part%uf(1:3) = 0.0
-      part%qinf = qinfp  !Brian 7/14/14
+      part%qinf = qinfp
       part%xrhs(1:3) = 0.0
       part%vrhs(1:3) = 0.0 
       part%Tprhs_s = 0.0
@@ -10510,7 +10506,7 @@ c
       integer :: i,nq,coal_idx,j,ran_idx,tmp_int,gm,gam_til
       integer :: xi_j, xi_k,ns,k_idx,j_idx
       real :: qv(3),dist_tmp,xdist,ydist,zdist,ran2
-      real :: phi,K,Pjk,veldiff,E,dV,p_alpha
+      real :: phi,K,Pjk,veldiff,E,dV,p_alpha,pvol_j,pvol_k,golovin_b
       real :: rad_j_tmp,rad_k_tmp
 
       !For whatever reason, the kd-search sometimes misses edge cases,
@@ -10602,9 +10598,6 @@ c
          veldiff = sqrt( (vel_data(i,1)-vel_data(coal_idx,1))**2 + 
      +                   (vel_data(i,2)-vel_data(coal_idx,2))**2 +  
      +                   (vel_data(i,3)-vel_data(coal_idx,3))**2 )
- 
-         K = pi2/2.0*E*veldiff*(rad_data(i) + rad_data(coal_idx))**2
-
 
          if (mult_data(i) .ge. mult_data(coal_idx)) then
             xi_j = mult_data(i)
@@ -10618,9 +10611,23 @@ c
             k_idx = i
          end if
 
-         Pjk = K*dt/dV*xi_j
+         !Choose the kernel:
+         !K = pi2/2.0*E*veldiff*(rad_data(i) + rad_data(coal_idx))**2
 
-         ns = nq-1   !This would be the number of particles in the "cell" according to Shima et al. 2009
+         !Golovin (1963) kernel:
+         pvol_j = pi2*2.0/3.0*rad_data(j_idx)**3.0
+         pvol_k = pi2*2.0/3.0*rad_data(k_idx)**3.0
+         golovin_b = 1.5e3
+         K = golovin_b*(pvol_j + pvol_k)
+
+         ! Pjk = K*dt/dV*xi_j
+
+         !TESTING: cheat here and hard-code a different dt and dV than the flow
+         !since there are issues
+         Pjk = K*1.0/1.0e6*xi_j
+         ns = tnumpart
+
+         !ns = nq-1   !This would be the number of particles in the "cell" according to Shima et al. 2009
          p_alpha = Pjk*(real(ns)*(real(ns)-1.0)/2.0)/(real(ns)/2.0)
 
          if (phi .lt. p_alpha-floor(p_alpha)) then
@@ -10629,11 +10636,11 @@ c
             gm = floor(p_alpha)
          end if
 
-         if (myid==0 .and. i==1) then
-         write(*,'(a5,7e15.6)'),'DHR1:',Pjk,p_alpha,K,dV,phi,veldiff,
-     +    real(ns)*real(xi_j)/dV
-         write(*,'(a5,5i)'),'DHR2:',floor(p_alpha),gm,ns
-         end if
+!         if (myid==0 .and. i==1) then
+!         write(*,'(a5,7e15.6)'),'DHR1:',Pjk,p_alpha,K,dV,phi,veldiff,
+!     +    real(ns)*real(xi_j)/dV
+!         write(*,'(a5,5i)'),'DHR2:',floor(p_alpha),gm,ns
+!         end if
 
          if (gm .gt. 0) then  !Only update radii and multiplicities if the coin flip indicates
        
@@ -10649,10 +10656,10 @@ c
             rad_data(k_idx) = (gam_til*rad_data(j_idx)**3 + 
      +                         rad_data(k_idx)**3)**(1.0/3.0)
 
-            write(*,'(a5,8i)') 'DHR3:',gm,gam_til,xi_j,xi_k,
-     +      mult_data(j_idx),mult_data(k_idx),j_idx,k_idx
-         write(*,'(a5,5e15.6)') 'DHR3:',rad_data(k_idx),rad_data(j_idx),
-     +      Pjk,p_alpha,K
+!            write(*,'(a5,8i)') 'DHR3:',gm,gam_til,xi_j,xi_k,
+!     +      mult_data(j_idx),mult_data(k_idx),j_idx,k_idx
+!         write(*,'(a5,5e15.6)') 'DHR3:',rad_data(k_idx),rad_data(j_idx),
+!     +      Pjk,p_alpha,K
 
             elseif (xi_j - gam_til*xi_k .eq. 0) then
        
@@ -10667,10 +10674,10 @@ c
             rad_data(j_idx) = rad_j_tmp
             rad_data(k_idx) = rad_k_tmp
 
-            write(*,'(a5,8i)') 'DHR4:',gm,gam_til,xi_j,xi_k,
-     +      mult_data(j_idx),mult_data(k_idx),j_idx,k_idx
-         write(*,'(a5,5e15.6)') 'DHR4:',rad_data(k_idx),rad_data(j_idx),
-     +      Pjk,p_alpha,K
+!            write(*,'(a5,8i)') 'DHR4:',gm,gam_til,xi_j,xi_k,
+!     +      mult_data(j_idx),mult_data(k_idx),j_idx,k_idx
+!         write(*,'(a5,5e15.6)') 'DHR4:',rad_data(k_idx),rad_data(j_idx),
+!     +      Pjk,p_alpha,K
 
             end if
 
@@ -10718,7 +10725,7 @@ c
             numpart = numpart + 1
          end if
          call add_histogram(bins_rad,hist_rad,
-     +    histbins+2,part%radius)
+     +    histbins+2,part%radius,part%mult)
       part => part%next
       end do
 
@@ -11877,7 +11884,7 @@ c
       integer :: idx
       real :: xv,yv,zv,ran2,deltaz
       real :: maxx,maxy,maxz
-      real :: xp_init(3)
+      real :: xp_init(3),R0,X0,rad_init,vol_init
 
       !Create the seed for the random number generator:
       call date_and_time(VALUES=values)
@@ -11906,8 +11913,19 @@ c
       yv = ran2(iseed)*(ymax-ymin) + ymin
       zv = ran2(iseed)*(zi-zw1) + zw1
       xp_init = (/xv,yv,zv/)
+
+      !Exponential distribution of droplet size to match Shima et al.
+      !(2009) test case
+      R0 = 30.531e-6
+      X0 = pi2*2.0/3.0*R0**3
+
+      vol_init = -X0*log(1.0-ran2(iseed))
+      rad_init = (vol_init/(pi2*2.0/3.0))**(1.0/3.0)
+      if (myid==0) write(*,*) 'DHR:',X0,R0,vol_init,rad_init
+      !rad_init = radius_init   !From params file -- all particles identical
+
       call create_particle(xp_init,vp_init,
-     +         Tp_init,qf_init,idx) 
+     +         Tp_init,qf_init,rad_init,idx) 
       end do
 
       partTsrc = 0.0
@@ -11946,7 +11964,7 @@ c
 
       m_s = Sal/1000.0*4.0/3.0*pi*radius_init**3*rhow
 
-      call set_binsdata(bins_rad,histbins+2,1.0e-8,1.0e-2)
+      call set_binsdata(bins_rad,histbins+2,1.0e-6,1.0e-2)
 
 
       if (myid==0) write(*,*) 'Init Particle radius = ',radius_init
@@ -12675,7 +12693,7 @@ c       ===== update x-axis for each bin =====
 
 
       end subroutine set_binsdata
-      subroutine add_histogram(binsdata,histdata,sizea,val1)
+      subroutine add_histogram(binsdata,histdata,sizea,val1,mult)
 
       use pars
       use fields
@@ -12684,7 +12702,7 @@ c       ===== update x-axis for each bin =====
       use particles
       implicit none
 
-      integer :: i,nbin,nbinnew,ibin
+      integer :: i,nbin,nbinnew,ibin,mult
       real :: dh
       real,intent(in) :: val1
 
@@ -12712,7 +12730,7 @@ c       Calculate size of interval
 
 
 c       Add the current event to the histogram
-        histdata(ibin) = histdata(ibin) + 1.0
+        histdata(ibin) = histdata(ibin) + real(mult)
 
       end subroutine add_histogram
 
