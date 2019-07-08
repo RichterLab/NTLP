@@ -29,6 +29,8 @@ ievap=0
 ineighbor=0
 icoalesce=1
 ipart_method=1   !1 = same RK3 as flow
+ipartdiff = 1
+isfs = 2   !isfs=1 is simple random walk, isfs=2 is Weil et al. (2004) particle subgrid
 /
 
 !Grid and domain parameters
@@ -100,7 +102,7 @@ Cpp = 4179.0  !J/kg-K
 Mw = 0.018015  !kg/mol
 Ru = 8.3144
 Ms = 0.05844  !kg/mol: molecular weight of salt
-Sal = 0.0   !Salinity
+Sal = 0.0   !INITIAL salinity
 Gam = 7.28e-2
 Ion = 2.0
 Os = 1.093
