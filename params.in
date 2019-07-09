@@ -25,10 +25,10 @@ ilin = 0   !1 means linear interpolation for particle, 6th order otherwise
 icouple=0
 iTcouple=0
 iHcouple=0  !iHcouple also controls TE couple
-ievap=0
+ievap=1
 ineighbor=0
 icoalesce=1
-ipart_method=1   !1 = same RK3 as flow
+ipart_method=2   !1 = same RK3 as flow
 ipartdiff = 1
 isfs = 2   !isfs=1 is simple random walk, isfs=2 is Weil et al. (2004) particle subgrid
 /

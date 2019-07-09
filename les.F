@@ -130,10 +130,18 @@ c     --- SFS velocity calculation ---------
       integer :: particletype,pad_diff
       integer :: numpart,tnumpart,ngidx
       integer :: iseed
+      integer :: num100=0, num1000=0, numimpos=0
+      integer :: tnum100, tnum1000, tnumimpos
+      integer :: denum, actnum, tdenum, tactnum
+      integer :: num_destroy=0,tnum_destroy=0
+
       real :: Rep_avg,part_grav
-      real :: radavg,radmin,radmax
+      real :: radavg,radmin,radmax,tempmin,tempmax,qmin,qmax
       real :: vp_init(3),Tp_init,qf_init
+      real :: Lv = (25.0 - 0.02274*26.0)*10.0**5
       integer :: mult_init
+
+      real :: avgres=0,tavgres=0
 
       real :: radius_init,rhow,nuf 
       real :: CpaCpp,Cpa,Cpp,Pra,Sc,Mw,Ru,rhoa
@@ -622,6 +630,15 @@ c
       if (it == 1) numpart = numpart + 1
       end do
       if (myid==0) write(*,*) 'time,tnumpart:',time,tnumpart
+      if (myid==0) write(*,*) 'time,tnum_destroy:',time,tnum_destroy
+      if (myid==0) write(*,*) 'radmin, radmax',time,radmin,radmax
+      if (myid==0) write(*,*) 'tempmin, tempmax',time,tempmin,tempmax
+      if (myid==0) write(*,*) 'qmin, qmax',time,qmin,qmax
+      if (myid==0) write(*,*) 'time, radavg',time,radavg
+      if (myid==0) write(*,*),'time,100,1000,impos',time,tnum100,
+     + tnum1000,tnumimpos
+      if (myid==0) write(*,*), 'time,actnum',time,tactnum
+      if (myid==0) write(*,*), 'time,denum',time,tdenum
 
 
       if(it .ge. new_vis .and. ivis0 .eq. 1) then
@@ -748,15 +765,15 @@ c
 c      
 c -------- update particles
 c
+         if (ipart_method .eq. 1) then
          t_s = mpi_wtime()
          !call particle_update_cn(it,istage) 
-         if (ipart_method .eq. 1) then
          call particle_update_rk3(it,istage) 
-         end if
 
          t_f = mpi_wtime()
          call mpi_barrier(mpi_comm_world,ierr)
          if (myid==5) write(*,*) 'time part: ',t_f-t_s
+         end if
 
 
       if(mnout .and. istage .eq. 1)  then
@@ -774,9 +791,15 @@ c
       t_stage_f = mpi_wtime()
       !if (myid==5) write(*,*) 'time stage: ',t_stage_f - t_stage_s
 
-!      if (ipart_method .eq. 3) then
-!         call particle_update_BE(it)
-!      end if
+      if (ipart_method .eq. 2) then
+         t_s = mpi_wtime()
+
+         call particle_update_BE(it)
+
+         t_f = mpi_wtime()
+         call mpi_barrier(mpi_comm_world,ierr)
+         if (myid==5) write(*,*) 'time part: ',t_f-t_s
+      end if
 
       !Call coalescence outside of RK loop since it's not appropriate as
       !part of RK scheme
@@ -806,7 +829,7 @@ c
       if (myid==5) write(*,*) 'time partdiff:', t_f - t_s
       end if
 
-
+      call radius_histogram
      
       call get_max
       call get_dt
@@ -5566,11 +5589,14 @@ c
 
          !Assuming tsfcc(2) is giving RH:
 
-         botC=(tsfcc(1)-273.15)  
-         RHB = tsfcc(2)/100.0
+!         RHB = tsfcc(2)/100.0
+!
+!         tsfcc(2) = RHB*Mw/Ru/tsfcc(1)*mod_Magnus(tsfcc(1))/rhoa
+!
+!         if (myid==0) then
+!         write(*,*) 'SURFACE HUMIDITY: %RH, q = ',RHB*100.0,tsfcc(2)
+!         end if
 
-         tsfcc(2) =  RHB*Mw/Ru/tsfcc(1)*610.94*
-     +               EXP(17.6257*botC/(botC+243.04))/rhoa
 
 
          end if
@@ -5890,6 +5916,7 @@ c
       use fields
       use con_data
       use con_stats
+      use particles
       include 'mpif.h'
 c
       do iz=1,nnz+1
@@ -6021,7 +6048,8 @@ c           u(ix,iy,iz) = ug(iz) - ugal
          endif
          do iy=iys,iye
          do ix=1,nnx
-            t(ix,iy,2,iz) = 0.01
+            t(ix,iy,2,iz) =
+     +      tsfcc(2)/100.0*Mw/Ru/t(ix,iy,1,iz)*mod_Magnus(t(ix,iy,1,iz))
             w(ix,iy,iz)   = 0.
             r1(ix,iy,iz)  = 0.
             r2(ix,iy,iz)  = 0.
@@ -8127,16 +8155,15 @@ c
       allocate(uext(0:nnz+1,iys-2:iye+3,mxs-2:mxe+3), 
      +         vext(0:nnz+1,iys-2:iye+3,mxs-2:mxe+3), 
      +         wext(0:nnz+1,iys-2:iye+3,mxs-2:mxe+3),
-c     +         Text(0:nnz+1,iys-2:iye+3,mxs-2:mxe+3))
-     +         Text(0:nnz+1,iys-2:iye+3,mxs-2:mxe+3),!Brian 7/14/14 
-     +         T2ext(0:nnz+1,iys-2:iye+3,mxs-2:mxe+3))  !Brian 7/14/14 
+     +         Text(0:nnz+1,iys-2:iye+3,mxs-2:mxe+3),
+     +         T2ext(0:nnz+1,iys-2:iye+3,mxs-2:mxe+3)) 
       !Transposed velocities to do the uf interpolation:
       allocate(u_t(0:nnz+1,iys:iye,mxs:mxe),
      +         v_t(0:nnz+1,iys:iye,mxs:mxe),
      +         w_t(0:nnz+1,iys:iye,mxs:mxe), 
-     +         T_t(0:nnz+1,iys:iye,mxs:mxe),!Brian 7/14/14 
-     +         T2_t(0:nnz+1,iys:iye,mxs:mxe)) !Brian 7/14/14 
-      !Keep track of particle counts at each node (its surrounding volume)
+     +         T_t(0:nnz+1,iys:iye,mxs:mxe),
+     +         T2_t(0:nnz+1,iys:iye,mxs:mxe))
+
       allocate(partcount(nnx,iys:iye,izs-1:ize+1))
       allocate(partcount_t(0:nnz+1,iys:iye,mxs:mxe))
       allocate(upwp_t(0:nnz+1,iys:iye,mxs:mxe))
@@ -9096,7 +9123,7 @@ c                     isize determined in sr. fill_cs
 c
       use pars
       include 'mpif.h'
-      character cgrid*4, iblks*16
+      character cgrid*4, iblks*16, num*3
       logical there
      
 c
@@ -10072,14 +10099,15 @@ c
 
       integer :: istage,ierr,it
       real :: g(3),pi
-      real :: denom,dtl,sigma,ttest
+      real :: denom,dtl,sigma
       integer :: ix,iy,iz
       real :: Rep,diff(3),diffnorm,corrfac,myRep_avg
       real :: xtmp(3),vtmp(3),Tptmp,radiustmp
       real :: Nup,Shp,rhop,taup_i,estar,einf
       real :: mylwc_sum,myphiw_sum,myphiv_sum,Volp      
-      real :: TfC,TpC,Lv,Eff_C,Eff_S
+      real :: Eff_C,Eff_S
       real :: t_s,t_f,t_s1,t_f1
+      real :: mod_Magnus
 
       g(1:3) = (/0.0, 0.0, part_grav/)
 
@@ -10171,11 +10199,7 @@ c
 
 
          !Mass Transfer calculations
-         TfC = part%Tf-273.15
-         einf = 610.94*EXP(17.6257*TfC/(TfC+243.04))
-         TpC = part%Tp-273.15
-         Lv =(25.0 - 0.02274*26.0)*10.0**5
-
+         einf = mod_Magnus(part%Tf)
          Eff_C = 2.0*Mw*Gam/(Ru*rhow*part%radius*part%Tp)
          Eff_S = Ion*Os*part%m_s*Mw/Ms/(Volp*rhop-part%m_s)
          estar = einf*exp(Mw*Lv/Ru*(1.0/part%Tf-1.0/part%Tp)
@@ -10207,17 +10231,12 @@ c
 
 
 
-         !part%vp(1:2) = 0.0
-         !part%vp(3) = -g(3)/taup_i
-
-         part%vp(1:3) = part%uf(1:3)
   
          part%xp(1:3) = xtmp(1:3) + dt*gama(istage)*part%xrhs(1:3)
-         !part%vp(1:3) = vtmp(1:3) + dt*gama(istage)*part%vrhs(1:3)
-         !part%Tp = Tptmp + dt*gama(istage)*part%Tprhs_s
-         !part%Tp = part%Tp + dt*gama(istage)*part%Tprhs_L
-         !part%radius = radiustmp + dt*gama(istage)*part%radrhs
-
+         part%vp(1:3) = vtmp(1:3) + dt*gama(istage)*part%vrhs(1:3)
+         part%Tp = Tptmp + dt*gama(istage)*part%Tprhs_s
+         part%Tp = part%Tp + dt*gama(istage)*part%Tprhs_L
+         part%radius = radiustmp + dt*gama(istage)*part%radrhs
 
 
          if (istage .eq. 3) part%res = part%res + dt
@@ -10265,6 +10284,8 @@ c
       !call mpi_barrier(mpi_comm_world,ierr)
       !t_f = mpi_wtime()
       !if (myid==5) write(*,*) 'time cpl: ', t_f - t_s
+
+      call particle_coupling_exchange
 
  
       !Finally, now that coupling and statistics arrays are filled, 
@@ -10423,488 +10444,747 @@ c
       !if (myid==5) write(*,*) 'time mpi_allreduce: ', t_f - t_s
 
       end subroutine particle_update_rk3
-!      subroutine particle_update_BE(it)
-!      use pars
-!      use particles
-!      use con_data
-!      use con_stats
-!      implicit none
-!      include 'mpif.h'
-!
-!      integer :: ierr,it,ib
-!      real :: g(3),tmpbuf(5),tmpbuf_rec(5),tmp_reintro
-!      real :: myradavg,myradmax,myradmin,mytempmax,mytempmin
-!      real :: myqmin,myqmax
-!      real :: denom,dtl,sigma,ttest
-!      integer :: ix,iy,iz,im,flag,mflag,istep=1
-!      real :: Rep,diff(3),diffnorm,corrfac,myRep_avg
-!      real :: xtmp(3),vtmp(3),Tptmp,radiustmp
-!      real :: Nup,Shp,rhop,taup_i,estar,einf
-!      real :: myphip_sum,myphiw_sum,myphiv_sum,Volp
-!      real :: TfC,TpC,Lv,Eff_C,Eff_S
-!      real :: t_s,t_f,t_s1,t_f1, vtemp(3)
-!      real :: nond_v(3), nond_r, nond_T
-!      real :: rt_start(2), v_start(3)
-!      real :: rt_zeroes(2), v_zeroes(3)
-!      real :: rad_orig,Tp_orig,u_orig(3)
-!      real :: taup0, dt_taup0, temp_r, temp_t, guess, rads(200)
-!      real :: Rp_guess, Tp_guess, a, aesa, rad_guess, temp_guess
-!
-!      g(1:3) = (/0.0, 0.0, part_grav/)
-!
-!
-!      !First fill extended velocity field for interpolation
-!      call fill_ext
-!
-!      partcount_t = 0.0
-!      vpsum_t = 0.0
-!      upwp_t = 0.0
-!      vpsqrsum_t = 0.0
-!      Tpsum_t = 0.0
-!      Tfsum_t = 0.0
-!      qfsum_t = 0.0
-!      radsum_t = 0.0
-!      rad2sum_t = 0.0
-!      mpsum_t = 0.0
-!      mwsum_t = 0.0
-!      Tpsqrsum_t = 0.0
-!      wpTpsum_t = 0.0
-!      myRep_avg = 0.0
-!      myphip_sum = 0.0
-!      myphiw_sum = 0.0
-!      myphiv_sum = 0.0
-!      qstarsum_t = 0.0
-!
-!      partsrc_t = 0.0
-!      partTsrc_t = 0.0
-!      partHsrc_t = 0.0
-!      partTEsrc_t = 0.0
-!
-!      denum = 0
-!      actnum = 0
-!
-!      !loop over the linked list of particles
-!      part => first_particle
-!      do while (associated(part))
-!
-!         vtemp(1:3) = part%vp(1:3)
-!
-!         !First, interpolate to get the fluid velocity part%uf(1:3):
-!         if (ilin .eq. 1) then
-!            call uf_interp_lin   !Use trilinear interpolation
-!         else
-!            call uf_interp       !Use 6th order Lagrange interpolation
-!         end if
-!
-!        if (it .LE. 1) then
-!           part%vp(1:3) = part%uf
-!        end if
-!
-!
-!        aesa = 610.94*EXP(17.6257*(part%Tf-273.15)
-!     +                  /((part%Tf-273.15)+243.04))
-!        a = (Ru*part%Tf*rhoa*part%qinf)/(Mw*aesa)
-!        diff(1:3) = part%vp - part%uf
-!        diffnorm = sqrt(diff(1)**2 + diff(2)**2 + diff(3)**2)
-!        Volp = pi2*2.0/3.0*part%radius**3
-!        rhop = (part%m_s+Volp*rhow)/Volp
-!        taup_i = 18.0*rhoa*nuf/rhop/(2.0*part%radius)**2
-!        Rep = 2.0*part%radius*diffnorm/nuf
-!        corrfac = (1.0 + 0.15*Rep**(0.687))
-!
-!        !implicitly calculates next velocity and position
-!        part%xp(1:3) = part%xp(1:3) + dt*part%vp(1:3)
-!        part%vp(1:3) = (part%vp(1:3)+taup_i*dt*corrfac*part%uf(1:3)
-!     +   -dt/substeps*g(1:3))/(1+dt*corrfac*taup_i)
-!
-!        ! non-dimensionalizes particle radius and temperature before
-!        ! iteratively solving for next radius and temperature
-!
-!        taup0 = (((part%m_s)/((2./3.)*pi2*radius_init**3) + rhow) *
-!     +   (radius_init*2)**2)/(18*rhoa*nuf)
-!
-!        dt_taup0 = dt/taup0
-!
-!        if (ievap .EQ. 1) then
-!                diff(1:3) = part%vp - part%uf
-!                diffnorm = sqrt(diff(1)**2 + diff(2)**2 + diff(3)**2)
-!                Volp = pi2*2.0/3.0*part%radius**3
-!                rhop = (part%m_s+Volp*rhow)/Volp
-!                taup_i = 18.0*rhoa*nuf/rhop/(2.0*part%radius)**2
-!                Rep = 2.0*part%radius*diffnorm/nuf
-!                corrfac = (1.0 + 0.15*Rep**(0.687))
-!
-!        !implicitly calculates next velocity and position
-!
-!        nond_v(1) = part%vp(1)
-!        nond_v(2) = part%vp(2)
-!        nond_v(3) = part%vp(3)
-!        nond_r = 1.
-!        nond_T = 1.
-!
-!               call rad_solver2(guess,mflag)
-!
-!               if (mflag == 0) then
-!                rt_start(1) = guess/part%radius
-!                rt_start(2) = part%Tf/part%Tp
-!               else
-!                rt_start(1) = 1.0
-!                rt_start(2) = 1.0
-!               end if
-!
-!               call gauss_newton_2d(nond_v, nond_r, nond_T, dt_taup0,
-!     +                           rt_start, rt_zeroes,flag,mflag)
-!
-!               if (flag==1) then
-!               num100 = num100+1
-!               call LV_solver(nond_v, nond_r, nond_T, dt_taup0,
-!     +                              rt_start, rt_zeroes,flag,mflag)
-!
-!               end if
-!
-!               if (flag == 1) num1000 = num1000 + 1
-!
-!               if (isnan(rt_zeroes(1)).OR.(rt_zeroes(1)<0)
-!     +    .OR.isnan(rt_zeroes(2)).OR.(rt_zeroes(2)<0)) then
-!                numimpos = numimpos + 1
-!                rt_zeroes(1) = 1.0
-!                rt_zeroes(2) = part%Tf/part%Tp
-!               end if
-!
-!               if ((rt_zeroes(2)*part%Tp > Tbot(1)*1.1) .OR.
-!     +             (rt_zeroes(2)*part%Tp < Ttop(1)*.90) .OR.
-!     +             (rt_zeroes(1)*part%radius < 0)) then
-!               numimpos = numimpos + 1
-!               rt_zeroes(1) = 1.0
-!               rt_zeroes(2) = 1.0
-!               end if
-!
-!               if (part%radius > 1.0e-6 .AND.
-!     +             part%radius*rt_zeroes(1) < 1.0e-6) then
-!                   denum = denum + 1
-!
-!               elseif (part%radius < 1.0e-6 .AND.
-!     +             part%radius*rt_zeroes(1) > 1.0e-6) then
-!                   actnum = actnum + 1
-!
-!               endif
-!
-!               part%radius = rt_zeroes(1)*part%radius
-!               part%Tp = rt_zeroes(2)*part%Tp
-!        end if
-!
-!        ! redimensionalizes new radius and temperature
-!
-!         nond_v(1:3) = part%vp(1:3)
-!
-!        !Intermediate Values
-!         diff(1:3) = part%vp - part%uf
-!         diffnorm = sqrt(diff(1)**2 + diff(2)**2 + diff(3)**2)
-!         Rep = 2.0*part%radius*diffnorm/nuf
-!
-!         myRep_avg = myRep_avg + Rep
-!         corrfac = (1.0 + 0.15*Rep**(0.687))
-!         myphip_sum = myphip_sum + Volp*rhop
-!         myphiw_sum = myphiw_sum + Volp*rhow
-!         myphiv_sum = myphiv_sum + Volp
-!
-!         !Compute Nusselt number for particle:
-!         !Ranz-Marshall relation
-!         Nup = 2.0 + 0.6*Rep**(1.0/2.0)*Pra**(1.0/3.0)
-!         Shp = 2.0 + 0.6*Rep**(1.0/2.0)*Sc**(1.0/3.0)
-!
-!         !Mass Transfer calculations
-!         TfC = part%Tf-273.15
-!         einf = 610.94*EXP(17.6257*TfC/(TfC+243.04))
-!         TpC = part%Tp-273.15
-!         Lv =(25.0 - 0.02274*26.0)*10.0**5
-!
-!         Eff_C = 2.0*Mw*Gam/(Ru*rhow*part%radius*part%Tp)
-!         Eff_S = Ion*Os*part%m_s*Mw/Ms/(Volp*rhop-part%m_s)
-!         estar = einf*exp(Mw*Lv/Ru*(1.0/part%Tf-1.0/part%Tp)
-!     +                                           +Eff_C-Eff_S)
-!         part%qstar = Mw/Ru*estar/part%Tp/rhoa
-!
-!        if (ievap .EQ. 1) then
-!            part%radrhs = Shp/9.0/Sc*rhop/rhow*part%radius*
-!     +                       taup_i*(part%qinf-part%qstar) !assumes qinf=rhov/rhoa rather than rhov/rhom
-!         else
-!            part%radrhs = 0.0
-!         end if
-!
-!        part%Tprhs_s = -Nup/3.0/Pra*CpaCpp*
-!     +                     rhop/rhow*taup_i*(part%Tp-part%Tf)
-!        part%Tprhs_L = 3.0*Lv/Cpp/part%radius*part%radrhs
-!
-!        part%xrhs(1:3) = part%vp(1:3)
-!        part%vrhs(1:3) = corrfac*taup_i*(part%uf(1:3)-part%vp(1:3))
-!     +                               - g(1:3)
-!
-!        if (ievap .EQ. 1) then
-!            !part%radius = rt_zeroes(1)*radius_init
-!            !part%Tp = rt_zeroes(2)*Tp_init
-!            !part%radius = rt_zeroes(1)*part%radius
-!            !part%Tp = rt_zeroes(2)*part%Tp
-!            !if (part%radius < 0) call destroy_particle
-!        else
-!            !if no evaporation, can directly solve for next temperature
-!            part%radius = radius_init
-!            !part%Tp =
-!            !(part%Tp-dt*(-Nup/3.0/Pra*CpaCpp*rhop/rhow*taup_i)
-!        !+
-!        !*part%Tf)/(1.-dt*(-Nup/3.0/Pra*CpaCpp*rhop/rhow*taup_i))
-!            part%Tp = part%Tf
-!            part%vrhs(1:3) = corrfac*taup_i*(part%uf(1:3)-vtemp(1:3))
-!     +                               - g(1:3)
-!        end if
-!
-!        part%res = part%res + dt
-!
-!
-!        if (flag==2) then
-!                call destroy_particle
-!                print*,'destroyed!'
-!        else
-!                part => part%next
-!        end if
-!
-!
-!      end do
-!
-!
-!      !Enforce nonperiodic bcs (either elastic or destroying particles)
-!      !call particle_bcs_nonperiodic
-!
-!      call particle_bcs_nonperiodic
-!
-!      !Check to see if particles left processor
-!      !If they did, remove from one list and add to another
-!
-!      call particle_exchange
-!
-!      !Now enforce periodic bcs 
-!      !just updates x,y locations if over xl,yl or under 0
-!      call particle_bcs_periodic
-!
-!      call particle_coupling_exchange
-!      !Finally, now that coupling and statistics arrays are filled, 
-!      !Transpose them back to align with the velocities:
-!      call ztox_trans(partsrc_t(0:nnz+1,iys:iye,mxs:mxe,1),
-!     +                partsrc(1:nnx,iys:iye,izs-1:ize+1,1),nnx,nnz,mxs,
-!     +                mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
-!     +                ncpu_s,numprocs)
-!      call ztox_trans(partsrc_t(0:nnz+1,iys:iye,mxs:mxe,2),
-!     +                partsrc(1:nnx,iys:iye,izs-1:ize+1,2),nnx,nnz,mxs,
-!     +                mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
-!     +                ncpu_s,numprocs)
-!      call ztox_trans(partsrc_t(0:nnz+1,iys:iye,mxs:mxe,3),
-!     +                partsrc(1:nnx,iys:iye,izs-1:ize+1,3),nnx,nnz,mxs,
-!     +                mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
-!     +                ncpu_s,numprocs)
-!      call ztox_trans(partTsrc_t(0:nnz+1,iys:iye,mxs:mxe),
-!     +                partTsrc(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,mxs,
-!     +                mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
-!     +                ncpu_s,numprocs)
-!      call ztox_trans(partHsrc_t(0:nnz+1,iys:iye,mxs:mxe),
-!     +                partHsrc(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,mxs,
-!     +                mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
-!     +                ncpu_s,numprocs)
-!
-!      call ztox_trans(partTEsrc_t(0:nnz+1,iys:iye,mxs:mxe),
-!     +                partTEsrc(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,mxs,
-!     +                mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
-!     +                ncpu_s,numprocs)
-!
-!      !Try only calling these when the history data is being written:
-!      if(mtrans) then
-!      call ztox_trans(upwp_t(0:nnz+1,iys:iye,mxs:mxe),
-!     +                upwp(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,mxs,
-!     +                mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
-!     +                ncpu_s,numprocs)
-!
-!      call ztox_trans(vpsum_t(0:nnz+1,iys:iye,mxs:mxe,1),
-!     +                vpsum(1:nnx,iys:iye,izs-1:ize+1,1),nnx,nnz,mxs,
-!     +                mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
-!     +                ncpu_s,numprocs)
-!      call ztox_trans(vpsum_t(0:nnz+1,iys:iye,mxs:mxe,2),
-!     +                vpsum(1:nnx,iys:iye,izs-1:ize+1,2),nnx,nnz,mxs,
-!     +                mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
-!     +                ncpu_s,numprocs)
-!      call ztox_trans(vpsum_t(0:nnz+1,iys:iye,mxs:mxe,3),
-!     +                vpsum(1:nnx,iys:iye,izs-1:ize+1,3),nnx,nnz,mxs,
-!     +                mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
-!     +                ncpu_s,numprocs)
-!
-!      call ztox_trans(vpsqrsum_t(0:nnz+1,iys:iye,mxs:mxe,1),
-!     +                vpsqrsum(1:nnx,iys:iye,izs-1:ize+1,1),nnx,nnz,mxs,
-!     +                mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
-!     +                ncpu_s,numprocs)
-!      call ztox_trans(vpsqrsum_t(0:nnz+1,iys:iye,mxs:mxe,2),
-!     +                vpsqrsum(1:nnx,iys:iye,izs-1:ize+1,2),nnx,nnz,mxs,
-!     +                mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
-!     +                ncpu_s,numprocs)
-!      call ztox_trans(vpsqrsum_t(0:nnz+1,iys:iye,mxs:mxe,3),
-!     +                vpsqrsum(1:nnx,iys:iye,izs-1:ize+1,3),nnx,nnz,mxs,
-!     +                mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
-!     +                ncpu_s,numprocs)
-!
-!      call ztox_trans(Tpsum_t(0:nnz+1,iys:iye,mxs:mxe),
-!     +                Tpsum(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,mxs,
-!     +                mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
-!     +                ncpu_s,numprocs)
-!      call ztox_trans(Tpsqrsum_t(0:nnz+1,iys:iye,mxs:mxe),
-!     +                Tpsqrsum(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,mxs,
-!     +                mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
-!     +                ncpu_s,numprocs)
-!      call ztox_trans(Tfsum_t(0:nnz+1,iys:iye,mxs:mxe),
-!     +                Tfsum(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,mxs,
-!     +                mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
-!     +                ncpu_s,numprocs)
-!      call ztox_trans(qfsum_t(0:nnz+1,iys:iye,mxs:mxe),
-!     +                qfsum(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,mxs,
-!     +                mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
-!     +                ncpu_s,numprocs)
-!      call ztox_trans(wpTpsum_t(0:nnz+1,iys:iye,mxs:mxe),
-!     +                wpTpsum(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,mxs,
-!     +                mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
-!     +                ncpu_s,numprocs)
-!
-!      call ztox_trans(partcount_t(0:nnz+1,iys:iye,mxs:mxe),
-!     +                partcount(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,mxs,
-!     +                mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
-!     +                ncpu_s,numprocs)
-!
-!      call ztox_trans(radsum_t(0:nnz+1,iys:iye,mxs:mxe),
-!     +                radsum(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,mxs,
-!     +                mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
-!     +                ncpu_s,numprocs)
-!
-!      call ztox_trans(rad2sum_t(0:nnz+1,iys:iye,mxs:mxe),
-!     +                rad2sum(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,mxs,
-!     +                mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
-!     +                ncpu_s,numprocs)
-!
-!      call ztox_trans(mpsum_t(0:nnz+1,iys:iye,mxs:mxe),
-!     +                mpsum(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,mxs,
-!     +                mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
-!     +                ncpu_s,numprocs)
-!
-!      call ztox_trans(mwsum_t(0:nnz+1,iys:iye,mxs:mxe),
-!     +                mwsum(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,mxs,
-!     +                mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
-!     +                ncpu_s,numprocs)
-!
-!      call ztox_trans(qstarsum_t(0:nnz+1,iys:iye,mxs:mxe),
-!     +                qstarsum(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,mxs,
-!     +                mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
-!     +                ncpu_s,numprocs)
-!
-!      end if
-!
-!      !Get particle count:
-!      numpart = 0
-!      myradavg = 0.0
-!      myradmin=1000.0
-!      myradmax = 0.0
-!      mytempmin = 1000.0
-!      mytempmax = 0.0
-!      myqmin = 1000.0
-!      myqmax = 0.0
-!      part => first_particle
-!      do while (associated(part))
-!      numpart = numpart + 1
-!      myradavg = myradavg + part%radius
-!      if (part%radius .gt. myradmax) myradmax = part%radius
-!      if (part%radius .lt. myradmin) myradmin = part%radius
-!      if (part%Tp .gt. mytempmax) mytempmax = part%Tp
-!      if (part%Tp .lt. mytempmin) mytempmin = part%Tp
-!      if (part%qstar .gt. myqmax) myqmax = part%qinf
-!      if (part%qstar .lt. myqmin) myqmin = part%qinf
-!      part => part%next
-!      end do
-!
-!
-!      !Compute total number of particles
-!      call mpi_allreduce(numpart,tnumpart,1,mpi_integer,mpi_sum,
-!     +                   mpi_comm_world,ierr)
-!
-!
-!
-!      call mpi_allreduce(denum,tdenum,1,mpi_integer,mpi_sum,
-!     +                   mpi_comm_world,ierr)
-!
-!      call mpi_allreduce(actnum,tactnum,1,mpi_integer,mpi_sum,
-!     +                   mpi_comm_world,ierr)
-!
-!      tmpbuf(1) = myRep_avg
-!      tmpbuf(2) = myphip_sum
-!      tmpbuf(3) = myphiw_sum
-!      tmpbuf(4) = myphiv_sum
-!      tmpbuf(5) = myradavg
-!
-!      !calculate average particle residence time
-!      call mpi_allreduce(avgres,tavgres,1,mpi_real8,mpi_sum,
-!     +    mpi_comm_world,ierr)
-!
-!      !Combine all reals that are being summed:
-!      call mpi_allreduce(tmpbuf,tmpbuf_rec,5,mpi_real8,mpi_sum,
-!     +    mpi_comm_world,ierr)
-!
-!      call mpi_allreduce(num_destroy,tnum_destroy,1,mpi_integer,mpi_sum,
-!     +   mpi_comm_world,ierr)
-!
-!      call mpi_allreduce(num100,tnum100,5,mpi_integer,mpi_sum,
-!     +    mpi_comm_world,ierr)
-!      call mpi_allreduce(num1000,tnum1000,5,mpi_integer,mpi_sum,
-!     +    mpi_comm_world,ierr)
-!      call mpi_allreduce(numimpos,tnumimpos,5,mpi_integer,mpi_sum,
-!     +    mpi_comm_world,ierr)
-!
-!      Rep_avg = tmpbuf_rec(1)
-!      phip = tmpbuf_rec(2)
-!      phiw = tmpbuf_rec(3)
-!      phiv = tmpbuf_rec(4)
-!      radavg = tmpbuf_rec(5)
-!
-!      phip = phip/xl/yl/zl/rhoa
-!      phiw = phiw/xl/yl/zl/rhoa
-!      phiv = phiv/xl/yl/zl
-!      Rep_avg = Rep_avg/tnumpart
-!      radavg = radavg/tnumpart
-!      tavgres = tavgres/tnum_destroy
-!
-!      !Min and max radius
-!      call mpi_allreduce(myradmin,radmin,1,mpi_real8,mpi_min,
-!     +                   mpi_comm_world,ierr)
-!      call mpi_allreduce(myradmax,radmax,1,mpi_real8,mpi_max,
-!     +                   mpi_comm_world,ierr)
-!
-!      call mpi_allreduce(mytempmin,tempmin,1,mpi_real8,mpi_min,
-!     +                   mpi_comm_world,ierr)
-!      call mpi_allreduce(mytempmax,tempmax,1,mpi_real8,mpi_max,
-!     +                   mpi_comm_world,ierr)
-!
-!      call mpi_allreduce(myqmin,qmin,1,mpi_real8,mpi_min,
-!     +                   mpi_comm_world,ierr)
-!      call mpi_allreduce(myqmax,qmax,1,mpi_real8,mpi_min,
-!     +                   mpi_comm_world,ierr)
-!      call mpi_allreduce(rads,trads,200,mpi_real8,mpi_sum,
-!     +    mpi_comm_world,ierr)
-!
-!      !do ib=1,200
-!      !  trads(ib) = trads(ib)/tnumpart
-!      !end do
-!
-!      !if (myid==0) print*,trads
-!
-!      !if (mod(it,1000)==0 .AND. numpart>0) then
-!      !call PDF(rads)
-!      !call write_PDF(trads)
-!      !call lagstats()
-!      !end if
-!
-!      end subroutine particle_update_BE
-!
+      subroutine particle_update_BE(it)
+      use pars
+      use particles
+      use con_data
+      use con_stats
+      implicit none
+      include 'mpif.h'
+
+      integer :: ierr,it
+      real :: g(3),tmpbuf(5),tmpbuf_rec(5),tmp_reintro
+      real :: myradavg,myradmax,myradmin,mytempmax,mytempmin
+      real :: myqmin,myqmax
+      real :: denom,dtl,sigma
+      integer :: ix,iy,iz,im,flag,mflag
+      real :: Rep,diff(3),diffnorm,corrfac,myRep_avg
+      real :: xtmp(3),vtmp(3),Tptmp,radiustmp
+      real :: Nup,Shp,rhop,taup_i,estar,einf
+      real :: myphip_sum,myphiw_sum,myphiv_sum,Volp
+      real :: Eff_C,Eff_S
+      real :: t_s,t_f,t_s1,t_f1
+      real :: rt_start(2)
+      real :: rt_zeroes(2)
+      real :: taup0, dt_taup0, temp_r, temp_t, guess
+      real :: mod_Magnus
+
+
+      g(1:3) = (/0.0, 0.0, part_grav/)
+
+      if (it .lt. 5000) then
+         ievap = 0
+      else
+         ievap = 1
+      end if
+
+
+      !First fill extended velocity field for interpolation
+      call fill_ext
+
+      partcount_t = 0.0
+      vpsum_t = 0.0
+      upwp_t = 0.0
+      vpsqrsum_t = 0.0
+      Tpsum_t = 0.0
+      Tfsum_t = 0.0
+      qfsum_t = 0.0
+      radsum_t = 0.0
+      rad2sum_t = 0.0
+      mpsum_t = 0.0
+      mwsum_t = 0.0
+      Tpsqrsum_t = 0.0
+      wpTpsum_t = 0.0
+      myRep_avg = 0.0
+      myphip_sum = 0.0
+      myphiw_sum = 0.0
+      myphiv_sum = 0.0
+      qstarsum_t = 0.0
+
+      partsrc_t = 0.0
+      partTsrc_t = 0.0
+      partHsrc_t = 0.0
+      partTEsrc_t = 0.0
+
+      denum = 0
+      actnum = 0
+
+      !loop over the linked list of particles
+      part => first_particle
+      do while (associated(part))
+
+
+         !First, interpolate to get the fluid velocity part%uf(1:3):
+         if (ilin .eq. 1) then
+            call uf_interp_lin   !Use trilinear interpolation
+         else
+            call uf_interp       !Use 6th order Lagrange interpolation
+         end if
+
+        if (it .LE. 1) then
+           part%vp(1:3) = part%uf
+        end if
+
+
+        diff(1:3) = part%vp - part%uf
+        diffnorm = sqrt(diff(1)**2 + diff(2)**2 + diff(3)**2)
+        Volp = pi2*2.0/3.0*part%radius**3
+        rhop = (part%m_s+Volp*rhow)/Volp
+        taup_i = 18.0*rhoa*nuf/rhop/(2.0*part%radius)**2
+        Rep = 2.0*part%radius*diffnorm/nuf
+        corrfac = (1.0 + 0.15*Rep**(0.687))
+
+        !implicitly calculates next velocity and position
+        part%xp(1:3) = part%xp(1:3) + dt*part%vp(1:3)
+        part%vp(1:3) = (part%vp(1:3)+taup_i*dt*corrfac*part%uf(1:3)
+     +   -dt*g(1:3))/(1+dt*corrfac*taup_i)
+
+        ! non-dimensionalizes particle radius and temperature before
+        ! iteratively solving for next radius and temperature
+
+        taup0 = (((part%m_s)/((2./3.)*pi2*radius_init**3) + rhow) *
+     +   (radius_init*2)**2)/(18*rhoa*nuf)
+
+        dt_taup0 = dt/taup0
+
+        if (ievap .EQ. 1) then
+
+               !Gives initial guess into nonlinear solver
+               !mflag = 0, has equilibrium radius; mflag = 1, no
+               !equilibrium (uses itself as initial guess)
+               call rad_solver2(guess,mflag)
+
+               if (mflag == 0) then
+                rt_start(1) = guess/part%radius
+                rt_start(2) = part%Tf/part%Tp
+               else
+                rt_start(1) = 1.0
+                rt_start(2) = 1.0
+               end if
+
+               call gauss_newton_2d(part%vp,dt_taup0,
+     +                           rt_start, rt_zeroes,flag)
+
+               if (flag==1) then
+               num100 = num100+1
+
+               call LV_solver(part%vp,dt_taup0,
+     +                              rt_start, rt_zeroes,flag)
+
+               end if
+
+               if (flag == 1) num1000 = num1000 + 1
+
+               if (isnan(rt_zeroes(1)).OR.(rt_zeroes(1)<0)
+     +    .OR.isnan(rt_zeroes(2)).OR.(rt_zeroes(2)<0)) then
+                numimpos = numimpos + 1  !How many have failed?
+                !If they failed (should be very small number), radius,
+                !temp remain unchanged
+                rt_zeroes(1) = 1.0
+                rt_zeroes(2) = part%Tf/part%Tp
+               end if
+
+
+               !Crude way of counting activation. Better would be
+               !computing critical radius
+               if (part%radius > 1.0e-6 .AND.
+     +             part%radius*rt_zeroes(1) < 1.0e-6) then
+                   denum = denum + 1
+
+               elseif (part%radius < 1.0e-6 .AND.
+     +             part%radius*rt_zeroes(1) > 1.0e-6) then
+                   actnum = actnum + 1
+
+               endif
+
+               !Redimensionalize
+               part%radius = rt_zeroes(1)*part%radius
+               part%Tp = rt_zeroes(2)*part%Tp
+        end if
+
+
+         !Intermediate Values
+         diff(1:3) = part%vp - part%uf
+         diffnorm = sqrt(diff(1)**2 + diff(2)**2 + diff(3)**2)
+         Rep = 2.0*part%radius*diffnorm/nuf
+
+         myRep_avg = myRep_avg + Rep
+         corrfac = (1.0 + 0.15*Rep**(0.687))
+         myphip_sum = myphip_sum + Volp*rhop
+         myphiw_sum = myphiw_sum + Volp*rhow
+         myphiv_sum = myphiv_sum + Volp
+
+         !Compute Nusselt number for particle:
+         !Ranz-Marshall relation
+         Nup = 2.0 + 0.6*Rep**(1.0/2.0)*Pra**(1.0/3.0)
+         Shp = 2.0 + 0.6*Rep**(1.0/2.0)*Sc**(1.0/3.0)
+
+         !Mass Transfer calculations
+         einf = mod_Magnus(part%Tf)
+
+         Eff_C = 2.0*Mw*Gam/(Ru*rhow*part%radius*part%Tp)
+         Eff_S = Ion*Os*part%m_s*Mw/Ms/(Volp*rhop-part%m_s)
+         estar = einf*exp(Mw*Lv/Ru*(1.0/part%Tf-1.0/part%Tp)
+     +                                           +Eff_C-Eff_S)
+         part%qstar = Mw/Ru*estar/part%Tp/rhoa
+
+        if (ievap .EQ. 1) then
+            part%radrhs = Shp/9.0/Sc*rhop/rhow*part%radius*
+     +                       taup_i*(part%qinf-part%qstar) !assumes qinf=rhov/rhoa rather than rhov/rhom
+         else
+            part%radrhs = 0.0
+         end if
+
+        part%Tprhs_s = -Nup/3.0/Pra*CpaCpp*
+     +                     rhop/rhow*taup_i*(part%Tp-part%Tf)
+        part%Tprhs_L = 3.0*Lv/Cpp/part%radius*part%radrhs
+
+        part%xrhs(1:3) = part%vp(1:3)
+        part%vrhs(1:3) = corrfac*taup_i*(part%uf(1:3)-part%vp(1:3))
+     +                               - g(1:3)
+
+        part%res = part%res + dt
+
+
+      part => part%next
+      end do
+
+      
+
+
+      !Enforce nonperiodic bcs (either elastic or destroying particles)
+      call particle_bcs_nonperiodic
+
+      !Check to see if particles left processor
+      !If they did, remove from one list and add to another
+
+      call particle_exchange
+
+      !Now enforce periodic bcs 
+      !just updates x,y locations if over xl,yl or under 0
+      call particle_bcs_periodic
+
+      call particle_coupling_exchange
+      !Finally, now that coupling and statistics arrays are filled, 
+      !Transpose them back to align with the velocities:
+      call ztox_trans(partsrc_t(0:nnz+1,iys:iye,mxs:mxe,1),
+     +                partsrc(1:nnx,iys:iye,izs-1:ize+1,1),nnx,nnz,mxs,
+     +                mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
+     +                ncpu_s,numprocs)
+      call ztox_trans(partsrc_t(0:nnz+1,iys:iye,mxs:mxe,2),
+     +                partsrc(1:nnx,iys:iye,izs-1:ize+1,2),nnx,nnz,mxs,
+     +                mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
+     +                ncpu_s,numprocs)
+      call ztox_trans(partsrc_t(0:nnz+1,iys:iye,mxs:mxe,3),
+     +                partsrc(1:nnx,iys:iye,izs-1:ize+1,3),nnx,nnz,mxs,
+     +                mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
+     +                ncpu_s,numprocs)
+      call ztox_trans(partTsrc_t(0:nnz+1,iys:iye,mxs:mxe),
+     +                partTsrc(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,mxs,
+     +                mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
+     +                ncpu_s,numprocs)
+      call ztox_trans(partHsrc_t(0:nnz+1,iys:iye,mxs:mxe),
+     +                partHsrc(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,mxs,
+     +                mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
+     +                ncpu_s,numprocs)
+
+      call ztox_trans(partTEsrc_t(0:nnz+1,iys:iye,mxs:mxe),
+     +                partTEsrc(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,mxs,
+     +                mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
+     +                ncpu_s,numprocs)
+
+      !Try only calling these when the history data is being written:
+      if(mtrans) then
+      call ztox_trans(upwp_t(0:nnz+1,iys:iye,mxs:mxe),
+     +                upwp(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,mxs,
+     +                mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
+     +                ncpu_s,numprocs)
+
+      call ztox_trans(vpsum_t(0:nnz+1,iys:iye,mxs:mxe,1),
+     +                vpsum(1:nnx,iys:iye,izs-1:ize+1,1),nnx,nnz,mxs,
+     +                mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
+     +                ncpu_s,numprocs)
+      call ztox_trans(vpsum_t(0:nnz+1,iys:iye,mxs:mxe,2),
+     +                vpsum(1:nnx,iys:iye,izs-1:ize+1,2),nnx,nnz,mxs,
+     +                mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
+     +                ncpu_s,numprocs)
+      call ztox_trans(vpsum_t(0:nnz+1,iys:iye,mxs:mxe,3),
+     +                vpsum(1:nnx,iys:iye,izs-1:ize+1,3),nnx,nnz,mxs,
+     +                mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
+     +                ncpu_s,numprocs)
+
+      call ztox_trans(vpsqrsum_t(0:nnz+1,iys:iye,mxs:mxe,1),
+     +                vpsqrsum(1:nnx,iys:iye,izs-1:ize+1,1),nnx,nnz,mxs,
+     +                mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
+     +                ncpu_s,numprocs)
+      call ztox_trans(vpsqrsum_t(0:nnz+1,iys:iye,mxs:mxe,2),
+     +                vpsqrsum(1:nnx,iys:iye,izs-1:ize+1,2),nnx,nnz,mxs,
+     +                mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
+     +                ncpu_s,numprocs)
+      call ztox_trans(vpsqrsum_t(0:nnz+1,iys:iye,mxs:mxe,3),
+     +                vpsqrsum(1:nnx,iys:iye,izs-1:ize+1,3),nnx,nnz,mxs,
+     +                mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
+     +                ncpu_s,numprocs)
+
+      call ztox_trans(Tpsum_t(0:nnz+1,iys:iye,mxs:mxe),
+     +                Tpsum(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,mxs,
+     +                mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
+     +                ncpu_s,numprocs)
+      call ztox_trans(Tpsqrsum_t(0:nnz+1,iys:iye,mxs:mxe),
+     +                Tpsqrsum(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,mxs,
+     +                mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
+     +                ncpu_s,numprocs)
+      call ztox_trans(Tfsum_t(0:nnz+1,iys:iye,mxs:mxe),
+     +                Tfsum(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,mxs,
+     +                mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
+     +                ncpu_s,numprocs)
+      call ztox_trans(qfsum_t(0:nnz+1,iys:iye,mxs:mxe),
+     +                qfsum(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,mxs,
+     +                mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
+     +                ncpu_s,numprocs)
+      call ztox_trans(wpTpsum_t(0:nnz+1,iys:iye,mxs:mxe),
+     +                wpTpsum(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,mxs,
+     +                mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
+     +                ncpu_s,numprocs)
+
+      call ztox_trans(partcount_t(0:nnz+1,iys:iye,mxs:mxe),
+     +                partcount(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,mxs,
+     +                mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
+     +                ncpu_s,numprocs)
+
+      call ztox_trans(radsum_t(0:nnz+1,iys:iye,mxs:mxe),
+     +                radsum(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,mxs,
+     +                mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
+     +                ncpu_s,numprocs)
+
+      call ztox_trans(rad2sum_t(0:nnz+1,iys:iye,mxs:mxe),
+     +                rad2sum(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,mxs,
+     +                mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
+     +                ncpu_s,numprocs)
+
+      call ztox_trans(mpsum_t(0:nnz+1,iys:iye,mxs:mxe),
+     +                mpsum(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,mxs,
+     +                mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
+     +                ncpu_s,numprocs)
+
+      call ztox_trans(mwsum_t(0:nnz+1,iys:iye,mxs:mxe),
+     +                mwsum(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,mxs,
+     +                mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
+     +                ncpu_s,numprocs)
+
+      call ztox_trans(qstarsum_t(0:nnz+1,iys:iye,mxs:mxe),
+     +                qstarsum(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,mxs,
+     +                mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
+     +                ncpu_s,numprocs)
+
+      end if
+
+      !Get particle count:
+      numpart = 0
+      myradavg = 0.0
+      myradmin=1000.0
+      myradmax = 0.0
+      mytempmin = 1000.0
+      mytempmax = 0.0
+      myqmin = 1000.0
+      myqmax = 0.0
+      part => first_particle
+      do while (associated(part))
+      numpart = numpart + 1
+      myradavg = myradavg + part%radius
+      if (part%radius .gt. myradmax) myradmax = part%radius
+      if (part%radius .lt. myradmin) myradmin = part%radius
+      if (part%Tp .gt. mytempmax) mytempmax = part%Tp
+      if (part%Tp .lt. mytempmin) mytempmin = part%Tp
+      if (part%qstar .gt. myqmax) myqmax = part%qinf
+      if (part%qstar .lt. myqmin) myqmin = part%qinf
+      part => part%next
+      end do
+
+
+      !Compute total number of particles
+      call mpi_allreduce(numpart,tnumpart,1,mpi_integer,mpi_sum,
+     +                   mpi_comm_world,ierr)
+
+
+
+      call mpi_allreduce(denum,tdenum,1,mpi_integer,mpi_sum,
+     +                   mpi_comm_world,ierr)
+
+      call mpi_allreduce(actnum,tactnum,1,mpi_integer,mpi_sum,
+     +                   mpi_comm_world,ierr)
+
+      tmpbuf(1) = myRep_avg
+      tmpbuf(2) = myphip_sum
+      tmpbuf(3) = myphiw_sum
+      tmpbuf(4) = myphiv_sum
+      tmpbuf(5) = myradavg
+
+      !calculate average particle residence time
+      call mpi_allreduce(avgres,tavgres,1,mpi_real8,mpi_sum,
+     +    mpi_comm_world,ierr)
+
+      !Combine all reals that are being summed:
+      call mpi_allreduce(tmpbuf,tmpbuf_rec,5,mpi_real8,mpi_sum,
+     +    mpi_comm_world,ierr)
+
+      call mpi_allreduce(num_destroy,tnum_destroy,1,mpi_integer,mpi_sum,
+     +   mpi_comm_world,ierr)
+
+      call mpi_allreduce(num100,tnum100,1,mpi_integer,mpi_sum,
+     +    mpi_comm_world,ierr)
+      call mpi_allreduce(num1000,tnum1000,1,mpi_integer,mpi_sum,
+     +    mpi_comm_world,ierr)
+      call mpi_allreduce(numimpos,tnumimpos,1,mpi_integer,mpi_sum,
+     +    mpi_comm_world,ierr)
+
+      Rep_avg = tmpbuf_rec(1)
+      phiw = tmpbuf_rec(3)
+      phiv = tmpbuf_rec(4)
+      radavg = tmpbuf_rec(5)
+
+      phiw = phiw/xl/yl/zl/rhoa
+      phiv = phiv/xl/yl/zl
+      Rep_avg = Rep_avg/tnumpart
+      radavg = radavg/tnumpart
+      tavgres = tavgres/tnum_destroy
+
+      !Min and max radius
+      call mpi_allreduce(myradmin,radmin,1,mpi_real8,mpi_min,
+     +                   mpi_comm_world,ierr)
+      call mpi_allreduce(myradmax,radmax,1,mpi_real8,mpi_max,
+     +                   mpi_comm_world,ierr)
+
+      call mpi_allreduce(mytempmin,tempmin,1,mpi_real8,mpi_min,
+     +                   mpi_comm_world,ierr)
+      call mpi_allreduce(mytempmax,tempmax,1,mpi_real8,mpi_max,
+     +                   mpi_comm_world,ierr)
+
+      call mpi_allreduce(myqmin,qmin,1,mpi_real8,mpi_min,
+     +                   mpi_comm_world,ierr)
+      call mpi_allreduce(myqmax,qmax,1,mpi_real8,mpi_min,
+     +                   mpi_comm_world,ierr)
+
+
+      end subroutine particle_update_BE
+      subroutine gauss_newton_2d(vnext,h,vec1,vec2,flag)
+        use particles
+        implicit none
+
+        real, intent(in) :: vnext(3), h, vec1(2)
+        real, intent(out) :: vec2(2)
+        integer, intent(out) :: flag
+        real :: error = 1E-8, fv1(2), fv2(2), v1(2), v_output(3), rel
+        real :: diff, temp1(2), temp2(2), relax, coeff, correct(2)
+        real, dimension(1:2, 1:2) :: J, fancy, inv, finalJ
+        integer :: iterations, neg, counts
+
+        iterations = 0
+        flag = 0
+
+        v1 = vec1
+        fv2 = (/1., 1./)
+        coeff = 0.1
+        do while ((sqrt(dot_product(fv2, fv2)) > error).AND.
+     +              (iterations<1000))
+
+
+                !print*, 'conditions: ', part%Tf, part%qinf, 'error', 
+                !+          sqrt(dot_product(fv2, fv2)), 'vel', part%uf
+
+                iterations = iterations + 1
+                !print*, 'vnext', vnext, 'v1', v1, 'v_output', v_output,
+                !+          'h', h
+
+                call ie_vrt_nd(vnext, v1(1), v1(2), v_output, fv1, h)
+                !print*,'fv1', fv1
+                call jacob_approx_2d(vnext, v1(1), v1(2), h, J)
+
+                !print*,'error ', sqrt(dot_product(fv1, fv1))
+
+                fancy = matmul(transpose(J), J)
+
+                call inverse_finder_2d(fancy, inv)
+
+                finalJ = matmul(inv, transpose(J))
+
+                !print*,'corrective term', matmul(finalJ, fv1)
+                correct = matmul(finalJ,fv1)
+                vec2 = v1 - correct
+
+                call ie_vrt_nd(vnext, v1(1), v1(2),v_output,temp1,h)
+                call ie_vrt_nd(vnext, vec2(1), vec2(2),v_output,temp2,h)
+
+                diff = sqrt(dot_product(temp1,temp1))-
+     +                 sqrt(dot_product(temp2,temp2))
+
+                if (sqrt(dot_product(correct,correct))<1E-8) then
+                        !flag = 1
+                        EXIT
+                end if
+
+                relax = 1.0
+                counts = 0
+
+               do while ((diff<0).OR.(vec2(1)<0).OR.(vec2(2)<0)
+     +                   .OR.isnan(vec2(1)))
+                        counts = counts + 1
+                        coeff = 0.5
+                        relax = relax * coeff
+                        vec2 = v1-matmul(finalJ,fv1)*relax
+                call ie_vrt_nd(vnext, vec2(1), vec2(2),v_output,temp2,h)
+                        diff = sqrt(dot_product(temp1,temp1))-
+     +                  sqrt(dot_product(temp2,temp2))
+
+                        if (counts>10) EXIT
+                end do
+
+                v1 = vec2
+
+                call ie_vrt_nd(vnext, vec2(1), vec2(2), v_output, fv2,h)
+        end do
+      if (iterations == 100) flag = 1
+      if (isnan(vec2(1)) .OR. vec2(1)<0 .OR. isnan(vec2(2))
+     + .OR. vec2(2)<0) flag = 1
+
+      end subroutine gauss_newton_2d
+      subroutine LV_solver(vnext,h,vec1,vec2,flag)
+        use particles
+        implicit none
+
+        real, intent(in) :: vnext(3),h, vec1(2)
+        real, intent(out) :: vec2(2)
+        integer, intent(out) :: flag
+        real :: error = 1E-8, fv1(2), fv2(2), v1(2), v_output(3), rel
+        real :: diff, lambda,lup,ldown
+        real :: C(2), newC(2), gradC(2), correct(2)
+        real, dimension(1:2, 1:2) :: J,I,g,invg
+        integer :: iterations, neg
+
+        I = reshape((/1, 0, 0, 1/),shape(I))
+        iterations = 0
+        flag = 0
+        v1 = vec1
+        fv2 = (/1., 1./)
+
+        lambda = 0.001
+        lup = 2.0
+        ldown = 2.0
+
+        do while ((sqrt(dot_product(fv2, fv2)) > error).AND.
+     +              (iterations<1000))
+
+        iterations = iterations + 1
+        call jacob_approx_2d(vnext, v1(1), v1(2), h,J)
+
+        call ie_vrt_nd(vnext, v1(1), v1(2),v_output,fv1,h)
+        g = matmul(transpose(J),J)+lambda*I
+        gradC = matmul(transpose(J),fv1)
+        C = 0.5*fv1*fv1
+
+        call inverse_finder_2d(g, invg)
+        correct = matmul(invg, gradC)
+        if (sqrt(dot_product(correct,correct)) < 1E-12) then
+                !flag = 1
+                EXIT
+        end if
+
+        vec2 = v1 - correct
+        call ie_vrt_nd(vnext, vec2(1), vec2(2),v_output,fv2,h)
+        newC = 0.5*fv2*fv2
+
+        if (sqrt(dot_product(newC,newC))<sqrt(dot_product(C,C))) then
+                v1 = vec2
+                lambda = lambda/ldown
+        else
+                lambda = lambda*lup
+        end if
+
+        end do
+
+        if (iterations==1000) then
+                flag = 1
+                !print*,'not converged ', sqrt(dot_product(fv2, fv2))
+        end if
+
+        if (vec2(1) < 0 .OR. vec2(2) < 0) then
+                flag = 1
+                !print*, 'negative', sqrt(dot_product(fv2,fv2))
+        end if
+
+
+      end subroutine LV_solver
+      subroutine jacob_approx_2d(vnext, rnext, tnext, h, J)
+        use particles
+        implicit none
+        integer :: n
+
+        real, intent(in) :: vnext(3), rnext, tnext, h
+        real, intent(out), dimension(1:2, 1:2) :: J
+        real :: diff = 0, v_output(3), rt_output(2),xper(2),
+     +          fxper(2), ynext(2),xper2(2),fxper2(2)
+
+        diff = 1E-12
+
+        ynext(1) = rnext
+        ynext(2) = tnext
+
+        call ie_vrt_nd(vnext, rnext, tnext, v_output, rt_output, h)
+
+        xper = ynext
+        xper2 = ynext
+
+        do n=1, 2
+                xper(n) = xper(n) + diff
+                xper2(n) = xper2(n) - diff
+                call ie_vrt_nd(vnext, xper(1), xper(2),v_output,
+     +           fxper,h)
+                call ie_vrt_nd(vnext, xper2(1), xper2(2),v_output,
+     +           fxper2,h)
+                !              if (.NOT. 
+                !+
+                !sqrt(dot_product((fxper-rt_output),(fxper-rt_output)))
+                !> 0)
+                J(:, n) = (fxper-rt_output)/diff
+                xper(n) = ynext(n)
+                xper2(n) = ynext(n)
+        end do
+
+      end subroutine jacob_approx_2d
+      subroutine inverse_finder_2d(C, invC)
+        implicit none
+        real :: det
+        real, dimension(1:2, 1:2), intent(in) :: C
+        real, dimension(1:2, 1:2), intent(out) :: invC
+
+        det = C(1, 1) * C(2, 2) - C(1, 2) * C(2, 1)
+
+        invC = reshape((/C(2, 2), -C(2,1), -C(1, 2), C(1, 1)/),
+     +   shape(invC))
+        invC = (1./det)*invC
+
+      end subroutine inverse_finder_2d
+      subroutine ie_vrt_nd(vnext, tempr, tempt, v_output,rt_output, h)
+      use pars
+      use particles
+      use con_data
+      use con_stats
+      implicit none
+      include 'mpif.h'
+
+      real, intent(in) :: vnext(3), tempr, tempt, h
+      real, intent(out) :: v_output(3), rT_output(2)
+
+      real :: esa, dnext,  m_w, rhop, Rep, taup,
+     +         vprime(3), rprime, Tprime, qstr, Shp, Nup, dp, VolP,
+     +         diff(3), diffnorm, Tnext, rnext, T
+      real :: taup0, g(3), mod_Magnus
+
+
+        taup0 = (((part%m_s)/((2./3.)*pi2*radius_init**3) + rhow) *
+     +   (radius_init*2)**2)/(18*rhoa*nuf)
+        g(1:3) = (/0.0, 0.0, part_grav/)
+
+        ! quantities come in already non-dimensionalized, so must be
+        ! converted back;
+        ! velocity is not non-dimensionalized so no need to change
+        rnext = tempr * part%radius
+        Tnext = tempt * part%Tp
+        dnext = rnext * 2.
+
+        esa = mod_Magnus(part%Tf)
+        VolP = (2./3.)*pi2*rnext**3
+        rhop = (part%m_s + VolP*rhow) / VolP
+
+        !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+
+        !!! Velocity !!!
+        diff(1:3) = part%uf - vnext
+        diffnorm = sqrt(diff(1)**2 + diff(2)**2 + diff(3)**2)
+        Rep = dnext * diffnorm/nuf
+        taup = (rhop * dnext**2)/(18.0*rhoa*nuf)
+        vprime(1:3) = (1. + 0.15 * (Rep**0.687)) * (1./taup) *
+     +  diff(1:3) - g(1:3)
+        vprime(1:3) = vprime(1:3) * taup0 ** 2
+        !!!!!!!!!!!!!!!!
+
+        !!! Humidity !!!
+        qstr = (Mw/(Ru*Tnext*rhoa)) * esa *
+     +  exp(((Lv*Mw/Ru)*((1./part%Tf) - (1./Tnext))) +
+     +  ((2.*Mw*Gam)/(Ru*rhow*rnext*Tnext)) -
+     +  ((Ion*Os*part%m_s*(Mw/Ms))/(Volp*rhop-part%m_s)))
+        !!!!!!!!!!!!!!!!!!
+
+        !!! Radius !!!
+        Shp = 2. + 0.6 * Rep**(1./2.) * Sc**(1./3.)
+        rprime = (1./9.) * (Shp/Sc) * (rhop/rhow) *
+     +  (rnext/taup) * (part%qinf - qstr)
+        rprime = rprime * (taup0/part%radius)
+        !!!!!!!!!!!!!!!!!
+
+        !!! Temperature !!!
+        Nup = 2. + 0.6*Rep**(1./2.)*Pra**(1./3.);
+
+        Tprime = -(1./3.)*(Nup/Pra)*CpaCpp*(rhop/rhow)*
+     +           (1./taup)*(Tnext-part%Tf) +
+     +           3.*Lv*(1./(rnext*Cpp))*rprime*(part%radius/taup0)
+        Tprime = Tprime * (taup0/part%Tp)
+        !!!!!!!!!!!!!!!!!
+
+        ! velocity is not non-dimensionalized so it does not need to be
+        ! changed back
+        v_output(1:3) = vnext(1:3) - part%vp(1:3) - h * vprime(1:3)
+        rT_output(1) = rnext/part%radius - 1.0  - h*rprime
+        rT_output(2) = Tnext/part%Tp - 1.0  - h*Tprime
+
+      end subroutine ie_vrt_nd
+      subroutine rad_solver2(guess,mflag)
+      use pars
+      use particles
+      use con_data
+      use con_stats
+      implicit none
+      include 'mpif.h'
+
+      real, intent(OUT) :: guess
+      integer, intent(OUT) :: mflag
+      real :: a, c, esa, Q, R, M, val, theta, S, T
+      real :: mod_Magnus
+
+      mflag = 0
+      esa = mod_Magnus(part%Tf)
+
+      a = -(2*Mw*Gam)/(Ru*rhow*part%Tf)/
+     +    LOG((Ru*part%Tf*rhoa*part%qinf)/(Mw*esa))
+      c = (Ion*Os*part%m_s*(Mw/Ms))/((2.0/3.0)*pi2*rhow)/
+     +    LOG((Ru*part%Tf*rhoa*part%qinf)/(Mw*esa))
+
+      Q = (a**2.0)/9.0
+      R = (2.0*a**3.0+27.0*c)/54.0
+      M = R**2.0-Q**3.0
+      val = (R**2.0)/(Q**3.0)
+
+      if (M<0) then
+        theta = acos(R/sqrt(Q**3.0))
+        guess = -(2*sqrt(Q)*cos((theta-pi2)/3.0))-a/3.0
+
+        if (guess < 0) then
+        guess = -(2*sqrt(Q)*cos((theta+pi2)/3.0))-a/3.0
+        end if
+
+      else
+        S = -(R/abs(R))*(abs(R)+sqrt(M))**(1.0/3.0)
+        T = Q/S
+        guess = S + T - a/3.0
+
+        if (guess < 0) then
+                guess = part%radius
+                mflag = 1
+        end if
+      end if
+
+      end subroutine rad_solver2
+
       subroutine create_particle(xp,vp,Tp,qinfp,rad_init,idx)
       use particles
       use pars
@@ -11176,11 +11456,6 @@ c
             gm = floor(p_alpha)
          end if
 
-!         if (myid==0 .and. i==1) then
-!         write(*,'(a5,7e15.6)'),'DHR1:',Pjk,p_alpha,K,dV,phi,veldiff,
-!     +    real(ns)*real(xi_j)/dV
-!         write(*,'(a5,5i)'),'DHR2:',floor(p_alpha),gm,ns
-!         end if
 
          if (gm .gt. 0) then  !Only update radii and multiplicities if the coin flip indicates
        
@@ -11196,10 +11471,6 @@ c
             rad_data(k_idx) = (gam_til*rad_data(j_idx)**3 + 
      +                         rad_data(k_idx)**3)**(1.0/3.0)
 
-!            write(*,'(a5,8i)') 'DHR3:',gm,gam_til,xi_j,xi_k,
-!     +      mult_data(j_idx),mult_data(k_idx),j_idx,k_idx
-!         write(*,'(a5,5e15.6)') 'DHR3:',rad_data(k_idx),rad_data(j_idx),
-!     +      Pjk,p_alpha,K
 
             elseif (xi_j - gam_til*xi_k .eq. 0) then
 
@@ -11217,11 +11488,6 @@ c
 
             rad_data(j_idx) = rad_j_tmp
             rad_data(k_idx) = rad_k_tmp
-
-!            write(*,'(a5,8i)') 'DHR4:',gm,gam_til,xi_j,xi_k,
-!     +      mult_data(j_idx),mult_data(k_idx),j_idx,k_idx
-!         write(*,'(a5,5e15.6)') 'DHR4:',rad_data(k_idx),rad_data(j_idx),
-!     +      Pjk,p_alpha,K
 
             end if
 
@@ -11258,8 +11524,7 @@ c
       part_tmp => part_tmp%next
       end do
 
-      !Finally remove dead particles from coalescence and add stats
-      hist_rad = 0
+      !Finally remove dead particles from coalescence
       numpart = 0
       part => first_particle
       do while (associated(part))
@@ -11268,8 +11533,6 @@ c
          else
             numpart = numpart + 1
          end if
-         call add_histogram(bins_rad,hist_rad,
-     +    histbins+2,part%radius,part%mult)
       part => part%next
       end do
 
@@ -11418,11 +11681,6 @@ c      -----x component ----------------
          us_ran = sqrt(fs*C0*epsn*dt)*gasdev(iseed)
          part%u_sub(1) = (a1+a2+a3)*dt + us_ran
 
-c      ------FOR CHECK-INDRAJIT-11/17/2017-----
-c        if(fs.gt.0.5)then
-c        part%u_sub(1) = gasdev(iseed)*sqrt(2*vis_sp/dt)
-c        end if
-c      -----------------------------------------
         ! Check to see it blows up 
         if(isnan(part%u_sub(1)))then
         write(*,*)'u-nan',a1,a2,a3,us_ran,part%sigm_s
@@ -11444,11 +11702,6 @@ c       -----y component ----------------
         us_ran = sqrt(fs*C0*epsn*dt)*gasdev(iseed)
         part%u_sub(2) = (a1+a2+a3)*dt + us_ran
 
-c      ------FOR CHECK-INDRAJIT-11/17/2017-----
-c        if(fs.gt.0.5)then
-c        part%u_sub(2) = gasdev(iseed)*sqrt(2*vis_sp/dt)
-c        end if
-c      -----------------------------------------
 
         if(isnan(part%u_sub(2)))then
         write(*,*)'v-nan',a1,a2,a3,us_ran,part%sigm_s
@@ -12928,7 +13181,7 @@ c     Now fill the ext arrays with the recieved buffers:
       !Now we have the weights - compute the velocity at xp:
         part%uf(1:3) = 0.0
         part%Tf = 0.0
-        part%qinf = 0.0 ! Brian 7/14/14 
+        part%qinf = 0.0
         do k = 1,6
         do j = 1,6
         do i = 1,6
@@ -12936,6 +13189,9 @@ c     Now fill the ext arrays with the recieved buffers:
             iy = ijpts(2,j)
             izuv = kuvpts(k)
             izw = kwpts(k)
+
+            if (ix .gt. mxe+3) write(*,'(i,7e15.6)') myid,
+     + part%xp(1),part%xp(2),part%xp(3),xmin,xmax,ymin,ymax
             part%uf(1) = part%uf(1)+uext(izuv,iy,ix)*wt(1,i)*
      +                   wt(2,j)*wt(3,k) 
             part%uf(2) = part%uf(2)+vext(izuv,iy,ix)*wt(1,i)*
@@ -12945,7 +13201,7 @@ c     Now fill the ext arrays with the recieved buffers:
             part%Tf = part%Tf+Text(izuv,iy,ix)*wt(1,i)*
      +                   wt(2,j)*wt(3,k)
             part%qinf = part%qinf+T2ext(izuv,iy,ix)*wt(1,i)*
-     +                   wt(2,j)*wt(3,k)  ! Brian 7/14/14 
+     +                   wt(2,j)*wt(3,k) 
          end do
          end do 
          end do
@@ -13314,6 +13570,7 @@ c        part%qinf = 0.0 ! Brian 7/14/14
       yv = ran2(iseed)*(ymax-ymin) + ymin
       zv = ran2(iseed)*(zi-zw1) + zw1
       xp_init = (/xv,yv,zv/)
+
 
       !Exponential distribution of droplet size to match Shima et al.
       !(2009) test case
@@ -13877,45 +14134,44 @@ c        part%qinf = 0.0 ! Brian 7/14/14
       !drag momentum coupling
       partsrc_t(iz,iy,ix,1:3) =
      +     partsrc_t(iz,iy,ix,1:3) +
-     +     partmass/rhoa*(part%vrhs(1:3)+g(1:3))*wtt/dV
+     +     partmass/rhoa*(part%vrhs(1:3)+g(1:3))*wtt/dV*
+     +     part%mult
 
       !vapor momentum coupling
       partsrc_t(iz,iy,ix,1:3) =
      +     partsrc_t(iz,iy,ix,1:3) +
      +     rhow/rhoa*pi2*2*part%radius**2*
-     +     part%radrhs*part%vp(1:3)*wtt/dV
+     +     part%radrhs*part%vp(1:3)*wtt/dV*
+     +     part%mult
       endif
 
       if (iTcouple == 1) then
       partTsrc_t(iz,iy,ix) =
      +     partTsrc_t(iz,iy,ix) +
      +     (part%Tprhs_s*6.0*rhow/rhop/CpaCpp/taup_i*
-     +     (pi2/2.0)*part%radius*nuf)*wtt/dV
+     +     (pi2/2.0)*part%radius*nuf)*wtt/dV*
+     +     part%mult
       endif
 
       if (iHcouple == 1) then
       partHsrc_t(iz,iy,ix) =     !Brian 8/5/14
      +     partHsrc_t(iz,iy,ix) +  !minus comes later
-     +     rhow/rhoa*pi2*2*part%radius**2*part%radrhs*wtt/dV
+     +     rhow/rhoa*pi2*2*part%radius**2*part%radrhs*wtt/dV*
+     +     part%mult
 
 
-
-!      http://eesc.columbia.edu/courses/ees/climate/SI_Units.pdf
-!      or http://catalog.conveyorspneumatic.com/Asset/FLS%20Specific%20Heat%20Capacities%20of%20Gases.pdf
        Cvv = 1463.0 !J/degkg
        Cpv = 1952.0 !from E. Toolbox -> 1864.0 !J/degkg
        !Cva = 717.0 !J/degkg
-       !lref = (25.0 - 0.02274*20.0)*10.0**5
        partTEsrc_t(iz,iy,ix) = 
      +     partTEsrc_t(iz,iy,ix) +  !minus comes later
      +         rhow/rhoa*pi2*2*part%radius**2*
-     +                  part%radrhs*Cpv/Cpa*part%Tp*wtt/dV -
+     +                  part%radrhs*Cpv/Cpa*part%Tp*wtt/dV*part%mult -
      +         rhow/rhoa*pi2*2*part%radius**2*
-     +                  part%radrhs*Cpv/Cpa*part%Tf*wtt/dV
+     +                  part%radrhs*Cpv/Cpa*part%Tf*wtt/dV*part%mult
 
       endif
 
-      !write(*,'a5,3i,3e15.6') 'bsrc:',ix,iy,iz,partsrc(ix,iy,iz,1:3)
 
       end do
       end do
@@ -13924,10 +14180,25 @@ c        part%qinf = 0.0 ! Brian 7/14/14
       part => part%next
       end do
 
-      !Now, partsrc and partTsrc have halos on each processor - give these to the rightful owner:
+
+      end subroutine particle_coupling_update
+      subroutine particle_coupling_exchange
+      use particles
+      use pars
+      use con_data
+      use con_stats
+      implicit none
+      include 'mpif.h'
+      real :: ctbuf_s(nnz+2,1:iye-iys+2,6),cbbuf_r(nnz+2,1:iye-iys+2,6)
+      real :: crbuf_s(nnz+2,1:mxe-mxs+1,6),clbuf_r(nnz+2,1:mxe-mxs+1,6)
+      integer :: istatus(mpi_status_size),ierr,ncount
+
+
+      !Now, partsrc and partTsrc have halos on each processor - give
+      !these to the rightful owner:
       crbuf_s=0.0;ctbuf_s=0.0
       clbuf_r=0.0;cbbuf_r=0.0
-    
+
       !First send top: 
       !get send buffer ready:
       ctbuf_s(1:nnz+2,1:iye-iys+2,1:3)=partsrc_t(0:nnz+1,
@@ -13941,29 +14212,29 @@ c        part%qinf = 0.0 ! Brian 7/14/14
        ctbuf_s(1:nnz+2,1:iye-iys+2,6)=partTEsrc_t(0:nnz+1,
      +                                iys:iye+1,mxe+1)
 
-      ncount = 6*(nnz+2)*(iye-iys+2) 
+      ncount = 6*(nnz+2)*(iye-iys+2)
       call mpi_sendrecv(ctbuf_s,ncount,mpi_real8,tproc,1,
      +     cbbuf_r,ncount,mpi_real8,bproc,1,mpi_comm_world,istatus,ierr)
 
       !Now just add the contents of the receive buffer into the entire 
       !iys column of this proc:
 
-      partsrc_t(0:nnz+1,iys:iye+1,mxs,1:3) = 
-     +   partsrc_t(0:nnz+1,iys:iye+1,mxs,1:3) + 
+      partsrc_t(0:nnz+1,iys:iye+1,mxs,1:3) =
+     +   partsrc_t(0:nnz+1,iys:iye+1,mxs,1:3) +
      +    cbbuf_r(1:nnz+2,1:iye-iys+2,1:3)
-      partTsrc_t(0:nnz+1,iys:iye+1,mxs) = 
-     +   partTsrc_t(0:nnz+1,iys:iye+1,mxs) + 
+      partTsrc_t(0:nnz+1,iys:iye+1,mxs) =
+     +   partTsrc_t(0:nnz+1,iys:iye+1,mxs) +
      +     cbbuf_r(1:nnz+2,1:iye-iys+2,4)
 
-      partHsrc_t(0:nnz+1,iys:iye+1,mxs) = 
-     +   partHsrc_t(0:nnz+1,iys:iye+1,mxs) + 
+      partHsrc_t(0:nnz+1,iys:iye+1,mxs) =
+     +   partHsrc_t(0:nnz+1,iys:iye+1,mxs) +
      +     cbbuf_r(1:nnz+2,1:iye-iys+2,5)
-      
-    
-      partTEsrc_t(0:nnz+1,iys:iye+1,mxs) = 
-     +   partTEsrc_t(0:nnz+1,iys:iye+1,mxs) + 
+
+
+      partTEsrc_t(0:nnz+1,iys:iye+1,mxs) =
+     +   partTEsrc_t(0:nnz+1,iys:iye+1,mxs) +
      +   cbbuf_r(1:nnz+2,1:iye-iys+2,6)
-      
+
       !Now get the right send buffer ready:
       crbuf_s(1:nnz+2,1:mxe-mxs+1,1:3)=
      +        partsrc_t(0:nnz+1,iye+1,mxs:mxe,1:3)
@@ -13981,39 +14252,22 @@ c        part%qinf = 0.0 ! Brian 7/14/14
      +     clbuf_r,ncount,mpi_real8,lproc,2,mpi_comm_world,istatus,ierr)
 
       !And again add the contents to the top/bottom rows of partsrc:
-      partsrc_t(0:nnz+1,iys,mxs:mxe,1:3) = 
-     +           partsrc_t(0:nnz+1,iys,mxs:mxe,1:3) + 
+      partsrc_t(0:nnz+1,iys,mxs:mxe,1:3) =
+     +           partsrc_t(0:nnz+1,iys,mxs:mxe,1:3) +
      +                clbuf_r(1:nnz+2,1:mxe-mxs+1,1:3)
 
-      partTsrc_t(0:nnz+1,iys,mxs:mxe) = 
-     +           partTsrc_t(0:nnz+1,iys,mxs:mxe) + 
+      partTsrc_t(0:nnz+1,iys,mxs:mxe) =
+     +           partTsrc_t(0:nnz+1,iys,mxs:mxe) +
      +                 clbuf_r(1:nnz+2,1:mxe-mxs+1,4)
-      partHsrc_t(0:nnz+1,iys,mxs:mxe) = 
-     +           partHsrc_t(0:nnz+1,iys,mxs:mxe) + 
-     +                 clbuf_r(1:nnz+2,1:mxe-mxs+1,5)  
-      partTEsrc_t(0:nnz+1,iys,mxs:mxe) = 
-     +           partTEsrc_t(0:nnz+1,iys,mxs:mxe) + 
-     +                 clbuf_r(1:nnz+2,1:mxe-mxs+1,6)  
+      partHsrc_t(0:nnz+1,iys,mxs:mxe) =
+     +           partHsrc_t(0:nnz+1,iys,mxs:mxe) +
+     +                 clbuf_r(1:nnz+2,1:mxe-mxs+1,5)
+      partTEsrc_t(0:nnz+1,iys,mxs:mxe) =
+     +           partTEsrc_t(0:nnz+1,iys,mxs:mxe) +
+     +                 clbuf_r(1:nnz+2,1:mxe-mxs+1,6)
 
-      !Now everyone should have the proper summed contributions from particles
-      !lying within (i-1,i+1),(j-1,j+1),(k-1,k+1)
 
-!      do ix=1,nnx
-!      do iy=iys,iye
-!      do iz=izs,ize
-!
-!      if ( (abs(partsrc(ix,iy,iz,1)) .gt. 1.0e-8) .or.
-!     +      (abs(partsrc(ix,iy,iz,2)) .gt. 1.0e-8) .or. 
-!     +      (abs(partsrc(ix,iy,iz,3)) .gt. 1.0e-8)) then
-!
-!      write(*,'a5,4i,3e15.6')'asrc:',myid,ix,iy,iz,partsrc(ix,iy,iz,1:3)
-!      end if
-!
-!      end do
-!      end do
-!      end do
-
-      end subroutine particle_coupling_update
+      end subroutine particle_coupling_exchange
       subroutine write_histograms
       use pars
       use fields
@@ -14045,7 +14299,7 @@ c -------------- Collect all histogram from different processors
         call mpi_reduce(hist_rad,sumbuf_rad,num_entries,
      +   mpi_real8,mpi_sum,0,mpi_comm_world,ierr)
 
-        if (l_root) then
+        if (myid==0) then
 
 
 c ---------------- save data 
@@ -14130,6 +14384,19 @@ c       Add the current event to the histogram
         histdata(ibin) = histdata(ibin) + real(mult)
 
       end subroutine add_histogram
+      subroutine radius_histogram
+      use particles
+      implicit none
+
+      hist_rad = 0
+      part => first_particle
+      do while (associated(part))
+         call add_histogram(bins_rad,hist_rad,
+     +    histbins+2,part%radius,part%mult)
+      part => part%next
+      end do
+
+      end subroutine radius_histogram
 
       subroutine read_input_file
       use pars
@@ -14250,3 +14517,17 @@ c       Add the current event to the histogram
        end if
        return
       end
+      function mod_Magnus(T)
+      implicit none
+
+      !Take in T in Kelvin and return saturation vapor pressure using
+      !function of Alduchov and Eskridge, 1996
+      real,intent(in) :: T  
+      real :: mod_Magnus
+
+      
+      mod_Magnus = 610.94 *exp((17.6257*(T-273.15))/
+     +  (243.04+(T-273.15)))
+       
+      
+      end function mod_Magnus
