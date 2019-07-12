@@ -23,7 +23,7 @@ c
       !Boundary conditions and other parameters
       real :: Uo, Ttop(nscl), Tbot(nscl),qstar(nscl),tsfcc(nscl)
       real :: grav,t00,fcor,zi,zl,xl,yl,zw1,dpdx
-      real :: ugcont,vgcont,zo
+      real :: ugcont,vgcont,zo,surf_RH
       integer :: isfc(nscl)
 c     
 c     ------------ leave following definitions as is
@@ -135,7 +135,7 @@ c     --- SFS velocity calculation ---------
       integer :: denum, actnum, tdenum, tactnum
       integer :: num_destroy=0,tnum_destroy=0
 
-      real :: Rep_avg,part_grav
+      real :: Rep_avg,part_grav(3)
       real :: radavg,radmin,radmax,tempmin,tempmax,qmin,qmax
       real :: vp_init(3),Tp_init,qf_init
       real :: Lv = (25.0 - 0.02274*26.0)*10.0**5
@@ -3238,6 +3238,7 @@ c
       use fftwk
       use con_data
       use con_stats
+      use particles
       real sfc_flx(2+nscl)
 c
       iz   = 1
@@ -5019,7 +5020,9 @@ c
       use fields
       use con_data
       use con_stats
+      use particles
       real buf(3+nscl)
+      real :: mod_Magnus
 c
       parameter (iter_mo = 30, zeta_min = -6.0, zeta_max = 3.0)
 c
@@ -5161,7 +5164,36 @@ c
 
 !Now that temperature and momentum have been done, apply BCs on remaining scalars:
 
-      do iscl=2,nscl
+      !Treat humidity differently
+      iscl=2
+
+      if (ibuoy.eq.0 .or. qstar(1) .eq. 0.) then
+          thstar(iscl) = 0.0
+          t10xy(iscl)  = 0.0
+          tsfcc(iscl)  = t1xy(iscl)
+      else
+         dnom = (zody-psis)*vk74in
+         if(isfc(iscl) .eq. 0) then
+            thstar(iscl) = -qstar(iscl)/utau
+            tsfcc(iscl)  = t1xy(iscl)-thstar(iscl)*dnom
+            t10xy(iscl)  = thstar(iscl)*dnom
+         else
+            !Humidity is always a Dirichlet condition at surf_RH
+            !Based on temperature in tsfcc(1)
+            tsfcc(2)=surf_RH/100.0*
+     +      Mw/Ru/tsfcc(1)*mod_Magnus(tsfcc(1))/rhoa
+
+            thstar(iscl) = (t1xy(iscl) - tsfcc(iscl))/dnom
+            t10xy(iscl)  = thstar(iscl)*dnom
+            qstar(iscl)  = -utau*thstar(iscl)
+         endif
+         amonin = -utau**3/(batagk*qstar(iscl))
+         zeta   = z1/amonin
+      endif
+
+
+      !Other scalars:
+      do iscl=3,nscl
 
       if (ibuoy.eq.0 .or. qstar(1) .eq. 0.) then
           thstar(iscl) = 0.0
@@ -5516,7 +5548,7 @@ c
       use con_stats
       use particles
 c
-      real :: RHT,RHB
+      real :: RHT,RHB,mod_Magnus
 
       pi   = 4.0*atan(1.0)
       pi2  = 2.0*pi
@@ -5589,13 +5621,13 @@ c
 
          !Assuming tsfcc(2) is giving RH:
 
-!         RHB = tsfcc(2)/100.0
-!
-!         tsfcc(2) = RHB*Mw/Ru/tsfcc(1)*mod_Magnus(tsfcc(1))/rhoa
-!
-!         if (myid==0) then
-!         write(*,*) 'SURFACE HUMIDITY: %RH, q = ',RHB*100.0,tsfcc(2)
-!         end if
+         RHB = surf_RH/100.0
+
+         tsfcc(2) = RHB*Mw/Ru/tsfcc(1)*mod_Magnus(tsfcc(1))/rhoa
+
+         if (myid==0) then
+         write(*,*) 'SURFACE HUMIDITY: %RH, q = ',surf_RH,tsfcc(2)
+         end if
 
 
 
@@ -5958,7 +5990,7 @@ c
       use particles
       real psi(nnx,iys:iye), psix(nnx,iys:iye),
      +     psiy(nnx,iys:iye,izs:izs), uxx(nnx,iys:iye),
-     +     vyy(nnx,iys:iye,izs:izs)
+     +     vyy(nnx,iys:iye,izs:izs),mod_Magnus
 
       !Initialize partcount to 0:
       partcount = 0.0
@@ -6048,8 +6080,8 @@ c           u(ix,iy,iz) = ug(iz) - ugal
          endif
          do iy=iys,iye
          do ix=1,nnx
-            t(ix,iy,2,iz) =
-     +      tsfcc(2)/100.0*Mw/Ru/t(ix,iy,1,iz)*mod_Magnus(t(ix,iy,1,iz))
+            t(ix,iy,2,iz) = surf_RH/100.0*
+     +      Mw/Ru/t(ix,iy,1,iz)*mod_Magnus(t(ix,iy,1,iz))/rhoa
             w(ix,iy,iz)   = 0.
             r1(ix,iy,iz)  = 0.
             r2(ix,iy,iz)  = 0.
@@ -7064,25 +7096,25 @@ c
 c
 c --------------- output additional scalars
 c
-c     if(nscl .eq. 2) then
-c     write(lu,5005)tsfcc(2),wtsfc(2)
-c5005 format(/,'  SURFACE VALUE: TXYM(2) =',e15.6,' WTSFC(2) = ',e15.6)
-c     write(lu,5100) (iz,txym(iz,2),wtle(iz,2),
-c    +              wtsb(iz,2),iz=iz_strt,iz_end)
-c5100 format(//,' IZ',5x,' SCALAR-1 MEAN',8x,' WS1LE',10x,
-c    +          ' WS1SB',10x
-c    +       ,/,(1x,i4,3(3x,e12.6)))
-c     else if (nscl .eq. 3) then
-c     write(lu,5205)tsfcc(2),wtsfc(2),tsfcc(3),wtsfc(3)
-c5205 format(/,'  SURFACE VALUE: TXYM(2) =',e15.6,' WTSFC(2) = ',e15.6,
-c    +       /,'  SURFACE VALUE: TXYM(3) =',e15.6,' WTSFC(3) = ',e15.6)
-c     write(lu,5200) (iz,txym(iz,2),txym(iz,3),wtle(iz,2),
-c    +    wtsb(iz,2),wtle(iz,3),wtsb(iz,3),iz=iz_strt,iz_end)
-c5200 format(//,' IZ',5x,' SCALAR-1 MEAN',8x,' SCALAR-2 MEAN',10x,
-c    +          ' WS1LE',10x,' WS1SB',10x,' WS2LE',10x,' WS1SB'
-c    +       ,/,(1x,i4,6(3x,e12.6)))
-c     endif
-c
+      if(nscl .eq. 2) then
+      write(lu,5005)tsfcc(2),wtsfc(2)
+ 5005 format(/,'  SURFACE VALUE: TXYM(2) =',e15.6,' WTSFC(2) = ',e15.6)
+      write(lu,5100) (iz,txym(iz,2),wtle(iz,2),
+     +              wtsb(iz,2),iz=iz_strt,iz_end)
+ 5100 format(//,' IZ',5x,' SCALAR-1 MEAN',8x,' WS1LE',10x,
+     +          ' WS1SB',10x
+     +       ,/,(1x,i4,3(3x,e15.6)))
+      else if (nscl .eq. 3) then
+      write(lu,5205)tsfcc(2),wtsfc(2),tsfcc(3),wtsfc(3)
+ 5205 format(/,'  SURFACE VALUE: TXYM(2) =',e15.6,' WTSFC(2) = ',e15.6,
+     +       /,'  SURFACE VALUE: TXYM(3) =',e15.6,' WTSFC(3) = ',e15.6)
+      write(lu,5200) (iz,txym(iz,2),txym(iz,3),wtle(iz,2),
+     +    wtsb(iz,2),wtle(iz,3),wtsb(iz,3),iz=iz_strt,iz_end)
+ 5200 format(//,' IZ',5x,' SCALAR-1 MEAN',8x,' SCALAR-2 MEAN',10x,
+     +          ' WS1LE',10x,' WS1SB',10x,' WS2LE',10x,' WS1SB'
+     +       ,/,(1x,i4,6(3x,e15.6)))
+      endif
+ 
       return
       end
       subroutine xy_stats
@@ -10098,7 +10130,7 @@ c
       include 'mpif.h'
 
       integer :: istage,ierr,it
-      real :: g(3),pi
+      real :: pi
       real :: denom,dtl,sigma
       integer :: ix,iy,iz
       real :: Rep,diff(3),diffnorm,corrfac,myRep_avg
@@ -10109,7 +10141,6 @@ c
       real :: t_s,t_f,t_s1,t_f1
       real :: mod_Magnus
 
-      g(1:3) = (/0.0, 0.0, part_grav/)
 
       !First fill extended velocity field for interpolation
       !t_s = mpi_wtime()
@@ -10215,7 +10246,7 @@ c
 
          part%xrhs(1:3) = part%vp(1:3)
          part%vrhs(1:3) = corrfac*taup_i*(part%uf(1:3)-part%vp(1:3))
-     +                               - g(1:3)
+     +                               - part_grav(1:3)
 
          if (ievap .EQ. 1) then      
             part%radrhs = Shp/9.0/Sc*rhop/rhow*part%radius*
@@ -10453,7 +10484,7 @@ c
       include 'mpif.h'
 
       integer :: ierr,it
-      real :: g(3),tmpbuf(5),tmpbuf_rec(5),tmp_reintro
+      real :: tmpbuf(5),tmpbuf_rec(5),tmp_reintro
       real :: myradavg,myradmax,myradmin,mytempmax,mytempmin
       real :: myqmin,myqmax
       real :: denom,dtl,sigma
@@ -10470,12 +10501,12 @@ c
       real :: mod_Magnus
 
 
-      g(1:3) = (/0.0, 0.0, part_grav/)
-
-      if (it .lt. 5000) then
+      if (it .lt. 2000) then
          ievap = 0
+         icoalesce = 0
       else
          ievap = 1
+         icoalesce = 1
       end if
 
 
@@ -10508,6 +10539,9 @@ c
 
       denum = 0
       actnum = 0
+      num100 = 0
+      num1000 = 0
+      numimpos = 0
 
       !loop over the linked list of particles
       part => first_particle
@@ -10525,7 +10559,6 @@ c
            part%vp(1:3) = part%uf
         end if
 
-
         diff(1:3) = part%vp - part%uf
         diffnorm = sqrt(diff(1)**2 + diff(2)**2 + diff(3)**2)
         Volp = pi2*2.0/3.0*part%radius**3
@@ -10537,7 +10570,7 @@ c
         !implicitly calculates next velocity and position
         part%xp(1:3) = part%xp(1:3) + dt*part%vp(1:3)
         part%vp(1:3) = (part%vp(1:3)+taup_i*dt*corrfac*part%uf(1:3)
-     +   -dt*g(1:3))/(1+dt*corrfac*taup_i)
+     +   +dt*part_grav(1:3))/(1+dt*corrfac*taup_i)
 
         ! non-dimensionalizes particle radius and temperature before
         ! iteratively solving for next radius and temperature
@@ -10641,15 +10674,13 @@ c
 
         part%xrhs(1:3) = part%vp(1:3)
         part%vrhs(1:3) = corrfac*taup_i*(part%uf(1:3)-part%vp(1:3))
-     +                               - g(1:3)
+     +                               + part_grav(1:3)
 
         part%res = part%res + dt
 
 
       part => part%next
       end do
-
-      
 
 
       !Enforce nonperiodic bcs (either elastic or destroying particles)
@@ -10663,6 +10694,8 @@ c
       !Now enforce periodic bcs 
       !just updates x,y locations if over xl,yl or under 0
       call particle_bcs_periodic
+
+      call particle_coupling_update
 
       call particle_coupling_exchange
       !Finally, now that coupling and statistics arrays are filled, 
@@ -10820,6 +10853,7 @@ c
       tmpbuf(4) = myphiv_sum
       tmpbuf(5) = myradavg
 
+
       !calculate average particle residence time
       call mpi_allreduce(avgres,tavgres,1,mpi_real8,mpi_sum,
      +    mpi_comm_world,ierr)
@@ -10864,6 +10898,7 @@ c
      +                   mpi_comm_world,ierr)
       call mpi_allreduce(myqmax,qmax,1,mpi_real8,mpi_min,
      +                   mpi_comm_world,ierr)
+
 
 
       end subroutine particle_update_BE
@@ -11083,7 +11118,7 @@ c
 
         taup0 = (((part%m_s)/((2./3.)*pi2*radius_init**3) + rhow) *
      +   (radius_init*2)**2)/(18*rhoa*nuf)
-        g(1:3) = (/0.0, 0.0, part_grav/)
+        g(1:3) = part_grav(1:3)
 
         ! quantities come in already non-dimensionalized, so must be
         ! converted back;
@@ -11252,8 +11287,9 @@ c
       !perfectly elastic collisions on top, bottom walls
       !i.e. location is reflected, w-velocity is negated
 
-      top = zl - part%radius
-      bot = 0.0 + part%radius
+      top = zl
+      !bot = 0.0 + part%radius
+      bot = zw1
 
       if (part%xp(3) .GT. top) then
          part%xp(3) = top - (part%xp(3)-top)
@@ -11430,20 +11466,20 @@ c
          end if
 
          !Choose the kernel:
-         !K = pi2/2.0*E*veldiff*(rad_data(i) + rad_data(coal_idx))**2
+         K = pi2/2.0*E*veldiff*(rad_data(i) + rad_data(coal_idx))**2
 
          !Golovin (1963) kernel:
-         pvol_j = pi2*2.0/3.0*rad_data(j_idx)**3.0
-         pvol_k = pi2*2.0/3.0*rad_data(k_idx)**3.0
-         golovin_b = 1.5e3
-         K = golovin_b*(pvol_j + pvol_k)
+         !pvol_j = pi2*2.0/3.0*rad_data(j_idx)**3.0
+         !pvol_k = pi2*2.0/3.0*rad_data(k_idx)**3.0
+         !golovin_b = 1.5e3
+         !K = golovin_b*(pvol_j + pvol_k)
 
-         ! Pjk = K*dt/dV*xi_j
+         Pjk = K*dt/dV*xi_j
 
          !TESTING: cheat here and hard-code a different dt and dV than the flow
          !since there are issues
-         Pjk = K*1.0/1.0e6*xi_j
-         ns = tnumpart
+         !Pjk = K*1.0/1.0e6*xi_j
+         !ns = tnumpart
 
          !ns = nq-1   !This would be the number of particles in the "cell" according to Shima et al. 2009
          p_alpha = Pjk*(real(ns)*(real(ns)-1.0)/2.0)/(real(ns)/2.0)
@@ -14046,10 +14082,7 @@ c        part%qinf = 0.0 ! Brian 7/14/14
       integer :: i,j,k,ncount,ipt,jpt,kpt,kwpt
       integer :: istatus(mpi_status_size),ierr
       integer :: ix,iy,iz
-      real :: g(3)
       real :: lref,Cvv,Cva,Cpv
-
-      g(1:3) = (/0.0, 0.0, part_grav/)
 
       partsrc_t = 0.0
       partTsrc_t = 0.0
@@ -14128,13 +14161,13 @@ c        part%qinf = 0.0 ! Brian 7/14/14
           write(*,*) 'DHR:',part%radius,part%xp(3),part%mult,part%vp(3)
       end if
 
-      !Recall to subtract minus g (add g) since momentum is extracted form
+      !Recall to subtract g since momentum is extracted form
       !fluid only through drag term - NOT the gravity term as well
       if (icouple == 1) then
       !drag momentum coupling
       partsrc_t(iz,iy,ix,1:3) =
      +     partsrc_t(iz,iy,ix,1:3) +
-     +     partmass/rhoa*(part%vrhs(1:3)+g(1:3))*wtt/dV*
+     +     partmass/rhoa*(part%vrhs(1:3)-part_grav(1:3))*wtt/dV*
      +     part%mult
 
       !vapor momentum coupling
@@ -14154,7 +14187,7 @@ c        part%qinf = 0.0 ! Brian 7/14/14
       endif
 
       if (iHcouple == 1) then
-      partHsrc_t(iz,iy,ix) =     !Brian 8/5/14
+      partHsrc_t(iz,iy,ix) =     
      +     partHsrc_t(iz,iy,ix) +  !minus comes later
      +     rhow/rhoa*pi2*2*part%radius**2*part%radrhs*wtt/dV*
      +     part%mult
@@ -14412,7 +14445,7 @@ c       Add the current event to the histogram
       namelist /grid_params/ ncpu_s, Uo, Ttop, Tbot,
      +         qstar, tsfcc, ugcont, vgcont,
      +         zi, zl, xl, yl, zw1, dpdx,
-     +         cfl,dt_new
+     +         cfl,dt_new,surf_RH
 
       namelist /path_names/ path_seed,path_part,path_res,
      +         path_sav,path_his,path_viz_xy,path_viz_xz,
