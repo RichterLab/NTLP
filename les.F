@@ -25,6 +25,13 @@ c
       real :: grav,t00,fcor,zi,zl,xl,yl,zw1,dpdx
       real :: ugcont,vgcont,zo,surf_RH
       integer :: isfc(nscl)
+
+      !Material parameters, both air and particles
+      real :: Lv = (25.0 - 0.02274*26.0)*10.0**5
+      real :: Sal,Ms,Gam,Ion,Os
+      real :: rhow,nuf 
+      real :: CpaCpp,Cpa,Cpp,Pra,Sc,Mw,Ru,rhoa
+
 c     
 c     ------------ leave following definitions as is
 c     
@@ -137,15 +144,10 @@ c     --- SFS velocity calculation ---------
 
       real :: Rep_avg,part_grav(3)
       real :: radavg,radmin,radmax,tempmin,tempmax,qmin,qmax
-      real :: vp_init(3),Tp_init,qf_init
-      real :: Lv = (25.0 - 0.02274*26.0)*10.0**5
+      real :: vp_init(3),Tp_init,qf_init,radius_init
       integer :: mult_init
 
       real :: avgres=0,tavgres=0
-
-      real :: radius_init,rhow,nuf 
-      real :: CpaCpp,Cpa,Cpp,Pra,Sc,Mw,Ru,rhoa
-      real :: Sal,Ms,Gam,Ion,Os
 
       integer, parameter :: histbins = 512
       real :: hist_rad(histbins+2)
