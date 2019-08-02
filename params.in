@@ -31,6 +31,7 @@ icoalesce=1
 ipart_method=2   !1 = same RK3 as flow
 ipartdiff = 1
 isfs = 2   !isfs=1 is simple random walk, isfs=2 is Weil et al. (2004) particle subgrid
+iexner = 1  !iexner = 1 applies a correction to part%Tf to account for conversion b/w potential temp and temp. (need in PBL)
 /
 
 !Grid and domain parameters
@@ -51,6 +52,8 @@ qstar = 0.5, 0.5  !Surface fluxes of (temperature, humidity) (used for LES and D
 tsfcc = 305.15, 100.0    !Surface conditions of (temp, humidity) (used for LES) -- make sure tsfcc is gt than t00 for both isfc=0 or 1
 
 surf_RH = 100.0
+
+psurf = 101325  !Pa -- nominal surface pressure, for use in the definition of potential temp
 
 ugcont = 0.0   !The initial u-velocity in the field
 vgcont = 0.0   !The initial v-velocity
@@ -94,6 +97,7 @@ nuf=1.57e-5  !m^2/s
 Cpa=1006.0  !J/kg-K
 Pra = 0.715
 Sc = 0.615
+Rd = 286.9     !J/kg-K  dry air gas constant
 
 !Particles:
 tnumpart = 1e5
@@ -102,7 +106,7 @@ rhow=1000.0  !kg/m^3
 part_grav = 0,0,-9.81 
 Cpp = 4179.0  !J/kg-K
 Mw = 0.018015  !kg/mol
-Ru = 8.3144
+Ru = 8.3144    !J/mol-K Universal gas constant
 Ms = 0.05844  !kg/mol: molecular weight of salt
 Sal = 0.0   !INITIAL salinity
 Gam = 7.28e-2

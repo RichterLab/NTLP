@@ -8,7 +8,7 @@ c     ----------------------------------------------------------------------
      +     iupwnd,ibuoy,ifilt,itcut,isubs,ibrcl,iocean,method,
      +     idebug,iz_space,ivis0,ifix_dt,new_vis,iDNS,
      +     icouple,iTcouple,iHcouple,ievap,ifields,ilin,ineighbor,
-     +     icoalesce,ipart_method,ipartdiff,isfs
+     +     icoalesce,ipart_method,ipartdiff,isfs,iexner
 c     
 c     -------- j_recl = record length in "bytes" for history file
 c     k8     = kind parameter for integers in mpi_io routines
@@ -23,14 +23,14 @@ c
       !Boundary conditions and other parameters
       real :: Uo, Ttop(nscl), Tbot(nscl),qstar(nscl),tsfcc(nscl)
       real :: grav,t00,fcor,zi,zl,xl,yl,zw1,dpdx
-      real :: ugcont,vgcont,zo,surf_RH
+      real :: ugcont,vgcont,zo,surf_RH,psurf
       integer :: isfc(nscl)
 
       !Material parameters, both air and particles
       real :: Lv = (25.0 - 0.02274*26.0)*10.0**5
       real :: Sal,Ms,Gam,Ion,Os
       real :: rhow,nuf 
-      real :: CpaCpp,Cpa,Cpp,Pra,Sc,Mw,Ru,rhoa
+      real :: CpaCpp,Cpa,Cpp,Pra,Sc,Mw,Ru,rhoa,Rd
 
 c     
 c     ------------ leave following definitions as is
@@ -10198,6 +10198,10 @@ c
             call uf_interp       !Use 6th order Lagrange interpolation
          end if
 
+         if (iexner .eq. 1) then
+             part%Tf = part%Tf*
+     +  (psurf/(psurf-part%xp(3)*rhoa*abs(part_grav(3))))**(-Rd/Cpa)
+         end if
 
 
          if (it .LE. 1 ) then 
@@ -10494,7 +10498,7 @@ c
       real :: Rep,diff(3),diffnorm,corrfac,myRep_avg
       real :: xtmp(3),vtmp(3),Tptmp,radiustmp
       real :: Nup,Shp,rhop,taup_i,estar,einf
-      real :: myphip_sum,myphiw_sum,myphiv_sum,Volp
+      real :: mylwc_sum,myphiw_sum,myphiv_sum,Volp
       real :: Eff_C,Eff_S
       real :: t_s,t_f,t_s1,t_f1
       real :: rt_start(2)
@@ -10508,7 +10512,7 @@ c
          icoalesce = 0
       else
          ievap = 1
-         icoalesce = 1
+         !icoalesce = 1
       end if
 
 
@@ -10529,7 +10533,7 @@ c
       Tpsqrsum_t = 0.0
       wpTpsum_t = 0.0
       myRep_avg = 0.0
-      myphip_sum = 0.0
+      mylwc_sum = 0.0
       myphiw_sum = 0.0
       myphiv_sum = 0.0
       qstarsum_t = 0.0
@@ -10560,6 +10564,12 @@ c
         if (it .LE. 1) then
            part%vp(1:3) = part%uf
         end if
+
+         if (iexner .eq. 1) then
+             part%Tf = part%Tf*
+     +  (psurf/(psurf-part%xp(3)*rhoa*abs(part_grav(3))))**(-Rd/Cpa)
+         end if
+
 
         diff(1:3) = part%vp - part%uf
         diffnorm = sqrt(diff(1)**2 + diff(2)**2 + diff(3)**2)
@@ -10645,7 +10655,7 @@ c
 
          myRep_avg = myRep_avg + Rep
          corrfac = (1.0 + 0.15*Rep**(0.687))
-         myphip_sum = myphip_sum + Volp*rhop
+         mylwc_sum = mylwc_sum + Volp*rhop*part%mult
          myphiw_sum = myphiw_sum + Volp*rhow
          myphiv_sum = myphiv_sum + Volp
 
@@ -10850,7 +10860,7 @@ c
      +                   mpi_comm_world,ierr)
 
       tmpbuf(1) = myRep_avg
-      tmpbuf(2) = myphip_sum
+      tmpbuf(2) = mylwc_sum
       tmpbuf(3) = myphiw_sum
       tmpbuf(4) = myphiv_sum
       tmpbuf(5) = myradavg
@@ -10875,6 +10885,7 @@ c
      +    mpi_comm_world,ierr)
 
       Rep_avg = tmpbuf_rec(1)
+      lwc = tmpbuf(2)
       phiw = tmpbuf_rec(3)
       phiv = tmpbuf_rec(4)
       radavg = tmpbuf_rec(5)
@@ -11298,9 +11309,10 @@ c
          part%vp(3) = -part%vp(3)
          part => part%next
       elseif (part%xp(3) .LT. bot) then
-         part%xp(3) = bot + (bot-part%xp(3))
-         part%vp(3) = -part%vp(3)
-         part => part%next
+         !part%xp(3) = bot + (bot-part%xp(3))
+         !part%vp(3) = -part%vp(3)
+         !part => part%next
+         call destroy_particle
       else
          part => part%next
       end if
@@ -14447,7 +14459,7 @@ c       Add the current event to the histogram
       namelist /grid_params/ ncpu_s, Uo, Ttop, Tbot,
      +         qstar, tsfcc, ugcont, vgcont,
      +         zi, zl, xl, yl, zw1, dpdx,
-     +         cfl,dt_new,surf_RH
+     +         cfl,dt_new,surf_RH,psurf
 
       namelist /path_names/ path_seed,path_part,path_res,
      +         path_sav,path_his,path_viz_xy,path_viz_xz,
@@ -14458,12 +14470,12 @@ c       Add the current event to the histogram
      +         method,idebug,iz_space,ivis0,ifix_dt,new_vis,iDNS,
      +         icouple,iTcouple,iHcouple,ievap,ifields,ilin,
      +         ineighbor,icoalesce,ipart_method,
-     +         ipartdiff,isfs
+     +         ipartdiff,isfs,iexner
 
 
       namelist /constants/ rhoa, nuf, Cpa, Pra, Sc,
      +         tnumpart,mult_init,rhow,part_grav,
-     +         Cpp,Mw,Ms,Ru,Gam,Ion,Os,Sal,
+     +         Cpp,Mw,Ms,Ru,Gam,Ion,Os,Sal,Rd,
      +         radius_init,
      +         grav, t00,fcor,zo,
      +         vp_init,Tp_init,qf_init
