@@ -10553,7 +10553,7 @@ c
       real :: rt_start(2)
       real :: rt_zeroes(2)
       real :: taup0, dt_taup0, temp_r, temp_t, guess
-      real :: mod_Magnus
+      real :: mod_Magnus,tmp_coeff
 
 
       if (it .lt. 2000) then
@@ -10730,9 +10730,14 @@ c
         if (ievap .EQ. 1) then
             part%radrhs = Shp/9.0/Sc*rhop/rhow*part%radius*
      +                       taup_i*(part%qinf-part%qstar) !assumes qinf=rhov/rhoa rather than rhov/rhom
-         else
+
+            !Also update the temperature directly using BE:
+            tmp_coeff = -Nup/3.0/Pra*CpaCpp*rhop/rhow*taup_i
+            part%Tp = (part%Tp + tmp_coeff*dt*part%Tf)/(1+dt*tmp_coeff)
+ 
+        else
             part%radrhs = 0.0
-         end if
+        end if
 
         part%Tprhs_s = -Nup/3.0/Pra*CpaCpp*
      +                     rhop/rhow*taup_i*(part%Tp-part%Tf)
