@@ -145,7 +145,7 @@ c     --- SFS velocity calculation ---------
       real :: Rep_avg,part_grav(3)
       real :: radavg,radmin,radmax,tempmin,tempmax,qmin,qmax
       real :: vp_init(3),Tp_init,qf_init,radius_init
-      integer :: mult_init
+      integer*8 :: mult_init
 
       real :: avgres=0,tavgres=0
 
@@ -157,7 +157,7 @@ c     --- SFS velocity calculation ---------
       !REMEMBER: IF ADDING ANYTHING, MUST UPDATE MPI DATATYPE!
       type :: particle
       integer :: pidx,procidx,nbr_pidx,nbr_procidx
-      integer :: to_destroy,mult
+      integer*8 :: mult
       real :: vp(3),xp(3),uf(3),xrhs(3),vrhs(3),Tp,Tprhs_s
       real :: Tprhs_L,Tf,radius,radrhs,qinf,qstar,dist
       real :: res,m_s
@@ -5992,7 +5992,7 @@ c
       use particles
       real psi(nnx,iys:iye), psix(nnx,iys:iye),
      +     psiy(nnx,iys:iye,izs:izs), uxx(nnx,iys:iye),
-     +     vyy(nnx,iys:iye,izs:izs),mod_Magnus
+     +     vyy(nnx,iys:iye,izs:izs),mod_Magnus,Ttmp
 
       !Initialize partcount to 0:
       partcount = 0.0
@@ -6082,8 +6082,16 @@ c           u(ix,iy,iz) = ug(iz) - ugal
          endif
          do iy=iys,iye
          do ix=1,nnx
+
+            !Convert theta to temperature:
+            Ttmp = 
+     +      t(ix,iy,1,iz)*(psurf/(psurf - zz(iz)*rhoa*grav))**(-Rd/Cpa)
+
+            !Get temperature based on desired RH
             t(ix,iy,2,iz) = surf_RH/100.0*
-     +      Mw/Ru/t(ix,iy,1,iz)*mod_Magnus(t(ix,iy,1,iz))/rhoa
+     +      Mw/Ru/Ttmp*mod_Magnus(Ttmp)/rhoa
+
+
             w(ix,iy,iz)   = 0.
             r1(ix,iy,iz)  = 0.
             r2(ix,iy,iz)  = 0.
@@ -10200,7 +10208,7 @@ c
 
          if (iexner .eq. 1) then
              part%Tf = part%Tf*
-     +  (psurf/(psurf-part%xp(3)*rhoa*abs(part_grav(3))))**(-Rd/Cpa)
+     +  (psurf/(psurf-part%xp(3)*rhoa*grav))**(-Rd/Cpa)
          end if
 
 
@@ -10224,7 +10232,7 @@ c
 
          myRep_avg = myRep_avg + Rep
          corrfac = (1.0 + 0.15*Rep**(0.687))
-         mylwc_sum = mylwc_sum + Volp*rhop*part%mult
+         mylwc_sum = mylwc_sum + Volp*rhop*real(part%mult)
          myphiw_sum = myphiw_sum + Volp*rhow
          myphiv_sum = myphiv_sum + Volp
 
@@ -10507,7 +10515,7 @@ c
       real :: mod_Magnus
 
 
-      if (it .lt. 2000) then
+      if (it .lt. 4000) then
          ievap = 0
          icoalesce = 0
       else
@@ -10567,7 +10575,7 @@ c
 
          if (iexner .eq. 1) then
              part%Tf = part%Tf*
-     +  (psurf/(psurf-part%xp(3)*rhoa*abs(part_grav(3))))**(-Rd/Cpa)
+     +  (psurf/(psurf-part%xp(3)*rhoa*grav))**(-Rd/Cpa)
          end if
 
 
@@ -10655,7 +10663,7 @@ c
 
          myRep_avg = myRep_avg + Rep
          corrfac = (1.0 + 0.15*Rep**(0.687))
-         mylwc_sum = mylwc_sum + Volp*rhop*part%mult
+         mylwc_sum = mylwc_sum + Volp*rhop*real(part%mult)
          myphiw_sum = myphiw_sum + Volp*rhow
          myphiv_sum = myphiv_sum + Volp
 
@@ -11273,7 +11281,6 @@ c
       part%nbr_pidx = -1
       part%nbr_procidx = -1
       part%mult = mult_init
-      part%to_destroy = 0
       part%res = 0.0
       part%m_s = Sal/1000.0*4.0/3.0*pi*radius_init**3*rhow
       
@@ -11563,27 +11570,23 @@ c
          part_tmp%radius = rad_data(i)
          part_tmp%mult = mult_data(i)
 
-         !Finally, indicate that particle should be killed if
-         !multiplicity is zero:
-         if (mult_data(i) .eq. 0) then
-            part_tmp%to_destroy = 1
-         end if
-
-
       i = i+1   
       part_tmp => part_tmp%next
       end do
 
       !Finally remove dead particles from coalescence
+      i = 1
       numpart = 0
       part => first_particle
       do while (associated(part))
-         if (part%to_destroy) then
+         if (mult_data(i) .eq. 0) then
             call destroy_particle
          else
             numpart = numpart + 1
+            part => part%next
          end if
-      part => part%next
+
+      i = i+1
       end do
 
 
@@ -13630,7 +13633,7 @@ c        part%qinf = 0.0 ! Brian 7/14/14
       vol_init = -X0*log(1.0-ran2(iseed))
       rad_init = (vol_init/(pi2*2.0/3.0))**(1.0/3.0)
 
-      !rad_init = radius_init   !From params file -- all particles identical
+      rad_init = radius_init   !From params file -- all particles identical
 
       call create_particle(xp_init,vp_init,
      +         Tp_init,qf_init,rad_init,idx) 
@@ -13735,6 +13738,7 @@ c        part%qinf = 0.0 ! Brian 7/14/14
       if (myid==0) then
       write(*,*) 'huge(tnumpart) = ',huge(tnumpart)
       write(*,*) 'huge(part%pidx) = ',huge(part%pidx)
+      write(*,*) 'huge(part%mult) = ',huge(part%mult)
       end if
 
 
@@ -14182,14 +14186,14 @@ c        part%qinf = 0.0 ! Brian 7/14/14
       partsrc_t(iz,iy,ix,1:3) =
      +     partsrc_t(iz,iy,ix,1:3) +
      +     partmass/rhoa*(part%vrhs(1:3)-part_grav(1:3))*wtt/dV*
-     +     part%mult
+     +     real(part%mult)
 
       !vapor momentum coupling
       partsrc_t(iz,iy,ix,1:3) =
      +     partsrc_t(iz,iy,ix,1:3) +
      +     rhow/rhoa*pi2*2*part%radius**2*
      +     part%radrhs*part%vp(1:3)*wtt/dV*
-     +     part%mult
+     +     real(part%mult)
       endif
 
       if (iTcouple == 1) then
@@ -14197,14 +14201,14 @@ c        part%qinf = 0.0 ! Brian 7/14/14
      +     partTsrc_t(iz,iy,ix) +
      +     (part%Tprhs_s*6.0*rhow/rhop/CpaCpp/taup_i*
      +     (pi2/2.0)*part%radius*nuf)*wtt/dV*
-     +     part%mult
+     +     real(part%mult)
       endif
 
       if (iHcouple == 1) then
       partHsrc_t(iz,iy,ix) =     
      +     partHsrc_t(iz,iy,ix) +  !minus comes later
      +     rhow/rhoa*pi2*2*part%radius**2*part%radrhs*wtt/dV*
-     +     part%mult
+     +     real(part%mult)
 
 
        Cvv = 1463.0 !J/degkg
@@ -14213,9 +14217,9 @@ c        part%qinf = 0.0 ! Brian 7/14/14
        partTEsrc_t(iz,iy,ix) = 
      +     partTEsrc_t(iz,iy,ix) +  !minus comes later
      +         rhow/rhoa*pi2*2*part%radius**2*
-     +                  part%radrhs*Cpv/Cpa*part%Tp*wtt/dV*part%mult -
+     +         part%radrhs*Cpv/Cpa*part%Tp*wtt/dV*real(part%mult) -
      +         rhow/rhoa*pi2*2*part%radius**2*
-     +                  part%radrhs*Cpv/Cpa*part%Tf*wtt/dV*part%mult
+     +         part%radrhs*Cpv/Cpa*part%Tf*wtt/dV*real(part%mult)
 
       endif
 
