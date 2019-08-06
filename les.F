@@ -1814,6 +1814,7 @@ c
       use fftwk
       use con_data
       use con_stats
+      use particles
 c
       real fntd(nnx,iys:iye,izs:ize)
       real fnt1(nnx,iys:iye), fnt2(nnx,iys:iye) 
@@ -1882,6 +1883,18 @@ c
          r1(ix,iy,iz) = u_adv + u_cor + u_geo
          r2(ix,iy,iz) = v_adv + v_cor + v_geo
          r3(ix,iy,iz) = w_adv + w_cor + w_buy
+
+
+         !Add particle momentum coupling
+         if (icouple == 1) then
+         r1(ix,iy,iz) = r1(ix,iy,iz) - partsrc(ix,iy,iz,1)
+         r2(ix,iy,iz) = r2(ix,iy,iz) - partsrc(ix,iy,iz,2)
+         !Note: partsrc(3,ix,iy,iz) is located at u,v-locations
+         !Interpolate to w-location:
+         r3(ix,iy,iz) = r3(ix,iy,iz) - (weit*partsrc(ix,iy,izp1,3)+
+     +                  weit1*partsrc(ix,iy,iz,3))
+         end if
+
       enddo
       enddo
 c
@@ -2376,6 +2389,7 @@ c
       use fftwk
       use con_data
       use con_stats
+      use particles
 c
 c
       real fnt1(nnx,iys:iye,izs:ize)
@@ -2611,6 +2625,33 @@ c
          enddo
          enddo
       enddo
+
+!---------add on the thermal coupling from the particles:
+      if (iscl == 1) then
+      if (iTcouple == 1) then
+      do iz=izs,ize
+         do iy=iys,iye
+         do ix=1,nnx
+          r4(ix,iy,1,iz) = r4(ix,iy,1,iz) - partTsrc(ix,iy,iz)
+         end do
+         end do
+      end do
+      end if
+      end if
+
+      if (iscl == 2) then
+      if (iHcouple == 1) then
+      do iz=izs,ize
+         do iy=iys,iye
+         do ix=1,nnx
+          r4(ix,iy,1,iz) = r4(ix,iy,1,iz) - partTEsrc(ix,iy,iz)
+          r4(ix,iy,2,iz) = r4(ix,iy,2,iz) - partHsrc(ix,iy,iz)
+         end do
+         end do
+      end do
+      end if
+      end if
+
 c
 c -------- save SGS fluxes for printout
 c
@@ -10515,11 +10556,16 @@ c
       real :: mod_Magnus
 
 
-      if (it .lt. 4000) then
+      if (it .lt. 2000) then
          ievap = 0
          icoalesce = 0
+         icouple = 0
+         iTcouple = 0
+         iHcouple = 0
       else
          ievap = 1
+         iTcouple = 1
+         iHcouple = 1
          !icoalesce = 1
       end if
 
