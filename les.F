@@ -157,11 +157,11 @@ c     --- SFS velocity calculation ---------
       !REMEMBER: IF ADDING ANYTHING, MUST UPDATE MPI DATATYPE!
       type :: particle
       integer :: pidx,procidx,nbr_pidx,nbr_procidx
-      integer*8 :: mult
       real :: vp(3),xp(3),uf(3),xrhs(3),vrhs(3),Tp,Tprhs_s
       real :: Tprhs_L,Tf,radius,radrhs,qinf,qstar,dist
       real :: res,m_s
       real :: u_sub(3),sigm_s
+      integer*8 :: mult
       type(particle), pointer :: prev,next
       end type particle
 
@@ -6106,6 +6106,13 @@ c           u(ix,iy,iz) = ug(iz) - ugal
            do iy=iys,iye
            do ix=1,nnx
               t(ix,iy,1,iz) = t_lower
+
+           !Add "bubble" to test cloud model
+!           t(ix,iy,1,iz) = t(ix,iy,1,iz) + 0.1*
+!     +     exp( -( (dx*(ix-1)-500.0)/200.0 )**2 
+!     +          -( (dy*(iy-1)-500.0)/200.0 )**2 )*
+!     +     exp (-zz(iz)/100.0)
+
            enddo
            enddo
          elseif(z(iz) .ge. z_upper) then
@@ -6124,13 +6131,18 @@ c           u(ix,iy,iz) = ug(iz) - ugal
          do iy=iys,iye
          do ix=1,nnx
 
-            !Convert theta to temperature:
-            Ttmp = 
-     +      t(ix,iy,1,iz)*(psurf/(psurf - zz(iz)*rhoa*grav))**(-Rd/Cpa)
-
-            !Get temperature based on desired RH
+         !Make a constant q profile at RH based on surface temp:
             t(ix,iy,2,iz) = surf_RH/100.0*
-     +      Mw/Ru/Ttmp*mod_Magnus(Ttmp)/rhoa
+     +      Mw/Ru/t_lower*mod_Magnus(t_lower)/rhoa
+
+         !Make a desired profile of RH:
+!            !Convert theta to temperature:
+!            Ttmp = 
+!     +      t(ix,iy,1,iz)*(psurf/(psurf - zz(iz)*rhoa*grav))**(-Rd/Cpa)
+!
+!            !Get temperature based on desired RH
+!            t(ix,iy,2,iz) = surf_RH/100.0*
+!     +      Mw/Ru/Ttmp*mod_Magnus(Ttmp)/rhoa
 
 
             w(ix,iy,iz)   = 0.
@@ -10556,17 +10568,17 @@ c
       real :: mod_Magnus,tmp_coeff
 
 
-      if (it .lt. 2000) then
-         ievap = 0
-         icoalesce = 0
-         icouple = 0
+      if (it .lt. 300) then
+!         ievap = 0
+!         icoalesce = 0
+!         icouple = 0
          iTcouple = 0
          iHcouple = 0
       else
-         ievap = 1
+!         ievap = 1
          iTcouple = 1
          iHcouple = 1
-         !icoalesce = 1
+!         icoalesce = 1
       end if
 
 
@@ -11660,13 +11672,14 @@ c     Calculations assume isotropic turbulece
       use con_stats
       use particles
       implicit none
+      include 'mpif.h'
       real :: sigm_sdxp,sigm_sdyp,sigm_sdzp,vis_sp
       real :: sigm_su,sigm_sl,us_ran,gasdev,tengz,englez_bar
       real :: engsbz_bar,sigm_w, sigm_ws
       real :: L_flt,epsn,fs,C0,a1,a2,a3,sigm_sprev,fs1
       real :: weit,weit1,weit3,weit4, T_lagr
       real :: us(3)
-      integer :: ix,iy,iz,izp1,izm1,ind,iz_part
+      integer :: ix,iy,iz,izp1,izm1,ind,iz_part,ierr
 c       ---initialize -------
         fs = 0.0
         C0 = 0.0
@@ -11855,6 +11868,10 @@ c       ---------------------------------
       part => part%next
       end do
 
+      !Compute total number of particles
+      call mpi_allreduce(numpart,tnumpart,1,mpi_integer,mpi_sum,
+     +                   mpi_comm_world,ierr)
+
 
       end subroutine SFS_velocity
 
@@ -11870,11 +11887,12 @@ c     Does not use Weil et al. 2004 formulation at all
       use con_stats
       use particles
       implicit none
+      include 'mpif.h'
 
       real :: sigm_sdxp,sigm_sdyp,sigm_sdzp,vis_sp
       real :: phim,phis,psim,psis,zeta
       real :: dadz,gasdev
-      integer :: ix,iy,iz,izp1,izm1,ind,iz_part
+      integer :: ix,iy,iz,izp1,izm1,ind,iz_part,ierr
 
 c       ---initialize -------
         sigm_s = 0.0
@@ -11937,6 +11955,10 @@ c       -----------------
          numpart = numpart + 1
       part => part%next
       end do
+
+      !Compute total number of particles
+      call mpi_allreduce(numpart,tnumpart,1,mpi_integer,mpi_sum,
+     +                   mpi_comm_world,ierr)
 
 
       end subroutine SFS_position
@@ -13713,7 +13735,7 @@ c        part%qinf = 0.0 ! Brian 7/14/14
       real :: pi
       integer(kind=MPI_ADDRESS_KIND) :: extent,lb
       integer(kind=MPI_ADDRESS_KIND) :: extent2,lb2,displs(3)
-      integer :: num_reals,num_integers
+      integer :: num_reals,num_integers,num_longs
 
       !First set up the neighbors for the interpolation stage:
       call assign_nbrs
@@ -13739,9 +13761,10 @@ c        part%qinf = 0.0 ! Brian 7/14/14
       !MUST UPDATE IF THINGS ARE ADDED/REMOVED FROM PARTICLE STRUCTURE
 
       num_reals = 6*3+12
-      num_integers = 6
+      num_integers = 4
+      num_longs = 3
       
-      blcts(1:3) = (/num_integers,num_reals,2/)
+      blcts(1:3) = (/num_integers,num_reals,num_longs/)
       displs(1) = 0
       types(1) = mpi_integer
       call mpi_type_get_extent(mpi_integer,lb,extent,ierr)
