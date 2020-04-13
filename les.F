@@ -16,7 +16,7 @@ c
       integer, parameter :: j_recl=4, k8=8
 
       integer, parameter :: nscl = 2, nvar = (4+nscl)
-      integer, parameter :: maxnx=128,maxny=128,maxnz=128
+      integer, parameter :: maxnx=64,maxny=64,maxnz=64
       integer, parameter :: maxnz1=maxnz+1,
      + maxnz2=maxnz+2,maxnx2=maxnx+2,maxny2=maxny+2
 
@@ -6132,8 +6132,8 @@ c           u(ix,iy,iz) = ug(iz) - ugal
          do ix=1,nnx
 
          !Make a constant q profile at RH based on surface temp:
-            t(ix,iy,2,iz) = surf_RH/100.0*
-     +      Mw/Ru/t_lower*mod_Magnus(t_lower)/rhoa
+!            t(ix,iy,2,iz) = surf_RH/100.0*
+!     +      Mw/Ru/t_lower*mod_Magnus(t_lower)/rhoa
 
          !Make a desired profile of RH:
 !            !Convert theta to temperature:
@@ -6143,6 +6143,13 @@ c           u(ix,iy,iz) = ug(iz) - ugal
 !            !Get temperature based on desired RH
 !            t(ix,iy,2,iz) = surf_RH/100.0*
 !     +      Mw/Ru/Ttmp*mod_Magnus(Ttmp)/rhoa
+
+
+!     Try to copy Charlotte's IC from the fog case (overwriting the
+!     temperature profile from above)
+
+            t(ix,iy,1,iz) = 284.0 + (1.0/128.0)*zz(iz)
+            t(ix,iy,2,iz) = 0.009 - (4.5/120.0)*zz(iz)
 
 
             w(ix,iy,iz)   = 0.
@@ -10568,7 +10575,7 @@ c
       real :: mod_Magnus,tmp_coeff
 
 
-      if (it .lt. 300) then
+      if (it .lt. 100) then
 !         ievap = 0
 !         icoalesce = 0
 !         icouple = 0
@@ -10743,12 +10750,14 @@ c
             part%radrhs = Shp/9.0/Sc*rhop/rhow*part%radius*
      +                       taup_i*(part%qinf-part%qstar) !assumes qinf=rhov/rhoa rather than rhov/rhom
 
+ 
+        else
+
+            part%radrhs = 0.0
+
             !Also update the temperature directly using BE:
             tmp_coeff = -Nup/3.0/Pra*CpaCpp*rhop/rhow*taup_i
             part%Tp = (part%Tp + tmp_coeff*dt*part%Tf)/(1+dt*tmp_coeff)
- 
-        else
-            part%radrhs = 0.0
         end if
 
         part%Tprhs_s = -Nup/3.0/Pra*CpaCpp*
