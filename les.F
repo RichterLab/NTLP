@@ -16,7 +16,7 @@ c
       integer, parameter :: j_recl=4, k8=8
 
       integer, parameter :: nscl = 2, nvar = (4+nscl)
-      integer, parameter :: maxnx=64,maxny=64,maxnz=64
+      integer, parameter :: maxnx=64,maxny=64,maxnz=128
       integer, parameter :: maxnz1=maxnz+1,
      + maxnz2=maxnz+2,maxnx2=maxnx+2,maxny2=maxny+2
 
@@ -631,16 +631,19 @@ c
 
       if (it == 1) numpart = numpart + 1
       end do
-      if (myid==0) write(*,*) 'time,tnumpart:',time,tnumpart
-      if (myid==0) write(*,*) 'time,tnum_destroy:',time,tnum_destroy
-      if (myid==0) write(*,*) 'radmin, radmax',time,radmin,radmax
-      if (myid==0) write(*,*) 'tempmin, tempmax',time,tempmin,tempmax
-      if (myid==0) write(*,*) 'qmin, qmax',time,qmin,qmax
-      if (myid==0) write(*,*) 'time, radavg',time,radavg
-      if (myid==0) write(*,*),'time,100,1000,impos',time,tnum100,
+
+      if (myid==0) then
+       write(*,*) 'time,tnumpart:',time,tnumpart
+       write(*,*) 'time,tnum_destroy:',time,tnum_destroy
+       write(*,'(a15,3e15.6)') 'radmin,radmax:',time,radmin,radmax
+       write(*,'(a15,3e15.6)') 'tempmin,tempmax:',time,tempmin,tempmax
+       write(*,'(a15,3e15.6)') 'qmin,qmax:',time,qmin,qmax
+       write(*,'(a15,3e15.6)') 'time,radavg:',time,radavg
+       write(*,'(a15,e15.6,3i)'),'time,100,1000,impos:',time,tnum100,
      + tnum1000,tnumimpos
-      if (myid==0) write(*,*), 'time,actnum',time,tactnum
-      if (myid==0) write(*,*), 'time,denum',time,tdenum
+      !if (myid==0) write(*,*), 'time,actnum',time,tactnum
+      !if (myid==0) write(*,*), 'time,denum',time,tdenum
+      end if
 
 
       if(it .ge. new_vis .and. ivis0 .eq. 1) then
@@ -3284,6 +3287,11 @@ c
       use particles
       real sfc_flx(2+nscl)
 c
+
+      if (time .gt. 3600.0) then
+         tsfcc(1) = 282.0
+      end if
+
       iz   = 1
       izm1 = iz - 1
       dz_i = dzu_i(1)
@@ -5068,6 +5076,8 @@ c
       real :: mod_Magnus
 c
       parameter (iter_mo = 30, zeta_min = -6.0, zeta_max = 3.0)
+
+
 c
 c ---------- limiting value for wind
 c
@@ -5152,10 +5162,10 @@ c
 c
 c ----------- iteration details
 c
-c        utau      = windm*vk/(zody-psim)
-c        write(nprt,1000) iter, zeta_a, utau, phim, psim
-c1000    format(' 1000 iter = ',i5,' zeta = ',e15.6,' u_* = ',e15.6,
-c    +          ' phim = ',e15.6,' psim = ',e15.6)
+         utau      = windm*vk/(zody-psim)
+         write(nprt,1000) iter, zeta_a, utau, phim, psim
+ 1000    format(' 1000 iter = ',i5,' zeta = ',e15.6,' u_* = ',e15.6,
+     +          ' phim = ',e15.6,' psim = ',e15.6)
       enddo
 c
 c --------- check if neutral surface layer
@@ -5718,8 +5728,9 @@ c
             z(iz) = dz*float(iz) + zwstrt
          enddo
       else
-        call vgrid(zw1,zi,zl,nnz,z(0),l_root,l_debug)
+        !call vgrid(zw1,zi,zl,nnz,z(0),l_root,l_debug)
         !call vgrid_channel(zw1,zi,zl,nnz,z(0),l_root,l_debug)
+        call vgrid_channel_fstrm(zw1,zi,zl,nnz,z(0),l_root,l_debug)
       endif
 c
       call get_dz
@@ -5982,6 +5993,73 @@ c
 c
       return
       end subroutine vgrid_channel
+      subroutine vgrid_channel_fstrm(z1,zi,zl,nnz,z,l_root,ldebug)
+c
+      real z(0:nnz+1)
+      real s(0:2*nnz+1)
+      integer :: zidx
+      logical l_root, l_debug
+c      
+                nnz = 2.0*nnz
+                zi = 2.0*zi
+                zl = 2.0*zl
+c
+c ----------------- build grid up to zi first
+c
+      z_frst = z1
+      z_cntr = zi*0.5
+      n_pbl  = nnz
+c     n_pbl  = (5*nnz)/8
+      z_fac1 = z_cntr/z_frst
+      z_fac2 = 1.0/float(n_pbl/2)
+      z_fac  = 1.1
+      knt = 0
+      tol = 0.00001
+   10 continue
+        knt = knt + 1
+        z_facn = (z_fac1*(z_fac - 1.0) + 1.0)**z_fac2
+        test   = abs(1.0 - z_facn/z_fac)
+        if(knt .gt. 50) then
+            if(l_root) write(6,9000) z_fac, z_facn, knt
+ 9000       format(' Cannot find stretching factor',/,
+     +             ' z_fac = ',e15.6,' z_facn = ',e15.6,' knt = ',i3)
+            stop
+        endif
+        z_fac = z_facn
+        if(test .gt. tol) go to 10
+      if(l_root) write(6,9100) z_fac, z_cntr, z1, knt
+ 9100 format(' Stretching factor = ',e15.6,/,
+     +       ' Match point       = ',e15.6,/,
+     +       ' First z           = ',e15.6,/,
+     +       ' Number of iters   = ',i4)
+      s(1) = z_frst
+      do iz=2,n_pbl/2-1
+         s(iz) = z_frst*(z_fac**(float(iz)) - 1.0)/(z_fac - 1.0)
+      enddo
+      s(n_pbl/2) = z_cntr
+      do iz=1,n_pbl/2 - 1
+         s(n_pbl-iz) = zi - s(iz)
+      enddo
+      s(n_pbl) = zi
+      s(0)   = 0.0
+c
+      if(l_root) write(6,5300) n_pbl
+ 5300 format(' n_pbl = ',i4)
+c
+      s(nnz+1) = s(nnz) + (s(nnz) - s(nnz-1))
+
+                nnz=nnz/2.0
+                zi = zi/2.0
+                zl = zl/2.0
+
+                do iz=0,nnz
+                        z(iz)=s(iz)
+                enddo
+                 z(nnz+1) = z(nnz) + (z(nnz) - z(nnz-1))
+
+      return
+      end subroutine vgrid_channel_fstrm
+
       subroutine get_dz
 c
 c --------------- compute spacing for given vertical
@@ -6148,8 +6226,17 @@ c           u(ix,iy,iz) = ug(iz) - ugal
 !     Try to copy Charlotte's IC from the fog case (overwriting the
 !     temperature profile from above)
 
-            t(ix,iy,1,iz) = 284.0 + (1.0/128.0)*zz(iz)
-            t(ix,iy,2,iz) = 0.009 - (4.5/120.0)*zz(iz)
+!From the first version of the paper:
+            t(ix,iy,1,iz) = 286.0 + (1.0/128.0)*zz(iz)
+            t(ix,iy,2,iz) = 0.0093 - (0.0025/128.0)*zz(iz)
+
+!            t(ix,iy,1,iz) = 286.0  !Remember this is the potential temp
+!            !Actual temp
+!            Ttmp = 
+!     +      t(ix,iy,1,iz)*(psurf/(psurf - zz(iz)*rhoa*grav))**(-Rd/Cpa)
+!
+!            t(ix,iy,2,iz) = 99.0/100.0*
+!     +      Mw/Ru/Ttmp*mod_Magnus(Ttmp)/rhoa
 
 
             w(ix,iy,iz)   = 0.
@@ -7419,8 +7506,8 @@ c
       radmean(iz) = stat(iz,28)/stat(iz,11) 
       rad2mean(iz)= stat(iz,29)/stat(iz,11)
  
-      mpmean(iz) = stat(iz,30)/stat(iz,11) !make sure stat matchs with phimp
-      mwmean(iz) = stat(iz,31)/stat(iz,11) !make sure stat matchs with phimw
+      mpmean(iz) = stat(iz,30)/stat(iz,11)
+      mwmean(iz) = stat(iz,31)/stat(iz,11)
       phimp(iz) = stat(iz,30)/xl/yl/dzw(iz)/rhoa
       phimw(iz) = stat(iz,31)/xl/yl/dzw(iz)/rhoa
  
@@ -10575,18 +10662,6 @@ c
       real :: mod_Magnus,tmp_coeff
 
 
-      if (it .lt. 100) then
-!         ievap = 0
-!         icoalesce = 0
-!         icouple = 0
-         iTcouple = 0
-         iHcouple = 0
-      else
-!         ievap = 1
-         iTcouple = 1
-         iHcouple = 1
-!         icoalesce = 1
-      end if
 
 
       !First fill extended velocity field for interpolation
@@ -11368,7 +11443,7 @@ c
       use particles
       use pars
       implicit none
-      real :: top,bot
+      real :: top,bot,ran2
 
       !Assumes domain goes from [0,xl),[0,yl),[0,zl]
       !Also maintain the number of particles on each proc
@@ -11391,7 +11466,11 @@ c
          !part%xp(3) = bot + (bot-part%xp(3))
          !part%vp(3) = -part%vp(3)
          !part => part%next
-         call destroy_particle
+
+         !call destroy_particle
+         part%xp(1) = ran2(iseed)*(xmax-xmin) + xmin
+         part%xp(2) = ran2(iseed)*(ymax-ymin) + ymin
+         part%xp(3) = ran2(iseed)*(zi-zw1) + zw1
       else
          part => part%next
       end if
@@ -14153,15 +14232,15 @@ c        part%qinf = 0.0 ! Brian 7/14/14
      +                          part%Tp*part%vp(3)
 
 
-      radsum_t(kpt,jpt,ipt) = radsum_t(kpt,jpt,ipt) + part%radius  !Brian 7/30/14
+      radsum_t(kpt,jpt,ipt) = radsum_t(kpt,jpt,ipt) + part%radius 
 
       rad2sum_t(kpt,jpt,ipt) = rad2sum_t(kpt,jpt,ipt) + part%radius**2  
 
       mpsum_t(kpt,jpt,ipt) = mpsum_t(kpt,jpt,ipt) + 
-     +                rhop*4.0/3.0*pi*part%radius**3  !Brian 7/30/14
+     +                part%mult*(rhop*4.0/3.0*pi*part%radius**3)
 
       mwsum_t(kpt,jpt,ipt) = mwsum_t(kpt,jpt,ipt) + 
-     +                rhow*4.0/3.0*pi*part%radius**3  !Brian 7/30/14
+     +               part%mult*(rhow*4.0/3.0*pi*part%radius**3)
 
       qstarsum_t(kpt,jpt,ipt) = qstarsum_t(kpt,jpt,ipt) + part%qstar
 
