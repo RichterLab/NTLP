@@ -10728,7 +10728,7 @@ c
         corrfac = (1.0 + 0.15*Rep**(0.687))
 
         !implicitly calculates next velocity and position
-        part%xp(1:3) = part%xp(1:3) + dt*part%vp(1:3)
+        !part%xp(1:3) = part%xp(1:3) + dt*part%vp(1:3)
         part%vp(1:3) = (part%vp(1:3)+taup_i*dt*corrfac*part%uf(1:3)
      +   +dt*part_grav(1:3))/(1+dt*corrfac*taup_i)
 
