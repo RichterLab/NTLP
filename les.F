@@ -8,7 +8,7 @@ c     ----------------------------------------------------------------------
      +     iupwnd,ibuoy,ifilt,itcut,isubs,ibrcl,iocean,method,
      +     idebug,iz_space,ivis0,ifix_dt,new_vis,iDNS,
      +     icouple,iTcouple,iHcouple,ievap,ifields,ilin,ineighbor,
-     +     icoalesce,ipart_method,ipartdiff,isfs,iexner
+     +     icoalesce,ipart_method,ipartdiff,isfs,iexner,ilongwave
 c     
 c     -------- j_recl = record length in "bytes" for history file
 c     k8     = kind parameter for integers in mpi_io routines
@@ -25,6 +25,10 @@ c
       real :: grav,t00,fcor,zi,zl,xl,yl,zw1,dpdx
       real :: ugcont,vgcont,zo,surf_RH,psurf
       integer :: isfc(nscl)
+
+      !Radiation parameters
+      real :: rad_kappa,rad_Fct,rad_Fcb
+      real :: radflux(0:maxnz),radsrc(maxnz)
 
       !Material parameters, both air and particles
       real :: Lv = (25.0 - 0.02274*26.0)*10.0**5
@@ -301,7 +305,7 @@ c ----------------------------------------------------------------------
      +           Tv_part1(maxnz,nscl),Tv_part2(maxnz),
      +           radmean(maxnz),rad2mean(maxnz),
      +           mpmean(maxnz),mwmean(maxnz), 
-     +           phimp(maxnz),phimw(maxnz),  
+     +           phimp(maxnz),ql(maxnz),  
      +           Hpsrc(maxnz),TEpsrc(maxnz),
      +           qstarm(maxnz),
      +           trip(maxnz),TpSq(maxnz),Tpdqp(maxnz)
@@ -342,7 +346,7 @@ c ----------------------------------------------------------------------
      +           Tv_part1(:,:),Tv_part2(:),
      +           radmean(:),rad2mean(:),
      +           mpmean(:),mwmean(:),
-     +           phimp(:),phimw(:), 
+     +           phimp(:),ql(:), 
      +           Hpsrc(:), TEpsrc(:),
      +           qstarm(:),
      +           trip(:),TpSq(:),Tpdqp(:)
@@ -433,7 +437,7 @@ c
              mpmean => c_s%mpmean    ; isize = isize + size(mpmean)
              mwmean => c_s%mwmean    ; isize = isize + size(mwmean) 
              phimp => c_s%phimp    ; isize = isize + size(phimp) 
-             phimw => c_s%phimw    ; isize = isize + size(phimw)
+             ql => c_s%ql    ; isize = isize + size(ql)
              Hpsrc   => c_s%Hpsrc    ; isize = isize + size(Hpsrc)
              TEpsrc  => c_s%TEpsrc  ; isize = isize + size(TEpsrc)
              qstarm => c_s%qstarm  ; isize = isize + size(qstarm)
@@ -2652,6 +2656,26 @@ c
          end do
          end do
       end do
+      end if
+      end if
+
+
+!---------add on simple radiation scheme:
+      if (ilongwave == 1) then
+      if (iscl == 1) then
+
+         call calc_radiation
+
+         do iz=izs,ize
+           do iy=iys,iye
+           do ix=1,nnx
+           !calc_radiation fills "radsrc" vector
+           r4(ix,iy,iscl,iz) = r4(ix,iy,iscl,iz) + radsrc(iz)
+
+           end do
+           end do
+         end do
+
       end if
       end if
 
@@ -7509,7 +7533,7 @@ c
       mpmean(iz) = stat(iz,30)/stat(iz,11)
       mwmean(iz) = stat(iz,31)/stat(iz,11)
       phimp(iz) = stat(iz,30)/xl/yl/dzw(iz)/rhoa
-      phimw(iz) = stat(iz,31)/xl/yl/dzw(iz)/rhoa
+      ql(iz) = stat(iz,31)/xl/yl/dzw(iz)/rhoa
  
       Hpsrc(iz) = stat(iz,32)*fnxy
       TEpsrc(iz) = stat(iz,33)*fnxy
@@ -10278,6 +10302,85 @@ c
 c
       return
       end
+
+      subroutine calc_radiation
+
+      !Calculate a simple radiative temperature source based on Larson
+      !et al. (2007) MWR, used in Mellado et al. (2018) JAMES
+      use pars
+      use particles
+      use con_stats
+      use con_data
+      implicit none
+      include 'mpif.h'
+
+      real :: LWP_tmp(nnz-1),LWP(nnz-1)  !Have to calulate the integral from top down, then reverse ordering
+      integer :: iz,lc
+
+      !Do trapezoidal integration from the TOP down:
+      !LWC only calculated on INTERIOR zw points
+
+      lc = 1
+      do iz=nnz-1,1,-1
+
+         if (lc .eq. 1) then
+
+         LWP_tmp(lc) = 0.5*rhoa*(ql(iz+1) + ql(iz))*(zz(iz+1)-zz(iz))
+
+         else
+
+
+         LWP_tmp(lc) = LWP_tmp(lc-1) +
+     +   0.5*rhoa*(ql(iz+1) + ql(iz))*(zz(iz+1)-zz(iz))
+
+         end if
+
+         lc = lc + 1
+      end do
+
+      !Reverse the order so that LWP(1) is the bottom
+      !LWP is stored at the interior zw points, since this is center of integral trapezoid
+      do iz=1,nnz-1
+         LWP(iz) = LWP_tmp(nnz-iz)
+      end do
+
+      !Now calculate the radiative flux based on LWP -- at zw points,
+      !including top/bottom
+
+      do iz=1,nnz-1
+
+         radflux(iz) = rad_Fct*exp(-rad_kappa*LWP(iz)) +
+     +         rad_Fcb*exp(-rad_kappa*(LWP(1) - LWP(iz)))
+
+      end do
+
+      !Give no radiative flux divergence at top/bottom
+      radflux(0) = radflux(1)
+      radflux(nnz) = radflux(nnz-1)
+
+      !Now finally calculate the "radsrc" tendency term for the temperature equation
+      !Based on the divergence of the radflux
+
+      do iz=1,nnz
+
+         radsrc(iz) = -1/rhoa/Cpa*(radflux(iz)-radflux(iz-1))/dzw(iz)
+
+      end do
+
+
+!DEBUG
+!      if (myid==0) then
+!      do iz=1,nnz-1
+!
+!      write(*,'(5e15.6)') zz(iz),ql(iz),LWP(iz),radflux(iz),radsrc(iz)
+!
+!      end do
+!      end if
+
+      end subroutine calc_radiation
+
+
+
       subroutine particle_update_rk3(it,istage)
       use pars
       use particles
@@ -14625,7 +14728,8 @@ c       Add the current event to the histogram
       namelist /grid_params/ ncpu_s, Uo, Ttop, Tbot,
      +         qstar, tsfcc, ugcont, vgcont,
      +         zi, zl, xl, yl, zw1, dpdx,
-     +         cfl,dt_new,surf_RH,psurf
+     +         cfl,dt_new,surf_RH,psurf,
+     +         rad_kappa,rad_Fct,rad_Fcb
 
       namelist /path_names/ path_seed,path_part,path_res,
      +         path_sav,path_his,path_viz_xy,path_viz_xz,
@@ -14636,7 +14740,7 @@ c       Add the current event to the histogram
      +         method,idebug,iz_space,ivis0,ifix_dt,new_vis,iDNS,
      +         icouple,iTcouple,iHcouple,ievap,ifields,ilin,
      +         ineighbor,icoalesce,ipart_method,
-     +         ipartdiff,isfs,iexner
+     +         ipartdiff,isfs,iexner,ilongwave
 
 
       namelist /constants/ rhoa, nuf, Cpa, Pra, Sc,

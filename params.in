@@ -32,6 +32,7 @@ ipart_method=2   !1 = same RK3 as flow
 ipartdiff = 1
 isfs = 2   !isfs=1 is simple random walk, isfs=2 is Weil et al. (2004) particle subgrid
 iexner = 1  !iexner = 1 applies a correction to part%Tf to account for conversion b/w potential temp and temp. (need in PBL)
+ilongwave = 1   !Use simple longwave radiation scheme when clouds/fog present
 /
 
 !Grid and domain parameters
@@ -66,6 +67,12 @@ xl = 0.251327  !2*pi*zl
 yl = 0.125664  !2*pi*zl
 
 zw1 = 0.00008  !The first grid point
+
+!Radiation parameters
+rad_kappa = 120.0  !The absorptivity in the radiation expression (see Larson et al. 2007)
+rad_Fct = 60.0    !Net radiative flux at cloud (or domain) top
+rad_Fcb	= 30.0    !Net radiative flux at cloud (or domain) base
+
 /
 
 !Set the paths for code I/O. Must be on the scratch directory, not AFS!
