@@ -308,7 +308,8 @@ c ----------------------------------------------------------------------
      +           phimp(maxnz),ql(maxnz),  
      +           Hpsrc(maxnz),TEpsrc(maxnz),
      +           qstarm(maxnz),
-     +           trip(maxnz),TpSq(maxnz),Tpdqp(maxnz)
+     +           trip(maxnz),TpSq(maxnz),Tpdqp(maxnz),
+     +           radtend(maxnz)
         real ::  xkn(maxnx),ykn(maxny),
      +           xk(maxnx),yk(maxny),
      +           xks(maxnx2,maxny),wavexy(maxnx2,maxny)
@@ -349,7 +350,8 @@ c ----------------------------------------------------------------------
      +           phimp(:),ql(:), 
      +           Hpsrc(:), TEpsrc(:),
      +           qstarm(:),
-     +           trip(:),TpSq(:),Tpdqp(:)
+     +           trip(:),TpSq(:),Tpdqp(:),
+     +           radtend(:)
         real, pointer ::  
      +           xkn(:), ykn(:), xk(:), yk(:), xks(:,:), wavexy(:,:)
         real, pointer ::  
@@ -444,6 +446,7 @@ c
              trip => c_s%trip; isize = isize + size(trip)
              TpSq => c_s%TpSq; isize = isize + size(TpSq)
              Tpdqp => c_s%Tpdqp; isize = isize + size(Tpdqp)
+             radtend => c_s%radtend; isize = isize + size(radtend)
 
 
              xkn     => c_s%xkn
@@ -7538,6 +7541,9 @@ c
       Hpsrc(iz) = stat(iz,32)*fnxy
       TEpsrc(iz) = stat(iz,33)*fnxy
       qstarm(iz) = stat(iz,34)/stat(iz,11)
+
+      !Doesn't need averaging if basing radiation source on average ql:
+      radtend(iz) = radsrc(iz)
 
 c
 c ------------ get scalar resolved fluxes and variances
