@@ -110,6 +110,7 @@ Rd = 286.9     !J/kg-K  dry air gas constant
 tnumpart = 1e5
 mult_init = 1e8
 rhow=1000.0  !kg/m^3
+rhos = 2000.0 !Density of salt, kg/m^3
 part_grav = 0,0,-9.81 
 Cpp = 4179.0  !J/kg-K
 Mw = 0.018015  !kg/mol
@@ -124,6 +125,5 @@ Os = 1.093
 radius_init=22.8e-6
 Tp_init = 300.0
 vp_init = 0.0, 0.0, 0.0
-qf_init = 0.01
 
 /

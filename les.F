@@ -33,7 +33,7 @@ c
       !Material parameters, both air and particles
       real :: Lv = (25.0 - 0.02274*26.0)*10.0**5
       real :: Sal,Ms,Gam,Ion,Os
-      real :: rhow,nuf 
+      real :: rhow,nuf,rhos
       real :: CpaCpp,Cpa,Cpp,Pra,Sc,Mw,Ru,rhoa,Rd
 
 c     
@@ -148,7 +148,7 @@ c     --- SFS velocity calculation ---------
 
       real :: Rep_avg,part_grav(3)
       real :: radavg,radmin,radmax,tempmin,tempmax,qmin,qmax
-      real :: vp_init(3),Tp_init,qf_init,radius_init
+      real :: vp_init(3),Tp_init,radius_init
       integer*8 :: mult_init
 
       real :: avgres=0,tavgres=0
@@ -3315,7 +3315,7 @@ c
       real sfc_flx(2+nscl)
 c
 
-      if (time .gt. 3600.0) then
+      if (time .gt. 1800.0) then
          tsfcc(1) = 282.0
       end if
 
@@ -10617,6 +10617,10 @@ c
      +                mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
      +                ncpu_s,numprocs)
 
+      call ztox_trans(mwsum_t(0:nnz+1,iys:iye,mxs:mxe),
+     +                mwsum(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,mxs,
+     +                mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
+     +                ncpu_s,numprocs)
 
       !Try only calling these when the history data is being written:
       if(mtrans  .and. istage .eq. 3) then
@@ -10692,10 +10696,6 @@ c
      +                mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
      +                ncpu_s,numprocs)
 
-      call ztox_trans(mwsum_t(0:nnz+1,iys:iye,mxs:mxe),
-     +                mwsum(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,mxs,
-     +                mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
-     +                ncpu_s,numprocs)
 
       call ztox_trans(qstarsum_t(0:nnz+1,iys:iye,mxs:mxe),
      +                qstarsum(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,mxs,
@@ -11002,6 +11002,12 @@ c
      +                mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
      +                ncpu_s,numprocs)
 
+      call ztox_trans(mwsum_t(0:nnz+1,iys:iye,mxs:mxe),
+     +                mwsum(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,mxs,
+     +                mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
+     +                ncpu_s,numprocs)
+
+
       !Try only calling these when the history data is being written:
       if(mtrans) then
       call ztox_trans(upwp_t(0:nnz+1,iys:iye,mxs:mxe),
@@ -11073,11 +11079,6 @@ c
 
       call ztox_trans(mpsum_t(0:nnz+1,iys:iye,mxs:mxe),
      +                mpsum(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,mxs,
-     +                mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
-     +                ncpu_s,numprocs)
-
-      call ztox_trans(mwsum_t(0:nnz+1,iys:iye,mxs:mxe),
-     +                mwsum(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,mxs,
      +                mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
      +                ncpu_s,numprocs)
 
@@ -11497,12 +11498,12 @@ c
 
       end subroutine rad_solver2
 
-      subroutine create_particle(xp,vp,Tp,qinfp,rad_init,idx)
+      subroutine create_particle(xp,vp,Tp,m_s,rad_init,idx)
       use particles
       use pars
       implicit none
 
-      real :: xp(3),vp(3),Tp,qinfp,rad_init,pi
+      real :: xp(3),vp(3),Tp,qinfp,rad_init,pi,m_s
       integer :: idx
 
       if (.NOT. associated(first_particle)) then
@@ -11526,7 +11527,7 @@ c
       part%Tp = Tp
       part%radius = rad_init
       part%uf(1:3) = 0.0
-      part%qinf = qinfp
+      part%qinf = 0.01
       part%xrhs(1:3) = 0.0
       part%vrhs(1:3) = 0.0 
       part%Tprhs_s = 0.0
@@ -11538,7 +11539,7 @@ c
       part%nbr_procidx = -1
       part%mult = mult_init
       part%res = 0.0
-      part%m_s = Sal/1000.0*4.0/3.0*pi*radius_init**3*rhow
+      part%m_s = m_s
       
       end subroutine create_particle
       function dFdr_uniform(r)
@@ -13864,7 +13865,7 @@ c        part%qinf = 0.0 ! Brian 7/14/14
       integer :: idx
       real :: xv,yv,zv,ran2,deltaz
       real :: maxx,maxy,maxz
-      real :: xp_init(3),R0,X0,rad_init,vol_init
+      real :: xp_init(3),rad_init,m_s
 
       !Create the seed for the random number generator:
       call date_and_time(VALUES=values)
@@ -13894,19 +13895,21 @@ c        part%qinf = 0.0 ! Brian 7/14/14
       zv = ran2(iseed)*(zi-zw1) + zw1
       xp_init = (/xv,yv,zv/)
 
+      !Get the initial droplet size based on some distribution:
 
-      !Exponential distribution of droplet size to match Shima et al.
-      !(2009) test case
-      R0 = 30.531e-6
-      X0 = pi2*2.0/3.0*R0**3
+      !From params file -- all particles identical
+      !rad_init = radius_init
+      !m_s = Sal/1000.0*2.0/3.0*pi2*radius_init**3*rhow
 
-      vol_init = -X0*log(1.0-ran2(iseed))
-      rad_init = (vol_init/(pi2*2.0/3.0))**(1.0/3.0)
+      !call exponential_dist(rad_init)  !From Shima et al. (2009) test case
+      !m_s = Sal/1000.0*4.0/3.0*pi*radius_init**3*rhow
 
-      rad_init = radius_init   !From params file -- all particles identical
+      
+      call double_lognormal_dist(rad_init,m_s)
+
 
       call create_particle(xp_init,vp_init,
-     +         Tp_init,qf_init,rad_init,idx) 
+     +         Tp_init,m_s,rad_init,idx) 
       end do
 
       partTsrc = 0.0
@@ -13918,6 +13921,101 @@ c        part%qinf = 0.0 ! Brian 7/14/14
 
 
       end subroutine particle_init
+
+      subroutine exponential_dist(rad_init)
+      use particles
+      use con_data
+      implicit none
+      include 'mpif.h'
+
+      real :: R0,X0,rad_init,vol_init
+      real :: ran2
+
+      !Exponential distribution of droplet size to match Shima et al.
+      !(2009) test case
+      R0 = 30.531e-6
+      X0 = pi2*2.0/3.0*R0**3
+
+      vol_init = -X0*log(1.0-ran2(iseed))
+      rad_init = (vol_init/(pi2*2.0/3.0))**(1.0/3.0)
+
+      end subroutine exponential_dist
+
+      subroutine double_lognormal_dist(rad_init,m_s)
+      use particles
+      use pars
+      use con_data
+      implicit none
+      include 'mpif.h'
+
+      real, intent(inout) :: rad_init,m_s
+      real :: ran2,cdf_func
+      real :: M_a,S_a,M_c,S_c,factor,totarea
+      real :: d1,d2,err,dhalf,ftest,CDF
+      real :: daerosol
+      real :: a,b,c,d,p,q
+      integer :: iter
+
+      !Set the parameters of the two lognormals:
+      M_a = -1.95
+      S_a = 0.5
+      M_c = 0.0
+      S_c = 0.45
+
+      factor = 10.0  !The ratio of the coarse mode PDF to accumulation mode
+
+      totarea = 1.0 + factor  !The total area of combined PDFs, for normalization purposes 
+
+      !Use bisection to get the radius based on the CDF contained in function cdf_func
+      d1 = 100.0
+      d2 = 0.01
+      err = 1.0
+      iter = 0
+      CDF = ran2(iseed)
+
+      do while (err > 1.0e-10)
+
+         dhalf = 0.5*(d1+d2)
+         ftest = cdf_func(dhalf,CDF,factor,M_a,S_a,M_c,S_c)
+         if (ftest < 0.0) then
+            d2 = dhalf
+         else 
+            d1 = dhalf
+         end if
+
+         err = abs(cdf_func(dhalf,CDF,factor,M_a,S_a,M_c,S_c))
+         iter = iter + 1
+
+         if (iter .gt. 1000) then
+            d1 = 1.0e-6
+            write(*,'(a12)') 'CDF convergence error'
+            exit
+         end if
+
+
+      end do
+      
+      daerosol = d1*1.0e-6  !Don't forget to convert micron to m
+      m_s = 2.0/3.0*pi2*(daerosol/2.0)**3*rhos
+
+      !Now have the dry aerosol diameter and mass, must rehydrate it using Kohler
+      !theory to get the proper initial condition
+      !Rehydrate to 80% RH
+
+      !The equation for the equilibrium radius is a cubic -- take positive root:
+      
+      a = log(0.8)  !RH = 80%
+      b = -2.0*Mw*Gam/Ru/rhow/Tp_init
+      c = 0.0
+      d = Ion*Os*m_s*(Mw/Ms)/(2.0/3.0*pi2*rhow)
+
+      p = -b/3.0/a
+      q = p**3 - 3.0*a*d/6.0/a**2
+
+      rad_init = (q + (q**2 - p**6)**(0.5))**(1./3.) + (q -
+     +         (q**2-p**6)**(0.5))**(1./3.) + p
+
+      end subroutine double_lognormal_dist
 
 
       subroutine particle_setup
@@ -13941,7 +14039,7 @@ c        part%qinf = 0.0 ! Brian 7/14/14
       call set_bounds
 
 
-      call set_binsdata(bins_rad,histbins+2,1.0e-6,1.0e-2)
+      call set_binsdata(bins_rad,histbins+2,1.0e-8,1.0e-3)
 
 
       if (myid==0) write(*,*) 'Init Particle radius = ',radius_init
@@ -14713,8 +14811,10 @@ c       Add the current event to the histogram
       hist_rad = 0
       part => first_particle
       do while (associated(part))
+         if (part%xp(3) .lt. 60.0) then
          call add_histogram(bins_rad,hist_rad,
      +    histbins+2,part%radius,part%mult)
+         end if
       part => part%next
       end do
 
@@ -14750,11 +14850,11 @@ c       Add the current event to the histogram
 
 
       namelist /constants/ rhoa, nuf, Cpa, Pra, Sc,
-     +         tnumpart,mult_init,rhow,part_grav,
+     +         tnumpart,mult_init,rhow,part_grav,rhos,
      +         Cpp,Mw,Ms,Ru,Gam,Ion,Os,Sal,Rd,
      +         radius_init,
      +         grav, t00,fcor,zo,
-     +         vp_init,Tp_init,qf_init
+     +         vp_init,Tp_init
 
 
       !params.in contains namelists to read
@@ -14854,3 +14954,12 @@ c       Add the current event to the histogram
        
       
       end function mod_Magnus
+      function cdf_func(d,CDF,factor,Ma,Sa,Mc,Sc)
+      implicit none
+      real :: d,CDF,factor,Ma,Sa,Mc,Sc,cdf_func
+
+      cdf_func = 1.0/(1.0+factor)/2.0*
+     + ( 1.0 + erf((log(d) - Ma)/Sa/sqrt(2.0)) +
+     + factor*(1 + erf((log(d) - Mc)/Sc/sqrt(2.0))) ) - CDF
+
+      end function cdf_func
