@@ -119,7 +119,6 @@ Ms = 0.05844  !kg/mol: molecular weight of salt
 Sal = 0.0   !INITIAL salinity
 Gam = 7.28e-2
 Ion = 2.0
-Os = 1.093
 
 !Particle initial conditions:
 radius_init=22.8e-6

@@ -32,7 +32,7 @@ c
 
       !Material parameters, both air and particles
       real :: Lv = (25.0 - 0.02274*26.0)*10.0**5
-      real :: Sal,Ms,Gam,Ion,Os
+      real :: Sal,Ms,Gam,Ion
       real :: rhow,nuf,rhos
       real :: CpaCpp,Cpa,Cpp,Pra,Sc,Mw,Ru,rhoa,Rd
 
@@ -163,7 +163,7 @@ c     --- SFS velocity calculation ---------
       integer :: pidx,procidx,nbr_pidx,nbr_procidx
       real :: vp(3),xp(3),uf(3),xrhs(3),vrhs(3),Tp,Tprhs_s
       real :: Tprhs_L,Tf,radius,radrhs,qinf,qstar,dist
-      real :: res,m_s
+      real :: res,m_s,Os
       real :: u_sub(3),sigm_s
       integer*8 :: mult
       type(particle), pointer :: prev,next
@@ -3316,7 +3316,7 @@ c
 c
 
       if (time .gt. 1800.0) then
-         tsfcc(1) = 282.0
+         tsfcc(1) = 283.0
       end if
 
       iz   = 1
@@ -5222,8 +5222,8 @@ c
 c
 c ------- surface details, for debug
 c
-c     write(nprt,2000) windm, utau, qstar(1), tsfcc(1), amonin, zeta,
-c    +              z1, batag, vk, batagk, zo
+      write(nprt,2000) windm, utau, qstar(1), tsfcc(1), amonin, zeta,
+     +              z1, batag, vk, batagk, zo
  2000 format(' 2000 suft ',/,
      +       '    windm = ',e15.6,' utau = ',e15.6,' qstar = ',e15.6,/,
      +       '    tsfcc = ',e15.6,' MO L = ',e15.6,' z1/L = ',e15.6,/,
@@ -6255,7 +6255,7 @@ c           u(ix,iy,iz) = ug(iz) - ugal
 
 !From the first version of the paper:
             t(ix,iy,1,iz) = 286.0 + (1.0/128.0)*zz(iz)
-            t(ix,iy,2,iz) = 0.0093 - (0.0025/128.0)*zz(iz)
+            t(ix,iy,2,iz) = 0.0093 - (0.0005/128.0)*zz(iz)
 
 !            t(ix,iy,1,iz) = 286.0  !Remember this is the potential temp
 !            !Actual temp
@@ -10502,7 +10502,7 @@ c
          !Mass Transfer calculations
          einf = mod_Magnus(part%Tf)
          Eff_C = 2.0*Mw*Gam/(Ru*rhow*part%radius*part%Tp)
-         Eff_S = Ion*Os*part%m_s*Mw/Ms/(Volp*rhop-part%m_s)
+         Eff_S = Ion*part%Os*part%m_s*Mw/Ms/(Volp*rhop-part%m_s)
          estar = einf*exp(Mw*Lv/Ru*(1.0/part%Tf-1.0/part%Tp)
      +                                           +Eff_C-Eff_S)
          part%qstar = Mw/Ru*estar/part%Tp/rhoa
@@ -10837,7 +10837,7 @@ c
         corrfac = (1.0 + 0.15*Rep**(0.687))
 
         !implicitly calculates next velocity and position
-        !part%xp(1:3) = part%xp(1:3) + dt*part%vp(1:3)
+        part%xp(1:3) = part%xp(1:3) + dt*part%vp(1:3)
         part%vp(1:3) = (part%vp(1:3)+taup_i*dt*corrfac*part%uf(1:3)
      +   +dt*part_grav(1:3))/(1+dt*corrfac*taup_i)
 
@@ -10904,6 +10904,12 @@ c
                part%Tp = rt_zeroes(2)*part%Tp
         end if
 
+         if (part%radius .gt. 1.0) then
+         write(*,'(a15,10e15.6)') 'DHR BROKEN', 
+     +    part%radius,part%qinf,part%Tp,part%Tf,part%xp(3),
+     +    part%Os,part%m_s,part%vp(1),part%vp(2),part%vp(3)
+         end if
+
 
          !Intermediate Values
          diff(1:3) = part%vp - part%uf
@@ -10925,7 +10931,7 @@ c
          einf = mod_Magnus(part%Tf)
 
          Eff_C = 2.0*Mw*Gam/(Ru*rhow*part%radius*part%Tp)
-         Eff_S = Ion*Os*part%m_s*Mw/Ms/(Volp*rhop-part%m_s)
+         Eff_S = Ion*part%Os*part%m_s*Mw/Ms/(Volp*rhop-part%m_s)
          estar = einf*exp(Mw*Lv/Ru*(1.0/part%Tf-1.0/part%Tp)
      +                                           +Eff_C-Eff_S)
          part%qstar = Mw/Ru*estar/part%Tp/rhoa
@@ -11425,7 +11431,7 @@ c
         qstr = (Mw/(Ru*Tnext*rhoa)) * esa *
      +  exp(((Lv*Mw/Ru)*((1./part%Tf) - (1./Tnext))) +
      +  ((2.*Mw*Gam)/(Ru*rhow*rnext*Tnext)) -
-     +  ((Ion*Os*part%m_s*(Mw/Ms))/(Volp*rhop-part%m_s)))
+     +  ((Ion*part%Os*part%m_s*(Mw/Ms))/(Volp*rhop-part%m_s)))
         !!!!!!!!!!!!!!!!!!
 
         !!! Radius !!!
@@ -11469,7 +11475,7 @@ c
 
       a = -(2*Mw*Gam)/(Ru*rhow*part%Tf)/
      +    LOG((Ru*part%Tf*rhoa*part%qinf)/(Mw*esa))
-      c = (Ion*Os*part%m_s*(Mw/Ms))/((2.0/3.0)*pi2*rhow)/
+      c = (Ion*part%Os*part%m_s*(Mw/Ms))/((2.0/3.0)*pi2*rhow)/
      +    LOG((Ru*part%Tf*rhoa*part%qinf)/(Mw*esa))
 
       Q = (a**2.0)/9.0
@@ -11498,12 +11504,12 @@ c
 
       end subroutine rad_solver2
 
-      subroutine create_particle(xp,vp,Tp,m_s,rad_init,idx)
+      subroutine create_particle(xp,vp,Tp,m_s,Os,rad_init,idx)
       use particles
       use pars
       implicit none
 
-      real :: xp(3),vp(3),Tp,qinfp,rad_init,pi,m_s
+      real :: xp(3),vp(3),Tp,qinfp,rad_init,pi,m_s,Os
       integer :: idx
 
       if (.NOT. associated(first_particle)) then
@@ -11540,6 +11546,7 @@ c
       part%mult = mult_init
       part%res = 0.0
       part%m_s = m_s
+      part%Os = Os
       
       end subroutine create_particle
       function dFdr_uniform(r)
@@ -11554,6 +11561,8 @@ c
       use pars
       implicit none
       real :: top,bot,ran2
+      real :: xp_init(3),m_s,Os,rad_init
+      integer :: idx
 
       !Assumes domain goes from [0,xl),[0,yl),[0,zl]
       !Also maintain the number of particles on each proc
@@ -11577,10 +11586,20 @@ c
          !part%vp(3) = -part%vp(3)
          !part => part%next
 
-         !call destroy_particle
-         part%xp(1) = ran2(iseed)*(xmax-xmin) + xmin
-         part%xp(2) = ran2(iseed)*(ymax-ymin) + ymin
-         part%xp(3) = ran2(iseed)*(zi-zw1) + zw1
+         call destroy_particle
+
+         !Immediately create a new one
+         call double_lognormal_dist(rad_init,m_s,Os)
+
+         xp_init(1) = ran2(iseed)*(xmax-xmin) + xmin
+         xp_init(2) = ran2(iseed)*(ymax-ymin) + ymin
+         xp_init(3) = ran2(iseed)*(zi-zw1) + zw1
+
+         idx = 2
+
+         call create_particle(xp_init,vp_init,
+     +         Tp_init,m_s,Os,rad_init,idx)
+
       else
          part => part%next
       end if
@@ -13865,7 +13884,7 @@ c        part%qinf = 0.0 ! Brian 7/14/14
       integer :: idx
       real :: xv,yv,zv,ran2,deltaz
       real :: maxx,maxy,maxz
-      real :: xp_init(3),rad_init,m_s
+      real :: xp_init(3),rad_init,m_s,Os
 
       !Create the seed for the random number generator:
       call date_and_time(VALUES=values)
@@ -13905,11 +13924,11 @@ c        part%qinf = 0.0 ! Brian 7/14/14
       !m_s = Sal/1000.0*4.0/3.0*pi*radius_init**3*rhow
 
       
-      call double_lognormal_dist(rad_init,m_s)
+      call double_lognormal_dist(rad_init,m_s,Os)
 
 
       call create_particle(xp_init,vp_init,
-     +         Tp_init,m_s,rad_init,idx) 
+     +         Tp_init,m_s,Os,rad_init,idx) 
       end do
 
       partTsrc = 0.0
@@ -13941,20 +13960,20 @@ c        part%qinf = 0.0 ! Brian 7/14/14
 
       end subroutine exponential_dist
 
-      subroutine double_lognormal_dist(rad_init,m_s)
+      subroutine double_lognormal_dist(rad_init,m_s,Os)
       use particles
       use pars
       use con_data
       implicit none
       include 'mpif.h'
 
-      real, intent(inout) :: rad_init,m_s
+      real, intent(inout) :: rad_init,m_s,Os
       real :: ran2,cdf_func
       real :: M_a,S_a,M_c,S_c,factor,totarea
       real :: d1,d2,err,dhalf,ftest,CDF
       real :: daerosol
       real :: a,b,c,d,p,q
-      integer :: iter
+      integer :: iter,prob
 
       !Set the parameters of the two lognormals:
       M_a = -1.95
@@ -13962,7 +13981,7 @@ c        part%qinf = 0.0 ! Brian 7/14/14
       M_c = 0.0
       S_c = 0.45
 
-      factor = 10.0  !The ratio of the coarse mode PDF to accumulation mode
+      factor = 0.15  !The ratio of the coarse mode PDF to accumulation mode
 
       totarea = 1.0 + factor  !The total area of combined PDFs, for normalization purposes 
 
@@ -13997,6 +14016,24 @@ c        part%qinf = 0.0 ! Brian 7/14/14
       
       daerosol = d1*1.0e-6  !Don't forget to convert micron to m
       m_s = 2.0/3.0*pi2*(daerosol/2.0)**3*rhos
+
+      !Actually set Os (to set kappa of kappa-Kohler theory) based on
+      !size -- accumulation and coarse modes likely have different
+      !compositions
+
+      if (d1 .lt. 0.5e-6) then
+         Os = 0.5
+      elseif (d1 .gt. 1.5e-6) then
+         Os = 1.0
+      else
+         if (ran2(iseed) .lt. 0.5) then
+            prob = 0
+         else
+            prob = 1
+         end if
+        Os = real(prob)*0.5 + real((1-prob))*1.0
+      end if
+         
 
       !Now have the dry aerosol diameter and mass, must rehydrate it using Kohler
       !theory to get the proper initial condition
@@ -14055,7 +14092,7 @@ c        part%qinf = 0.0 ! Brian 7/14/14
       !Set up MPI datatypes for sending particle information
       !MUST UPDATE IF THINGS ARE ADDED/REMOVED FROM PARTICLE STRUCTURE
 
-      num_reals = 6*3+12
+      num_reals = 6*3+13
       num_integers = 4
       num_longs = 3
       
@@ -14851,7 +14888,7 @@ c       Add the current event to the histogram
 
       namelist /constants/ rhoa, nuf, Cpa, Pra, Sc,
      +         tnumpart,mult_init,rhow,part_grav,rhos,
-     +         Cpp,Mw,Ms,Ru,Gam,Ion,Os,Sal,Rd,
+     +         Cpp,Mw,Ms,Ru,Gam,Ion,Sal,Rd,
      +         radius_init,
      +         grav, t00,fcor,zo,
      +         vp_init,Tp_init
