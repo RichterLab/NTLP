@@ -23,7 +23,7 @@ c
       !Boundary conditions and other parameters
       real :: Uo, Ttop(nscl), Tbot(nscl),qstar(nscl),tsfcc(nscl)
       real :: grav,t00,fcor,zi,zl,xl,yl,zw1,dpdx
-      real :: ugcont,vgcont,zo,surf_RH,psurf
+      real :: ugcont,vgcont,zo,surf_RH,psurf,surf_temp
       integer :: isfc(nscl)
 
       !Radiation parameters
@@ -3316,7 +3316,7 @@ c
 c
 
       if (time .gt. 1800.0) then
-         tsfcc(1) = 283.0
+         tsfcc(1) = surf_temp
       end if
 
       iz   = 1
@@ -5197,13 +5197,14 @@ c
 c
 c --------- check if neutral surface layer
 c
-      if (ibuoy.eq.0 .or. qstar(1) .eq. 0.) then
+      if (ibuoy.eq.0 .or. abs(qstar(1)) .lt. 1.0e-4) then
           amonin    = 1000.
           zeta      = 0.0
           utau      = windm*vk/zody
           thstar(1) = 0.0
           t10xy(1)  = 0.0
-          tsfcc(1)  = t1xy(1)
+          !tsfcc(1)  = t1xy(1)
+          tsfcc(1)  = surf_temp
       else
          utau = windm*vk/(zody-psim)
          dnom = (zody-psis)*vk74in
@@ -5247,10 +5248,18 @@ c
       !Treat humidity differently
       iscl=2
 
-      if (ibuoy.eq.0 .or. qstar(1) .eq. 0.) then
-          thstar(iscl) = 0.0
-          t10xy(iscl)  = 0.0
-          tsfcc(iscl)  = t1xy(iscl)
+      if (ibuoy.eq.0 .or. abs(qstar(1)) .lt. 1.0e-4) then
+          
+          !thstar(iscl) = 0.0
+          !t10xy(iscl)  = 0.0
+          !tsfcc(iscl)  = t1xy(iscl)
+
+         dnom = zody*vk74in
+          tsfcc(2)=surf_RH/100.0*
+     +    Mw/Ru/tsfcc(1)*mod_Magnus(tsfcc(1))/rhoa
+            thstar(iscl) = (t1xy(iscl) - tsfcc(iscl))/dnom
+            t10xy(iscl)  = thstar(iscl)*dnom
+            qstar(iscl)  = -utau*thstar(iscl)
       else
          dnom = (zody-psis)*vk74in
          if(isfc(iscl) .eq. 0) then
@@ -11504,13 +11513,14 @@ c
 
       end subroutine rad_solver2
 
-      subroutine create_particle(xp,vp,Tp,m_s,Os,rad_init,idx)
+      subroutine create_particle(xp,vp,Tp,m_s,Os,mult,rad_init,idx)
       use particles
       use pars
       implicit none
 
       real :: xp(3),vp(3),Tp,qinfp,rad_init,pi,m_s,Os
       integer :: idx
+      integer*8 :: mult
 
       if (.NOT. associated(first_particle)) then
          allocate(first_particle)
@@ -11543,7 +11553,7 @@ c
       part%procidx = myid
       part%nbr_pidx = -1
       part%nbr_procidx = -1
-      part%mult = mult_init
+      part%mult = mult
       part%res = 0.0
       part%m_s = m_s
       part%Os = Os
@@ -11563,6 +11573,7 @@ c
       real :: top,bot,ran2
       real :: xp_init(3),m_s,Os,rad_init
       integer :: idx
+      integer*8 :: mult
 
       !Assumes domain goes from [0,xl),[0,yl),[0,zl]
       !Also maintain the number of particles on each proc
@@ -11589,7 +11600,7 @@ c
          call destroy_particle
 
          !Immediately create a new one
-         call double_lognormal_dist(rad_init,m_s,Os)
+         call double_lognormal_dist(rad_init,m_s,Os,mult)
 
          xp_init(1) = ran2(iseed)*(xmax-xmin) + xmin
          xp_init(2) = ran2(iseed)*(ymax-ymin) + ymin
@@ -11598,7 +11609,7 @@ c
          idx = 2
 
          call create_particle(xp_init,vp_init,
-     +         Tp_init,m_s,Os,rad_init,idx)
+     +         Tp_init,m_s,Os,mult,rad_init,idx)
 
       else
          part => part%next
@@ -11652,12 +11663,14 @@ c
 
       real, allocatable :: xp_data(:,:),distances(:),rad_data(:)
       real, allocatable :: vel_data(:,:)
-      integer, allocatable :: index_data(:,:),indexes(:),mult_data(:)
+      integer, allocatable :: index_data(:,:),indexes(:)
+      integer*8, allocatable :: mult_data(:)
       integer, allocatable :: destroy_data(:)
       integer, allocatable :: coal_data(:),ran_nq(:)
 
       integer :: i,nq,coal_idx,j,ran_idx,tmp_int,gm,gam_til
-      integer :: xi_j, xi_k,ns,k_idx,j_idx,mult_tmp_j,mult_tmp_k
+      integer :: ns,k_idx,j_idx
+      integer*8 :: mult_tmp_j,mult_tmp_k,xi_j,xi_k
       real :: qv(3),dist_tmp,xdist,ydist,zdist,ran2
       real :: phi,K,Pjk,veldiff,E,dV,p_alpha,pvol_j,pvol_k,golovin_b
       real :: rad_j_tmp,rad_k_tmp
@@ -13882,6 +13895,7 @@ c        part%qinf = 0.0 ! Brian 7/14/14
       include 'mpif.h' 
       integer :: values(8)
       integer :: idx
+      integer*8 :: mult
       real :: xv,yv,zv,ran2,deltaz
       real :: maxx,maxy,maxz
       real :: xp_init(3),rad_init,m_s,Os
@@ -13924,11 +13938,11 @@ c        part%qinf = 0.0 ! Brian 7/14/14
       !m_s = Sal/1000.0*4.0/3.0*pi*radius_init**3*rhow
 
       
-      call double_lognormal_dist(rad_init,m_s,Os)
+      call double_lognormal_dist(rad_init,m_s,Os,mult)
 
 
       call create_particle(xp_init,vp_init,
-     +         Tp_init,m_s,Os,rad_init,idx) 
+     +         Tp_init,m_s,Os,mult,rad_init,idx) 
       end do
 
       partTsrc = 0.0
@@ -13960,7 +13974,7 @@ c        part%qinf = 0.0 ! Brian 7/14/14
 
       end subroutine exponential_dist
 
-      subroutine double_lognormal_dist(rad_init,m_s,Os)
+      subroutine double_lognormal_dist(rad_init,m_s,Os,mult)
       use particles
       use pars
       use con_data
@@ -13974,6 +13988,7 @@ c        part%qinf = 0.0 ! Brian 7/14/14
       real :: daerosol
       real :: a,b,c,d,p,q
       integer :: iter,prob
+      integer*8 :: mult
 
       !Set the parameters of the two lognormals:
       M_a = -1.95
@@ -13981,7 +13996,10 @@ c        part%qinf = 0.0 ! Brian 7/14/14
       M_c = 0.0
       S_c = 0.45
 
-      factor = 0.15  !The ratio of the coarse mode PDF to accumulation mode
+      !The ratio of the coarse mode PDF to accumulation mode
+      !NOTE: Making the factor inflated by 100 but decreasing the
+      !multiplicity by same amount to get better coarse mode resolution
+      factor = 0.015*100.0
 
       totarea = 1.0 + factor  !The total area of combined PDFs, for normalization purposes 
 
@@ -14023,8 +14041,10 @@ c        part%qinf = 0.0 ! Brian 7/14/14
 
       if (d1 .lt. 0.5e-6) then
          Os = 0.5
+         mult = mult_init
       elseif (d1 .gt. 1.5e-6) then
          Os = 1.0
+         mult = mult_init/100
       else
          if (ran2(iseed) .lt. 0.5) then
             prob = 0
@@ -14032,6 +14052,7 @@ c        part%qinf = 0.0 ! Brian 7/14/14
             prob = 1
          end if
         Os = real(prob)*0.5 + real((1-prob))*1.0
+        mult = prob*mult_init + (1-prob)*mult_init/100
       end if
          
 
@@ -14810,7 +14831,8 @@ c       ===== update x-axis for each bin =====
       use particles
       implicit none
 
-      integer :: i,nbin,nbinnew,ibin,mult
+      integer :: i,nbin,nbinnew,ibin
+      integer*8 :: mult
       real :: dh
       real,intent(in) :: val1
 
@@ -14871,7 +14893,7 @@ c       Add the current event to the histogram
       namelist /grid_params/ ncpu_s, Uo, Ttop, Tbot,
      +         qstar, tsfcc, ugcont, vgcont,
      +         zi, zl, xl, yl, zw1, dpdx,
-     +         cfl,dt_new,surf_RH,psurf,
+     +         cfl,dt_new,surf_RH,psurf,surf_temp,
      +         rad_kappa,rad_Fct,rad_Fcb
 
       namelist /path_names/ path_seed,path_part,path_res,

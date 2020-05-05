@@ -53,6 +53,7 @@ qstar = 0.5, 0.5  !Surface fluxes of (temperature, humidity) (used for LES and D
 tsfcc = 305.15, 100.0    !Surface conditions of (temp, humidity) (used for LES) -- make sure tsfcc is gt than t00 for both isfc=0 or 1
 
 surf_RH = 100.0
+surf_temp = 283.0
 
 psurf = 101325  !Pa -- nominal surface pressure, for use in the definition of potential temp
 
