@@ -10836,6 +10836,8 @@ c
      +  (psurf/(psurf-part%xp(3)*rhoa*grav))**(-Rd/Cpa)
          end if
 
+        !Debug:
+        part%sigm_s = part%radius
 
         diff(1:3) = part%vp - part%uf
         diffnorm = sqrt(diff(1)**2 + diff(2)**2 + diff(3)**2)
@@ -10914,9 +10916,10 @@ c
         end if
 
          if (part%radius .gt. 1.0) then
-         write(*,'(a15,10e15.6)') 'DHR BROKEN', 
+         write(*,'(a15,12e15.6)') 'DHR BROKEN', 
      +    part%radius,part%qinf,part%Tp,part%Tf,part%xp(3),
-     +    part%Os,part%m_s,part%vp(1),part%vp(2),part%vp(3)
+     +    part%Os,part%m_s,part%vp(1),part%vp(2),part%vp(3),
+     +    part%res,part%sigm_s
          end if
 
 
@@ -13999,7 +14002,7 @@ c        part%qinf = 0.0 ! Brian 7/14/14
       !The ratio of the coarse mode PDF to accumulation mode
       !NOTE: Making the factor inflated by 100 but decreasing the
       !multiplicity by same amount to get better coarse mode resolution
-      factor = 0.015*100.0
+      factor = 0.15
 
       totarea = 1.0 + factor  !The total area of combined PDFs, for normalization purposes 
 
@@ -14039,12 +14042,12 @@ c        part%qinf = 0.0 ! Brian 7/14/14
       !size -- accumulation and coarse modes likely have different
       !compositions
 
-      if (d1 .lt. 0.5e-6) then
+      if (daerosol .lt. 1.0e-6) then
          Os = 0.5
          mult = mult_init
-      elseif (d1 .gt. 1.5e-6) then
+      elseif (daerosol .gt. 1.0e-6) then
          Os = 1.0
-         mult = mult_init/100
+         mult = mult_init
       else
          if (ran2(iseed) .lt. 0.5) then
             prob = 0
@@ -14052,7 +14055,7 @@ c        part%qinf = 0.0 ! Brian 7/14/14
             prob = 1
          end if
         Os = real(prob)*0.5 + real((1-prob))*1.0
-        mult = prob*mult_init + (1-prob)*mult_init/100
+        mult = prob*mult_init + (1-prob)*mult_init
       end if
          
 
@@ -14502,10 +14505,10 @@ c        part%qinf = 0.0 ! Brian 7/14/14
       rad2sum_t(kpt,jpt,ipt) = rad2sum_t(kpt,jpt,ipt) + part%radius**2  
 
       mpsum_t(kpt,jpt,ipt) = mpsum_t(kpt,jpt,ipt) + 
-     +                part%mult*(rhop*4.0/3.0*pi*part%radius**3)
+     +               real(part%mult)*(rhop*4.0/3.0*pi*part%radius**3)
 
       mwsum_t(kpt,jpt,ipt) = mwsum_t(kpt,jpt,ipt) + 
-     +               part%mult*(rhow*4.0/3.0*pi*part%radius**3)
+     +               real(part%mult)*(rhow*4.0/3.0*pi*part%radius**3)
 
       qstarsum_t(kpt,jpt,ipt) = qstarsum_t(kpt,jpt,ipt) + part%qstar
 
@@ -14832,7 +14835,7 @@ c       ===== update x-axis for each bin =====
       implicit none
 
       integer :: i,nbin,nbinnew,ibin
-      integer*8 :: mult
+      integer*8, intent(in) :: mult
       real :: dh
       real,intent(in) :: val1
 
@@ -14867,13 +14870,13 @@ c       Add the current event to the histogram
       use particles
       implicit none
 
-      hist_rad = 0
+      hist_rad = 0.0
       part => first_particle
       do while (associated(part))
-         if (part%xp(3) .lt. 60.0) then
+         !if (part%xp(3) .lt. 60.0) then
          call add_histogram(bins_rad,hist_rad,
      +    histbins+2,part%radius,part%mult)
-         end if
+         !end if
       part => part%next
       end do
 
