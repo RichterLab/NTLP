@@ -149,7 +149,8 @@ c     --- SFS velocity calculation ---------
       real :: Rep_avg,part_grav(3)
       real :: radavg,radmin,radmax,tempmin,tempmax,qmin,qmax
       real :: vp_init(3),Tp_init,radius_init
-      integer*8 :: mult_init
+      real :: pdf_factor
+      integer*8 :: mult_init,mult_factor,mult_a,mult_c
 
       real :: avgres=0,tavgres=0
 
@@ -734,6 +735,7 @@ c
          call save_p
       endif
 
+
       if(mhis  .and. istage .eq. 1) then
           call write_histograms
       end if
@@ -750,6 +752,8 @@ c
       if(istage .eq. 1) then
          if(msave .and. l_root) call save_c(it)
       endif
+
+     
 c
 c --------- solve for pressure
 c
@@ -771,6 +775,7 @@ c
       if(micut) then
          call dealias
       endif
+
 
 
 
@@ -842,7 +847,7 @@ c
       end if
 
       call radius_histogram
-     
+
       call get_max
       call get_dt
       if (it.ge.itmax) go to 99000
@@ -872,6 +877,7 @@ c
 c
       real u_send(5), u_recv(5)
 c
+
       dx_i = 1.0/dx
       dy_i = 1.0/dy
 c
@@ -920,6 +926,7 @@ c
       u_send(3) = w_temp
       u_send(4) = wsav
       u_send(5) = vis_temp 
+  
 c
       call mpi_allreduce(u_send,u_recv,5,mpi_real8,
      +     mpi_max,mpi_comm_world,ierror)
@@ -929,6 +936,8 @@ c
       wmax = u_recv(3)
       wabs = u_recv(4)
       vismax = u_recv(5)
+
+
 c
       return
       end
@@ -1710,6 +1719,7 @@ c
          call tke_vis(istep)   ! WARNING: this has not been checked for iscl=2
          call rhs_uvw(istep)   ! WARNING: this has not been checked for iscl=2
       end if
+
 c
 c -------- evaluate rhs of scalar equations
 c
@@ -1720,6 +1730,7 @@ c
             call rhs_scl(istep,l,it) 
          end if
       enddo
+
 c
 c ---------- gather stat sums on root processor
 c            using mpi_reduction over all processors
@@ -1833,6 +1844,7 @@ c
       real tau13_l(nnx,iys:iye), tau23_l(nnx,iys:iye)
       real r3_sum(1:nnz)
 c
+
       do iz=izs,ize
 c
       izm1 = iz - 1
@@ -1887,12 +1899,14 @@ c ------------ geostrophic wind
 c
          u_geo = -fcor*vg(iz)
          v_geo =  fcor*(ug(iz)-ugal)
+
 c
 c ------------ totals
 c
          r1(ix,iy,iz) = u_adv + u_cor + u_geo
          r2(ix,iy,iz) = v_adv + v_cor + v_geo
          r3(ix,iy,iz) = w_adv + w_cor + w_buy
+
 
 
          !Add particle momentum coupling
@@ -2473,6 +2487,7 @@ c
      +           -(taut3_u(ix,iy,iscl)-taut3_l(ix,iy,iscl))*dzw_i(iz)
       enddo
       enddo
+
 c
       if(iupwnd .ne. 1) then
 c
@@ -2636,6 +2651,7 @@ c
          enddo
       enddo
 
+
 !---------add on the thermal coupling from the particles:
       if (iscl == 1) then
       if (iTcouple == 1) then
@@ -2648,6 +2664,7 @@ c
       end do
       end if
       end if
+
 
       if (iscl == 2) then
       if (iHcouple == 1) then
@@ -2678,6 +2695,7 @@ c
            end do
            end do
          end do
+
 
       end if
       end if
@@ -4014,7 +4032,6 @@ c
                 p(ix,iy,iz) = fnt1(ix,iy,iz) +  
      +                     ((w(ix,iy,iz) -wbc(ix,iy,2))*gami +
      +                       r3(ix,iy,iz))*dzw_i(iz)
-
             enddo
             enddo
          else if(iz .eq. nnz) then
@@ -5190,7 +5207,7 @@ c
 c ----------- iteration details
 c
          utau      = windm*vk/(zody-psim)
-         write(nprt,1000) iter, zeta_a, utau, phim, psim
+!         write(nprt,1000) iter, zeta_a, utau, phim, psim
  1000    format(' 1000 iter = ',i5,' zeta = ',e15.6,' u_* = ',e15.6,
      +          ' phim = ',e15.6,' psim = ',e15.6)
       enddo
@@ -5223,8 +5240,8 @@ c
 c
 c ------- surface details, for debug
 c
-      write(nprt,2000) windm, utau, qstar(1), tsfcc(1), amonin, zeta,
-     +              z1, batag, vk, batagk, zo
+!      write(nprt,2000) windm, utau, qstar(1), tsfcc(1), amonin, zeta,
+!     +              z1, batag, vk, batagk, zo
  2000 format(' 2000 suft ',/,
      +       '    windm = ',e15.6,' utau = ',e15.6,' qstar = ',e15.6,/,
      +       '    tsfcc = ',e15.6,' MO L = ',e15.6,' z1/L = ',e15.6,/,
@@ -6186,6 +6203,16 @@ c
       mwsum_t = 0.0
       qstarsum = 0.0
       qstarsum_t = 0.0 
+      u = 0.0
+      v = 0.0
+      w = 0.0
+      e = 0.0
+      t = 0.0
+      r1 = 0.0
+      r2 = 0.0
+      r3 = 0.0
+      r4 = 0.0
+      r5 = 0.0
 
 c ------------ note set nmatch in sr. iso so that
 c              it is compatible with conditions here
@@ -7298,7 +7325,7 @@ c
      +          ' WS1SB',10x
      +       ,/,(1x,i4,3(3x,e15.6)))
       else if (nscl .eq. 3) then
-      write(lu,5205)tsfcc(2),wtsfc(2),tsfcc(3),wtsfc(3)
+!      write(lu,5205)tsfcc(2),wtsfc(2),tsfcc(3),wtsfc(3)
  5205 format(/,'  SURFACE VALUE: TXYM(2) =',e15.6,' WTSFC(2) = ',e15.6,
      +       /,'  SURFACE VALUE: TXYM(3) =',e15.6,' WTSFC(3) = ',e15.6)
       write(lu,5200) (iz,txym(iz,2),txym(iz,3),wtle(iz,2),
@@ -10367,7 +10394,9 @@ c
          radflux(iz) = rad_Fct*exp(-rad_kappa*LWP(iz)) +
      +         rad_Fcb*exp(-rad_kappa*(LWP(1) - LWP(iz)))
 
+
       end do
+
 
       !Give no radiative flux divergence at top/bottom
       radflux(0) = radflux(1)
@@ -10380,17 +10409,9 @@ c
 
          radsrc(iz) = -1/rhoa/Cpa*(radflux(iz)-radflux(iz-1))/dzw(iz)
 
+
       end do
 
-
-!DEBUG
-!      if (myid==0) then
-!      do iz=1,nnz-1
-!
-!      write(*,'(5e15.6)') zz(iz),ql(iz),LWP(iz),radflux(iz),radsrc(iz)
-!
-!      end do
-!      end if
 
       end subroutine calc_radiation
 
@@ -10586,6 +10607,12 @@ c
       !t_f = mpi_wtime()
       !if (myid==5) write(*,*) 'time bc_per:', t_f - t_s
 
+      part => first_particle
+      do while (associated(part))     
+
+
+      part => part%next
+      end do
 
       !Now that particles are in their updated position, 
       !compute their contribution to the momentum coupling:
@@ -10827,6 +10854,7 @@ c
             call uf_interp       !Use 6th order Lagrange interpolation
          end if
 
+
         if (it .LE. 1) then
            part%vp(1:3) = part%uf
         end if
@@ -10916,7 +10944,7 @@ c
         end if
 
          if (part%radius .gt. 1.0) then
-         write(*,'(a15,12e15.6)') 'DHR BROKEN', 
+         write(*,'(a15,12e15.6)') 'WARNING: BIG DROPLET', 
      +    part%radius,part%qinf,part%Tp,part%Tf,part%xp(3),
      +    part%Os,part%m_s,part%vp(1),part%vp(2),part%vp(3),
      +    part%res,part%sigm_s
@@ -10976,6 +11004,24 @@ c
       part => part%next
       end do
 
+
+      !Loop through and make sure to remove the rare case where droplet
+      !explodes due to BE procedure
+      !Still not 100% certain why this happens, but only occurs under
+      !very specific and rare circumstances
+      part => first_particle
+      do while (associated(part))
+
+       if (part%radius .gt. 1.0) then
+         write(*,'(a16,12e15.6)') 'DHR BIG DROPLET: ',
+     +    part%radius,part%qinf,part%Tp,part%Tf,part%xp(3),
+     +    part%Os,part%m_s,part%vp(1),part%vp(2),part%vp(3),
+     +    part%res
+          call destroy_particle
+       else
+           part=> part%next
+        end if
+      end do
 
       !Enforce nonperiodic bcs (either elastic or destroying particles)
       call particle_bcs_nonperiodic
@@ -11546,7 +11592,8 @@ c
       part%Tp = Tp
       part%radius = rad_init
       part%uf(1:3) = 0.0
-      part%qinf = 0.01
+      part%qinf = 0.008
+      part%Tf = Tp
       part%xrhs(1:3) = 0.0
       part%vrhs(1:3) = 0.0 
       part%Tprhs_s = 0.0
@@ -11574,7 +11621,8 @@ c
       use pars
       implicit none
       real :: top,bot,ran2
-      real :: xp_init(3),m_s,Os,rad_init
+      real :: xp_init(3),m_s,Os,rad_init,prob
+      real :: S,M
       integer :: idx
       integer*8 :: mult
 
@@ -11603,7 +11651,30 @@ c
          call destroy_particle
 
          !Immediately create a new one
-         call double_lognormal_dist(rad_init,m_s,Os,mult)
+         prob = pdf_factor/(1 + pdf_factor)
+
+         !Use this to choose which to generate:
+
+         if (ran2(iseed) .gt. prob) then   !It's accumulation mode
+            S = 0.5
+            M = -1.95
+            Os = 0.5
+            mult = mult_a
+
+            !With these parameters, get m_s and rad_init from distribution
+            call lognormal_dist(rad_init,m_s,Os,M,S)
+
+          else  !It's coarse mode
+
+            S = 0.45
+            M = 0.0
+            Os = 1.0
+            mult = mult_c
+
+            !With these parameters, get m_s and rad_init from distribution
+            call lognormal_dist(rad_init,m_s,Os,M,S)
+
+          end if
 
          xp_init(1) = ran2(iseed)*(xmax-xmin) + xmin
          xp_init(2) = ran2(iseed)*(ymax-ymin) + ymin
@@ -13897,15 +13968,19 @@ c        part%qinf = 0.0 ! Brian 7/14/14
       implicit none
       include 'mpif.h' 
       integer :: values(8)
-      integer :: idx
+      integer :: idx,ierr
       integer*8 :: mult
       real :: xv,yv,zv,ran2,deltaz
       real :: maxx,maxy,maxz
       real :: xp_init(3),rad_init,m_s,Os
+      real :: S,M,prob
+      integer*8 :: num_a,num_c,totnum_a,totnum_c
 
       !Create the seed for the random number generator:
       call date_and_time(VALUES=values)
       iseed = -(myid+values(8)+values(7)+values(6))
+
+      write(*,*) 'iseed=',myid,iseed
 
       !Initialize ngidx, the particle global index
       ngidx = 1
@@ -13918,6 +13993,16 @@ c        part%qinf = 0.0 ! Brian 7/14/14
       numpart = numpart + MOD(tnumpart,numprocs)
       endif
 
+      !Lognormal distribution parameters
+      mult_factor = 500
+      pdf_factor = 0.02*real(mult_factor)
+      prob = pdf_factor/(1 + pdf_factor)
+
+      !Adjust the multiplicity so that the total number of particles
+      !isn't altered:
+      mult_c = mult_init/mult_factor
+      mult_a = mult_init/(1.0-prob)*(1 - prob/real(mult_factor))
+
       !Initialize the linked list of particles:
       nullify(part,first_particle)
       
@@ -13925,6 +14010,8 @@ c        part%qinf = 0.0 ! Brian 7/14/14
       maxx=0.0
       maxy=0.0
       maxz=0.0
+      num_a = 0
+      num_c = 0
       do idx=1,numpart
       xv = ran2(iseed)*(xmax-xmin) + xmin
       yv = ran2(iseed)*(ymax-ymin) + ymin
@@ -13940,13 +14027,38 @@ c        part%qinf = 0.0 ! Brian 7/14/14
       !call exponential_dist(rad_init)  !From Shima et al. (2009) test case
       !m_s = Sal/1000.0*4.0/3.0*pi*radius_init**3*rhow
 
-      
-      call double_lognormal_dist(rad_init,m_s,Os,mult)
+      !Generate a double lognormal from individual coarse & accumulation modes
+      !call double_lognormal_dist(rad_init,m_s,Os,mult)  !First attempt!
+
+      !Generate
+      if (ran2(iseed) .gt. prob) then   !It's accumulation mode
+         S = 0.5
+         M = -1.95
+         Os = 0.5
+         mult = mult_a
+
+         !With these parameters, get m_s and rad_init from distribution
+         call lognormal_dist(rad_init,m_s,Os,M,S)
+         num_a = num_a + 1
+
+       else  !It's coarse mode
+
+         S = 0.45
+         M = 0.0
+         Os = 1.0
+         mult = mult_c
+
+         !With these parameters, get m_s and rad_init from distribution
+         call lognormal_dist(rad_init,m_s,Os,M,S)
+         num_c = num_c + 1
+
+       end if
 
 
       call create_particle(xp_init,vp_init,
      +         Tp_init,m_s,Os,mult,rad_init,idx) 
       end do
+
 
       partTsrc = 0.0
       partTsrc_t = 0.0
@@ -13977,6 +14089,71 @@ c        part%qinf = 0.0 ! Brian 7/14/14
 
       end subroutine exponential_dist
 
+      subroutine lognormal_dist(rad_init,m_s,Os,M,S)
+      use particles
+      use pars
+      use con_data
+      implicit none
+      include 'mpif.h'
+
+      real, intent(inout) :: rad_init,m_s,Os
+      real :: ran2,cdf_func_single
+      real :: M,S
+      real :: d1,d2,err,dhalf,ftest,CDF
+      real :: daerosol
+      real :: a,b,c,d,p,q
+      integer :: iter,prob
+
+      !Use bisection to get the radius based on the CDF contained in function cdf_func
+      d1 = 100.0
+      d2 = 0.01
+      err = 1.0
+      iter = 0
+      CDF = ran2(iseed)
+
+      do while (err > 1.0e-10)
+
+         dhalf = 0.5*(d1+d2)
+         ftest = cdf_func_single(dhalf,CDF,M,S)
+         if (ftest < 0.0) then
+            d2 = dhalf
+         else 
+            d1 = dhalf
+         end if
+
+         err = abs(cdf_func_single(dhalf,CDF,M,S))
+         iter = iter + 1
+
+         if (iter .gt. 1000) then
+            d1 = 1.0e-6
+            write(*,'(a12)') 'CDF convergence error'
+            exit
+         end if
+
+
+      end do
+      
+      daerosol = d1*1.0e-6  !Don't forget to convert micron to m
+      m_s = 2.0/3.0*pi2*(daerosol/2.0)**3*rhos
+
+      !Now have the dry aerosol diameter and mass, must rehydrate it using Kohler
+      !theory to get the proper initial condition
+      !Rehydrate to 95% RH
+
+      !The equation for the equilibrium radius is a cubic -- take positive root:
+      
+      a = log(0.95)  !RH = 95%
+      b = -2.0*Mw*Gam/Ru/rhow/Tp_init
+      c = 0.0
+      d = Ion*Os*m_s*(Mw/Ms)/(2.0/3.0*pi2*rhow)
+
+      p = -b/3.0/a
+      q = p**3 - 3.0*a*d/6.0/a**2
+
+      rad_init = (q + (q**2 - p**6)**(0.5))**(1./3.) + (q -
+     +         (q**2-p**6)**(0.5))**(1./3.) + p
+
+      end subroutine lognormal_dist
       subroutine double_lognormal_dist(rad_init,m_s,Os,mult)
       use particles
       use pars
@@ -13986,7 +14163,7 @@ c        part%qinf = 0.0 ! Brian 7/14/14
 
       real, intent(inout) :: rad_init,m_s,Os
       real :: ran2,cdf_func
-      real :: M_a,S_a,M_c,S_c,factor,totarea
+      real :: M_a,S_a,M_c,S_c,totarea
       real :: d1,d2,err,dhalf,ftest,CDF
       real :: daerosol
       real :: a,b,c,d,p,q
@@ -14002,9 +14179,8 @@ c        part%qinf = 0.0 ! Brian 7/14/14
       !The ratio of the coarse mode PDF to accumulation mode
       !NOTE: Making the factor inflated by 100 but decreasing the
       !multiplicity by same amount to get better coarse mode resolution
-      factor = 0.15
 
-      totarea = 1.0 + factor  !The total area of combined PDFs, for normalization purposes 
+      totarea = 1.0 + pdf_factor  !The total area of combined PDFs, for normalization purposes 
 
       !Use bisection to get the radius based on the CDF contained in function cdf_func
       d1 = 100.0
@@ -14016,14 +14192,14 @@ c        part%qinf = 0.0 ! Brian 7/14/14
       do while (err > 1.0e-10)
 
          dhalf = 0.5*(d1+d2)
-         ftest = cdf_func(dhalf,CDF,factor,M_a,S_a,M_c,S_c)
+         ftest = cdf_func(dhalf,CDF,pdf_factor,M_a,S_a,M_c,S_c)
          if (ftest < 0.0) then
             d2 = dhalf
          else 
             d1 = dhalf
          end if
 
-         err = abs(cdf_func(dhalf,CDF,factor,M_a,S_a,M_c,S_c))
+         err = abs(cdf_func(dhalf,CDF,pdf_factor,M_a,S_a,M_c,S_c))
          iter = iter + 1
 
          if (iter .gt. 1000) then
@@ -14061,11 +14237,11 @@ c        part%qinf = 0.0 ! Brian 7/14/14
 
       !Now have the dry aerosol diameter and mass, must rehydrate it using Kohler
       !theory to get the proper initial condition
-      !Rehydrate to 80% RH
+      !Rehydrate to 95% RH
 
       !The equation for the equilibrium radius is a cubic -- take positive root:
       
-      a = log(0.8)  !RH = 80%
+      a = log(0.95)  !RH = 95%
       b = -2.0*Mw*Gam/Ru/rhow/Tp_init
       c = 0.0
       d = Ion*Os*m_s*(Mw/Ms)/(2.0/3.0*pi2*rhow)
@@ -14537,6 +14713,7 @@ c        part%qinf = 0.0 ! Brian 7/14/14
       partHsrc_t = 0.0
       partTEsrc_t = 0.0
 
+
       part => first_particle
       do while (associated(part))
 
@@ -14650,6 +14827,7 @@ c        part%qinf = 0.0 ! Brian 7/14/14
      +         part%radrhs*Cpv/Cpa*part%Tp*wtt/dV*real(part%mult) -
      +         rhow/rhoa*pi2*2*part%radius**2*
      +         part%radrhs*Cpv/Cpa*part%Tf*wtt/dV*real(part%mult)
+
 
       endif
 
@@ -15016,6 +15194,14 @@ c       Add the current event to the histogram
        
       
       end function mod_Magnus
+      function cdf_func_single(d,CDF,M,S)
+      implicit none
+      real :: d,CDF,M,S,cdf_func_single
+
+      cdf_func_single = 1.0/2.0*
+     + (1.0 + erf((log(d) - M)/S/sqrt(2.0)))  - CDF
+
+      end function cdf_func_single
       function cdf_func(d,CDF,factor,Ma,Sa,Mc,Sc)
       implicit none
       real :: d,CDF,factor,Ma,Sa,Mc,Sc,cdf_func
