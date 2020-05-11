@@ -127,7 +127,7 @@ c     ----------------------------------------------------------------------
       real, allocatable :: wpTpsum(:,:,:),wpTpsum_t(:,:,:)
       real, allocatable :: radsum(:,:,:),radsum_t(:,:,:) 
       real, allocatable :: rad2sum(:,:,:),rad2sum_t(:,:,:) 
-      real, allocatable :: mpsum(:,:,:),mpsum_t(:,:,:) 
+      real, allocatable :: multcount(:,:,:),multcount_t(:,:,:) 
       real, allocatable :: mwsum(:,:,:),mwsum_t(:,:,:)
       real, allocatable :: qstarsum(:,:,:),qstarsum_t(:,:,:) 
 
@@ -305,8 +305,8 @@ c ----------------------------------------------------------------------
      +           Tv_diss(maxnz,nscl),
      +           Tv_part1(maxnz,nscl),Tv_part2(maxnz),
      +           radmean(maxnz),rad2mean(maxnz),
-     +           mpmean(maxnz),mwmean(maxnz), 
-     +           phimp(maxnz),ql(maxnz),  
+     +           multmean(maxnz),mwmean(maxnz), 
+     +           Nc(maxnz),ql(maxnz),  
      +           Hpsrc(maxnz),TEpsrc(maxnz),
      +           qstarm(maxnz),
      +           trip(maxnz),TpSq(maxnz),Tpdqp(maxnz),
@@ -347,8 +347,8 @@ c ----------------------------------------------------------------------
      +           Tv_tran(:,:),Tv_prod(:,:),Tv_diss(:,:),
      +           Tv_part1(:,:),Tv_part2(:),
      +           radmean(:),rad2mean(:),
-     +           mpmean(:),mwmean(:),
-     +           phimp(:),ql(:), 
+     +           multmean(:),mwmean(:),
+     +           Nc(:),ql(:), 
      +           Hpsrc(:), TEpsrc(:),
      +           qstarm(:),
      +           trip(:),TpSq(:),Tpdqp(:),
@@ -437,9 +437,9 @@ c
              Tv_part2 => c_s%Tv_part2  ; isize = isize + size(Tv_part2)
              radmean => c_s%radmean  ; isize = isize + size(radmean)
              rad2mean => c_s%rad2mean  ; isize = isize + size(rad2mean)
-             mpmean => c_s%mpmean    ; isize = isize + size(mpmean)
+             multmean => c_s%multmean ; isize = isize + size(multmean)
              mwmean => c_s%mwmean    ; isize = isize + size(mwmean) 
-             phimp => c_s%phimp    ; isize = isize + size(phimp) 
+             Nc => c_s%Nc    ; isize = isize + size(Nc) 
              ql => c_s%ql    ; isize = isize + size(ql)
              Hpsrc   => c_s%Hpsrc    ; isize = isize + size(Hpsrc)
              TEpsrc  => c_s%TEpsrc  ; isize = isize + size(TEpsrc)
@@ -6212,8 +6212,8 @@ c
       radsum_t = 0.0 
       rad2sum = 0.0 
       rad2sum_t = 0.0 
-      mpsum = 0.0
-      mpsum_t = 0.0
+      multcount = 0.0
+      multcount_t = 0.0
       mwsum = 0.0
       mwsum_t = 0.0
       qstarsum = 0.0
@@ -7466,7 +7466,7 @@ c
          stat(iz,27) = stat(iz,27) + partTsrc(ix,iy,iz)
          stat(iz,28) = stat(iz,28) + radsum(ix,iy,iz) 
          stat(iz,29) = stat(iz,29) + rad2sum(ix,iy,iz) 
-         stat(iz,30) = stat(iz,30) + mpsum(ix,iy,iz)
+         stat(iz,30) = stat(iz,30) + multcount(ix,iy,iz)
          stat(iz,31) = stat(iz,31) + mwsum(ix,iy,iz)
          stat(iz,32) = stat(iz,32) + partHsrc(ix,iy,iz)
          stat(iz,33) = stat(iz,33) + partTEsrc(ix,iy,iz)
@@ -7574,9 +7574,9 @@ c
       radmean(iz) = stat(iz,28)/stat(iz,11) 
       rad2mean(iz)= stat(iz,29)/stat(iz,11)
  
-      mpmean(iz) = stat(iz,30)/stat(iz,11)
+      multmean(iz) = stat(iz,30)/stat(iz,11)
       mwmean(iz) = stat(iz,31)/stat(iz,11)
-      phimp(iz) = stat(iz,30)/xl/yl/dzw(iz)/rhoa
+      Nc(iz) = stat(iz,30)/xl/yl/dzw(iz)
       ql(iz) = stat(iz,31)/xl/yl/dzw(iz)/rhoa
  
       Hpsrc(iz) = stat(iz,32)*fnxy
@@ -8450,8 +8450,8 @@ c
       allocate(radsum_t(0:nnz+1,iys:iye,mxs:mxe)) 
       allocate(rad2sum(nnx,iys:iye,izs-1:ize+1)) 
       allocate(rad2sum_t(0:nnz+1,iys:iye,mxs:mxe))
-      allocate(mpsum(nnx,iys:iye,izs-1:ize+1)) 
-      allocate(mpsum_t(0:nnz+1,iys:iye,mxs:mxe)) 
+      allocate(multcount(nnx,iys:iye,izs-1:ize+1)) 
+      allocate(multcount_t(0:nnz+1,iys:iye,mxs:mxe)) 
       allocate(mwsum(nnx,iys:iye,izs-1:ize+1)) 
       allocate(mwsum_t(0:nnz+1,iys:iye,mxs:mxe)) 
       allocate(partHsrc(nnx,iys:iye,izs-1:ize+1))
@@ -10460,7 +10460,7 @@ c
       qfsum_t = 0.0
       radsum_t = 0.0  
       rad2sum_t = 0.0  
-      mpsum_t = 0.0
+      multcount_t = 0.0
       mwsum_t = 0.0
       Tpsqrsum_t = 0.0
       wpTpsum_t = 0.0
@@ -10732,8 +10732,8 @@ c
      +                mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
      +                ncpu_s,numprocs) 
 
-      call ztox_trans(mpsum_t(0:nnz+1,iys:iye,mxs:mxe),
-     +                mpsum(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,mxs,
+      call ztox_trans(multcount_t(0:nnz+1,iys:iye,mxs:mxe),
+     +                multcount(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,mxs,
      +                mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
      +                ncpu_s,numprocs)
 
@@ -10825,7 +10825,7 @@ c
       qfsum_t = 0.0
       radsum_t = 0.0
       rad2sum_t = 0.0
-      mpsum_t = 0.0
+      multcount_t = 0.0
       mwsum_t = 0.0
       Tpsqrsum_t = 0.0
       wpTpsum_t = 0.0
@@ -11145,8 +11145,8 @@ c
      +                mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
      +                ncpu_s,numprocs)
 
-      call ztox_trans(mpsum_t(0:nnz+1,iys:iye,mxs:mxe),
-     +                mpsum(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,mxs,
+      call ztox_trans(multcount_t(0:nnz+1,iys:iye,mxs:mxe),
+     +                multcount(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,mxs,
      +                mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
      +                ncpu_s,numprocs)
 
@@ -14689,8 +14689,8 @@ c        part%qinf = 0.0 ! Brian 7/14/14
 
       rad2sum_t(kpt,jpt,ipt) = rad2sum_t(kpt,jpt,ipt) + part%radius**2  
 
-      mpsum_t(kpt,jpt,ipt) = mpsum_t(kpt,jpt,ipt) + 
-     +               real(part%mult)*(rhop*4.0/3.0*pi*part%radius**3)
+      multcount_t(kpt,jpt,ipt) = multcount_t(kpt,jpt,ipt) + 
+     +               real(part%mult)
 
       mwsum_t(kpt,jpt,ipt) = mwsum_t(kpt,jpt,ipt) + 
      +               real(part%mult)*(rhow*4.0/3.0*pi*part%radius**3)
