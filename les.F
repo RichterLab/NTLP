@@ -16,7 +16,7 @@ c
       integer, parameter :: j_recl=4, k8=8
 
       integer, parameter :: nscl = 2, nvar = (4+nscl)
-      integer, parameter :: maxnx=64,maxny=64,maxnz=128
+      integer, parameter :: maxnx=128,maxny=128,maxnz=128
       integer, parameter :: maxnz1=maxnz+1,
      + maxnz2=maxnz+2,maxnx2=maxnx+2,maxny2=maxny+2
 
@@ -969,6 +969,7 @@ c
      +           ' infinite time step !!!')
           stop
       endif
+
 c
 c ---------------- choose fixed or variable time step
 c
@@ -1689,6 +1690,7 @@ c
      +     erhs(nnx,iys:iye,izs:ize),
      +     trhs(nnx,iys:iye,nscl,izs:ize)
 c
+
       do iz=izs,ize
          do iy=iys,iye
          do ix=1,nnx
@@ -3333,9 +3335,12 @@ c
       real sfc_flx(2+nscl)
 c
 
-      if (time .gt. 1800.0) then
-         tsfcc(1) = surf_temp
-      end if
+          if (time .gt. 1800.0) then
+             tsfcc(1) = 282.0
+          else
+             tsfcc(1)  = 283.9
+          end if
+
 
       iz   = 1
       izm1 = iz - 1
@@ -5214,14 +5219,20 @@ c
 c
 c --------- check if neutral surface layer
 c
-      if (ibuoy.eq.0 .or. abs(qstar(1)) .lt. 1.0e-4) then
+
+      if (ibuoy.eq.0 .or. abs(qstar(1)) .lt. 1.0e-6) then
           amonin    = 1000.
           zeta      = 0.0
           utau      = windm*vk/zody
           thstar(1) = 0.0
           t10xy(1)  = 0.0
+
           !tsfcc(1)  = t1xy(1)
-          tsfcc(1)  = surf_temp
+            dnom = zody*vk74in
+            thstar(1) = (t1xy(1) - tsfcc(1))/dnom
+            t10xy(1)  = thstar(1)*dnom
+            qstar(1)  = -utau*thstar(1)
+            write(*,*) 'DHR INSIDE',thstar(1),t10xy(1),qstar(1)
       else
          utau = windm*vk/(zody-psim)
          dnom = (zody-psis)*vk74in
@@ -5265,13 +5276,13 @@ c
       !Treat humidity differently
       iscl=2
 
-      if (ibuoy.eq.0 .or. abs(qstar(1)) .lt. 1.0e-4) then
+      if (ibuoy.eq.0 .or. abs(qstar(1)) .lt. 1.0e-6) then
           
           !thstar(iscl) = 0.0
           !t10xy(iscl)  = 0.0
           !tsfcc(iscl)  = t1xy(iscl)
 
-         dnom = zody*vk74in
+          dnom = zody*vk74in
           tsfcc(2)=surf_RH/100.0*
      +    Mw/Ru/tsfcc(1)*mod_Magnus(tsfcc(1))/rhoa
             thstar(iscl) = (t1xy(iscl) - tsfcc(iscl))/dnom
@@ -5741,8 +5752,8 @@ c
 c
 c
          !Gradients of temperature and scalars above inversion (upper BC)
-         dtdzf(1)=0.003
-         dtdzf(2)=0.000
+         dtdzf(1)=(285.4-284.6)/(127.0-93.5)
+         dtdzf(2)=(0.00663-0.007992)/(117.7-93.5)
 c
          dtjump  = 0.0
          divgls  = 0.0
@@ -6166,6 +6177,10 @@ c
      +     psiy(nnx,iys:iye,izs:izs), uxx(nnx,iys:iye),
      +     vyy(nnx,iys:iye,izs:izs),mod_Magnus,Ttmp
 
+      real :: slope_q,slope_t
+      real :: z_switch,t_switch,q_switch
+      real :: t_surf,q_surf
+
       !Initialize partcount to 0:
       partcount = 0.0
       partcount_t = 0.0
@@ -6218,57 +6233,47 @@ c ------------ note set nmatch in sr. iso so that
 c              it is compatible with conditions here
 c
       do iz=1,nnz
-c        ug(iz)   = ugcont*(zz(iz)/zl)
          ug(iz)   = ugcont
          vg(iz)   = vgcont
          divz(iz) = 0.0
       enddo
-c
-      izi = (50*nnz)/100
-      zi  = z(izi)
-c
-      z_lower = zi - 50.0
-      t_lower = 300.0
-      z_upper = zi + 50.0
-      t_upper = 308.0
-      slope   = (t_upper - t_lower)/(z_upper - z_lower)
+
+      !Parameters from Charlotte's C-FOG profile
+      z_switch = 93.5
+      t_switch = 284.5
+      q_switch = 0.0079916
+      t_surf = 284.0
+      q_surf = 0.0081199
+
+      !Slopes below the inversion
+      slope_t = (t_switch-t_surf)/z_switch
+      slope_q = (q_switch-q_surf)/z_switch
 c
       do iz=izs,ize
          do iy=iys,iye
          do ix=1,nnx
             u(ix,iy,iz) = ugcont-ugal
-c           u(ix,iy,iz) = ug(iz) - ugal
             v(ix,iy,iz) = vgcont
             w(ix,iy,iz) = 0.0
             e(ix,iy,iz) = 0.0
          enddo
          enddo
-         if(z(iz) .le. z_lower) then
+         if(zz(iz) .le. z_switch) then
            do iy=iys,iye
            do ix=1,nnx
-              t(ix,iy,1,iz) = t_lower
-
-           !Add "bubble" to test cloud model
-!           t(ix,iy,1,iz) = t(ix,iy,1,iz) + 0.1*
-!     +     exp( -( (dx*(ix-1)-500.0)/200.0 )**2 
-!     +          -( (dy*(iy-1)-500.0)/200.0 )**2 )*
-!     +     exp (-zz(iz)/100.0)
-
+              t(ix,iy,1,iz) = t_surf + slope_t*zz(iz)
+              t(ix,iy,2,iz) = q_surf + slope_q*zz(iz)
            enddo
            enddo
-         elseif(z(iz) .ge. z_upper) then
+         elseif(zz(iz) .ge. z_switch) then
            do iy=iys,iye
            do ix=1,nnx
-              t(ix,iy,1,iz) = t_upper + (zz(iz+1) - z_upper)*dtdzf(1)
-           enddo
-           enddo
-         else
-           do iy=iys,iye
-           do ix=1,nnx
-              t(ix,iy,1,iz) = t_lower + slope*(zz(iz+1) - z_lower)
+              t(ix,iy,1,iz) = t_switch + (zz(iz) - z_switch)*dtdzf(1)
+              t(ix,iy,2,iz) = q_switch + (zz(iz) - z_switch)*dtdzf(2)
            enddo
            enddo
          endif
+
          do iy=iys,iye
          do ix=1,nnx
 
@@ -6290,9 +6295,9 @@ c           u(ix,iy,iz) = ug(iz) - ugal
 !     temperature profile from above)
 
 !From the first version of the paper:
-            t(ix,iy,1,iz) = 286.0 + (1.0/128.0)*zz(iz)
-            t(ix,iy,2,iz) = 0.0093 - (0.0005/128.0)*zz(iz)
-
+!            t(ix,iy,1,iz) = 286.0 + (1.0/128.0)*zz(iz)
+!            t(ix,iy,2,iz) = 0.0093 - (0.0005/128.0)*zz(iz)
+!
 !            t(ix,iy,1,iz) = 286.0  !Remember this is the potential temp
 !            !Actual temp
 !            Ttmp = 
@@ -10808,7 +10813,6 @@ c
 
 
 
-
       !First fill extended velocity field for interpolation
       call fill_ext
 
@@ -10943,7 +10947,7 @@ c
                part%Tp = rt_zeroes(2)*part%Tp
         end if
 
-         if (part%radius .gt. 1.0) then
+         if (part%radius .gt. 1.0e-2) then
          write(*,'(a15,12e15.6)') 'WARNING: BIG DROPLET', 
      +    part%radius,part%qinf,part%Tp,part%Tf,part%xp(3),
      +    part%Os,part%m_s,part%vp(1),part%vp(2),part%vp(3),
@@ -11591,8 +11595,9 @@ c
       part%vp(1:3) = vp(1:3)
       part%Tp = Tp
       part%radius = rad_init
-      part%uf(1:3) = 0.0
-      part%qinf = 0.008
+      part%uf(1:3) = vp(1:3)
+      part%qinf = tsfcc(2)
+      part%qstar = 0.008
       part%Tf = Tp
       part%xrhs(1:3) = 0.0
       part%vrhs(1:3) = 0.0 
@@ -11607,6 +11612,10 @@ c
       part%res = 0.0
       part%m_s = m_s
       part%Os = Os
+      part%dist = 0.0
+      part%u_sub(1:3) = 0.0
+      part%sigm_s = 0.0
+
       
       end subroutine create_particle
       function dFdr_uniform(r)

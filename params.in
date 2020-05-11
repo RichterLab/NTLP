@@ -40,7 +40,7 @@ ilongwave = 1   !Use simple longwave radiation scheme when clouds/fog present
 ncpu_s=8
 
 !Time step
-cfl = 0.4
+cfl = 0.1
 dt_new = 0.1
 
 !Use for DNS:
