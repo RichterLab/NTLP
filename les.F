@@ -949,6 +949,9 @@ c
       use pars
       use con_data
       use con_stats
+      use particles
+
+      real :: tauc,Dv,tauc_tmp
 c
 
       ucfl = umax
@@ -986,13 +989,14 @@ c
       dt_new  = cfl/vel_max
       dt_new = amin1(dt_new, 5.0)
 c     dt_new = amin1(dt_new, 10.0)
+      dt_cfl = dt_new
       endif
 
 c ---------------- compare against viscous stability limit
 c
       if (ifix_dt .eq. 0) then
+
       if(vismax*dt_new .gt. 0.5) then
-         dt_cfl = dt_new
          dt_new = 0.5/vismax
          if(l_root) then
             write(6,6200) dt_new, dt_cfl, vismax
@@ -1001,7 +1005,37 @@ c
      +      ' cfl time step = ',e15.6,' vismax = ',e15.6)
          endif
       endif
-      end if
+
+
+      !Now need to check time step against cloud timescale tau_c
+      !Using horizontal average Nc and diameter -- could use local
+      Dv = nuf/Sc  !Diffusivity of vapor in air
+
+      tauc = 5.0
+      do iz=1,nnz
+         
+         tauc_tmp = 1.0/(pi2*Dv*2.0*radmean(iz)*Nc(iz))
+
+
+         if (.not. isnan(tauc_tmp)) then
+            tauc = min(tauc,tauc_tmp)
+         end if
+
+!         if (myid==0) write(*,*) 'DHR:',Dv,radmean(iz),Nc(iz),pi2,
+!     +   tauc_tmp,tauc
+
+      end do
+
+      dt_new = min(dt_new,tauc/5.0)
+            if (l_root) then
+            write(6,6210) dt_new, dt_cfl, tauc
+ 6210       format(' 6210 cfl time step too large for droplets',/,
+     +      '   tauc time step = ',e15.6,
+     +      ' cfl time step = ',e15.6,' tauc = ',e15.6)
+            end if
+      
+
+      end if  !ifix_dt .eq. 0
 c
 c -------- for safety if restart set timestep = saved timestep in
 c          restart file
@@ -13988,8 +14022,6 @@ c        part%qinf = 0.0 ! Brian 7/14/14
       !Create the seed for the random number generator:
       call date_and_time(VALUES=values)
       iseed = -(myid+values(8)+values(7)+values(6))
-
-      write(*,*) 'iseed=',myid,iseed
 
       !Initialize ngidx, the particle global index
       ngidx = 1
