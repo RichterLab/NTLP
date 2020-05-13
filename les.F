@@ -1026,13 +1026,15 @@ c
 
       end do
 
-      dt_new = min(dt_new,tauc/5.0)
+      if (tauc/5.0 .lt. dt_new) then
+            dt_new = tauc/5.0
             if (l_root) then
             write(6,6210) dt_new, dt_cfl, tauc
  6210       format(' 6210 cfl time step too large for droplets',/,
      +      '   tauc time step = ',e15.6,
      +      ' cfl time step = ',e15.6,' tauc = ',e15.6)
             end if
+      end if
       
 
       end if  !ifix_dt .eq. 0
@@ -3370,7 +3372,7 @@ c
 c
 
           if (time .gt. 1800.0) then
-             tsfcc(1) = 282.0
+             tsfcc(1) = surf_temp
           else
              tsfcc(1)  = 283.9
           end if
