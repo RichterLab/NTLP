@@ -1026,8 +1026,8 @@ c
 
       end do
 
-      if (tauc/5.0 .lt. dt_new) then
-            dt_new = tauc/5.0
+      if (tauc/15.0 .lt. dt_new) then
+            dt_new = tauc/15.0
             if (l_root) then
             write(6,6210) dt_new, dt_cfl, tauc
  6210       format(' 6210 cfl time step too large for droplets',/,
@@ -5256,7 +5256,7 @@ c
 c --------- check if neutral surface layer
 c
 
-      if (ibuoy.eq.0 .or. abs(qstar(1)) .lt. 1.0e-6) then
+      if (ibuoy.eq.0 .or. abs(qstar(1)) .lt. 1.0e-8) then
           amonin    = 1000.
           zeta      = 0.0
           utau      = windm*vk/zody
@@ -5312,7 +5312,7 @@ c
       !Treat humidity differently
       iscl=2
 
-      if (ibuoy.eq.0 .or. abs(qstar(1)) .lt. 1.0e-6) then
+      if (ibuoy.eq.0 .or. abs(qstar(1)) .lt. 1.0e-8) then
           
           !thstar(iscl) = 0.0
           !t10xy(iscl)  = 0.0
@@ -6275,11 +6275,18 @@ c
       enddo
 
       !Parameters from Charlotte's C-FOG profile
-      z_switch = 93.5
+      !z_switch = 93.5
+      !t_switch = 284.5
+      !q_switch = 0.0079916
+      !t_surf = 284.0
+      !q_surf = 0.0081199
+
+      !Now play with them
+      z_switch = 80.0
       t_switch = 284.5
       q_switch = 0.0079916
       t_surf = 284.0
-      q_surf = 0.0081199
+      q_surf = 0.00824
 
       !Slopes below the inversion
       slope_t = (t_switch-t_surf)/z_switch
@@ -10587,7 +10594,7 @@ c
 
          part%xrhs(1:3) = part%vp(1:3)
          part%vrhs(1:3) = corrfac*taup_i*(part%uf(1:3)-part%vp(1:3))
-     +                               - part_grav(1:3)
+     +                               + part_grav(1:3)
 
          if (ievap .EQ. 1) then      
             part%radrhs = Shp/9.0/Sc*rhop/rhow*part%radius*
@@ -10915,6 +10922,8 @@ c
         Rep = 2.0*part%radius*diffnorm/nuf
         corrfac = (1.0 + 0.15*Rep**(0.687))
 
+        corrfac = 1.0
+
         !implicitly calculates next velocity and position
         part%xp(1:3) = part%xp(1:3) + dt*part%vp(1:3)
         part%vp(1:3) = (part%vp(1:3)+taup_i*dt*corrfac*part%uf(1:3)
@@ -11111,6 +11120,22 @@ c
      +                mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
      +                ncpu_s,numprocs)
 
+      call ztox_trans(partcount_t(0:nnz+1,iys:iye,mxs:mxe),
+     +                partcount(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,mxs,
+     +                mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
+     +                ncpu_s,numprocs)
+
+      call ztox_trans(multcount_t(0:nnz+1,iys:iye,mxs:mxe),
+     +                multcount(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,mxs,
+     +                mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
+     +                ncpu_s,numprocs)
+
+      call ztox_trans(radsum_t(0:nnz+1,iys:iye,mxs:mxe),
+     +                radsum(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,mxs,
+     +                mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
+     +                ncpu_s,numprocs)
+
+
 
       !Try only calling these when the history data is being written:
       if(mtrans) then
@@ -11166,23 +11191,8 @@ c
      +                mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
      +                ncpu_s,numprocs)
 
-      call ztox_trans(partcount_t(0:nnz+1,iys:iye,mxs:mxe),
-     +                partcount(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,mxs,
-     +                mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
-     +                ncpu_s,numprocs)
-
-      call ztox_trans(radsum_t(0:nnz+1,iys:iye,mxs:mxe),
-     +                radsum(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,mxs,
-     +                mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
-     +                ncpu_s,numprocs)
-
       call ztox_trans(rad2sum_t(0:nnz+1,iys:iye,mxs:mxe),
      +                rad2sum(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,mxs,
-     +                mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
-     +                ncpu_s,numprocs)
-
-      call ztox_trans(multcount_t(0:nnz+1,iys:iye,mxs:mxe),
-     +                multcount(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,mxs,
      +                mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid,
      +                ncpu_s,numprocs)
 
