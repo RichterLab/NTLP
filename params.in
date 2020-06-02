@@ -27,6 +27,7 @@ icouple=0
 iTcouple=0
 iHcouple=0  !iHcouple also controls TE couple
 ievap=0
+ineighbor=0
 /
 
 !Grid and domain parameters

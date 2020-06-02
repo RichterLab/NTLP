@@ -1,4 +1,4 @@
-# NTLP
+# NTLP (NCAR Turbulence with Lagrangian Particles)
 
 ## Compilation
 To build on the CRC machines you must run the following commands:
