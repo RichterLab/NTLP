@@ -3371,7 +3371,7 @@ c
       real sfc_flx(2+nscl)
 c
 
-          if (time .gt. 1800.0) then
+          if (time .gt. 3600.0) then
              tsfcc(1) = surf_temp
           else
              tsfcc(1)  = 283.9
@@ -11612,13 +11612,14 @@ c
 
       end subroutine rad_solver2
 
-      subroutine create_particle(xp,vp,Tp,m_s,Os,mult,rad_init,idx)
+      subroutine create_particle(xp,vp,Tp,m_s,Os,mult,rad_init,idx,
+     +            procidx)
       use particles
       use pars
       implicit none
 
       real :: xp(3),vp(3),Tp,qinfp,rad_init,pi,m_s,Os
-      integer :: idx
+      integer :: idx,procidx
       integer*8 :: mult
 
       if (.NOT. associated(first_particle)) then
@@ -11651,7 +11652,7 @@ c
       part%Tprhs_L = 0.0
       part%radrhs = 0.0
       part%pidx = idx 
-      part%procidx = myid
+      part%procidx = procidx
       part%nbr_pidx = -1
       part%nbr_procidx = -1
       part%mult = mult
@@ -11678,7 +11679,7 @@ c
       real :: top,bot,ran2
       real :: xp_init(3),m_s,Os,rad_init,prob
       real :: S,M
-      integer :: idx
+      integer :: idx,procidx,idx_old,procidx_old
       integer*8 :: mult
 
       !Assumes domain goes from [0,xl),[0,yl),[0,zl]
@@ -11702,6 +11703,9 @@ c
          !part%xp(3) = bot + (bot-part%xp(3))
          !part%vp(3) = -part%vp(3)
          !part => part%next
+
+         idx_old = part%pidx
+         procidx_old = part%procidx
 
          call destroy_particle
 
@@ -11735,10 +11739,17 @@ c
          xp_init(2) = ran2(iseed)*(ymax-ymin) + ymin
          xp_init(3) = ran2(iseed)*(zi-zw1) + zw1
 
-         idx = 2
+         !To save the one that gets written out by default
+         if (idx_old .eq. 1 .and. procidx_old .eq. 0) then
+            idx = 1
+            procidx = 0
+         else
+            idx = 2
+            procidx = myid
+         end if
 
          call create_particle(xp_init,vp_init,
-     +         Tp_init,m_s,Os,mult,rad_init,idx)
+     +        Tp_init,m_s,Os,mult,rad_init,idx,procidx)
 
       else
          part => part%next
@@ -14047,7 +14058,7 @@ c        part%qinf = 0.0 ! Brian 7/14/14
       endif
 
       !Lognormal distribution parameters
-      mult_factor = 500
+      mult_factor = 200
       pdf_factor = 0.02*real(mult_factor)
       prob = pdf_factor/(1 + pdf_factor)
 
@@ -14109,7 +14120,7 @@ c        part%qinf = 0.0 ! Brian 7/14/14
 
 
       call create_particle(xp_init,vp_init,
-     +         Tp_init,m_s,Os,mult,rad_init,idx) 
+     +         Tp_init,m_s,Os,mult,rad_init,idx,myid) 
       end do
 
 
