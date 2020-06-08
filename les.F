@@ -813,9 +813,9 @@ c
 
          call particle_update_BE(it)
 
-         t_f = mpi_wtime()
-         call mpi_barrier(mpi_comm_world,ierr)
-         if (myid==5) write(*,*) 'time part: ',t_f-t_s
+!         t_f = mpi_wtime()
+!         call mpi_barrier(mpi_comm_world,ierr)
+!         if (myid==5) write(*,*) 'time part: ',t_f-t_s
       end if
 
       !Call coalescence outside of RK loop since it's not appropriate as
@@ -825,9 +825,9 @@ c
 
       call particle_coalesce
 
-      call mpi_barrier(mpi_comm_world,ierr)
-      t_f = mpi_wtime()
-      if (myid==5) write(*,*) 'time coalescence:', t_f - t_s
+!      call mpi_barrier(mpi_comm_world,ierr)
+!      t_f = mpi_wtime()
+!      if (myid==5) write(*,*) 'time coalescence:', t_f - t_s
       end if
 
       if (ipartdiff) then
@@ -841,9 +841,9 @@ c
            call SFS_position
         end if
 
-      call mpi_barrier(mpi_comm_world,ierr)
-      t_f = mpi_wtime()
-      if (myid==5) write(*,*) 'time partdiff:', t_f - t_s
+!      call mpi_barrier(mpi_comm_world,ierr)
+!      t_f = mpi_wtime()
+!      if (myid==5) write(*,*) 'time partdiff:', t_f - t_s
       end if
 
       call radius_histogram
@@ -1754,8 +1754,8 @@ c
          call dns_vis
          call rhs_uvw_DNS(istep)
       else
-         call tke_vis(istep)   ! WARNING: this has not been checked for iscl=2
-         call rhs_uvw(istep)   ! WARNING: this has not been checked for iscl=2
+         call tke_vis(istep) 
+         call rhs_uvw(istep) 
       end if
 
 c
@@ -3374,7 +3374,7 @@ c
           if (time .gt. 3600.0) then
              tsfcc(1) = surf_temp
           else
-             tsfcc(1)  = 283.9
+             tsfcc(1)  = 284.0
           end if
 
 
@@ -3469,6 +3469,7 @@ c
 c     write(nprt,2345) uwsfc, vwsfc, wtsfc(nscl), tsfcc(nscl)
  2345 format(' in lower 2345 uwsfc = ',e15.6,' vwsfc = ',e15.6,
      +       ' wtsfc = ',e15.6,' tsfcc = ',e15.6)
+
 c
       do iy=iys,iye
       do ix=1,nnx
@@ -5256,7 +5257,8 @@ c
 c --------- check if neutral surface layer
 c
 
-      if (ibuoy.eq.0 .or. abs(qstar(1)) .lt. 1.0e-8) then
+      !if (ibuoy.eq.0 .or. abs(qstar(1)) .lt. 1.0e-8) then
+      if (ibuoy.eq.0 ) then
           amonin    = 1000.
           zeta      = 0.0
           utau      = windm*vk/zody
@@ -5264,11 +5266,11 @@ c
           t10xy(1)  = 0.0
 
           !tsfcc(1)  = t1xy(1)
-            dnom = zody*vk74in
-            thstar(1) = (t1xy(1) - tsfcc(1))/dnom
-            t10xy(1)  = thstar(1)*dnom
-            qstar(1)  = -utau*thstar(1)
-            write(*,*) 'DHR INSIDE',thstar(1),t10xy(1),qstar(1)
+          !  dnom = zody*vk74in
+          !  thstar(1) = (t1xy(1) - tsfcc(1))/dnom
+          !  t10xy(1)  = thstar(1)*dnom
+          !  qstar(1)  = -utau*thstar(1)
+          !  write(*,*) 'DHR INSIDE',thstar(1),t10xy(1),qstar(1)
       else
          utau = windm*vk/(zody-psim)
          dnom = (zody-psis)*vk74in
@@ -5312,18 +5314,19 @@ c
       !Treat humidity differently
       iscl=2
 
-      if (ibuoy.eq.0 .or. abs(qstar(1)) .lt. 1.0e-8) then
+      !if (ibuoy.eq.0 .or. abs(qstar(1)) .lt. 1.0e-8) then
+      if (ibuoy.eq.0 ) then
           
-          !thstar(iscl) = 0.0
-          !t10xy(iscl)  = 0.0
-          !tsfcc(iscl)  = t1xy(iscl)
+          thstar(iscl) = 0.0
+          t10xy(iscl)  = 0.0
+          tsfcc(iscl)  = t1xy(iscl)
 
-          dnom = zody*vk74in
-          tsfcc(2)=surf_RH/100.0*
-     +    Mw/Ru/tsfcc(1)*mod_Magnus(tsfcc(1))/rhoa
-            thstar(iscl) = (t1xy(iscl) - tsfcc(iscl))/dnom
-            t10xy(iscl)  = thstar(iscl)*dnom
-            qstar(iscl)  = -utau*thstar(iscl)
+!          dnom = zody*vk74in
+!          tsfcc(2)=surf_RH/100.0*
+!     +    Mw/Ru/tsfcc(1)*mod_Magnus(tsfcc(1))/rhoa
+!            thstar(iscl) = (t1xy(iscl) - tsfcc(iscl))/dnom
+!            t10xy(iscl)  = thstar(iscl)*dnom
+!            qstar(iscl)  = -utau*thstar(iscl)
       else
          dnom = (zody-psis)*vk74in
          if(isfc(iscl) .eq. 0) then
@@ -5788,8 +5791,8 @@ c
 c
 c
          !Gradients of temperature and scalars above inversion (upper BC)
-         dtdzf(1)=(285.4-284.6)/(127.0-93.5)
-         dtdzf(2)=(0.00663-0.007992)/(117.7-93.5)
+         dtdzf(1)=(285.5-284.0)/(80.0-30.0)
+         dtdzf(2)=(0.006-0.00805)/(80.0-30.0)
 c
          dtjump  = 0.0
          divgls  = 0.0
@@ -6282,17 +6285,21 @@ c
       !q_surf = 0.0081199
 
       !Now play with them
-      z_switch = 80.0
-      t_switch = 284.5
-      q_switch = 0.0079916
+      z_switch = 30.0
+      t_switch = 284.05
+      q_switch = 0.00811
       t_surf = 284.0
-      q_surf = 0.00824
+      q_surf = 0.00823
 
       !Slopes below the inversion
       slope_t = (t_switch-t_surf)/z_switch
       slope_q = (q_switch-q_surf)/z_switch
 c
       do iz=izs,ize
+
+
+         !Try and alleviate the abrupt IC on the velocity
+         if (zz(iz) .ge. 0.0) then
          do iy=iys,iye
          do ix=1,nnx
             u(ix,iy,iz) = ugcont-ugal
@@ -6301,6 +6308,18 @@ c
             e(ix,iy,iz) = 0.0
          enddo
          enddo
+         else
+         do iy=iys,iye
+         do ix=1,nnx
+            u(ix,iy,iz) = ugcont/(log(50.0/0.5))*log(zz(iz)/0.5) - ugal
+            v(ix,iy,iz) = vgcont
+            w(ix,iy,iz) = 0.0
+            e(ix,iy,iz) = 0.0
+         enddo
+         enddo
+         end if
+         
+
          if(zz(iz) .le. z_switch) then
            do iy=iys,iye
            do ix=1,nnx
@@ -10965,6 +10984,11 @@ c
 
                if (flag == 1) num1000 = num1000 + 1
 
+
+               if (flag==1) then
+               write(*,*) 'DHR TEST:',part%xp(3),part%qinf,part%Tf
+               end if
+
                if (isnan(rt_zeroes(1)).OR.(rt_zeroes(1)<0)
      +    .OR.isnan(rt_zeroes(2)).OR.(rt_zeroes(2)<0)) then
                 numimpos = numimpos + 1  !How many have failed?
@@ -11674,6 +11698,7 @@ c
       end function dFdr_uniform
       subroutine particle_bcs_nonperiodic
       use particles
+      use con_stats
       use pars
       implicit none
       real :: top,bot,ran2
@@ -11691,7 +11716,7 @@ c
       !perfectly elastic collisions on top, bottom walls
       !i.e. location is reflected, w-velocity is negated
 
-      top = zl
+      top = zz(nnz)
       !bot = 0.0 + part%radius
       bot = zw1
 
@@ -13686,8 +13711,6 @@ c     Now fill the ext arrays with the recieved buffers:
             izuv = kuvpts(k)
             izw = kwpts(k)
 
-            if (ix .gt. mxe+3) write(*,'(i,7e15.6)') myid,
-     + part%xp(1),part%xp(2),part%xp(3),xmin,xmax,ymin,ymax
             part%uf(1) = part%uf(1)+uext(izuv,iy,ix)*wt(1,i)*
      +                   wt(2,j)*wt(3,k) 
             part%uf(2) = part%uf(2)+vext(izuv,iy,ix)*wt(1,i)*
@@ -13781,8 +13804,21 @@ c     Now fill the ext arrays with the recieved buffers:
 
 
       end do
+      !Fix if the particle is in between the top (uv) point and zl
+      if (kpt .eq. nnz) then
+         part%uf(1) = uext(kpt,iy,ix)
+         part%uf(2) = vext(kpt,iy,ix)
+         part%Tf = Text(kpt,iy,ix)
+         part%qinf = T2ext(kpt,iy,ix)
+      end if
       end do
       end do
+
+
+      if (part%Tf .lt. 200) then
+      write(*,*) 'DHR TEST2:',part%Tf,kpt,Text(kpt,ipt,jpt),
+     + Text(kpt+1,ipt,jpt)
+      end if
 
 
       end subroutine uf_interp_lin
@@ -14189,7 +14225,7 @@ c        part%qinf = 0.0 ! Brian 7/14/14
          iter = iter + 1
 
          if (iter .gt. 1000) then
-            d1 = 1.0e-6
+            d1 = 1.0e-7
             write(*,'(a12)') 'CDF convergence error'
             exit
          end if
@@ -14267,7 +14303,7 @@ c        part%qinf = 0.0 ! Brian 7/14/14
          iter = iter + 1
 
          if (iter .gt. 1000) then
-            d1 = 1.0e-6
+            d1 = 1.0e-7
             write(*,'(a12)') 'CDF convergence error'
             exit
          end if
