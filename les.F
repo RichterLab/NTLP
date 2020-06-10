@@ -1021,8 +1021,6 @@ c
             tauc = min(tauc,tauc_tmp)
          end if
 
-!         if (myid==0) write(*,*) 'DHR:',Dv,radmean(iz),Nc(iz),pi2,
-!     +   tauc_tmp,tauc
 
       end do
 
@@ -10985,9 +10983,6 @@ c
                if (flag == 1) num1000 = num1000 + 1
 
 
-               if (flag==1) then
-               write(*,*) 'DHR TEST:',part%xp(3),part%qinf,part%Tf
-               end if
 
                if (isnan(rt_zeroes(1)).OR.(rt_zeroes(1)<0)
      +    .OR.isnan(rt_zeroes(2)).OR.(rt_zeroes(2)<0)) then
@@ -11663,6 +11658,8 @@ c
       pi = 4.0*atan(1.0)
   
       part%xp(1:3) = xp(1:3)
+      !Put in here to make sure that particle report is from fog layer
+      if (idx .eq. 1 .and. procidx .eq. 0) part%xp(3) = 10.0
       part%vp(1:3) = vp(1:3)
       part%Tp = Tp
       part%radius = rad_init
@@ -11738,27 +11735,31 @@ c
          prob = pdf_factor/(1 + pdf_factor)
 
          !Use this to choose which to generate:
+!!!!!! Double Lognormal
+!         if (ran2(iseed) .gt. prob) then   !It's accumulation mode
+!            S = 0.5
+!            M = -1.95
+!            Os = 0.5
+!            mult = mult_a
+!
+!            !With these parameters, get m_s and rad_init from distribution
+!            call lognormal_dist(rad_init,m_s,Os,M,S)
+!
+!          else  !It's coarse mode
+!
+!            S = 0.45
+!            M = 0.0
+!            Os = 1.0
+!            mult = mult_c
+!
+!            !With these parameters, get m_s and rad_init from distribution
+!            call lognormal_dist(rad_init,m_s,Os,M,S)
+!
+!          end if
 
-         if (ran2(iseed) .gt. prob) then   !It's accumulation mode
-            S = 0.5
-            M = -1.95
-            Os = 0.5
-            mult = mult_a
-
-            !With these parameters, get m_s and rad_init from distribution
-            call lognormal_dist(rad_init,m_s,Os,M,S)
-
-          else  !It's coarse mode
-
-            S = 0.45
-            M = 0.0
-            Os = 1.0
-            mult = mult_c
-
-            !With these parameters, get m_s and rad_init from distribution
-            call lognormal_dist(rad_init,m_s,Os,M,S)
-
-          end if
+         Os = 1.0
+         call uniform_dist(rad_init,m_s,Os)
+      
 
          xp_init(1) = ran2(iseed)*(xmax-xmin) + xmin
          xp_init(2) = ran2(iseed)*(ymax-ymin) + ymin
@@ -11773,8 +11774,11 @@ c
             procidx = myid
          end if
 
+!         call create_particle(xp_init,vp_init,
+!     +        Tp_init,m_s,Os,mult,rad_init,idx,procidx)
+
          call create_particle(xp_init,vp_init,
-     +        Tp_init,m_s,Os,mult,rad_init,idx,procidx)
+     +        Tp_init,m_s,Os,mult_init,rad_init,idx,procidx)
 
       else
          part => part%next
@@ -13815,12 +13819,6 @@ c     Now fill the ext arrays with the recieved buffers:
       end do
 
 
-      if (part%Tf .lt. 200) then
-      write(*,*) 'DHR TEST2:',part%Tf,kpt,Text(kpt,ipt,jpt),
-     + Text(kpt+1,ipt,jpt)
-      end if
-
-
       end subroutine uf_interp_lin
 
       subroutine sigm_interp(sigm_sdxp,sigm_sdyp,sigm_sdzp,
@@ -14127,36 +14125,47 @@ c        part%qinf = 0.0 ! Brian 7/14/14
       !call exponential_dist(rad_init)  !From Shima et al. (2009) test case
       !m_s = Sal/1000.0*4.0/3.0*pi*radius_init**3*rhow
 
+
+!!!!!!! DOUBLE LOGNORMAL
       !Generate a double lognormal from individual coarse & accumulation modes
       !call double_lognormal_dist(rad_init,m_s,Os,mult)  !First attempt!
 
-      !Generate
-      if (ran2(iseed) .gt. prob) then   !It's accumulation mode
-         S = 0.5
-         M = -1.95
-         Os = 0.5
-         mult = mult_a
+!      !Generate
+!      if (ran2(iseed) .gt. prob) then   !It's accumulation mode
+!         S = 0.5
+!         M = -1.95
+!         Os = 0.5
+!         mult = mult_a
+!
+!         !With these parameters, get m_s and rad_init from distribution
+!         call lognormal_dist(rad_init,m_s,Os,M,S)
+!         num_a = num_a + 1
+!
+!       else  !It's coarse mode
+!
+!         S = 0.45
+!         M = 0.0
+!         Os = 1.0
+!         mult = mult_c
+!
+!         !With these parameters, get m_s and rad_init from distribution
+!         call lognormal_dist(rad_init,m_s,Os,M,S)
+!         num_c = num_c + 1
+!
+!       end if
+!
+!      call create_particle(xp_init,vp_init,
+!     +         Tp_init,m_s,Os,mult,rad_init,idx,myid) 
+!
 
-         !With these parameters, get m_s and rad_init from distribution
-         call lognormal_dist(rad_init,m_s,Os,M,S)
-         num_a = num_a + 1
+!!!!!!! UNIFORM FOR TESTING
 
-       else  !It's coarse mode
-
-         S = 0.45
-         M = 0.0
-         Os = 1.0
-         mult = mult_c
-
-         !With these parameters, get m_s and rad_init from distribution
-         call lognormal_dist(rad_init,m_s,Os,M,S)
-         num_c = num_c + 1
-
-       end if
-
+      Os = 1.0
+      call uniform_dist(rad_init,m_s,Os)
 
       call create_particle(xp_init,vp_init,
-     +         Tp_init,m_s,Os,mult,rad_init,idx,myid) 
+     +         Tp_init,m_s,Os,mult_init,rad_init,idx,myid) 
+
       end do
 
 
@@ -14188,8 +14197,7 @@ c        part%qinf = 0.0 ! Brian 7/14/14
       rad_init = (vol_init/(pi2*2.0/3.0))**(1.0/3.0)
 
       end subroutine exponential_dist
-
-      subroutine lognormal_dist(rad_init,m_s,Os,M,S)
+      subroutine uniform_dist(rad_init,m_s,Os)
       use particles
       use pars
       use con_data
@@ -14199,41 +14207,18 @@ c        part%qinf = 0.0 ! Brian 7/14/14
       real, intent(inout) :: rad_init,m_s,Os
       real :: ran2,cdf_func_single
       real :: M,S
-      real :: d1,d2,err,dhalf,ftest,CDF
+      real :: d1,d2,dtmp
       real :: daerosol
       real :: a,b,c,d,p,q
       integer :: iter,prob
 
-      !Use bisection to get the radius based on the CDF contained in function cdf_func
-      d1 = 100.0
-      d2 = 0.01
-      err = 1.0
-      iter = 0
-      CDF = ran2(iseed)
-
-      do while (err > 1.0e-10)
-
-         dhalf = 0.5*(d1+d2)
-         ftest = cdf_func_single(dhalf,CDF,M,S)
-         if (ftest < 0.0) then
-            d2 = dhalf
-         else 
-            d1 = dhalf
-         end if
-
-         err = abs(cdf_func_single(dhalf,CDF,M,S))
-         iter = iter + 1
-
-         if (iter .gt. 1000) then
-            d1 = 1.0e-7
-            write(*,'(a12)') 'CDF convergence error'
-            exit
-         end if
-
-
-      end do
+      !choose aerosol diameter from uniform distribution
+      d1 = -7.7
+      d2 = -6.0
       
-      daerosol = d1*1.0e-6  !Don't forget to convert micron to m
+      dtmp = (ran2(iseed)*(d2 - d1) + d1)
+      daerosol = 10**(dtmp)
+
       m_s = 2.0/3.0*pi2*(daerosol/2.0)**3*rhos
 
       !Now have the dry aerosol diameter and mass, must rehydrate it using Kohler
@@ -14253,7 +14238,8 @@ c        part%qinf = 0.0 ! Brian 7/14/14
       rad_init = (q + (q**2 - p**6)**(0.5))**(1./3.) + (q -
      +         (q**2-p**6)**(0.5))**(1./3.) + p
 
-      end subroutine lognormal_dist
+      end subroutine uniform_dist
+
       subroutine double_lognormal_dist(rad_init,m_s,Os,mult)
       use particles
       use pars
@@ -15151,10 +15137,10 @@ c       Add the current event to the histogram
       hist_rad = 0.0
       part => first_particle
       do while (associated(part))
-         !if (part%xp(3) .lt. 60.0) then
+         if (part%xp(3) .lt. 30.0) then
          call add_histogram(bins_rad,hist_rad,
      +    histbins+2,part%radius,part%mult)
-         !end if
+         end if
       part => part%next
       end do
 
