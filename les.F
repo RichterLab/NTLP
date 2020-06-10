@@ -11736,29 +11736,31 @@ c
 
          !Use this to choose which to generate:
 !!!!!! Double Lognormal
-!         if (ran2(iseed) .gt. prob) then   !It's accumulation mode
-!            S = 0.5
-!            M = -1.95
-!            Os = 0.5
-!            mult = mult_a
-!
-!            !With these parameters, get m_s and rad_init from distribution
-!            call lognormal_dist(rad_init,m_s,Os,M,S)
-!
-!          else  !It's coarse mode
-!
-!            S = 0.45
-!            M = 0.0
-!            Os = 1.0
-!            mult = mult_c
-!
-!            !With these parameters, get m_s and rad_init from distribution
-!            call lognormal_dist(rad_init,m_s,Os,M,S)
-!
-!          end if
+         if (ran2(iseed) .gt. prob) then   !It's accumulation mode
+            S = 0.5
+            M = -1.95
+            Os = 0.5
+            mult = mult_a
 
-         Os = 1.0
-         call uniform_dist(rad_init,m_s,Os)
+            !With these parameters, get m_s and rad_init from distribution
+            call lognormal_dist(rad_init,m_s,Os,M,S)
+
+          else  !It's coarse mode
+
+            S = 0.45
+            M = 0.0
+            Os = 1.0
+            mult = mult_c
+
+            !With these parameters, get m_s and rad_init from distribution
+            call lognormal_dist(rad_init,m_s,Os,M,S)
+
+          end if
+
+!!!!! UNIFORM 
+!         Os = 1.0
+!         mult = mult_init
+!         call uniform_dist(rad_init,m_s,Os)
       
 
          xp_init(1) = ran2(iseed)*(xmax-xmin) + xmin
@@ -11774,11 +11776,10 @@ c
             procidx = myid
          end if
 
-!         call create_particle(xp_init,vp_init,
-!     +        Tp_init,m_s,Os,mult,rad_init,idx,procidx)
 
          call create_particle(xp_init,vp_init,
-     +        Tp_init,m_s,Os,mult_init,rad_init,idx,procidx)
+     +        Tp_init,m_s,Os,mult,rad_init,idx,procidx)
+
 
       else
          part => part%next
@@ -14130,42 +14131,41 @@ c        part%qinf = 0.0 ! Brian 7/14/14
       !Generate a double lognormal from individual coarse & accumulation modes
       !call double_lognormal_dist(rad_init,m_s,Os,mult)  !First attempt!
 
-!      !Generate
-!      if (ran2(iseed) .gt. prob) then   !It's accumulation mode
-!         S = 0.5
-!         M = -1.95
-!         Os = 0.5
-!         mult = mult_a
-!
-!         !With these parameters, get m_s and rad_init from distribution
-!         call lognormal_dist(rad_init,m_s,Os,M,S)
-!         num_a = num_a + 1
-!
-!       else  !It's coarse mode
-!
-!         S = 0.45
-!         M = 0.0
-!         Os = 1.0
-!         mult = mult_c
-!
-!         !With these parameters, get m_s and rad_init from distribution
-!         call lognormal_dist(rad_init,m_s,Os,M,S)
-!         num_c = num_c + 1
-!
-!       end if
-!
-!      call create_particle(xp_init,vp_init,
-!     +         Tp_init,m_s,Os,mult,rad_init,idx,myid) 
-!
+      !Generate
+      if (ran2(iseed) .gt. prob) then   !It's accumulation mode
+         S = 0.5
+         M = -1.95
+         Os = 0.5
+         mult = mult_a
 
-!!!!!!! UNIFORM FOR TESTING
+         !With these parameters, get m_s and rad_init from distribution
+         call lognormal_dist(rad_init,m_s,Os,M,S)
+         num_a = num_a + 1
 
-      Os = 1.0
-      call uniform_dist(rad_init,m_s,Os)
+       else  !It's coarse mode
+
+         S = 0.45
+         M = 0.0
+         Os = 1.0
+         mult = mult_c
+
+         !With these parameters, get m_s and rad_init from distribution
+         call lognormal_dist(rad_init,m_s,Os,M,S)
+         num_c = num_c + 1
+
+       end if
+
+
+
+!!!!!!! UNIFORM
+
+!      Os = 1.0
+!      mult = mult_init
+!      call uniform_dist(rad_init,m_s,Os)
+!
 
       call create_particle(xp_init,vp_init,
-     +         Tp_init,m_s,Os,mult_init,rad_init,idx,myid) 
-
+     +         Tp_init,m_s,Os,mult,rad_init,idx,myid) 
       end do
 
 
