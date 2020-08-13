@@ -631,6 +631,9 @@ c
       write(*,'(a7,2e15.6)') 'rad1: ',time,part%radius 
       write(*,'(a7,2e15.6)') 'qinf1:',time,part%qinf 
       write(*,'(a7,2e15.6)') 'qstr1:',time,part%qstar 
+      write(*,'(a7,2e15.6)') 'Os1:',time,part%Os
+      write(*,'(a7,2e15.6)') 'ms1:',time,part%m_s
+      write(*,'(a7,2e15.6)') 'res1:',time,part%res
       write(*,'(a7,e15.6,i)') 'mult1:',time,part%mult
 
       end if
@@ -10928,7 +10931,7 @@ c
      +  (psurf/(psurf-part%xp(3)*rhoa*grav))**(-Rd/Cpa)
          end if
 
-        !Debug:
+        !DHR Debug:
         part%sigm_s = part%radius
 
         diff(1:3) = part%vp - part%uf
@@ -11758,7 +11761,11 @@ c
           end if
 
 !!!!! UNIFORM 
+!         if (ran2(iseed) .gt. 0.5) then
+!         Os = 0.5
+!         else
 !         Os = 1.0
+!         end if
 !         mult = mult_init
 !         call uniform_dist(rad_init,m_s,Os)
       
@@ -14159,10 +14166,14 @@ c        part%qinf = 0.0 ! Brian 7/14/14
 
 !!!!!!! UNIFORM
 
+!      if (ran2(iseed) .gt. 0.5) then
+!      Os = 0.5
+!      else
 !      Os = 1.0
+!      end if
 !      mult = mult_init
 !      call uniform_dist(rad_init,m_s,Os)
-!
+
 
       call create_particle(xp_init,vp_init,
      +         Tp_init,m_s,Os,mult,rad_init,idx,myid) 
@@ -14179,6 +14190,73 @@ c        part%qinf = 0.0 ! Brian 7/14/14
 
       end subroutine particle_init
 
+      subroutine lognormal_dist(rad_init,m_s,Os,M,S)
+      use particles
+      use pars
+      use con_data
+      implicit none
+      include 'mpif.h'
+
+      real, intent(inout) :: rad_init,m_s,Os
+      real :: ran2,cdf_func_single
+      real :: M,S
+      real :: d1,d2,err,dhalf,ftest,CDF
+      real :: daerosol
+      real :: a,b,c,d,p,q
+      integer :: iter,prob
+
+      !Use bisection to get the radius based on the CDF contained in
+      !function cdf_func
+      d1 = 100.0
+      d2 = 0.01
+      err = 1.0
+      iter = 0
+      CDF = ran2(iseed)
+
+      do while (err > 1.0e-10)
+
+         dhalf = 0.5*(d1+d2)
+         ftest = cdf_func_single(dhalf,CDF,M,S)
+         if (ftest < 0.0) then
+            d2 = dhalf
+         else
+            d1 = dhalf
+         end if
+
+         err = abs(cdf_func_single(dhalf,CDF,M,S))
+         iter = iter + 1
+
+         if (iter .gt. 1000) then
+            d1 = 1.0e-7
+            write(*,'(a12)') 'CDF convergence error'
+            exit
+         end if
+
+
+      end do
+
+      daerosol = d1*1.0e-6  !Don't forget to convert micron to m
+      m_s = 2.0/3.0*pi2*(daerosol/2.0)**3*rhos
+
+      !Now have the dry aerosol diameter and mass, must rehydrate it
+      !using Kohler
+      !theory to get the proper initial condition
+      !Rehydrate to 95% RH
+
+      !The equation for the equilibrium radius is a cubic -- take
+      !positive root:
+      a = log(0.95)  !RH = 95%
+      b = -2.0*Mw*Gam/Ru/rhow/Tp_init
+      c = 0.0
+      d = Ion*Os*m_s*(Mw/Ms)/(2.0/3.0*pi2*rhow)
+
+      p = -b/3.0/a
+      q = p**3 - 3.0*a*d/6.0/a**2
+
+      rad_init = (q + (q**2 - p**6)**(0.5))**(1./3.) + (q -
+     +         (q**2-p**6)**(0.5))**(1./3.) + p
+
+      end subroutine lognormal_dist
       subroutine exponential_dist(rad_init)
       use particles
       use con_data
