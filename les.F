@@ -11661,8 +11661,6 @@ c
       pi = 4.0*atan(1.0)
   
       part%xp(1:3) = xp(1:3)
-      !Put in here to make sure that particle report is from fog layer
-      if (idx .eq. 1 .and. procidx .eq. 0) part%xp(3) = 10.0
       part%vp(1:3) = vp(1:3)
       part%Tp = Tp
       part%radius = rad_init
@@ -11778,6 +11776,12 @@ c
          if (idx_old .eq. 1 .and. procidx_old .eq. 0) then
             idx = 1
             procidx = 0
+
+            !Force particle log output to be a coarse mode in fog layer -- "giant mode"
+            rad_init = 1.2e-6
+            Os = 1.0
+            mult = mult_c
+            xp_init(3) = 10.0
          else
             idx = 2
             procidx = myid
