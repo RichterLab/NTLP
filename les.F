@@ -11778,10 +11778,15 @@ c
             procidx = 0
 
             !Force particle log output to be a coarse mode in fog layer -- "giant mode"
-            rad_init = 1.2e-6
+            S = 0.45
+            M = 0.0
             Os = 1.0
             mult = mult_c
+
+            !With these parameters, get m_s and rad_init from distribution
+            call lognormal_dist(rad_init,m_s,Os,M,S)
             xp_init(3) = 10.0
+
          else
             idx = 2
             procidx = myid
@@ -14177,6 +14182,19 @@ c        part%qinf = 0.0 ! Brian 7/14/14
 !      end if
 !      mult = mult_init
 !      call uniform_dist(rad_init,m_s,Os)
+
+       !Force the output particle to be a coarse mode particle
+       if (idx==1 .and. myid==0) then
+            !Force particle log output to be a coarse mode in fog layer -- "giant mode"
+            S = 0.45
+            M = 0.0
+            Os = 1.0
+            mult = mult_c
+
+            !With these parameters, get m_s and rad_init from distribution
+            call lognormal_dist(rad_init,m_s,Os,M,S)
+            xp_init(3) = 10.0
+        end if
 
 
       call create_particle(xp_init,vp_init,
