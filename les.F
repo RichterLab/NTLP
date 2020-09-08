@@ -14751,7 +14751,7 @@ c        part%qinf = 0.0 ! Brian 7/14/14
       integer :: istatus(mpi_status_size), ierr, fh
       integer(kind=mpi_offset_kind) :: zoffset,offset
       integer :: myp,totalp 
-      integer :: iproc,i,pidxmax
+      integer :: iproc,i,pidxmax,numloop,partloop,readpart
       type(particle), allocatable :: readbuf(:)
 
       if (myid==0) write(*,7000) path_part 
@@ -14770,11 +14770,28 @@ c        part%qinf = 0.0 ! Brian 7/14/14
       if (myid==0) write(*,*) 'read tnumpart = ',tnumpart
     
       offset = 4
-      allocate(readbuf(tnumpart))
-      call mpi_file_read_at_all(fh,offset,readbuf,tnumpart,
+
+      !For many particles (above ~10 million), I can't read them all
+      !into the readbuf at the same time - must break up into chunks.
+      !Arbitrarily choose 5 million particles at a time (~840 MB)
+
+      !numloop will be 1 if tnumpart < 5 million, increasing from there
+      numloop = floor(tnumpart/5e6)+1
+
+      do partloop = 1,numloop
+
+      if (partloop == numloop) then
+         readpart = tnumpart - (numloop-1)*5e6
+      else
+         readpart = 5e6
+      end if
+
+      allocate(readbuf(readpart))
+
+      call mpi_file_read_at_all(fh,offset,readbuf,readpart,
      +                       particletype,istatus,ierr)
 
-      do i = 1,tnumpart
+      do i = 1,readpart
         !Now - does it lie within this proc's bounds?
         if (readbuf(i)%xp(2) .GT. ymin .AND.
      +       readbuf(i)%xp(2) .LT. ymax .AND.
@@ -14797,6 +14814,10 @@ c        part%qinf = 0.0 ! Brian 7/14/14
       end do
 
       deallocate(readbuf)
+
+      offset = offset + sizeof(part)*readpart
+
+      end do
 
       call mpi_file_close(fh,ierr)
       
