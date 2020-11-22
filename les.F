@@ -32,6 +32,11 @@ c     ----------------------------------------------------------------------
      +     nnxp2, nnyp2, nnzp1, ivis, nnzm1, isize, krec,
      +     izs, ize, ixs, ixe, jxs, jxe, kxs, kxe,
      +     mxs, mxe, iss, ise, iys, iye, jys, jye
+
+      integer :: ncid, time_dimid, time_varid
+      integer :: dt_varid
+      integer :: dimids(1)
+      integer :: his_counter
 c     ----------------------------------------------------------------------
       character case*3
 c     ----------------------------------------------------------------------
@@ -535,6 +540,7 @@ c
          case = case_inp
          call init
          call setup(it)
+         call netcdf_init
 
          if (ispray==1) then
          call particle_setup
@@ -750,8 +756,10 @@ c
           if(l_root) call print(6,it,1,nnz)
       endif
       if(l_root) then
-         if(mhis  .and. istage .eq. 1)  call write_his(itop)
-         if(mhis  .and. istage .eq. 1 .and. mtape) call close_his
+         !if(mhis  .and. istage .eq. 1)  call write_his(itop)
+         if(mhis  .and. istage .eq. 1)  call write_his_netcdf
+         !if(mhis  .and. istage .eq. 1 .and. mtape) call close_his
+         if(mhis  .and. istage .eq. 1 .and. mtape) call close_his_netcdf
       endif
 c
  8999 continue
@@ -12299,6 +12307,71 @@ c
 !      end do
 
       end subroutine particle_coupling_update
+
+      subroutine netcdf_check(status)
+      use netcdf
+      implicit none
+      integer, intent ( in) :: status
+    
+      if(status /= nf90_noerr) then 
+      print *, trim(nf90_strerror(status))
+      stop "Stopped"
+      end if
+
+      end subroutine netcdf_check
+      subroutine netcdf_init
+      use netcdf
+      use pars
+      implicit none
+
+      character (len = *), parameter :: netcdf_file = 
+     +"/scratch365/drichte2/tutorial/case1/netcdf_test.nc"
+
+      call netcdf_check( nf90_create(netcdf_file, nf90_clobber, ncid) ) 
+
+      call netcdf_check( nf90_def_dim(ncid, "time", 
+     +                   NF90_UNLIMITED, time_dimid) )
+
+      dimids = (/ time_dimid /)
+
+      call netcdf_check( nf90_def_var(ncid,"time",NF90_REAL,dimids,
+     +            time_varid) )
+
+      call netcdf_check( nf90_def_var(ncid, "dt", NF90_REAL, dimids,
+     +            dt_varid) )
+
+      call netcdf_check( nf90_enddef(ncid) )
+
+      his_counter = 1
+
+      end subroutine netcdf_init
+
+      subroutine write_his_netcdf
+      use netcdf
+      use pars
+      use fields
+      use con_data
+      use con_stats
+      use particles
+
+      implicit none
+      
+      call netcdf_check( nf90_put_var(ncid, time_varid, real(time),
+     +  start=(/his_counter/)) )
+      call netcdf_check( nf90_put_var(ncid, dt_varid, real(dt),
+     +  start=(/his_counter/)) )
+      
+      his_counter = his_counter + 1
+      
+      end subroutine write_his_netcdf
+      subroutine close_his_netcdf
+      use netcdf
+      use pars
+      implicit none
+
+      call netcdf_check( nf90_close(ncid) )
+
+      end subroutine close_his_netcdf
 
       subroutine read_input_file
       use pars
