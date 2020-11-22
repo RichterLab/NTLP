@@ -33,9 +33,11 @@ c     ----------------------------------------------------------------------
      +     izs, ize, ixs, ixe, jxs, jxe, kxs, kxe,
      +     mxs, mxe, iss, ise, iys, iye, jys, jye
 
-      integer :: ncid, time_dimid, time_varid
+      integer :: ncid
+      integer :: time_dimid, time_varid
       integer :: dt_varid
-      integer :: dimids(1)
+      integer :: zu_varid,zu_dimid,zw_varid,zw_dimid,uxym_varid
+      integer :: dimids(1),dimids_zu(2),dimids_zw(2)
       integer :: his_counter
 c     ----------------------------------------------------------------------
       character case*3
@@ -12332,13 +12334,27 @@ c
       call netcdf_check( nf90_def_dim(ncid, "time", 
      +                   NF90_UNLIMITED, time_dimid) )
 
+      call netcdf_check( nf90_def_dim(ncid, "zu", 
+     +                   nnz, zu_dimid) )
+      call netcdf_check( nf90_def_dim(ncid, "zw", 
+     +                   nnz+1, zw_dimid) )
+
       dimids = (/ time_dimid /)
+      dimids_zu = (/ zu_dimid, time_dimid/)
+      dimids_zw = (/ zw_dimid, time_dimid/)
 
       call netcdf_check( nf90_def_var(ncid,"time",NF90_REAL,dimids,
      +            time_varid) )
 
       call netcdf_check( nf90_def_var(ncid, "dt", NF90_REAL, dimids,
      +            dt_varid) )
+
+      call netcdf_check( nf90_def_var(ncid, "zu", NF90_REAL, dimids_zu,
+     +            zu_varid) )
+      call netcdf_check( nf90_def_var(ncid, "zw", NF90_REAL, dimids_zw,
+     +            zw_varid) )
+      call netcdf_check( nf90_def_var(ncid,"uxym",NF90_REAL, dimids_zu,
+     +            uxym_varid) )
 
       call netcdf_check( nf90_enddef(ncid) )
 
@@ -12360,6 +12376,13 @@ c
      +  start=(/his_counter/)) )
       call netcdf_check( nf90_put_var(ncid, dt_varid, real(dt),
      +  start=(/his_counter/)) )
+
+      call netcdf_check( nf90_put_var(ncid, zu_varid, real(zz(1:nnz)),
+     +  start=(/1, his_counter/)) )
+      call netcdf_check( nf90_put_var(ncid, zw_varid, real(z(0:nnz)),
+     +  start=(/1, his_counter/)) )
+      call netcdf_check( nf90_put_var(ncid,uxym_varid,real(uxym(1:nnz)),
+     +  start=(/1, his_counter/)) )
       
       his_counter = his_counter + 1
       
