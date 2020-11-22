@@ -39,6 +39,7 @@ c     ----------------------------------------------------------------------
       integer :: zu_varid,zu_dimid,zw_varid,zw_dimid,uxym_varid
       integer :: dimids(1),dimids_zu(2),dimids_zw(2)
       integer :: his_counter
+      character(len=80) :: path_netcdf_his
 c     ----------------------------------------------------------------------
       character case*3
 c     ----------------------------------------------------------------------
@@ -6749,7 +6750,8 @@ c
 c --------- decide whether history files are to be saved
 c
       if((ihst .gt. 0) .and. (it .ge. it_his_nxt)) then
-         call open_his(it)
+         !call open_his(it)
+         call open_his_netcdf
          it_his_nxt = it_his_nxt + itape
       endif
 c
@@ -12326,10 +12328,10 @@ c
       use pars
       implicit none
 
-      character (len = *), parameter :: netcdf_file = 
+      path_netcdf_his = 
      +"/scratch365/drichte2/tutorial/case1/netcdf_test.nc"
 
-      call netcdf_check( nf90_create(netcdf_file, nf90_clobber, ncid) ) 
+      call netcdf_check( nf90_create(path_netcdf_his,nf90_clobber,ncid))
 
       call netcdf_check( nf90_def_dim(ncid, "time", 
      +                   NF90_UNLIMITED, time_dimid) )
@@ -12395,6 +12397,15 @@ c
       call netcdf_check( nf90_close(ncid) )
 
       end subroutine close_his_netcdf
+      subroutine open_his_netcdf
+      use netcdf
+      use pars
+      implicit none
+
+      call netcdf_check( nf90_open(path_netcdf_his,NF90_WRITE,
+     + ncid) )
+
+      end subroutine open_his_netcdf
 
       subroutine read_input_file
       use pars
