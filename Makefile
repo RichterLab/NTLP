@@ -9,8 +9,10 @@ OUTPUTLIB = -L$(NETCDFBASE)/lib
 OUTPUTOPT = -DNETCDF -DNCFPLUS
 LINKOPTS  = -lnetcdf -lnetcdff
 
-SRC = fft.f \
-      kdtree.f90
+SRC = 	fft.f \
+	kdtree.f90 \
+        defs.F \
+        netcdf_io.f90
 
 OBJS = $(addsuffix .o, $(basename $(SRC)))
 
@@ -19,12 +21,11 @@ all:	$(OBJS)
 	$(FORTRAN) les.F -o lesmpi.a  $(OBJS) $(FLAGS) $(OUTPUTINC) $(OUTPUTLIB) $(LINKOPTS)
 
 %.o:	
-	$(F90) $(FLAGS) $(SRC) -c
+	$(FORTRAN) $(FLAGS) $(SRC) -c $(OUTPUTINC) $(OUTPUTLIB)
 
 debug:  $(OBJS)
 	$(FORTRAN) $(FLAGS) $(DEBUG_FLAGS) $(INCLUDE) les.F $(OFILES)
 
 clean:
 	rm -f *.o *.mod lesmpi.a mach.file *.*~
-
 
