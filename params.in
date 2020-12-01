@@ -28,6 +28,7 @@ iTcouple=0
 iHcouple=0  !iHcouple also controls TE couple
 ievap=0
 ineighbor=0
+inetcdf=1   !If set to 1, writes history file to netcdf format. Otherwise writes original binary
 /
 
 !Grid and domain parameters

@@ -17,8 +17,8 @@ SRC = 	fft.f \
 OBJS = $(addsuffix .o, $(basename $(SRC)))
 
 
-lesmpi.a:	$(OBJS)
-		$(FORTRAN) les.F -o lesmpi.a  $(OBJS) $(FLAGS) $(OUTPUTINC) $(OUTPUTLIB) $(LINKOPTS)
+les.F:	$(OBJS)
+	$(FORTRAN) les.F -o lesmpi.a  $(OBJS) $(FLAGS) $(OUTPUTINC) $(OUTPUTLIB) $(LINKOPTS)
 
 %.o:	
 	$(FORTRAN) $(FLAGS) $(SRC) -c $(OUTPUTINC) $(OUTPUTLIB)

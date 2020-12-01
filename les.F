@@ -311,10 +311,13 @@ c
           if(l_root) call print(6,it,1,nnz)
       endif
       if(l_root) then
-         !if(mhis  .and. istage .eq. 1)  call write_his(itop)
-         if(mhis  .and. istage .eq. 1)  call write_his_netcdf
-         !if(mhis  .and. istage .eq. 1 .and. mtape) call close_his
+         if (inetcdf .eq. 1) then
+            if(mhis  .and. istage .eq. 1)  call write_his_netcdf
          if(mhis  .and. istage .eq. 1 .and. mtape) call close_his_netcdf
+         else
+            if(mhis  .and. istage .eq. 1)  call write_his(itop)
+            if(mhis  .and. istage .eq. 1 .and. mtape) call close_his
+         end if
       endif
 c
  8999 continue
@@ -6303,8 +6306,11 @@ c
 c --------- decide whether history files are to be saved
 c
       if((ihst .gt. 0) .and. (it .ge. it_his_nxt)) then
-         !call open_his(it)
-         call open_his_netcdf
+         if (inetcdf .eq. 1) then
+            call open_his_netcdf
+         else
+            call open_his(it)
+         end if
          it_his_nxt = it_his_nxt + itape
       endif
 c
@@ -11888,7 +11894,7 @@ c
      +         iupwnd,ibuoy,ifilt,itcut,isubs,ibrcl,iocean,
      +         method,idebug,iz_space,ivis0,ifix_dt,new_vis,iDNS,
      +         ispray,icouple,iTcouple,iHcouple,ievap,ifields,ilin,
-     +         ineighbor
+     +         ineighbor,inetcdf
 
 
       namelist /constants/ rhoa, nuf, Cpa, Pra, Sc,
