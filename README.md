@@ -18,3 +18,5 @@ Set up the I/O directory on scratch: /scratch365/netID/tutorial/case1
 
 Make sure all paths in params.in and les.run point to the proper locations
 
+The tutorial is set up to run the benchmark particle-laden turbulent channel flow simulation of Marchioli et al. (2008), IJMF, doi:10.1016/j.ijmultiphaseflow.2008.01.009
+
