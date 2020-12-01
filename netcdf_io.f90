@@ -38,7 +38,6 @@ subroutine netcdf_init
       use pars
       implicit none
 
-      !path_netcdf_his = "/scratch365/drichte2/tutorial/case1/netcdf_test.nc"
       path_netcdf_his = trim(adjustl(path_his))//"history.nc"
 
       call netcdf_check( nf90_create(path_netcdf_his,nf90_clobber,ncid))
@@ -241,8 +240,6 @@ subroutine netcdf_restart
       implicit none
 
        
-
-      !path_netcdf_his = "/scratch365/drichte2/tutorial/case1/netcdf_test.nc"
       path_netcdf_his = trim(adjustl(path_his))//"history.nc"
       call netcdf_check( nf90_open(path_netcdf_his,NF90_WRITE,ncid) )
 
