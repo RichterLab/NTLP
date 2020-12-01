@@ -4,6 +4,8 @@ implicit none
 integer :: ncid
 integer :: time_dimid,zu_vid,zu_dimid,s_dimid
 integer :: time_vid,dt_vid
+integer :: utau_vid,uwsfc_vid
+integer :: tnumpart_vid
 integer :: zw_vid,zw_dimid
 integer :: uxym_vid,vxym_vid,wxym_vid,txym_vid
 integer :: ups_vid,vps_vid,wps_vid,tps_vid
@@ -15,6 +17,10 @@ integer :: vp1mean_vid,vp2mean_vid,vp3mean_vid
 integer :: vp1msqr_vid,vp2msqr_vid,vp3msqr_vid
 integer :: m1src_vid,m2src_vid,m3src_vid
 integer :: Tpsrc_vid,TEpsrc_vid,Hpsrc_vid
+integer :: Tpmean_vid,Tpmsqr_vid
+integer :: Tfmean_vid,qfmean_vid
+integer :: radmean_vid,rad2mean_vid
+integer :: qstarm_vid
 integer :: dimids(1),dimids_zu(2),dimids_zw(2),dimids_zu_s(3),dimids_zw_s(3)
 integer :: his_counter
 character(len=80) :: path_netcdf_his
@@ -60,6 +66,15 @@ subroutine netcdf_init
 
       call netcdf_check( nf90_def_var(ncid, "dt", NF90_REAL, dimids,dt_vid) )
       call netcdf_check( nf90_put_att(ncid,dt_vid,"title","Model time step") )
+
+      call netcdf_check( nf90_def_var(ncid, "utau", NF90_REAL, dimids,utau_vid) )
+      call netcdf_check( nf90_put_att(ncid,utau_vid,"title","Friction velocity ustar") )
+
+      call netcdf_check( nf90_def_var(ncid, "uwsfc", NF90_REAL, dimids,uwsfc_vid) )
+      call netcdf_check( nf90_put_att(ncid,uwsfc_vid,"title","Lower surface stress") )
+
+      call netcdf_check( nf90_def_var(ncid, "tnumpart", NF90_REAL, dimids,tnumpart_vid) )
+      call netcdf_check( nf90_put_att(ncid,tnumpart_vid,"title","Total number of particles") )
 
       call netcdf_check( nf90_def_var(ncid, "zu", NF90_REAL, dimids_zu,zu_vid) )
       call netcdf_check( nf90_put_att(ncid,zu_vid,"title","z levels at u-points") )
@@ -148,6 +163,27 @@ subroutine netcdf_init
       call netcdf_check( nf90_def_var(ncid,"Hpsrc",NF90_REAL, dimids_zu,Hpsrc_vid) )
       call netcdf_check( nf90_put_att(ncid,Hpsrc_vid,"title","Particle vapor source") )
 
+      call netcdf_check( nf90_def_var(ncid,"Tpmean",NF90_REAL, dimids_zu,Tpmean_vid) )
+      call netcdf_check( nf90_put_att(ncid,Tpmean_vid,"title","Horiz. avg. particle temp") )
+
+      call netcdf_check( nf90_def_var(ncid,"Tpmsqr",NF90_REAL, dimids_zu,Tpmsqr_vid) )
+      call netcdf_check( nf90_put_att(ncid,Tpmsqr_vid,"title","Mean squared particle temp <Tp^2>") )
+
+      call netcdf_check( nf90_def_var(ncid,"Tfmean",NF90_REAL, dimids_zu,Tfmean_vid) )
+      call netcdf_check( nf90_put_att(ncid,Tfmean_vid,"title","Horiz. avg. fluid temp at particle") )
+
+      call netcdf_check( nf90_def_var(ncid,"qfmean",NF90_REAL, dimids_zu,qfmean_vid) )
+      call netcdf_check( nf90_put_att(ncid,qfmean_vid,"title","Horiz. avg. fluid qv at particle") )
+
+      call netcdf_check( nf90_def_var(ncid,"radmean",NF90_REAL, dimids_zu,radmean_vid) )
+      call netcdf_check( nf90_put_att(ncid,radmean_vid,"title","Horiz. avg. particle radius") )
+
+      call netcdf_check( nf90_def_var(ncid,"rad2mean",NF90_REAL, dimids_zu,rad2mean_vid) )
+      call netcdf_check( nf90_put_att(ncid,rad2mean_vid,"title","Mean squared particle radius <rp^2>") )
+
+      call netcdf_check( nf90_def_var(ncid,"qstarm",NF90_REAL, dimids_zu,qstarm_vid) )
+      call netcdf_check( nf90_put_att(ncid,qstarm_vid,"title","Horiz. avg. qstar") )
+
       call netcdf_check( nf90_enddef(ncid) )
 
       his_counter = 1
@@ -167,6 +203,10 @@ subroutine write_his_netcdf
 
       call netcdf_check( nf90_put_var(ncid, time_vid, real(time),start=(/his_counter/)) )
       call netcdf_check( nf90_put_var(ncid, dt_vid, real(dt),start=(/his_counter/)) )
+
+      call netcdf_check( nf90_put_var(ncid, utau_vid, real(utau),start=(/his_counter/)) )
+      call netcdf_check( nf90_put_var(ncid, uwsfc_vid, real(uwsfc),start=(/his_counter/)) )
+      call netcdf_check( nf90_put_var(ncid, tnumpart_vid, real(tnumpart),start=(/his_counter/)) )
 
       call netcdf_check( nf90_put_var(ncid, zu_vid, real(zz(1:nnz)),start=(/1, his_counter/)) )
       call netcdf_check( nf90_put_var(ncid, zw_vid, real(z(0:nnz)),start=(/1, his_counter/)) )
@@ -214,6 +254,14 @@ subroutine write_his_netcdf
       call netcdf_check( nf90_put_var(ncid,Tpsrc_vid,real(Tpsrc(1:nnz)),start=(/1, his_counter/)) )
       call netcdf_check( nf90_put_var(ncid,TEpsrc_vid,real(TEpsrc(1:nnz)),start=(/1, his_counter/)) )
       call netcdf_check( nf90_put_var(ncid,Hpsrc_vid,real(Hpsrc(1:nnz)),start=(/1, his_counter/)) )
+
+      call netcdf_check( nf90_put_var(ncid,Tpmean_vid,real(Tpmean(1:nnz)),start=(/1, his_counter/)) )
+      call netcdf_check( nf90_put_var(ncid,Tpmsqr_vid,real(Tpmsqr(1:nnz)),start=(/1, his_counter/)) )
+      call netcdf_check( nf90_put_var(ncid,Tfmean_vid,real(Tfmean(1:nnz)),start=(/1, his_counter/)) )
+      call netcdf_check( nf90_put_var(ncid,qfmean_vid,real(qfmean(1:nnz)),start=(/1, his_counter/)) )
+      call netcdf_check( nf90_put_var(ncid,radmean_vid,real(radmean(1:nnz)),start=(/1, his_counter/)) )
+      call netcdf_check( nf90_put_var(ncid,rad2mean_vid,real(rad2mean(1:nnz)),start=(/1, his_counter/)) )
+      call netcdf_check( nf90_put_var(ncid,qstarm_vid,real(qstarm(1:nnz)),start=(/1, his_counter/)) )
 
       his_counter = his_counter + 1
 
