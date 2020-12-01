@@ -6790,9 +6790,9 @@ c
       vp1msqr(iz) = sqrt(stat(iz,15)/stat(iz,11)-vp1mean(iz)**2)
       vp2msqr(iz) = sqrt(stat(iz,16)/stat(iz,11)-vp2mean(iz)**2)
       vp3msqr(iz) = sqrt(stat(iz,17)/stat(iz,11)-vp3mean(iz)**2)
-      m1src(iz) = stat(iz,18)*fnxy
-      m2src(iz) = stat(iz,19)*fnxy
-      m3src(iz) = stat(iz,20)*fnxy
+      m1src(iz) = -stat(iz,18)*fnxy
+      m2src(iz) = -stat(iz,19)*fnxy
+      m3src(iz) = -stat(iz,20)*fnxy
       uw_tot(iz) = uwle(iz) + uwsb(iz)
       vw_tot(iz) = vwle(iz) + vwsb(iz)
       upwpm(iz) = stat(iz,21)/stat(iz,11)-(vp1mean(iz)*vp3mean(iz))
@@ -6801,7 +6801,7 @@ c
       Tfmean(iz) = stat(iz,24)/stat(iz,11)
       qfmean(iz) = stat(iz,25)/stat(iz,11)
       wpTpm(iz) = stat(iz,26)/stat(iz,11)-(Tpmean(iz)*vp3mean(iz))
-      Tpsrc(iz) = stat(iz,27)*fnxy
+      Tpsrc(iz) = -stat(iz,27)*fnxy
       radmean(iz) = stat(iz,28)/stat(iz,11) 
       rad2mean(iz)= stat(iz,29)/stat(iz,11)
  
@@ -6810,8 +6810,8 @@ c
       phimp(iz) = stat(iz,30)/xl/yl/dzw(iz)/rhoa
       phimw(iz) = stat(iz,31)/xl/yl/dzw(iz)/rhoa
  
-      Hpsrc(iz) = stat(iz,32)*fnxy
-      TEpsrc(iz) = stat(iz,33)*fnxy
+      Hpsrc(iz) = -stat(iz,32)*fnxy
+      TEpsrc(iz) = -stat(iz,33)*fnxy
       qstarm(iz) = stat(iz,34)/stat(iz,11)
 
 c

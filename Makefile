@@ -17,14 +17,11 @@ SRC = 	fft.f \
 OBJS = $(addsuffix .o, $(basename $(SRC)))
 
 
-all:	$(OBJS)
-	$(FORTRAN) les.F -o lesmpi.a  $(OBJS) $(FLAGS) $(OUTPUTINC) $(OUTPUTLIB) $(LINKOPTS)
+lesmpi.a:	$(OBJS)
+		$(FORTRAN) les.F -o lesmpi.a  $(OBJS) $(FLAGS) $(OUTPUTINC) $(OUTPUTLIB) $(LINKOPTS)
 
 %.o:	
 	$(FORTRAN) $(FLAGS) $(SRC) -c $(OUTPUTINC) $(OUTPUTLIB)
-
-debug:  $(OBJS)
-	$(FORTRAN) $(FLAGS) $(DEBUG_FLAGS) $(INCLUDE) les.F $(OFILES)
 
 clean:
 	rm -f *.o *.mod lesmpi.a mach.file *.*~
