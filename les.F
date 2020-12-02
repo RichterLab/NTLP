@@ -5,6 +5,7 @@ c
       use particles
       use con_data
       use con_stats
+      use netcdf_io
       include 'mpif.h'
 c
 c ------------- definition of internal flags
@@ -94,6 +95,9 @@ c
          case = case_inp
          call init
          call setup(it)
+         if (inetcdf .eq. 1) then
+         call netcdf_init
+         end if
 
          call particle_setup
          call particle_init 
@@ -325,8 +329,13 @@ c
           if(l_root) call print(6,it,1,nnz)
       endif
       if(l_root) then
-         if(mhis  .and. istage .eq. 1)  call write_his(itop)
-         if(mhis  .and. istage .eq. 1 .and. mtape) call close_his
+         if (inetcdf .eq. 1) then
+            if(mhis  .and. istage .eq. 1)  call write_his_netcdf
+         if(mhis  .and. istage .eq. 1 .and. mtape) call close_his_netcdf
+         else
+            if(mhis  .and. istage .eq. 1)  call write_his(itop)
+            if(mhis  .and. istage .eq. 1 .and. mtape) call close_his
+         end if
       endif
 c
  8999 continue
@@ -6599,6 +6608,7 @@ c
       use fields
       use con_data
       use con_stats
+      use netcdf_io
 c
       data ionce /0/
       save ionce
@@ -6658,7 +6668,11 @@ c
 c --------- decide whether history files are to be saved
 c
       if((ihst .gt. 0) .and. (it .ge. it_his_nxt)) then
-         call open_his(it)
+         if (inetcdf .eq. 1) then
+            call open_his_netcdf
+         else
+            call open_his(it)
+         end if
          it_his_nxt = it_his_nxt + itape
       endif
 c
@@ -7144,9 +7158,9 @@ c
       vp1msqr(iz) = sqrt(stat(iz,15)/stat(iz,11)-vp1mean(iz)**2)
       vp2msqr(iz) = sqrt(stat(iz,16)/stat(iz,11)-vp2mean(iz)**2)
       vp3msqr(iz) = sqrt(stat(iz,17)/stat(iz,11)-vp3mean(iz)**2)
-      m1src(iz) = stat(iz,18)*fnxy
-      m2src(iz) = stat(iz,19)*fnxy
-      m3src(iz) = stat(iz,20)*fnxy
+      m1src(iz) = -stat(iz,18)*fnxy
+      m2src(iz) = -stat(iz,19)*fnxy
+      m3src(iz) = -stat(iz,20)*fnxy
       uw_tot(iz) = uwle(iz) + uwsb(iz)
       vw_tot(iz) = vwle(iz) + vwsb(iz)
       upwpm(iz) = stat(iz,21)/stat(iz,11)-(vp1mean(iz)*vp3mean(iz))
@@ -7155,7 +7169,7 @@ c
       Tfmean(iz) = stat(iz,24)/stat(iz,11)
       qfmean(iz) = stat(iz,25)/stat(iz,11)
       wpTpm(iz) = stat(iz,26)/stat(iz,11)-(Tpmean(iz)*vp3mean(iz))
-      Tpsrc(iz) = stat(iz,27)*fnxy
+      Tpsrc(iz) = -stat(iz,27)*fnxy
       radmean(iz) = stat(iz,28)/stat(iz,11) 
       rad2mean(iz)= stat(iz,29)/stat(iz,11)
  
@@ -7164,8 +7178,8 @@ c
       Nc(iz) = stat(iz,30)/xl/yl/dzw(iz)
       ql(iz) = stat(iz,31)/xl/yl/dzw(iz)/rhoa
  
-      Hpsrc(iz) = stat(iz,32)*fnxy
-      TEpsrc(iz) = stat(iz,33)*fnxy
+      Hpsrc(iz) = -stat(iz,32)*fnxy
+      TEpsrc(iz) = -stat(iz,33)*fnxy
       qstarm(iz) = stat(iz,34)/stat(iz,11)
 
       !Doesn't need averaging if basing radiation source on average ql:
@@ -14816,7 +14830,8 @@ c       Add the current event to the histogram
      +         method,idebug,iz_space,ivis0,ifix_dt,new_vis,iDNS,
      +         icouple,iTcouple,iHcouple,ievap,ifields,ilin,
      +         ineighbor,icoalesce,ipart_method,
-     +         ipartdiff,isfs,iexner,ilongwave
+     +         ipartdiff,isfs,iexner,ilongwave,
+     +         inetcdf
 
 
       namelist /constants/ rhoa, nuf, Cpa, Pra, Sc,

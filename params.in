@@ -33,6 +33,7 @@ ipartdiff = 1
 isfs = 2   !isfs=1 is simple random walk, isfs=2 is Weil et al. (2004) particle subgrid
 iexner = 1  !iexner = 1 applies a correction to part%Tf to account for conversion b/w potential temp and temp. (need in PBL)
 ilongwave = 1   !Use simple longwave radiation scheme when clouds/fog present
+inetcdf = 1  !Set to 1 to output history data to netcdf format, otherwise original binary format
 /
 
 !Grid and domain parameters
