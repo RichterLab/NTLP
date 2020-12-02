@@ -149,7 +149,7 @@ c     --- SFS velocity calculation ---------
       real :: Rep_avg,part_grav(3)
       real :: radavg,radmin,radmax,tempmin,tempmax,qmin,qmax
       real :: vp_init(3),Tp_init,radius_init
-      real :: pdf_factor
+      real :: pdf_factor,pdf_prob
       integer*8 :: mult_init,mult_factor,mult_a,mult_c
 
       real :: avgres=0,tavgres=0
@@ -11700,7 +11700,7 @@ c
       use pars
       implicit none
       real :: top,bot,ran2
-      real :: xp_init(3),m_s,Os,rad_init,prob
+      real :: xp_init(3),m_s,Os,rad_init
       real :: S,M
       integer :: idx,procidx,idx_old,procidx_old
       integer*8 :: mult
@@ -11732,12 +11732,10 @@ c
 
          call destroy_particle
 
-         !Immediately create a new one
-         prob = pdf_factor/(1 + pdf_factor)
 
          !Use this to choose which to generate:
 !!!!!! Double Lognormal
-         if (ran2(iseed) .gt. prob) then   !It's accumulation mode
+         if (ran2(iseed) .gt. pdf_prob) then   !It's accumulation mode
             S = 0.5
             M = -1.95
             Os = 0.5
@@ -14090,7 +14088,7 @@ c        part%qinf = 0.0 ! Brian 7/14/14
       real :: xv,yv,zv,ran2,deltaz
       real :: maxx,maxy,maxz
       real :: xp_init(3),rad_init,m_s,Os
-      real :: S,M,prob
+      real :: S,M
       integer*8 :: num_a,num_c,totnum_a,totnum_c
 
       !Create the seed for the random number generator:
@@ -14107,16 +14105,6 @@ c        part%qinf = 0.0 ! Brian 7/14/14
       if (myid == 0) then
       numpart = numpart + MOD(tnumpart,numprocs)
       endif
-
-      !Lognormal distribution parameters
-      mult_factor = 200
-      pdf_factor = 0.02*real(mult_factor)
-      prob = pdf_factor/(1 + pdf_factor)
-
-      !Adjust the multiplicity so that the total number of particles
-      !isn't altered:
-      mult_c = mult_init/mult_factor
-      mult_a = mult_init/(1.0-prob)*(1 - prob/real(mult_factor))
 
       !Initialize the linked list of particles:
       nullify(part,first_particle)
@@ -14147,8 +14135,9 @@ c        part%qinf = 0.0 ! Brian 7/14/14
       !Generate a double lognormal from individual coarse & accumulation modes
       !call double_lognormal_dist(rad_init,m_s,Os,mult)  !First attempt!
 
+
       !Generate
-      if (ran2(iseed) .gt. prob) then   !It's accumulation mode
+      if (ran2(iseed) .gt. pdf_prob) then   !It's accumulation mode
          S = 0.5
          M = -1.95
          Os = 0.5
@@ -14225,7 +14214,7 @@ c        part%qinf = 0.0 ! Brian 7/14/14
       real :: d1,d2,err,dhalf,ftest,CDF
       real :: daerosol
       real :: a,b,c,d,p,q
-      integer :: iter,prob
+      integer :: iter
 
       !Use bisection to get the radius based on the CDF contained in
       !function cdf_func
@@ -14249,7 +14238,7 @@ c        part%qinf = 0.0 ! Brian 7/14/14
          iter = iter + 1
 
          if (iter .gt. 1000) then
-            d1 = 1.0e-7
+            d1 = 0.1
             write(*,'(a12)') 'CDF convergence error'
             exit
          end if
@@ -14310,7 +14299,7 @@ c        part%qinf = 0.0 ! Brian 7/14/14
       real :: d1,d2,dtmp
       real :: daerosol
       real :: a,b,c,d,p,q
-      integer :: iter,prob
+      integer :: iter
 
       !choose aerosol diameter from uniform distribution
       d1 = -7.7
@@ -14348,12 +14337,12 @@ c        part%qinf = 0.0 ! Brian 7/14/14
       include 'mpif.h'
 
       real, intent(inout) :: rad_init,m_s,Os
-      real :: ran2,cdf_func
+      real :: ran2,cdf_func,prob
       real :: M_a,S_a,M_c,S_c,totarea
       real :: d1,d2,err,dhalf,ftest,CDF
       real :: daerosol
       real :: a,b,c,d,p,q
-      integer :: iter,prob
+      integer :: iter
       integer*8 :: mult
 
       !Set the parameters of the two lognormals:
@@ -14460,6 +14449,18 @@ c        part%qinf = 0.0 ! Brian 7/14/14
 
       !Also assign the x,y,z max and mins to track particles leaving
       call set_bounds
+
+
+      !Lognormal distribution parameters  -- Must be called even on
+      !restart!
+      mult_factor = 200
+      pdf_factor = 0.02*real(mult_factor)
+      pdf_prob = pdf_factor/(1 + pdf_factor)
+
+      !Adjust the multiplicity so that the total number of particles
+      !isn't altered:
+      mult_c = mult_init/mult_factor
+      mult_a = mult_init/(1.0-pdf_prob)*(1 - pdf_prob/real(mult_factor))
 
 
       call set_binsdata(bins_rad,histbins+2,1.0e-8,1.0e-3)
