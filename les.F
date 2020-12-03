@@ -95,7 +95,9 @@ c
          case = case_inp
          call init
          call setup(it)
+         if (inetcdf .eq. 1) then
          call netcdf_init
+         end if
 
          if (ispray==1) then
          call particle_setup

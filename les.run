@@ -18,6 +18,7 @@ cd $homedir
 
 module load mvapich2
 module load intel
+module load netcdf
 
 imachine=0
 echo $imachine > ./mach.file
