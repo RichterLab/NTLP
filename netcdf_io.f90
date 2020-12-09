@@ -5,9 +5,10 @@ integer :: ncid
 integer :: time_dimid,zu_vid,zu_dimid,s_dimid
 integer :: time_vid,dt_vid
 integer :: utau_vid,uwsfc_vid
+integer :: Tsfc_vid,qsfc_vid,wtsfc_vid,wqsfc_vid
 integer :: tnumpart_vid
 integer :: zw_vid,zw_dimid
-integer :: uxym_vid,vxym_vid,wxym_vid,txym_vid
+integer :: uxym_vid,vxym_vid,wxym_vid,txym_vid,RHxym_vid,tempxym_vid,exym_vid
 integer :: ups_vid,vps_vid,wps_vid,tps_vid
 integer :: wtle_vid,wtsb_vid
 integer :: uwle_vid,uwsb_vid
@@ -61,6 +62,7 @@ subroutine netcdf_init
       dimids_zu_s = (/ zu_dimid, s_dimid, time_dimid/)
       dimids_zw_s = (/ zw_dimid, s_dimid, time_dimid/)
 
+!!! Single quantities
       call netcdf_check( nf90_def_var(ncid,"time",NF90_REAL,dimids,time_vid) )
       call netcdf_check( nf90_put_att(ncid,time_vid,"title","Simulation time") )
 
@@ -76,6 +78,20 @@ subroutine netcdf_init
       call netcdf_check( nf90_def_var(ncid, "tnumpart", NF90_REAL, dimids,tnumpart_vid) )
       call netcdf_check( nf90_put_att(ncid,tnumpart_vid,"title","Total number of particles") )
 
+      call netcdf_check( nf90_def_var(ncid, "Tsfc", NF90_REAL, dimids,Tsfc_vid) )
+      call netcdf_check( nf90_put_att(ncid,Tsfc_vid,"title","Surface temperature") )
+
+      call netcdf_check( nf90_def_var(ncid, "qsfc", NF90_REAL, dimids,qsfc_vid) )
+      call netcdf_check( nf90_put_att(ncid,qsfc_vid,"title","Surface specific humidity qv") )
+
+      call netcdf_check( nf90_def_var(ncid, "wtsfc", NF90_REAL, dimids,wtsfc_vid) )
+      call netcdf_check( nf90_put_att(ncid,wtsfc_vid,"title","Surface sensible heat flux <w'T'>") )
+
+      call netcdf_check( nf90_def_var(ncid, "wqsfc", NF90_REAL, dimids,wqsfc_vid) )
+      call netcdf_check( nf90_put_att(ncid,wqsfc_vid,"title","Surface vapor flux <w'q'>") )
+
+
+!!! Profiles
       call netcdf_check( nf90_def_var(ncid, "zu", NF90_REAL, dimids_zu,zu_vid) )
       call netcdf_check( nf90_put_att(ncid,zu_vid,"title","z levels at u-points") )
 
@@ -92,7 +108,16 @@ subroutine netcdf_init
       call netcdf_check( nf90_put_att(ncid,wxym_vid,"title","Horiz. avg. w vel") )
 
       call netcdf_check( nf90_def_var(ncid,"txym",NF90_REAL, dimids_zu_s,txym_vid) )
-      call netcdf_check( nf90_put_att(ncid,txym_vid,"title","Horiz. avg. scalars") )
+      call netcdf_check( nf90_put_att(ncid,txym_vid,"title","Horiz. avg. scalars, potential temp, specific humidity,...") )
+
+      call netcdf_check( nf90_def_var(ncid,"exym",NF90_REAL, dimids_zw,exym_vid) )
+      call netcdf_check( nf90_put_att(ncid,exym_vid,"title","Horiz. avg. subgrid energy e") )
+
+      call netcdf_check( nf90_def_var(ncid,"RHxym",NF90_REAL, dimids_zu,RHxym_vid) )
+      call netcdf_check( nf90_put_att(ncid,RHxym_vid,"title","Horiz. avg. relative humidity") )
+
+      call netcdf_check( nf90_def_var(ncid,"tempxym",NF90_REAL, dimids_zu,tempxym_vid) )
+      call netcdf_check( nf90_put_att(ncid,tempxym_vid,"title","Horiz. avg. temperature") )
 
       call netcdf_check( nf90_def_var(ncid,"ups",NF90_REAL, dimids_zu,ups_vid) )
       call netcdf_check( nf90_put_att(ncid,ups_vid,"title","Fluctuating velocity <u'^2>") )
@@ -207,6 +232,10 @@ subroutine write_his_netcdf
       call netcdf_check( nf90_put_var(ncid, utau_vid, real(utau),start=(/his_counter/)) )
       call netcdf_check( nf90_put_var(ncid, uwsfc_vid, real(uwsfc),start=(/his_counter/)) )
       call netcdf_check( nf90_put_var(ncid, tnumpart_vid, real(tnumpart),start=(/his_counter/)) )
+      call netcdf_check( nf90_put_var(ncid, Tsfc_vid, real(tsfcc(1)),start=(/his_counter/)) )
+      call netcdf_check( nf90_put_var(ncid, qsfc_vid, real(tsfcc(2)),start=(/his_counter/)) )
+      call netcdf_check( nf90_put_var(ncid, wtsfc_vid, real(wtsfc(1)),start=(/his_counter/)) )
+      call netcdf_check( nf90_put_var(ncid, wqsfc_vid, real(wtsfc(2)),start=(/his_counter/)) )
 
       call netcdf_check( nf90_put_var(ncid, zu_vid, real(zz(1:nnz)),start=(/1, his_counter/)) )
       call netcdf_check( nf90_put_var(ncid, zw_vid, real(z(0:nnz)),start=(/1, his_counter/)) )
@@ -215,6 +244,9 @@ subroutine write_his_netcdf
       call netcdf_check( nf90_put_var(ncid,vxym_vid,real(vxym(1:nnz)),start=(/1, his_counter/)) )
       call netcdf_check( nf90_put_var(ncid,wxym_vid,real(wxym(0:nnz)),start=(/1, his_counter/)) )
       call netcdf_check( nf90_put_var(ncid,txym_vid,real(txym(1:nnz,1:nscl)),start=(/1,1,his_counter/)) )
+      call netcdf_check( nf90_put_var(ncid,exym_vid,real(e_mn(0:nnz)),start=(/1, his_counter/)) )
+      call netcdf_check( nf90_put_var(ncid,RHxym_vid,real(RHxym(1:nnz)),start=(/1,his_counter/)) )
+      call netcdf_check( nf90_put_var(ncid,tempxym_vid,real(tempxym(1:nnz)),start=(/1,his_counter/)) )
 
       call netcdf_check( nf90_put_var(ncid,ups_vid,real(ups(1:nnz)),start=(/1, his_counter/)) )
       call netcdf_check( nf90_put_var(ncid,vps_vid,real(vps(1:nnz)),start=(/1, his_counter/)) )

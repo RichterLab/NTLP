@@ -67,7 +67,8 @@ c     ----------------------------------------------------------------------
      +     taut3m(:,:,:), t_grnd(:,:,:)
 c     ----------------------------------------------------------------------
       real ::       u_mn(0:maxnz1), v_mn(0:maxnz1),
-     +     w_mn(0:maxnz1), t_mn(0:maxnz1,nscl), alphaC(0:maxnz1,nscl)
+     +     w_mn(0:maxnz1), t_mn(0:maxnz1,nscl), alphaC(0:maxnz1,nscl),
+     +     e_mn(0:maxnz1)
 c     ----------------------------------------------------------------------
       real ::       dzw(0:maxnz2), dzu(0:maxnz2),
      +     dzw_i(0:maxnz2), dzu_i(0:maxnz2)
@@ -311,7 +312,7 @@ c ----------------------------------------------------------------------
      +           Hpsrc(maxnz),TEpsrc(maxnz),
      +           qstarm(maxnz),
      +           trip(maxnz),TpSq(maxnz),Tpdqp(maxnz),
-     +           radtend(maxnz)
+     +           radtend(maxnz),RHxym(maxnz),tempxym(maxnz)
         real ::  xkn(maxnx),ykn(maxny),
      +           xk(maxnx),yk(maxny),
      +           xks(maxnx2,maxny),wavexy(maxnx2,maxny)
@@ -353,7 +354,7 @@ c ----------------------------------------------------------------------
      +           Hpsrc(:), TEpsrc(:),
      +           qstarm(:),
      +           trip(:),TpSq(:),Tpdqp(:),
-     +           radtend(:)
+     +           radtend(:),RHxym(:),tempxym(:)
         real, pointer ::  
      +           xkn(:), ykn(:), xk(:), yk(:), xks(:,:), wavexy(:,:)
         real, pointer ::  
@@ -449,6 +450,8 @@ c
              TpSq => c_s%TpSq; isize = isize + size(TpSq)
              Tpdqp => c_s%Tpdqp; isize = isize + size(Tpdqp)
              radtend => c_s%radtend; isize = isize + size(radtend)
+             RHxym => c_s%RHxym; isize = isize + size(RHxym)
+             tempxym => c_s%tempxym; isize = isize + size(tempxym)
 
 
              xkn     => c_s%xkn

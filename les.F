@@ -2903,11 +2903,13 @@ c
       real sfc_flx(2+nscl)
 c
 
-          if (time .gt. 3600.0) then
-             tsfcc(1) = surf_temp
-          else
-             tsfcc(1)  = 284.0
-          end if
+
+!! To change the lower surface temperature at some specified time
+!          if (time .gt. 3600.0) then
+!             tsfcc(1) = surf_temp
+!          else
+!             tsfcc(1)  = 284.0
+!          end if
 
 
       iz   = 1
@@ -4128,10 +4130,22 @@ c
       use con_data
       use con_stats
 c
+c
+c -------- set e to minimum value 
+c
+      do iz=izs-1,ize+1
+         do iy=iys,iye
+         do ix=1,nnx
+            e(ix,iy,iz )=amax1(e(ix,iy,iz ),sml_eg)
+         enddo
+         enddo
+      enddo
+
       do iz=0,nnz+1
          u_mn(iz)   = 0.0
          v_mn(iz)   = 0.0
          w_mn(iz)   = 0.0
+         e_mn(iz)   = 0.0
          engz(iz)   = 0.0
          engsbz(iz) = 0.0
          divz(iz)   = 0.0
@@ -4153,12 +4167,14 @@ c
             u_mn(iz) = u_mn(iz) + u(ix,iy,iz)
             v_mn(iz) = v_mn(iz) + v(ix,iy,iz)
             w_mn(iz) = w_mn(iz) + w(ix,iy,iz)
+            e_mn(iz) = e_mn(iz) + e(ix,iy,iz)
 
          enddo
          enddo
          u_mn(iz) = u_mn(iz)*fnxy
          v_mn(iz) = v_mn(iz)*fnxy
          w_mn(iz) = w_mn(iz)*fnxy
+         e_mn(iz) = e_mn(iz)*fnxy
          do iscl=1,nscl
             t_mn(iz,iscl) = 0.0
             alphaC(iz,iscl) = 0.0
@@ -4175,19 +4191,10 @@ c
       call mpi_sum_z(u_mn(0),i_root,myid,nnzp1+1,1)
       call mpi_sum_z(v_mn(0),i_root,myid,nnzp1+1,1)
       call mpi_sum_z(w_mn(0),i_root,myid,nnzp1+1,1)
+      call mpi_sum_z(e_mn(0),i_root,myid,nnzp1+1,1)
       do iscl=1,nscl
          call mpi_sum_z(t_mn(0,iscl),i_root,myid,nnzp1+1,1)
          call mpi_sum_z(alphaC(0,iscl),i_root,myid,nnzp1+1,1)
-      enddo
-c
-c -------- set e to minimum value 
-c
-      do iz=izs-1,ize+1
-         do iy=iys,iye
-         do ix=1,nnx
-            e(ix,iy,iz )=amax1(e(ix,iy,iz ),sml_eg)
-         enddo
-         enddo
       enddo
 c
 c -------------- get terms which contribute to mean pressure
@@ -5309,6 +5316,8 @@ c
 
          !Assuming tsfcc(2) is giving RH:
 
+         surf_temp = tsfcc(1)
+
          RHB = surf_RH/100.0
 
          tsfcc(2) = RHB*Mw/Ru/tsfcc(1)*mod_Magnus(tsfcc(1))/rhoa
@@ -5809,6 +5818,7 @@ c
          divz(iz) = 0.0
       enddo
 
+      !!!! Use for the C-FOG fog LCM case:
       !Parameters from Charlotte's C-FOG profile
       !z_switch = 93.5
       !t_switch = 284.5
@@ -5817,15 +5827,25 @@ c
       !q_surf = 0.0081199
 
       !Now play with them
-      z_switch = 30.0
-      t_switch = 284.05
-      q_switch = 0.00811
-      t_surf = 284.0
-      q_surf = 0.00823
+      !z_switch = 30.0
+      !t_switch = 284.05
+      !q_switch = 0.00811
+      !t_surf = 284.0
+      !q_surf = 0.00823
+
+   
+      z_switch = 80.0
+      t_switch = 300.0
+      t_surf = 300.0
+      q_switch = 0.021234
+      q_surf = 0.021234
 
       !Slopes below the inversion
-      slope_t = (t_switch-t_surf)/z_switch
-      slope_q = (q_switch-q_surf)/z_switch
+      !slope_t = (t_switch-t_surf)/z_switch
+      !slope_q = (q_switch-q_surf)/z_switch
+
+      slope_t = 0.0
+      slope_q = 0.0
 c
       do iz=izs,ize
 
@@ -6955,8 +6975,9 @@ c ------- indices for indexing array stat(.,.)
 c         js = number of non-scalar stats
 c         ns = number of scalar stats
 c
-      parameter(js = 34, ns = 5, nstat = js + ns*nscl)   !Brian 7/30/14  js=25->26
+      parameter(js = 35, ns = 5, nstat = js + ns*nscl)   !Brian 7/30/14  js=25->26
       real stat(1:nnz,nstat)
+      real RHtmp, Ttmp
 c
 c -------- stat(.,1) = u*u = ups
 c          stat(.,2) = v*v = vps
@@ -6992,6 +7013,8 @@ c          stat(.,31) = mass_w_sum
 c          stat(.,32) = Hpsrc
 c          stat(.,33) = TEpsrc
 c          stat(.,34) = qstarsum
+c          stat(.,35) = relative humidity
+c          stat(.,36) = temperature (NOT potential temp)
 c          stat(.,m1) = resolved scalar flux wt at zw = wtle
 c          stat(.,m2) = resolved scalar flux ut at zw = utle
 c          stat(.,m3) = resolved scalar flux vt at zw = vtle
@@ -7070,8 +7093,21 @@ c
          stat(iz,32) = stat(iz,32) + partHsrc(ix,iy,iz)
          stat(iz,33) = stat(iz,33) + partTEsrc(ix,iy,iz)
          stat(iz,34) = stat(iz,34) + qstarsum(ix,iy,iz)
+
+         if (iexner .eq. 1) then
+         Ttmp = t(ix,iy,1,iz)*
+     +  (psurf/(psurf-zz(iz)*rhoa*grav))**(-Rd/Cpa)
+         else
+         Ttmp = t(ix,iy,1,iz)
+         end if
+
+         RHtmp = Ttmp*
+     +   t(ix,iy,2,iz)*Ru/Mw/mod_magnus(Ttmp)*rhoa*100.0
+         stat(iz,35) = stat(iz,35) + RHtmp
+         stat(iz,36) = stat(iz,36) + Ttmp
       enddo
       enddo
+
 c
 c ------------ get scalar resolved fluxes and variances
 c
@@ -7182,8 +7218,12 @@ c
       TEpsrc(iz) = -stat(iz,33)*fnxy
       qstarm(iz) = stat(iz,34)/stat(iz,11)
 
+      RHxym(iz) = stat(iz,35)*fnxy
+      tempxym(iz) = stat(iz,36)*fnxy
+
       !Doesn't need averaging if basing radiation source on average ql:
       radtend(iz) = radsrc(iz)
+
 
 c
 c ------------ get scalar resolved fluxes and variances
@@ -11237,9 +11277,11 @@ c
       implicit none
       real :: top,bot,ran2
       real :: xp_init(3),m_s,Os,rad_init
-      real :: S,M
+      real :: S,M,pi
       integer :: idx,procidx,idx_old,procidx_old
       integer*8 :: mult
+
+      pi   = 4.0*atan(1.0)
 
       !Assumes domain goes from [0,xl),[0,yl),[0,zl]
       !Also maintain the number of particles on each proc
@@ -11269,28 +11311,30 @@ c
          call destroy_particle
 
 
-         !Use this to choose which to generate:
+!!!! Choose how to re-initialize. These are relevant for cloud simulations
+!!!! "Double lognormal" and "Uniform" refer to the dry aerosol size
+
 !!!!!! Double Lognormal
-         if (ran2(iseed) .gt. pdf_prob) then   !It's accumulation mode
-            S = 0.5
-            M = -1.95
-            Os = 0.5
-            mult = mult_a
-
-            !With these parameters, get m_s and rad_init from distribution
-            call lognormal_dist(rad_init,m_s,Os,M,S)
-
-          else  !It's coarse mode
-
-            S = 0.45
-            M = 0.0
-            Os = 1.0
-            mult = mult_c
-
-            !With these parameters, get m_s and rad_init from distribution
-            call lognormal_dist(rad_init,m_s,Os,M,S)
-
-          end if
+!         if (ran2(iseed) .gt. pdf_prob) then   !It's accumulation mode
+!            S = 0.5
+!            M = -1.95
+!            Os = 0.5
+!            mult = mult_a
+!
+!            !With these parameters, get m_s and rad_init from distribution
+!            call lognormal_dist(rad_init,m_s,Os,M,S)
+!
+!          else  !It's coarse mode
+!
+!            S = 0.45
+!            M = 0.0
+!            Os = 1.0
+!            mult = mult_c
+!
+!            !With these parameters, get m_s and rad_init from distribution
+!            call lognormal_dist(rad_init,m_s,Os,M,S)
+!
+!          end if
 
 !!!!! UNIFORM 
 !         if (ran2(iseed) .gt. 0.5) then
@@ -11302,29 +11346,40 @@ c
 !         call uniform_dist(rad_init,m_s,Os)
       
 
-         xp_init(1) = ran2(iseed)*(xmax-xmin) + xmin
-         xp_init(2) = ran2(iseed)*(ymax-ymin) + ymin
-         xp_init(3) = ran2(iseed)*(zi-zw1) + zw1
 
          !To save the one that gets written out by default
-         if (idx_old .eq. 1 .and. procidx_old .eq. 0) then
-            idx = 1
-            procidx = 0
+!         if (idx_old .eq. 1 .and. procidx_old .eq. 0) then
+!            idx = 1
+!            procidx = 0
+!
+!            !Force particle log output to be a coarse mode in fog layer -- "giant mode"
+!            S = 0.45
+!            M = 0.0
+!            Os = 1.0
+!            mult = mult_c
+!
+!            !With these parameters, get m_s and rad_init from distribution
+!            call lognormal_dist(rad_init,m_s,Os,M,S)
+!            xp_init(3) = 10.0
+!
+!         else
+!            idx = 2
+!            procidx = myid
+!         end if
 
-            !Force particle log output to be a coarse mode in fog layer -- "giant mode"
-            S = 0.45
-            M = 0.0
-            Os = 1.0
-            mult = mult_c
 
-            !With these parameters, get m_s and rad_init from distribution
-            call lognormal_dist(rad_init,m_s,Os,M,S)
-            xp_init(3) = 10.0
+!!! Re-initialize more appropriate for sea spray
 
-         else
-            idx = 2
-            procidx = myid
-         end if
+         Os = 1.0
+         mult = mult_init
+         rad_init = radius_init   ! From the params.in file
+         m_s = rad_init**3*pi*4.0/3.0*rhow*Sal  !Using the salinity specified in params.in
+         
+         Tp_init = tsfcc(1)
+
+         xp_init(1) = ran2(iseed)*(xmax-xmin) + xmin
+         xp_init(2) = ran2(iseed)*(ymax-ymin) + ymin
+         xp_init(3) = 1.0  !New particles are initialized at z = 1m
 
 
          call create_particle(xp_init,vp_init,
@@ -13661,10 +13716,10 @@ c        part%qinf = 0.0 ! Brian 7/14/14
 
       !From params file -- all particles identical
       !rad_init = radius_init
-      !m_s = Sal/1000.0*2.0/3.0*pi2*radius_init**3*rhow
+      !m_s = Sal*2.0/3.0*pi2*radius_init**3*rhow
 
       !call exponential_dist(rad_init)  !From Shima et al. (2009) test case
-      !m_s = Sal/1000.0*4.0/3.0*pi*radius_init**3*rhow
+      !m_s = Sal*4.0/3.0*pi*radius_init**3*rhow
 
 
 !!!!!!! DOUBLE LOGNORMAL
@@ -13673,28 +13728,28 @@ c        part%qinf = 0.0 ! Brian 7/14/14
 
 
       !Generate
-      if (ran2(iseed) .gt. pdf_prob) then   !It's accumulation mode
-         S = 0.5
-         M = -1.95
-         Os = 0.5
-         mult = mult_a
-
-         !With these parameters, get m_s and rad_init from distribution
-         call lognormal_dist(rad_init,m_s,Os,M,S)
-         num_a = num_a + 1
-
-       else  !It's coarse mode
-
-         S = 0.45
-         M = 0.0
-         Os = 1.0
-         mult = mult_c
-
-         !With these parameters, get m_s and rad_init from distribution
-         call lognormal_dist(rad_init,m_s,Os,M,S)
-         num_c = num_c + 1
-
-       end if
+!      if (ran2(iseed) .gt. pdf_prob) then   !It's accumulation mode
+!         S = 0.5
+!         M = -1.95
+!         Os = 0.5
+!         mult = mult_a
+!
+!         !With these parameters, get m_s and rad_init from distribution
+!         call lognormal_dist(rad_init,m_s,Os,M,S)
+!         num_a = num_a + 1
+!
+!       else  !It's coarse mode
+!
+!         S = 0.45
+!         M = 0.0
+!         Os = 1.0
+!         mult = mult_c
+!
+!         !With these parameters, get m_s and rad_init from distribution
+!         call lognormal_dist(rad_init,m_s,Os,M,S)
+!         num_c = num_c + 1
+!
+!       end if
 
 
 
@@ -13708,18 +13763,31 @@ c        part%qinf = 0.0 ! Brian 7/14/14
 !      mult = mult_init
 !      call uniform_dist(rad_init,m_s,Os)
 
-       !Force the output particle to be a coarse mode particle
-       if (idx==1 .and. myid==0) then
-            !Force particle log output to be a coarse mode in fog layer -- "giant mode"
-            S = 0.45
-            M = 0.0
-            Os = 1.0
-            mult = mult_c
+!       !Force the output particle to be a coarse mode particle
+!       if (idx==1 .and. myid==0) then
+!            !Force particle log output to be a coarse mode in fog layer -- "giant mode"
+!            S = 0.45
+!            M = 0.0
+!            Os = 1.0
+!            mult = mult_c
+!
+!            !With these parameters, get m_s and rad_init from distribution
+!            call lognormal_dist(rad_init,m_s,Os,M,S)
+!            xp_init(3) = 10.0
+!        end if
 
-            !With these parameters, get m_s and rad_init from distribution
-            call lognormal_dist(rad_init,m_s,Os,M,S)
-            xp_init(3) = 10.0
-        end if
+
+!!!!! More appropriate for sea spray:
+         Os = 1.0
+         mult = mult_init
+         rad_init = radius_init   ! From the params.in file
+         m_s = rad_init**3*pi2*2.0/3.0*rhow*Sal  !Using the salinity specified in params.in
+         
+         Tp_init = tsfcc(1)
+
+         xp_init(1) = ran2(iseed)*(xmax-xmin) + xmin
+         xp_init(2) = ran2(iseed)*(ymax-ymin) + ymin
+         xp_init(3) = ran2(iseed)*10.0  !Start particles between 0 and 10m
 
 
       call create_particle(xp_init,vp_init,
