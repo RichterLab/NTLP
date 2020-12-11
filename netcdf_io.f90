@@ -7,7 +7,7 @@ integer :: time_vid,dt_vid
 integer :: utau_vid,uwsfc_vid
 integer :: tnumpart_vid
 integer :: zw_vid,zw_dimid
-integer :: uxym_vid,vxym_vid,wxym_vid,txym_vid
+integer :: uxym_vid,vxym_vid,wxym_vid,txym_vid,exym_vid
 integer :: ups_vid,vps_vid,wps_vid,tps_vid
 integer :: wtle_vid,wtsb_vid
 integer :: uwle_vid,uwsb_vid
@@ -93,6 +93,9 @@ subroutine netcdf_init
 
       call netcdf_check( nf90_def_var(ncid,"txym",NF90_REAL, dimids_zu_s,txym_vid) )
       call netcdf_check( nf90_put_att(ncid,txym_vid,"title","Horiz. avg. scalars") )
+
+      call netcdf_check( nf90_def_var(ncid,"exym",NF90_REAL, dimids_zw,exym_vid) )
+      call netcdf_check( nf90_put_att(ncid,exym_vid,"title","Horiz. avg. subgrid energy e") )
 
       call netcdf_check( nf90_def_var(ncid,"ups",NF90_REAL, dimids_zu,ups_vid) )
       call netcdf_check( nf90_put_att(ncid,ups_vid,"title","Fluctuating velocity <u'^2>") )
@@ -215,6 +218,7 @@ subroutine write_his_netcdf
       call netcdf_check( nf90_put_var(ncid,vxym_vid,real(vxym(1:nnz)),start=(/1, his_counter/)) )
       call netcdf_check( nf90_put_var(ncid,wxym_vid,real(wxym(0:nnz)),start=(/1, his_counter/)) )
       call netcdf_check( nf90_put_var(ncid,txym_vid,real(txym(1:nnz,1:nscl)),start=(/1,1,his_counter/)) )
+      call netcdf_check( nf90_put_var(ncid,exym_vid,real(e_mn(0:nnz)),start=(/1, his_counter/)) )
 
       call netcdf_check( nf90_put_var(ncid,ups_vid,real(ups(1:nnz)),start=(/1, his_counter/)) )
       call netcdf_check( nf90_put_var(ncid,vps_vid,real(vps(1:nnz)),start=(/1, his_counter/)) )

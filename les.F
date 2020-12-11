@@ -3954,10 +3954,22 @@ c
       use con_data
       use con_stats
 c
+c
+c -------- set e to minimum value 
+c
+      do iz=izs-1,ize+1
+         do iy=iys,iye
+         do ix=1,nnx
+            e(ix,iy,iz )=amax1(e(ix,iy,iz ),sml_eg)
+         enddo
+         enddo
+      enddo
+
       do iz=0,nnz+1
          u_mn(iz)   = 0.0
          v_mn(iz)   = 0.0
          w_mn(iz)   = 0.0
+         e_mn(iz)   = 0.0
          engz(iz)   = 0.0
          engsbz(iz) = 0.0
          divz(iz)   = 0.0
@@ -3978,12 +3990,14 @@ c
             u_mn(iz) = u_mn(iz) + u(ix,iy,iz)
             v_mn(iz) = v_mn(iz) + v(ix,iy,iz)
             w_mn(iz) = w_mn(iz) + w(ix,iy,iz)
+            e_mn(iz) = e_mn(iz) + e(ix,iy,iz)
 
          enddo
          enddo
          u_mn(iz) = u_mn(iz)*fnxy
          v_mn(iz) = v_mn(iz)*fnxy
          w_mn(iz) = w_mn(iz)*fnxy
+         e_mn(iz) = e_mn(iz)*fnxy
          do iscl=1,nscl
             t_mn(iz,iscl) = 0.0
             do iy=iys,iye
@@ -3997,18 +4011,9 @@ c
       call mpi_sum_z(u_mn(0),i_root,myid,nnzp1+1,1)
       call mpi_sum_z(v_mn(0),i_root,myid,nnzp1+1,1)
       call mpi_sum_z(w_mn(0),i_root,myid,nnzp1+1,1)
+      call mpi_sum_z(e_mn(0),i_root,myid,nnzp1+1,1)
       do iscl=1,nscl
          call mpi_sum_z(t_mn(0,iscl),i_root,myid,nnzp1+1,1)
-      enddo
-c
-c -------- set e to minimum value 
-c
-      do iz=izs-1,ize+1
-         do iy=iys,iye
-         do ix=1,nnx
-            e(ix,iy,iz )=amax1(e(ix,iy,iz ),sml_eg)
-         enddo
-         enddo
       enddo
 c
 c -------------- get terms which contribute to mean pressure
