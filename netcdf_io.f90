@@ -1,6 +1,7 @@
 module netcdf_io
 implicit none
 
+
 integer :: ncid
 integer :: time_dimid,zu_vid,zu_dimid,s_dimid
 integer :: time_vid,dt_vid

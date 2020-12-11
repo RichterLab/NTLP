@@ -10507,9 +10507,6 @@ c
      +  (psurf/(psurf-part%xp(3)*rhoa*grav))**(-Rd/Cpa)
          end if
 
-        !DHR Debug:
-        part%sigm_s = part%radius
-
         diff(1:3) = part%vp - part%uf
         diffnorm = sqrt(diff(1)**2 + diff(2)**2 + diff(3)**2)
         Volp = pi2*2.0/3.0*part%radius**3
@@ -11717,7 +11714,7 @@ c       -----------------
         do ix =1,nnx
         do iy = iys,iye
            sigm_s(ix,iy,iz) = 2.0*e(ix,iy,iz)/3.0
-           vis_ss(ix,iy,iz) = vis_s(ix,iy,3,iz)
+           vis_ss(ix,iy,iz) = vis_s(ix,iy,2,iz)
            sigm_sdx(ix,iy,iz) =  sigm_s(ix,iy,iz)       !for xderiv
            sigm_sdy(ix,iy,iz) =  sigm_s(ix,iy,iz)       !for yderiv
 c       --------------------
