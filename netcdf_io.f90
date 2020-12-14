@@ -23,6 +23,7 @@ integer :: Tpmean_vid,Tpmsqr_vid
 integer :: Tfmean_vid,qfmean_vid
 integer :: radmean_vid,rad2mean_vid
 integer :: qstarm_vid
+integer :: Nc_vid,ql_vid
 integer :: dimids(1),dimids_zu(2),dimids_zw(2),dimids_zu_s(3),dimids_zw_s(3)
 integer :: his_counter
 character(len=80) :: path_netcdf_his
@@ -151,7 +152,7 @@ subroutine netcdf_init
       call netcdf_check( nf90_put_att(ncid,wtsb_vid,"title","Subgrid <w't'>") )
 
       call netcdf_check( nf90_def_var(ncid,"zconc",NF90_REAL, dimids_zu,zconc_vid) )
-      call netcdf_check( nf90_put_att(ncid,zconc_vid,"title","Particle concentration") )
+      call netcdf_check( nf90_put_att(ncid,zconc_vid,"title","Computational droplet number concentration") )
 
       call netcdf_check( nf90_def_var(ncid,"vp1mean",NF90_REAL, dimids_zu,vp1mean_vid) )
       call netcdf_check( nf90_put_att(ncid,vp1mean_vid,"title","Horiz. avg. particle velocity u") )
@@ -209,6 +210,12 @@ subroutine netcdf_init
 
       call netcdf_check( nf90_def_var(ncid,"qstarm",NF90_REAL, dimids_zu,qstarm_vid) )
       call netcdf_check( nf90_put_att(ncid,qstarm_vid,"title","Horiz. avg. qstar") )
+
+      call netcdf_check( nf90_def_var(ncid,"Nc",NF90_REAL, dimids_zu,Nc_vid) )
+      call netcdf_check( nf90_put_att(ncid,Nc_vid,"title","Horiz. avg. total number concentration") )
+
+      call netcdf_check( nf90_def_var(ncid,"ql",NF90_REAL, dimids_zu,ql_vid) )
+      call netcdf_check( nf90_put_att(ncid,ql_vid,"title","Horiz. avg. liquid droplet mixing ratio") )
 
       call netcdf_check( nf90_enddef(ncid) )
 
@@ -295,6 +302,8 @@ subroutine write_his_netcdf
       call netcdf_check( nf90_put_var(ncid,radmean_vid,real(radmean(1:nnz)),start=(/1, his_counter/)) )
       call netcdf_check( nf90_put_var(ncid,rad2mean_vid,real(rad2mean(1:nnz)),start=(/1, his_counter/)) )
       call netcdf_check( nf90_put_var(ncid,qstarm_vid,real(qstarm(1:nnz)),start=(/1, his_counter/)) )
+      call netcdf_check( nf90_put_var(ncid,Nc_vid,real(Nc(1:nnz)),start=(/1, his_counter/)) )
+      call netcdf_check( nf90_put_var(ncid,ql_vid,real(ql(1:nnz)),start=(/1, his_counter/)) )
 
       his_counter = his_counter + 1
 
