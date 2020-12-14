@@ -11714,7 +11714,7 @@ c       -----------------
         do ix =1,nnx
         do iy = iys,iye
            sigm_s(ix,iy,iz) = 2.0*e(ix,iy,iz)/3.0
-           vis_ss(ix,iy,iz) = vis_s(ix,iy,2,iz)
+           vis_ss(ix,iy,iz) = vis_s(ix,iy,1,iz)
            sigm_sdx(ix,iy,iz) =  sigm_s(ix,iy,iz)       !for xderiv
            sigm_sdy(ix,iy,iz) =  sigm_s(ix,iy,iz)       !for yderiv
 c       --------------------
@@ -11752,6 +11752,7 @@ c       ---------------
         call sigm_interp(sigm_sdxp,sigm_sdyp,sigm_sdzp,vis_sp,iz_part)
 
         part%sigm_s = abs(part%sigm_s)  !Interpolation near surface can give small negative numbers
+        part%sigm_s = max(part%sigm_s,1.0e-4) !Prevent it from getting too small, makes time derivative term singular
 
 c       -----------------
 c       calculate the subgrid velocity Weil et al ,2004-isotropic turb.
@@ -11794,15 +11795,17 @@ c      -----x component ----------------
          a2 =0.0
          a3 = 0.0
          a1 =(-0.5)*fs*C0*epsn*part%u_sub(1)/part%sigm_s
-         a2 =0.5*(1.0/part%sigm_s)*part%u_sub(1)*
+         a2 =0.5*(fs/part%sigm_s)*part%u_sub(1)*
      +          (part%sigm_s - sigm_sprev)/dt
-         a3 = 0.5*sigm_sdxp
+         a3 = 0.5*fs*sigm_sdxp
          us_ran = sqrt(fs*C0*epsn*dt)*gasdev(iseed)
          part%u_sub(1) = (a1+a2+a3)*dt + us_ran
 
         ! Check to see it blows up 
-        if(isnan(part%u_sub(1)))then
-        write(*,*)'u-nan',a1,a2,a3,us_ran,part%sigm_s
+        !if(isnan(part%u_sub(1)))then
+        if (abs(part%u_sub(1)) .gt. ugcont) then
+        write(*,*)'u-nan',a1,a2,a3,us_ran,part%sigm_s,part%u_sub(1),
+     +  (part%sigm_s - sigm_sprev)/dt,fs,epsn
         write(*,*)'part-con',fs,epsn,dzw(iz_part+1),iz_part
         write(*,*)'part-nan',part%xp(1),part%xp(2),part%xp(3)
         write(*,*)'energy',engsbz(iz_part+1),engz(iz_part+1)
@@ -11815,15 +11818,17 @@ c       -----y component ----------------
         a2 =0.0
         a3 = 0.0
         a1 =(-0.5)*fs*C0*epsn*part%u_sub(2)/part%sigm_s
-        a2 =0.5*(1.0/part%sigm_s)*part%u_sub(2)*
+        a2 =0.5*(fs/part%sigm_s)*part%u_sub(2)*
      +          (part%sigm_s - sigm_sprev)/dt
-        a3 = 0.5*sigm_sdyp
+        a3 = 0.5*fs*sigm_sdyp
         us_ran = sqrt(fs*C0*epsn*dt)*gasdev(iseed)
         part%u_sub(2) = (a1+a2+a3)*dt + us_ran
 
 
-        if(isnan(part%u_sub(2)))then
-        write(*,*)'v-nan',a1,a2,a3,us_ran,part%sigm_s
+        !if(isnan(part%u_sub(2)))then
+        if (abs(part%u_sub(2)) .gt. ugcont) then
+        write(*,*)'v-nan',a1,a2,a3,us_ran,part%sigm_s,part%u_sub(2),
+     +  (part%sigm_s - sigm_sprev)/dt,fs,epsn
         write(*,*)'part-nan',part%xp(1),part%xp(2),part%xp(3)
         write(*,*)'derev-nan',sigm_sdxp,sigm_sdyp,sigm_sdzp
         stop
@@ -11835,14 +11840,16 @@ c       -----z component ----------------
         a2 =0.0
         a3 = 0.0
         a1 =(-0.5)*fs*C0*epsn*part%u_sub(3)/part%sigm_s
-        a2 =0.5*(1.0/part%sigm_s)*part%u_sub(3)*
+        a2 =0.5*(fs/part%sigm_s)*part%u_sub(3)*
      +          (part%sigm_s - sigm_sprev)/dt
-        a3 = 0.5*sigm_sdzp
+        a3 = 0.5*fs*sigm_sdzp
         us_ran = sqrt(fs*C0*epsn*dt)*gasdev(iseed)
         part%u_sub(3) = (a1+a2+a3)*dt + us_ran
 
-        if(isnan(part%u_sub(3)))then
-        write(*,*)'w-nan',a1,a2,a3,us_ran,part%sigm_s
+        !if(isnan(part%u_sub(3)))then
+        if (abs(part%u_sub(3)) .gt. ugcont) then
+        write(*,*)'w-nan',a1,a2,a3,us_ran,part%sigm_s,part%u_sub(3),
+     +  (part%sigm_s - sigm_sprev)/dt,fs,epsn
         write(*,*)'part-nan',part%xp(1),part%xp(2),part%xp(3)
         write(*,*)'derev-nan',sigm_sdxp,sigm_sdyp,sigm_sdzp
         stop

@@ -20,7 +20,7 @@ OBJS = $(addsuffix .o, $(basename $(SRC)))
 
 
 lesmpi.a: $(OBJS) les.F
-	$(FORTRAN) les.F -o $@ $^ $(FLAGS) $(DEBUG_FLAGS) $(OUTPUTINC) $(OUTPUTLIB) $(LINKOPTS)
+	$(FORTRAN) $^ -o $@  $(FLAGS) $(DEBUG_FLAGS) $(OUTPUTINC) $(OUTPUTLIB) $(LINKOPTS)
 
 %.o: %.f
 	$(FORTRAN) $(FLAGS) $(DEBUG_FLAGS) -c $< $(OUTPUTINC) $(OUTPUTLIB)
