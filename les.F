@@ -6975,7 +6975,7 @@ c ------- indices for indexing array stat(.,.)
 c         js = number of non-scalar stats
 c         ns = number of scalar stats
 c
-      parameter(js = 35, ns = 5, nstat = js + ns*nscl)   !Brian 7/30/14  js=25->26
+      parameter(js = 36, ns = 5, nstat = js + ns*nscl)
       real stat(1:nnz,nstat)
       real RHtmp, Ttmp
 c
