@@ -11387,21 +11387,21 @@ c
 
 !!! Re-initialize more appropriate for sea spray
 
-         Os = 1.0
-         mult = mult_init
-         rad_init = radius_init   ! From the params.in file
-         m_s = rad_init**3*pi*4.0/3.0*rhow*Sal  !Using the salinity specified in params.in
-         
-         Tp_init = tsfcc(1)
-
-         xp_init(1) = ran2(iseed)*(xmax-xmin) + xmin
-         xp_init(2) = ran2(iseed)*(ymax-ymin) + ymin
-         xp_init(3) = 1.0  !New particles are initialized at z = 1m
-
-
-         call create_particle(xp_init,vp_init,
-     +        Tp_init,m_s,Os,mult,rad_init,idx,procidx)
-
+!         Os = 1.0
+!         mult = mult_init
+!         rad_init = radius_init   ! From the params.in file
+!         m_s = rad_init**3*pi*4.0/3.0*rhow*Sal  !Using the salinity specified in params.in
+!         
+!         Tp_init = tsfcc(1)
+!
+!         xp_init(1) = ran2(iseed)*(xmax-xmin) + xmin
+!         xp_init(2) = ran2(iseed)*(ymax-ymin) + ymin
+!         xp_init(3) = 1.0  !New particles are initialized at z = 1m
+!
+!
+!         call create_particle(xp_init,vp_init,
+!     +        Tp_init,m_s,Os,mult,rad_init,idx,procidx)
+!
 
       else
          part => part%next
@@ -13811,7 +13811,7 @@ c        part%qinf = 0.0 ! Brian 7/14/14
 
          xp_init(1) = ran2(iseed)*(xmax-xmin) + xmin
          xp_init(2) = ran2(iseed)*(ymax-ymin) + ymin
-         xp_init(3) = ran2(iseed)*10.0  !Start particles between 0 and 10m
+         xp_init(3) = ran2(iseed)*zl
 
 
       call create_particle(xp_init,vp_init,
