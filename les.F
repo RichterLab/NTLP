@@ -171,7 +171,6 @@ c
 
       if (myid==0) then
        write(*,*) 'time,tnumpart:',time,tnumpart
-       write(*,*) 'time,tnum_destroy:',time,tnum_destroy
        write(*,'(a15,3e15.6)') 'radmin,radmax:',time,radmin,radmax
        write(*,'(a15,3e15.6)') 'tempmin,tempmax:',time,tempmin,tempmax
        write(*,'(a15,3e15.6)') 'qmin,qmax:',time,qmin,qmax
@@ -11323,6 +11322,8 @@ c
          procidx_old = part%procidx
 
          call destroy_particle
+
+         num_destroy = num_destroy + 1
 
 
 !!!! Choose how to re-initialize. These are relevant for cloud simulations
