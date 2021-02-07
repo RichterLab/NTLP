@@ -188,6 +188,8 @@ c
           ivis = 0
       endif
 
+      call reset_particle_counters
+
 
 c
 c ---------------- 3 stage runge-kutta time stepping
@@ -14911,6 +14913,17 @@ c       Add the current event to the histogram
       if (myid==1) print*, 'Swall', Swall
 
       end subroutine humidity_control
+
+      subroutine reset_particle_counters
+      use particles
+      implicit none
+
+      !Reset some counters that need to be set to zero at every time
+      !step
+
+      num_destroy = 0
+
+      end subroutine reset_particle_counters
 
       subroutine read_input_file
       use pars
