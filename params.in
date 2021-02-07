@@ -2,9 +2,9 @@
 !Time step information
 &step_params
 iti=0          !Time step to begin
-itmax=300000   !Max number of time steps
+itmax=10000   !Max number of time steps
 imean=100    !Number of time steps between writing mean profiles to output log file
-ihst=100     !Number of time steps between writing profiles to history file
+ihst=10     !Number of time steps between writing profiles to history file
 itape=10000  !Number of time steps before opening new history file and writing full 3D volumes
 itstr=1
 it_his=1     !Time step to begin recording history files
@@ -19,10 +19,10 @@ ismlt=0, ifree=0, iradup=0, iupwnd=1
 ibuoy=1, ifilt=0, itcut=1, isubs=0, ibrcl=0, iocean=0
 method=3, idebug=1, iz_space=1, ivis0=1, ifix_dt=0, new_vis=-1
 isfc = 1, 1  ! isfc = 0 sets surface flux (qstar), isfc = 1 sets surface condition (Dirichlet through tsfcc)
-iDNS = 0
+iDNS = 1
 ifields = 0  ! if set to 1, reads the initial condition from path_ran below; otherwise calls subroutine random
 ilin = 1   !1 means linear interpolation for particle, 6th order otherwise
-icouple=0
+icouple=1
 iTcouple=1
 iHcouple=1  !iHcouple also controls TE couple
 ievap=1
@@ -31,9 +31,10 @@ icoalesce=0
 ipart_method=2   !1 = same RK3 as flow, 2 = backward Euler
 ipartdiff = 1
 isfs = 2   !isfs=1 is simple random walk, isfs=2 is Weil et al. (2004) particle subgrid
-iexner = 1  !iexner = 1 applies a correction to part%Tf to account for conversion b/w potential temp and temp. (need in PBL)
+iexner = 0  !iexner = 1 applies a correction to part%Tf to account for conversion b/w potential temp and temp. (need in PBL)
 ilongwave = 0   !Use simple longwave radiation scheme when clouds/fog present
 inetcdf = 1  !Set to 1 to output history data to netcdf format, otherwise original binary format
+ihumiditycontrol = 1  !Set a humidity source/sink (used for Pi Chamber; subroutine humidity_control)
 /
 
 !Grid and domain parameters
@@ -46,8 +47,8 @@ dt_new = 1.0
 
 !Use for DNS:
 Uo = 0.0  !Sets the magnitude of the top and bottom plate velocities (Couette flow -- assumes equal and opposite)
-Ttop(1) = 300.15, 95.0  !Currently this should be (temperature, relative humidity) (used in DNS)
-Tbot(1) = 300.15, 100.0  !Currently this should be (temperature, relative humidity) (used in DNS)
+Ttop(1) = 280.0, 100.0  !Currently this should be (temperature, relative humidity) (used in DNS)
+Tbot(1) = 299.0, 100.0  !Currently this should be (temperature, relative humidity) (used in DNS)
 
 !Use for LES:
 qstar = 0.2, 0.2  !Surface fluxes of (temperature, humidity) (used for LES and DNS)
@@ -61,14 +62,14 @@ psurf = 101325  !Pa -- nominal surface pressure, for use in the definition of po
 ugcont = 20.0   !The initial u-velocity in the field
 vgcont = 0.0   !The initial v-velocity
 
-dpdx = -0.69325  !The pressure gradient for channel flow (gets put into u_geo for DNS)
+dpdx = 0.0  !The pressure gradient for channel flow (gets put into u_geo for DNS)
 
-zi = 80.0  !This has to do with grid stretching; make equal to zl for Couette/channel
-zl = 80.0
-xl = 128.0
-yl = 128.0
+zi = 1.0  !This has to do with grid stretching; make equal to zl for Couette/channel
+zl = 1.0
+xl = 2.0
+yl = 2.0
 
-zw1 = 0.1  !The first grid point
+zw1 = 0.00333  !The first grid point
 
 !Radiation parameters
 rad_kappa = 120.0  !The absorptivity in the radiation expression (see Larson et al. 2007)

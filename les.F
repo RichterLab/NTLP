@@ -342,6 +342,10 @@ c
       t_stage_f = mpi_wtime()
       !if (myid==5) write(*,*) 'time stage: ',t_stage_f - t_stage_s
 
+      if (ihumiditycontrol .eq. 1) then
+      call humidity_control
+      end if
+
       if (ipart_method .eq. 2) then
          t_s = mpi_wtime()
 
@@ -2568,6 +2572,19 @@ c
       end do
       end if
       end if 
+
+!-----------add on the humidity wall sink 
+
+      if (iscl==2) then
+
+      do iz=izs,ize
+        do iy=iys,iye
+        do ix=1,nnx
+            r4(ix,iy,2,iz) = r4(ix,iy,2,iz) + Swall
+        enddo
+        enddo
+      enddo
+      endif
 
 
 
@@ -5835,10 +5852,10 @@ c
 
    
       z_switch = 80.0
-      t_switch = 300.0
-      t_surf = 300.0
-      q_switch = 0.021234
-      q_surf = 0.021234
+      t_switch = 285.0
+      t_surf = 285.0
+      q_switch = 0.02
+      q_surf = 0.02
 
       !Slopes below the inversion
       !slope_t = (t_switch-t_surf)/z_switch
@@ -5854,8 +5871,8 @@ c
          if (zz(iz) .ge. 0.0) then
          do iy=iys,iye
          do ix=1,nnx
-            u(ix,iy,iz) = ugcont-ugal
-            v(ix,iy,iz) = vgcont
+            u(ix,iy,iz) = 0.0
+            v(ix,iy,iz) = 0.0
             w(ix,iy,iz) = 0.0
             e(ix,iy,iz) = 0.0
          enddo
@@ -5883,7 +5900,7 @@ c
            do iy=iys,iye
            do ix=1,nnx
               t(ix,iy,1,iz) = t_switch + (zz(iz) - z_switch)*dtdzf(1)
-              t(ix,iy,2,iz) = q_switch + (zz(iz) - z_switch)*dtdzf(2)
+              !t(ix,iy,2,iz) = q_switch + (zz(iz) - z_switch)*dtdzf(2)
            enddo
            enddo
          endif
@@ -14876,6 +14893,24 @@ c       Add the current event to the histogram
 
       end subroutine radius_histogram
 
+      subroutine humidity_control
+
+      use pars
+      use fields
+      use fftwk
+      use con_data
+      use con_stats
+
+      implicit none
+      include 'mpif.h'
+
+
+      Swall = -2.25E-6
+
+      if (myid==1) print*, 'Swall', Swall
+
+      end subroutine humidity_control
+
       subroutine read_input_file
       use pars
       use particles
@@ -14903,7 +14938,7 @@ c       Add the current event to the histogram
      +         icouple,iTcouple,iHcouple,ievap,ifields,ilin,
      +         ineighbor,icoalesce,ipart_method,
      +         ipartdiff,isfs,iexner,ilongwave,
-     +         inetcdf
+     +         inetcdf,ihumiditycontrol
 
 
       namelist /constants/ rhoa, nuf, Cpa, Pra, Sc,
