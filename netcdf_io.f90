@@ -7,7 +7,7 @@ integer :: time_dimid,zu_vid,zu_dimid,s_dimid
 integer :: time_vid,dt_vid
 integer :: utau_vid,uwsfc_vid
 integer :: Tsfc_vid,qsfc_vid,wtsfc_vid,wqsfc_vid
-integer :: tnumpart_vid,tnum_destroy_vid
+integer :: tnumpart_vid,tnum_destroy_vid,tot_reintro_vid
 integer :: zw_vid,zw_dimid
 integer :: uxym_vid,vxym_vid,wxym_vid,txym_vid,RHxym_vid,tempxym_vid,exym_vid
 integer :: ups_vid,vps_vid,wps_vid,tps_vid
@@ -82,6 +82,9 @@ subroutine netcdf_init
 
       call netcdf_check( nf90_def_var(ncid, "tnum_destroy", NF90_REAL, dimids,tnum_destroy_vid) )
       call netcdf_check( nf90_put_att(ncid,tnum_destroy_vid,"title","Particles killed this time step") )
+
+      call netcdf_check( nf90_def_var(ncid, "tot_reintro", NF90_REAL, dimids,tot_reintro_vid) )
+      call netcdf_check( nf90_put_att(ncid,tot_reintro_vid,"title","Particles introduced this time step") )
 
       call netcdf_check( nf90_def_var(ncid, "Tsfc", NF90_REAL, dimids,Tsfc_vid) )
       call netcdf_check( nf90_put_att(ncid,Tsfc_vid,"title","Surface temperature") )
@@ -244,6 +247,7 @@ subroutine write_his_netcdf
       call netcdf_check( nf90_put_var(ncid, uwsfc_vid, real(uwsfc),start=(/his_counter/)) )
       call netcdf_check( nf90_put_var(ncid, tnumpart_vid, real(tnumpart),start=(/his_counter/)) )
       call netcdf_check( nf90_put_var(ncid, tnum_destroy_vid, real(tnum_destroy),start=(/his_counter/)) )
+      call netcdf_check( nf90_put_var(ncid, tot_reintro_vid, real(tot_reintro),start=(/his_counter/)) )
       call netcdf_check( nf90_put_var(ncid, Tsfc_vid, real(tsfcc(1)),start=(/his_counter/)) )
       call netcdf_check( nf90_put_var(ncid, qsfc_vid, real(tsfcc(2)),start=(/his_counter/)) )
       call netcdf_check( nf90_put_var(ncid, wtsfc_vid, real(wtsfc(1)),start=(/his_counter/)) )

@@ -385,6 +385,10 @@ c
 !      if (myid==5) write(*,*) 'time partdiff:', t_f - t_s
       end if
 
+      if (ireintro) then
+         call particle_reintro(it)
+      end if
+
       call radius_histogram
 
       call get_max
@@ -10452,7 +10456,7 @@ c
       include 'mpif.h'
 
       integer :: ierr,it
-      real :: tmpbuf(5),tmpbuf_rec(5),tmp_reintro
+      real :: tmpbuf(5),tmpbuf_rec(5)
       real :: myradavg,myradmax,myradmin,mytempmax,mytempmin
       real :: myqmin,myqmax
       real :: denom,dtl,sigma
@@ -11278,13 +11282,51 @@ c
 
       
       end subroutine create_particle
-      function dFdr_uniform(r)
+      subroutine particle_reintro(it)
+      use particles
+      use pars
+      use con_data
+      use con_stats
+      use fields
       implicit none
-      real :: r,dFdr_uniform 
+      include 'mpif.h'
 
-      dFdr_uniform = 0.5e-6
+      integer :: it
+      integer :: ierr,randproc,np,my_reintro
+      real :: xp_init(3),ran2,Os,m_s
 
-      end function dFdr_uniform
+      my_reintro = nprime*(1./60.)*(10.**6.)*dt*4/numprocs*10.0 !4m^3 (vol chamber)
+      tot_reintro = my_reintro*numprocs
+
+
+      if (myid==0) write(*,*) 'time,tot_reintro,tnum_destroy:',time,
+     +                  tot_reintro,tnum_destroy
+
+      if (mod(it, 10)==0) then
+      do np=1,my_reintro
+
+      !Proc 0 gets a random proc ID, broadcasts it out:
+      !if (myid==0) randproc = floor(ran2(iseed)*numprocs)
+      !call mpi_bcast(randproc,1,mpi_integer,0,mpi_comm_world,ierr)
+
+
+         xp_init(1) = ran2(iseed)*(xmax-xmin) + xmin
+         xp_init(2) = ran2(iseed)*(ymax-ymin) + ymin
+         xp_init(3) = ran2(iseed)*zl/2.0
+
+         Os = 1.0
+         m_s = radius_init**3*pi2*2.0/3.0*rhow*Sal  !Using the salinity specified in params.in
+         
+
+         call create_particle(xp_init,vp_init,
+     +         Tp_init,m_s,Os,mult_init,radius_init,2,myid) 
+
+      end do
+      end if
+
+
+      end subroutine particle_reintro
+
       subroutine particle_bcs_nonperiodic
       use particles
       use con_stats
@@ -14922,6 +14964,7 @@ c       Add the current event to the histogram
       !step
 
       num_destroy = 0
+      !tot_reintro = 0
 
       end subroutine reset_particle_counters
 
@@ -14952,7 +14995,7 @@ c       Add the current event to the histogram
      +         icouple,iTcouple,iHcouple,ievap,ifields,ilin,
      +         ineighbor,icoalesce,ipart_method,
      +         ipartdiff,isfs,iexner,ilongwave,
-     +         inetcdf,ihumiditycontrol
+     +         inetcdf,ihumiditycontrol,ireintro
 
 
       namelist /constants/ rhoa, nuf, Cpa, Pra, Sc,
@@ -14960,7 +15003,7 @@ c       Add the current event to the histogram
      +         Cpp,Mw,Ms,Ru,Gam,Ion,Sal,Rd,
      +         radius_init,
      +         grav, t00,fcor,zo,
-     +         vp_init,Tp_init
+     +         vp_init,Tp_init,nprime
 
 
       !params.in contains namelists to read

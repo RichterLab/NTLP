@@ -9,7 +9,7 @@ c     ----------------------------------------------------------------------
      +     idebug,iz_space,ivis0,ifix_dt,new_vis,iDNS,
      +     icouple,iTcouple,iHcouple,ievap,ifields,ilin,ineighbor,
      +     icoalesce,ipart_method,ipartdiff,isfs,iexner,ilongwave,
-     +     inetcdf,ihumiditycontrol
+     +     inetcdf,ihumiditycontrol,ireintro
 c     
 c     -------- j_recl = record length in "bytes" for history file
 c     k8     = kind parameter for integers in mpi_io routines
@@ -25,7 +25,7 @@ c
       real :: Uo, Ttop(nscl), Tbot(nscl),qstar(nscl),tsfcc(nscl)
       real :: grav,t00,fcor,zi,zl,xl,yl,zw1,dpdx
       real :: ugcont,vgcont,zo,surf_RH,psurf,surf_temp
-      real :: Swall=0.0
+      real :: Swall=0.0,nprime
       integer :: isfc(nscl)
 
       !Radiation parameters
@@ -148,6 +148,7 @@ c     --- SFS velocity calculation ---------
       integer :: tnum100, tnum1000, tnumimpos
       integer :: denum, actnum, tdenum, tactnum
       integer :: num_destroy=0,tnum_destroy=0
+      integer :: tot_reintro=0
 
       real :: Rep_avg,part_grav(3)
       real :: radavg,radmin,radmax,tempmin,tempmax,qmin,qmax
