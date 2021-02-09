@@ -5395,8 +5395,8 @@ c
          enddo
       else
         !call vgrid(zw1,zi,zl,nnz,z(0),l_root,l_debug)
-        !call vgrid_channel(zw1,zi,zl,nnz,z(0),l_root,l_debug)
-        call vgrid_channel_fstrm(zw1,zi,zl,nnz,z(0),l_root,l_debug)
+        call vgrid_channel(zw1,zi,zl,nnz,z(0),l_root,l_debug)
+        !call vgrid_channel_fstrm(zw1,zi,zl,nnz,z(0),l_root,l_debug)
       endif
 c
       call get_dz
@@ -10589,6 +10589,10 @@ c
                 !temp remain unchanged
                 rt_zeroes(1) = 1.0
                 rt_zeroes(2) = part%Tf/part%Tp
+                write(*,'(a15,12e15.6)') 'WARNING: BIG DROPLET', 
+     +          part%radius,part%qinf,part%Tp,part%Tf,part%xp(3),
+     +          part%Os,part%m_s,part%vp(1),part%vp(2),part%vp(3),
+     +          part%res,part%sigm_s
                end if
 
 
@@ -11296,13 +11300,13 @@ c
       real :: xp_init(3),ran2,Os,m_s
 
       my_reintro = nprime*(1./60.)*(10.**6.)*dt*4/numprocs*10.0 !4m^3 (vol chamber)
-      tot_reintro = my_reintro*numprocs
 
-
-      if (myid==0) write(*,*) 'time,tot_reintro,tnum_destroy:',time,
-     +                  tot_reintro,tnum_destroy
+      tot_reintro = 0
 
       if (mod(it, 10)==0) then
+      tot_reintro = my_reintro*numprocs
+      if (myid==0) write(*,*) 'time,tot_reintro:',time,
+     +                  tot_reintro
       do np=1,my_reintro
 
       !Proc 0 gets a random proc ID, broadcasts it out:
