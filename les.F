@@ -331,6 +331,7 @@ c
          if (inetcdf .eq. 1) then
             if(mhis  .and. istage .eq. 1)  call write_his_netcdf
          if(mhis  .and. istage .eq. 1 .and. mtape) call close_his_netcdf
+         if(mhis  .and. istage .eq. 1 .and. mtape) call close_histograms
          else
             if(mhis  .and. istage .eq. 1)  call write_his(itop)
             if(mhis  .and. istage .eq. 1 .and. mtape) call close_his
@@ -6710,6 +6711,7 @@ c
       if((ihst .gt. 0) .and. (it .ge. it_his_nxt)) then
          if (inetcdf .eq. 1) then
             call open_his_netcdf
+            call open_histograms(it)
          else
             call open_his(it)
          end if
@@ -7797,6 +7799,39 @@ c --------------- errors
      +       ' num = ',i8, 'krec = ',i6)
       stop
       end
+      subroutine close_histograms
+c
+c ---- close history files
+c
+      use pars
+      logical there
+c
+c ---- root closes and checks the files
+c
+      close(nrad)
+      close(nres)
+      inquire(file=path_rad_hist,exist=there)
+      if(.not.there) then
+         write(6,8100) path_rad_hist
+         call mpi_finalize(ierr)
+         stop
+      endif
+      inquire(file=path_res_hist,exist=there)
+      if(.not.there) then
+         write(6,8200) path_res_hist
+         call mpi_finalize(ierr)
+         stop
+      endif
+      write(6,7100) path_rad_hist
+      write(6,7200) path_res_hist
+c
+      return
+c -------------------- process write errors
+ 7100 format(' RADHIST DATA IS WRITTEN IN FILE  ',a80)
+ 7200 format(' RESHIST DATA IS WRITTEN IN FILE  ',a80)
+ 8100 format(' SR. SAVE_RADPDF: Trouble rad histogram file =',a80)
+ 8200 format(' SR. SAVE_RESPDF: Trouble res histogram file =',a80)
+      end
       subroutine close_his
 c
 c ---- close history files
@@ -7809,6 +7844,7 @@ c
       close(nhis1)
       close(nhisp)
       close(nrad)
+      close(nres)
       inquire(file=path_sav_h,exist=there)
       if(.not.there) then
          write(6,8000) path_sav_h
@@ -8992,6 +9028,7 @@ c
       npre  = 30
       nhis1 = 40
       nrad = 45
+      nres = 46
       nvelc = 50
       nhisp = 60
       nviz_z = 80
@@ -9040,6 +9077,68 @@ c
 c
       return
       end
+      subroutine open_histograms(istep)
+c
+c ------------------- open history files by root
+c                     isize determined in sr. fill_cs
+c
+      use pars
+      include 'mpif.h'
+      character cgrid*4, iblks*16, num*3
+      logical there
+     
+c
+c --------------- build character strings for ascii history file name
+c
+      !Open PDF files
+      cgrid = '.le.'
+
+      call blnk(iblks)
+      write(iblks(1:7),'(i7.7)') istep
+      iblks(8:8) = '_'
+      write(iblks(9:15),'(i7.7)') (istep+itape)
+      iblnk = index(path_histog,' ')
+      call blnk(path_rad_hist)
+      call blnk(path_res_hist)
+
+
+      path_rad_hist = path_histog(1:iblnk-1)//'/radhist'//
+     +       cgrid(1:4)//case(1:3)//'.'//iblks(1:15)//'.txt'      
+
+      path_res_hist = path_histog(1:iblnk-1)//'/reshist'//
+     +       cgrid(1:4)//case(1:3)//'.'//iblks(1:15)//'.txt'      
+
+
+c
+c ----------------- save data in directory
+c
+      if(l_root) then
+
+
+      close(nrad)
+      open(nrad,err=4500,file=path_rad_hist,form='formatted')
+
+      close(nres)
+      open(nres,err=4600,file=path_res_hist,form='formatted')
+
+      endif
+c
+      return
+c ------------------- process errors
+c-------------------
+ 4500 continue
+      write(6,6303) nrad, path_rad_hist
+ 6303 format(' 6303, SR. OPEN_RADPDF:',/,
+     +       '    cannot open radhist file on unit = ',i2,/,
+     +       '    path = ',a80)
+      stop
+ 4600 continue
+      write(6,6303) nres, path_res_hist
+ 6304 format(' 6303, SR. OPEN_RESPDF:',/,
+     +       '    cannot open reshist file on unit = ',i2,/,
+     +       '    path = ',a80)
+      stop
+      end
       subroutine open_his(istep)
 c
 c ------------------- open history files by root
@@ -9077,20 +9176,6 @@ c
       path_sav_hp = path_his(1:iblnk-1)//'/his'//
      +         cgrid(1:4)//case(1:3)//'.'//iblks(1:15)//'.ieee'
 
-      !Do it again for radius pdf file:
-      cgrid = '.le.'
-      write(num,'(i3.3)') itn
-
-      iblnk = index(path_histog,' ')
-      call blnk(iblks)
-      write(iblks(1:7),'(i7.7)') istep
-      iblks(8:8) = '_'
-      write(iblks(9:15),'(i7.7)') (istep+itape)
-      call blnk(path_sav_hist)
-
-
-      path_sav_hist = path_histog(1:iblnk-1)//'/radhist'//
-     +          cgrid(1:4)//case(1:3)//'.'//iblks(1:15)//'.txt'      
 c
 c ----------------- save data in directory
 c
@@ -9104,9 +9189,8 @@ c
      +        form='unformatted',access='direct',recl=isize*j_recl,
      +        status='unknown')
 
-      close(nrad)
-      open(nrad,err=4500,file=path_sav_hist,form='formatted')
-      endif
+      end if
+
 c
       return
 c ------------------- process errors
@@ -9124,12 +9208,6 @@ c-------------------
      +       '    path = ',a80)
       stop
 
- 4500 continue
-      write(6,6303) nrad, path_sav_hist
- 6303 format(' 6303, SR. OPEN_RADPDF:',/,
-     +       '    cannot open radhist file on unit = ',i2,/,
-     +       '    path = ',a80)
-      stop
       end
       subroutine viz_output_filename(istep)
 c
@@ -11402,6 +11480,10 @@ c
 
          idx_old = part%pidx
          procidx_old = part%procidx
+
+         !Before destroying it, put its residence time in histogram
+         call add_histogram(bins_res,hist_res,
+     +    histbins+2,part%res,part%mult)
 
          call destroy_particle
 
@@ -14246,15 +14328,13 @@ c        part%qinf = 0.0 ! Brian 7/14/14
       mult_a = mult_init/(1.0-pdf_prob)*(1 - pdf_prob/real(mult_factor))
 
 
+      !set_binsdata does logarithmic binning!
+      !Radius histogram
       call set_binsdata(bins_rad,histbins+2,1.0e-8,1.0e-3)
 
+      !Residence time histogram
+      call set_binsdata(bins_res,histbins+2,1.0e-1,1.0e4)
 
-      if (myid==0) write(*,*) 'Init Particle radius = ',radius_init
-      if (myid==0) write(*,*) 'Init Particle Salinity = ',Sal     
-      if (myid==0) write(*,*) 'Particle gravity = ',part_grav
-      if (myid==0) write(*,*) 'nuf = ',nuf
-      if (myid==0) write(*,*) 'CpaCpp = ',CpaCpp
-      if (myid==0) write(*,*) 'Pra = ',Pra
 
       !Initialize the linked list of particles:
       nullify(part,first_particle)
@@ -14935,22 +15015,26 @@ c        part%qinf = 0.0 ! Brian 7/14/14
       integer :: num_entries
 
       real :: sumbuf_rad(histbins+2)
+      real :: sumbuf_res(histbins+2)
       real :: binval_rad(histbins+2)
+      real :: binval_res(histbins+2)
 
       character :: fformat*10, num*3
 
 
 c -------------- record bins for histogram file -----------
         binval_rad = bins_rad(:)
+        binval_res = bins_res(:)
 
 
 c -------------- Collect all histogram from different processors
+
+        !Radius PDF
         num_entries = (histbins+2)
         call mpi_reduce(hist_rad,sumbuf_rad,num_entries,
      +   mpi_real8,mpi_sum,0,mpi_comm_world,ierr)
 
         if (myid==0) then
-
 
 c ---------------- save data 
 
@@ -14958,6 +15042,24 @@ c ---------------- save data
         fformat = '('//num//'e15.6)'
 
         write(nrad,fformat),sumbuf_rad(1:histbins+2)
+
+        end if
+
+        !Residence time PDF
+        num_entries = (histbins+2)
+        call mpi_reduce(hist_res,sumbuf_res,num_entries,
+     +   mpi_real8,mpi_sum,0,mpi_comm_world,ierr)
+
+        hist_res = 0.0  !Reset it every time it writes
+
+        if (myid==0) then
+
+c ---------------- save data 
+
+        write(num,'(i3.3)') histbins+2
+        fformat = '('//num//'e15.6)'
+
+        write(nres,fformat),sumbuf_res(1:histbins+2)
 
         end if
 
