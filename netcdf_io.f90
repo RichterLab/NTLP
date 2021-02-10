@@ -15,6 +15,7 @@ integer :: wtle_vid,wtsb_vid
 integer :: uwle_vid,uwsb_vid
 integer :: vwle_vid,vwsb_vid
 integer :: zconc_vid
+integer :: pflux_vid,pfluxdiff_vid
 integer :: vp1mean_vid,vp2mean_vid,vp3mean_vid
 integer :: vp1msqr_vid,vp2msqr_vid,vp3msqr_vid
 integer :: m1src_vid,m2src_vid,m3src_vid
@@ -160,6 +161,12 @@ subroutine netcdf_init
       call netcdf_check( nf90_def_var(ncid,"zconc",NF90_REAL, dimids_zu,zconc_vid) )
       call netcdf_check( nf90_put_att(ncid,zconc_vid,"title","Computational droplet number concentration") )
 
+      call netcdf_check( nf90_def_var(ncid,"pflux",NF90_REAL, dimids_zw,pflux_vid) )
+      call netcdf_check( nf90_put_att(ncid,pflux_vid,"title","Flux of particles through zw points due to gravity/advection") )
+
+      call netcdf_check( nf90_def_var(ncid,"pfluxdiff",NF90_REAL, dimids_zw,pfluxdiff_vid) )
+      call netcdf_check( nf90_put_att(ncid,pfluxdiff_vid,"title","Flux of particles through zw points due to SFS diffusion") )
+
       call netcdf_check( nf90_def_var(ncid,"vp1mean",NF90_REAL, dimids_zu,vp1mean_vid) )
       call netcdf_check( nf90_put_att(ncid,vp1mean_vid,"title","Horiz. avg. particle velocity u") )
 
@@ -288,6 +295,8 @@ subroutine write_his_netcdf
       call netcdf_check( nf90_put_var(ncid,wtsb_vid,real(wtsb(0:nnz,1:nscl)),start=(/1,1, his_counter/)) )
 
       call netcdf_check( nf90_put_var(ncid,zconc_vid,real(zconc(1:nnz)),start=(/1, his_counter/)) )
+      call netcdf_check( nf90_put_var(ncid,pflux_vid,real(pflux(0:nnz)),start=(/1, his_counter/)) )
+      call netcdf_check( nf90_put_var(ncid,pfluxdiff_vid,real(pfluxdiff(0:nnz)),start=(/1, his_counter/)) )
       call netcdf_check( nf90_put_var(ncid,vp1mean_vid,real(vp1mean(1:nnz)),start=(/1, his_counter/)) )
       call netcdf_check( nf90_put_var(ncid,vp2mean_vid,real(vp2mean(1:nnz)),start=(/1, his_counter/)) )
       call netcdf_check( nf90_put_var(ncid,vp3mean_vid,real(vp3mean(1:nnz)),start=(/1, his_counter/)) )

@@ -188,8 +188,6 @@ c
           ivis = 0
       endif
 
-      call reset_particle_counters
-
 
 c
 c ---------------- 3 stage runge-kutta time stepping
@@ -7259,6 +7257,11 @@ c
          wt_tot(iz,l) = wtle(iz,l) + wtsb(iz,l)
       enddo
       enddo
+
+      !Append this with summing pflux and pfluxdiff
+      call mpi_sum_z(pflux(0),i_root,myid,nnz+1,1)
+      call mpi_sum_z(pfluxdiff(0),i_root,myid,nnz+1,1)
+
 c
       return
       end
@@ -10455,7 +10458,7 @@ c
       implicit none
       include 'mpif.h'
 
-      integer :: ierr,it
+      integer :: ierr,it,fluxloc,fluxloci
       real :: tmpbuf(5),tmpbuf_rec(5)
       real :: myradavg,myradmax,myradmin,mytempmax,mytempmin
       real :: myqmin,myqmax
@@ -10471,6 +10474,7 @@ c
       real :: rt_zeroes(2)
       real :: taup0, dt_taup0, temp_r, temp_t, guess
       real :: mod_Magnus,tmp_coeff
+      real :: xp3i
 
 
 
@@ -10501,11 +10505,14 @@ c
       partHsrc_t = 0.0
       partTEsrc_t = 0.0
 
+      pflux = 0.0
+
       denum = 0
       actnum = 0
       num100 = 0
       num1000 = 0
       numimpos = 0
+      num_destroy = 0
 
       !loop over the linked list of particles
       part => first_particle
@@ -10539,10 +10546,43 @@ c
 
         corrfac = 1.0
 
+        xp3i = part%xp(3)   !Store this to do flux calculation
+
         !implicitly calculates next velocity and position
         part%xp(1:3) = part%xp(1:3) + dt*part%vp(1:3)
         part%vp(1:3) = (part%vp(1:3)+taup_i*dt*corrfac*part%uf(1:3)
      +   +dt*part_grav(1:3))/(1+dt*corrfac*taup_i)
+
+
+
+        !Store the particle flux now that we have the new position
+        if (part%xp(3) .gt. zl) then   !This will get treated in particle_bcs_nonperiodic, but record here
+           fluxloc = nnz+1
+           fluxloci = minloc(z,1,mask=(z.gt.xp3i))-1
+        elseif (part%xp(3) .lt. 0.0) then !This will get treated in particle_bcs_nonperiodic, but record here
+           fluxloci = minloc(z,1,mask=(z.gt.xp3i))-1
+           fluxloc = 0
+        else
+
+        fluxloc = minloc(z,1,mask=(z.gt.part%xp(3)))-1
+        fluxloci = minloc(z,1,mask=(z.gt.xp3i))-1
+
+        end if  !Only apply flux calc to particles in domain
+
+        if (xp3i .lt. part%xp(3)) then !Particle moved up
+
+        do iz=fluxloci,fluxloc-1
+           pflux(iz) = pflux(iz) + part%mult
+        end do
+
+        elseif (xp3i .gt. part%xp(3)) then !Particle moved down
+
+        do iz=fluxloc,fluxloci-1
+           pflux(iz) = pflux(iz) - part%mult
+        end do
+
+        end if  !Up/down conditional statement
+
 
         ! non-dimensionalizes particle radius and temperature before
         ! iteratively solving for next radius and temperature
@@ -11353,9 +11393,10 @@ c
       !perfectly elastic collisions on top, bottom walls
       !i.e. location is reflected, w-velocity is negated
 
-      top = zz(nnz)
+      top = z(nnz)
       !bot = 0.0 + part%radius
-      bot = zw1
+      !bot = zw1
+      bot = 0.0
 
       if (part%xp(3) .GT. top) then
          part%xp(3) = top - (part%xp(3)-top)
@@ -11747,7 +11788,9 @@ c     Calculations assume isotropic turbulece
       real :: L_flt,epsn,fs,C0,a1,a2,a3,sigm_sprev,fs1
       real :: weit,weit1,weit3,weit4, T_lagr
       real :: us(3)
+      real :: xp3i
       integer :: ix,iy,iz,izp1,izm1,ind,iz_part,ierr
+      integer :: fluxloc,fluxloci
 c       ---initialize -------
         fs = 0.0
         C0 = 0.0
@@ -11767,6 +11810,7 @@ c       ---initialize -------
         us = 0.0
         sigm_ws = 0.0
         sigm_w = 0.0
+        pfluxdiff = 0.0
 c       ------------------
 c       compute sigma squre (sigm_s) based on subgrid energy field
 c       -----------------       
@@ -11924,10 +11968,41 @@ c       -----z component ----------------
 c       -------------------
 c       Update particle location and velocity
 c       ------------------
+        xp3i = part%xp(3)
         do ind = 1,3
         part%xp(ind) = part%xp(ind) + part%u_sub(ind)*dt
         end do
 c       ---------------------------------        
+
+        !Store the particle flux now that we have the new position
+        if (part%xp(3) .gt. zl) then   !This will get treated in particle_bcs_nonperiodic, but record here
+           fluxloc = nnz+1
+           fluxloci = minloc(z,1,mask=(z.gt.xp3i))-1
+        elseif (part%xp(3) .lt. 0.0) then !This will get treated in particle_bcs_nonperiodic, but record here
+           fluxloci = minloc(z,1,mask=(z.gt.xp3i))-1
+           fluxloc = 0
+        else
+
+        fluxloc = minloc(z,1,mask=(z.gt.part%xp(3)))-1
+        fluxloci = minloc(z,1,mask=(z.gt.xp3i))-1
+
+        end if  !Only apply flux calc to particles in domain
+
+        if (xp3i .lt. part%xp(3)) then !Particle moved up
+
+        do iz=fluxloci,fluxloc-1
+           pfluxdiff(iz) = pfluxdiff(iz) + part%mult
+        end do
+
+        elseif (xp3i .gt. part%xp(3)) then !Particle moved down
+
+        do iz=fluxloc,fluxloci-1
+           pfluxdiff(iz) = pfluxdiff(iz) - part%mult
+        end do
+
+        end if  !Up/down conditional statement
+
+
         part => part%next
         end do
 
@@ -11967,10 +12042,13 @@ c     Does not use Weil et al. 2004 formulation at all
       real :: sigm_sdxp,sigm_sdyp,sigm_sdzp,vis_sp
       real :: phim,phis,psim,psis,zeta
       real :: dadz,gasdev
+      real :: xp3i
       integer :: ix,iy,iz,izp1,izm1,ind,iz_part,ierr
+      integer :: fluxloc,fluxloci
 
 c       ---initialize -------
         sigm_s = 0.0
+        pfluxdiff = 0.0
 
 c       ------------------
 c       compute sigma squre (sigm_s) based on subgrid energy field
@@ -12009,12 +12087,42 @@ c       -----------------
            dadz = (alphaC(iz_part+1,1)-alphaC(iz_part,1))*dzw_i(iz)
         end if
 
+        xp3i = part%xp(3)
 
         !Now simply solve Langevin equation:
         part%xp(1) = part%xp(1) + gasdev(iseed)*sqrt(2.0*abs(vis_sp)*dt)
         part%xp(2) = part%xp(2) + gasdev(iseed)*sqrt(2.0*abs(vis_sp)*dt)
         part%xp(3) = part%xp(3) + gasdev(iseed)*sqrt(2.0*abs(vis_sp)*dt)
      +             + dadz*dt
+
+
+        !Store the particle flux now that we have the new position
+        if (part%xp(3) .gt. zl) then   !This will get treated in particle_bcs_nonperiodic, but record here
+           fluxloc = nnz+1
+           fluxloci = minloc(z,1,mask=(z.gt.xp3i))-1
+        elseif (part%xp(3) .lt. 0.0) then !This will get treated in particle_bcs_nonperiodic, but record here
+           fluxloci = minloc(z,1,mask=(z.gt.xp3i))-1
+           fluxloc = 0
+        else
+
+        fluxloc = minloc(z,1,mask=(z.gt.part%xp(3)))-1
+        fluxloci = minloc(z,1,mask=(z.gt.xp3i))-1
+
+        end if  !Only apply flux calc to particles in domain
+
+        if (xp3i .lt. part%xp(3)) then !Particle moved up
+
+        do iz=fluxloci,fluxloc-1
+           pfluxdiff(iz) = pfluxdiff(iz) + part%mult
+        end do
+
+        elseif (xp3i .gt. part%xp(3)) then !Particle moved down
+
+        do iz=fluxloc,fluxloci-1
+           pfluxdiff(iz) = pfluxdiff(iz) - part%mult
+        end do
+
+        end if  !Up/down conditional statement
 
 
         part => part%next
@@ -12852,6 +12960,7 @@ c       -----------------
       T2ext(0:nnz+1,iys-2:iys-1,mxe+1:mxe+3) = 
      +     tlbuf_r(1:nnz+2,1:2,1:3,5)!Brian 7/14/14
 
+
       end subroutine fill_ext
       subroutine fill_extSFS
 c       This subroutine calculte the extented fields for SFS velocity
@@ -13482,14 +13591,22 @@ c     Now fill the ext arrays with the recieved buffers:
       part%qinf = part%qinf + T2ext(izuv,iy,ix)*
      +      wtx*wty*wtz
 
-
       end do
-      !Fix if the particle is in between the top (uv) point and zl
+
+      !Since the ghost points don't follow the filling of "ext", a quick
+      !fix is to use 0th order interpolation if between last (uv) point
+      !and wall
       if (kpt .eq. nnz) then
          part%uf(1) = uext(kpt,iy,ix)
          part%uf(2) = vext(kpt,iy,ix)
          part%Tf = Text(kpt,iy,ix)
          part%qinf = T2ext(kpt,iy,ix)
+      end if
+      if (kpt .eq. 0) then
+         part%uf(1) = uext(1,iy,ix)
+         part%uf(2) = vext(1,iy,ix)
+         part%Tf = Text(1,iy,ix)
+         part%qinf = T2ext(1,iy,ix)
       end if
       end do
       end do
@@ -13858,7 +13975,6 @@ c        part%qinf = 0.0 ! Brian 7/14/14
          xp_init(1) = ran2(iseed)*(xmax-xmin) + xmin
          xp_init(2) = ran2(iseed)*(ymax-ymin) + ymin
          xp_init(3) = ran2(iseed)*zl
-
 
       call create_particle(xp_init,vp_init,
      +         Tp_init,m_s,Os,mult,rad_init,idx,myid) 
@@ -14959,18 +15075,6 @@ c       Add the current event to the histogram
       if (myid==1) print*, 'Swall', Swall
 
       end subroutine humidity_control
-
-      subroutine reset_particle_counters
-      use particles
-      implicit none
-
-      !Reset some counters that need to be set to zero at every time
-      !step
-
-      num_destroy = 0
-      !tot_reintro = 0
-
-      end subroutine reset_particle_counters
 
       subroutine read_input_file
       use pars

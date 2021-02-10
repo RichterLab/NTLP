@@ -17,7 +17,7 @@ c
       integer, parameter :: j_recl=4, k8=8
 
       integer, parameter :: nscl = 2, nvar = (4+nscl)
-      integer, parameter :: maxnx=256,maxny=256,maxnz=128
+      integer, parameter :: maxnx=128,maxny=128,maxnz=128
       integer, parameter :: maxnz1=maxnz+1,
      + maxnz2=maxnz+2,maxnx2=maxnx+2,maxny2=maxny+2
 
@@ -314,7 +314,8 @@ c ----------------------------------------------------------------------
      +           Hpsrc(maxnz),TEpsrc(maxnz),
      +           qstarm(maxnz),
      +           trip(maxnz),TpSq(maxnz),Tpdqp(maxnz),
-     +           radtend(maxnz),RHxym(maxnz),tempxym(maxnz)
+     +           radtend(maxnz),RHxym(maxnz),tempxym(maxnz),
+     +           pflux(0:maxnz),pfluxdiff(0:maxnz)
         real ::  xkn(maxnx),ykn(maxny),
      +           xk(maxnx),yk(maxny),
      +           xks(maxnx2,maxny),wavexy(maxnx2,maxny)
@@ -356,7 +357,8 @@ c ----------------------------------------------------------------------
      +           Hpsrc(:), TEpsrc(:),
      +           qstarm(:),
      +           trip(:),TpSq(:),Tpdqp(:),
-     +           radtend(:),RHxym(:),tempxym(:)
+     +           radtend(:),RHxym(:),tempxym(:),
+     +           pflux(:),pfluxdiff(:)
         real, pointer ::  
      +           xkn(:), ykn(:), xk(:), yk(:), xks(:,:), wavexy(:,:)
         real, pointer ::  
@@ -454,6 +456,8 @@ c
              radtend => c_s%radtend; isize = isize + size(radtend)
              RHxym => c_s%RHxym; isize = isize + size(RHxym)
              tempxym => c_s%tempxym; isize = isize + size(tempxym)
+             pflux => c_s%pflux; isize = isize + size(pflux)
+             pfluxdiff => c_s%pfluxdiff; isize = isize + size(pfluxdiff)
 
 
              xkn     => c_s%xkn
