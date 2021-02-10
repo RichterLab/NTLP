@@ -10629,10 +10629,14 @@ c
                 !temp remain unchanged
                 rt_zeroes(1) = 1.0
                 rt_zeroes(2) = part%Tf/part%Tp
-                write(*,'(a15,12e15.6)') 'WARNING: BIG DROPLET', 
+                write(*,'(a30,12e15.6)') 'WARNING: CONVERGENCE', 
      +          part%radius,part%qinf,part%Tp,part%Tf,part%xp(3),
      +          part%Os,part%m_s,part%vp(1),part%vp(2),part%vp(3),
      +          part%res,part%sigm_s
+               !Remove the rare case where droplet
+               !explodes due to BE procedure
+               !Still not 100% certain why this happens, but only occurs under
+               !very specific and rare circumstances
                end if
 
 
@@ -10654,7 +10658,14 @@ c
         end if
 
          if (part%radius .gt. 1.0e-2) then
-         write(*,'(a15,12e15.6)') 'WARNING: BIG DROPLET', 
+         write(*,'(a30,12e15.6)') 'WARNING: BIG DROPLET', 
+     +    part%radius,part%qinf,part%Tp,part%Tf,part%xp(3),
+     +    part%Os,part%m_s,part%vp(1),part%vp(2),part%vp(3),
+     +    part%res,part%sigm_s
+         end if
+
+         if (part%qinf .lt. 0.0) then
+         write(*,'(a30,12e15.6)') 'WARNING: NEG QINF', 
      +    part%radius,part%qinf,part%Tp,part%Tf,part%xp(3),
      +    part%Os,part%m_s,part%vp(1),part%vp(2),part%vp(3),
      +    part%res,part%sigm_s
@@ -10714,24 +10725,6 @@ c
       part => part%next
       end do
 
-
-      !Loop through and make sure to remove the rare case where droplet
-      !explodes due to BE procedure
-      !Still not 100% certain why this happens, but only occurs under
-      !very specific and rare circumstances
-      part => first_particle
-      do while (associated(part))
-
-       if (part%radius .gt. 1.0) then
-         write(*,'(a16,12e15.6)') 'DHR BIG DROPLET: ',
-     +    part%radius,part%qinf,part%Tp,part%Tf,part%xp(3),
-     +    part%Os,part%m_s,part%vp(1),part%vp(2),part%vp(3),
-     +    part%res
-          call destroy_particle
-       else
-           part=> part%next
-        end if
-      end do
 
       !Enforce nonperiodic bcs (either elastic or destroying particles)
       call particle_bcs_nonperiodic
