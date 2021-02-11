@@ -302,6 +302,230 @@ subroutine fill_ext
 
 
 end subroutine fill_ext
+subroutine fill_extSFS
+!       This subroutine calculte the extented fields for SFS velocity
+
+      use pars
+      use fields
+      use con_stats
+      use con_data
+      implicit none
+      include 'mpif.h'
+
+      integer :: istatus(mpi_status_size),ierr
+      integer :: ix,iy,iz
+      real :: sigm_st(0:nnz+1,iys:iye,mxs:mxe)
+      real :: sigm_sdxt(0:nnz+1,iys:iye,mxs:mxe)
+      real :: sigm_sdyt(0:nnz+1,iys:iye,mxs:mxe)
+      real :: sigm_sdzt(0:nnz+1,iys:iye,mxs:mxe)
+      real :: vis_st(0:nnz+1,iys:iye,mxs:mxe)
+      !preceding letter: r=right,l=left,t=top,b=bot.
+      !_s: buf of things to send TO r,l,t,b
+      !_r: buf of things to recv FROM r,l,t,b
+      real :: tbuf_s(nnz+2,iye-iys+1,2,5),tbuf_r(nnz+2,iye-iys+1,3,5)
+      real :: bbuf_s(nnz+2,iye-iys+1,3,5),bbuf_r(nnz+2,iye-iys+1,2,5)
+      real :: rbuf_s(nnz+2,2,mxe-mxs+1,5),rbuf_r(nnz+2,3,mxe-mxs+1,5)
+      real :: lbuf_s(nnz+2,3,mxe-mxs+1,5),lbuf_r(nnz+2,2,mxe-mxs+1,5)
+
+      !Corners:
+      real :: trbuf_s(nnz+2,2,2,5),trbuf_r(nnz+2,3,3,5)
+      real :: brbuf_s(nnz+2,2,3,5),brbuf_r(nnz+2,3,2,5)
+      real :: blbuf_s(nnz+2,3,3,5),blbuf_r(nnz+2,2,2,5)
+      real :: tlbuf_s(nnz+2,3,2,5),tlbuf_r(nnz+2,2,3,5)
+
+
+      !MPI send counts:
+      integer :: rc_s,rc_r,trc_s,trc_r,tc_s,tc_r,tlc_s,tlc_r
+      integer :: lc_s,lc_r,blc_s,blc_r,bc_s,bc_r,brc_s,brc_r
+      sigm_sext = 0.0
+      sigm_sdxext = 0.0
+      sigm_sdyext = 0.0
+      sigm_sdzext = 0.0
+      vis_sext = 0.0
+      vis_st = 0.0
+      sigm_st = 0.0
+      sigm_sdxt = 0.0
+      sigm_sdyt = 0.0
+      sigm_sdzt = 0.0
+
+      call xtoz_trans(sigm_s(1:nnx,iys:iye,izs-1:ize+1),sigm_st,nnx, &
+                     nnz,mxs,mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e, &
+                     myid,ncpu_s,numprocs)
+      call xtoz_trans(sigm_sdx(1:nnx,iys:iye,izs-1:ize+1),sigm_sdxt,nnx, &
+                     nnz,mxs,mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e, &
+                     myid,ncpu_s,numprocs)
+      call xtoz_trans(sigm_sdy(1:nnx,iys:iye,izs-1:ize+1),sigm_sdyt,nnx, &
+                     nnz,mxs,mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e, &
+                     myid,ncpu_s,numprocs)
+      call xtoz_trans(sigm_sdz(1:nnx,iys:iye,izs-1:ize+1),sigm_sdzt,nnx, &
+                     nnz,mxs,mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e, &
+                     myid,ncpu_s,numprocs)
+
+      call xtoz_trans(vis_ss(1:nnx,iys:iye,izs-1:ize+1),vis_st,nnx, &
+                     nnz,mxs,mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e, &
+                     myid,ncpu_s,numprocs)
+
+      sigm_sext(0:nnz+1,iys:iye,mxs:mxe) = sigm_st(0:nnz+1,iys:iye,mxs:mxe)
+      sigm_sdxext(0:nnz+1,iys:iye,mxs:mxe) = sigm_sdxt(0:nnz+1,iys:iye,mxs:mxe)
+      sigm_sdyext(0:nnz+1,iys:iye,mxs:mxe) = sigm_sdyt(0:nnz+1,iys:iye,mxs:mxe)
+      sigm_sdzext(0:nnz+1,iys:iye,mxs:mxe) = sigm_sdzt(0:nnz+1,iys:iye,mxs:mxe)
+      vis_sext(0:nnz+1,iys:iye,mxs:mxe) = vis_st(0:nnz+1,iys:iye,mxs:mxe)
+
+
+
+      !Fill the send buffers:
+      tc_s = 5*(nnz+2)*2*(iye-iys+1) 
+      tc_r = 5*(nnz+2)*3*(iye-iys+1)
+      trc_s = 5*(nnz+2)*2*2 
+      trc_r = 5*(nnz+2)*3*3 
+      rc_s = 5*(nnz+2)*(mxe-mxs+1)*2 
+      rc_r = 5*(nnz+2)*(mxe-mxs+1)*3 
+      tlc_s = 5*(nnz+2)*3*2 
+      tlc_r = 5*(nnz+2)*2*3 
+      bc_s = 5*(nnz+2)*3*(iye-iys+1) 
+      bc_r = 5*(nnz+2)*2*(iye-iys+1)
+      blc_s = 5*(nnz+2)*3*3 
+      blc_r = 5*(nnz+2)*2*2 
+      lc_s = 5*(nnz+2)*(mxe-mxs+1)*3 
+      lc_r = 5*(nnz+2)*(mxe-mxs+1)*2 
+      brc_s = 5*(nnz+2)*2*3
+      brc_r = 5*(nnz+2)*3*2
+
+      !First sigm_s:
+      tbuf_s(1:nnz+2,1:iye-iys+1,1:2,1) = sigm_st(0:nnz+1,iys:iye,mxe-1:mxe)
+      trbuf_s(1:nnz+2,1:2,1:2,1) = sigm_st(0:nnz+1,iye-1:iye,mxe-1:mxe)
+      rbuf_s(1:nnz+2,1:2,1:mxe-mxs+1,1) = sigm_st(0:nnz+1,iye-1:iye,mxs:mxe)
+      brbuf_s(1:nnz+2,1:2,1:3,1) = sigm_st(0:nnz+1,iye-1:iye,mxs:mxs+2)
+      bbuf_s(1:nnz+2,1:iye-iys+1,1:3,1) = sigm_st(0:nnz+1,iys:iye,mxs:mxs+2)
+      blbuf_s(1:nnz+2,1:3,1:3,1) = sigm_st(0:nnz+1,iys:iys+2,mxs:mxs+2)
+      lbuf_s(1:nnz+2,1:3,1:mxe-mxs+1,1) = sigm_st(0:nnz+1,iys:iys+2,mxs:mxe)
+      tlbuf_s(1:nnz+2,1:3,1:2,1) = sigm_st(0:nnz+1,iys:iys+2,mxe-1:mxe)
+
+      !sigm_sdx:
+      tbuf_s(1:nnz+2,1:iye-iys+1,1:2,2) = sigm_sdxt(0:nnz+1,iys:iye,mxe-1:mxe)
+      trbuf_s(1:nnz+2,1:2,1:2,2) = sigm_sdxt(0:nnz+1,iye-1:iye,mxe-1:mxe)
+      rbuf_s(1:nnz+2,1:2,1:mxe-mxs+1,2) = sigm_sdxt(0:nnz+1,iye-1:iye,mxs:mxe)
+      brbuf_s(1:nnz+2,1:2,1:3,2) = sigm_sdxt(0:nnz+1,iye-1:iye,mxs:mxs+2)
+      bbuf_s(1:nnz+2,1:iye-iys+1,1:3,2) = sigm_sdxt(0:nnz+1,iys:iye,mxs:mxs+2)
+      blbuf_s(1:nnz+2,1:3,1:3,2) = sigm_sdxt(0:nnz+1,iys:iys+2,mxs:mxs+2)
+      lbuf_s(1:nnz+2,1:3,1:mxe-mxs+1,2) = sigm_sdxt(0:nnz+1,iys:iys+2,mxs:mxe)
+      tlbuf_s(1:nnz+2,1:3,1:2,2) = sigm_sdxt(0:nnz+1,iys:iys+2,mxe-1:mxe)
+
+      !sigm_sdy:
+      tbuf_s(1:nnz+2,1:iye-iys+1,1:2,3) = sigm_sdyt(0:nnz+1,iys:iye,mxe-1:mxe)
+      trbuf_s(1:nnz+2,1:2,1:2,3) = sigm_sdyt(0:nnz+1,iye-1:iye,mxe-1:mxe)
+      rbuf_s(1:nnz+2,1:2,1:mxe-mxs+1,3) = sigm_sdyt(0:nnz+1,iye-1:iye,mxs:mxe)
+      brbuf_s(1:nnz+2,1:2,1:3,3) = sigm_sdyt(0:nnz+1,iye-1:iye,mxs:mxs+2)
+      bbuf_s(1:nnz+2,1:iye-iys+1,1:3,3) = sigm_sdyt(0:nnz+1,iys:iye,mxs:mxs+2)
+      blbuf_s(1:nnz+2,1:3,1:3,3) = sigm_sdyt(0:nnz+1,iys:iys+2,mxs:mxs+2)
+      lbuf_s(1:nnz+2,1:3,1:mxe-mxs+1,3) = sigm_sdyt(0:nnz+1,iys:iys+2,mxs:mxe)
+      tlbuf_s(1:nnz+2,1:3,1:2,3) = sigm_sdyt(0:nnz+1,iys:iys+2,mxe-1:mxe)
+
+      !sigm_sdz
+      tbuf_s(1:nnz+2,1:iye-iys+1,1:2,4) = sigm_sdzt(0:nnz+1,iys:iye,mxe-1:mxe)
+      trbuf_s(1:nnz+2,1:2,1:2,4) = sigm_sdzt(0:nnz+1,iye-1:iye,mxe-1:mxe)
+      rbuf_s(1:nnz+2,1:2,1:mxe-mxs+1,4) = sigm_sdzt(0:nnz+1,iye-1:iye,mxs:mxe)
+      brbuf_s(1:nnz+2,1:2,1:3,4) = sigm_sdzt(0:nnz+1,iye-1:iye,mxs:mxs+2)
+      bbuf_s(1:nnz+2,1:iye-iys+1,1:3,4) = sigm_sdzt(0:nnz+1,iys:iye,mxs:mxs+2)
+      blbuf_s(1:nnz+2,1:3,1:3,4) = sigm_sdzt(0:nnz+1,iys:iys+2,mxs:mxs+2)
+      lbuf_s(1:nnz+2,1:3,1:mxe-mxs+1,4) = sigm_sdzt(0:nnz+1,iys:iys+2,mxs:mxe)
+      tlbuf_s(1:nnz+2,1:3,1:2,4) = sigm_sdzt(0:nnz+1,iys:iys+2,mxe-1:mxe)
+
+      !vis_s
+      tbuf_s(1:nnz+2,1:iye-iys+1,1:2,5) = vis_st(0:nnz+1,iys:iye,mxe-1:mxe)
+      trbuf_s(1:nnz+2,1:2,1:2,5) = vis_st(0:nnz+1,iye-1:iye,mxe-1:mxe)
+      rbuf_s(1:nnz+2,1:2,1:mxe-mxs+1,5) = vis_st(0:nnz+1,iye-1:iye,mxs:mxe)
+      brbuf_s(1:nnz+2,1:2,1:3,5) = vis_st(0:nnz+1,iye-1:iye,mxs:mxs+2)
+      bbuf_s(1:nnz+2,1:iye-iys+1,1:3,5) = vis_st(0:nnz+1,iys:iye,mxs:mxs+2)
+      blbuf_s(1:nnz+2,1:3,1:3,5)  = vis_st(0:nnz+1,iys:iys+2,mxs:mxs+2)
+      lbuf_s(1:nnz+2,1:3,1:mxe-mxs+1,5) = vis_st(0:nnz+1,iys:iys+2,mxs:mxe)
+      tlbuf_s(1:nnz+2,1:3,1:2,5) = vis_st(0:nnz+1,iys:iys+2,mxe-1:mxe)
+
+
+      !Zero out recieve buffers
+      rbuf_r=0.0;trbuf_r=0.0;tbuf_r=0.0;tlbuf_r=0.0;lbuf_r=0.0
+      blbuf_r=0.0;bbuf_r=0.0;brbuf_r=0.0
+
+      !Left/right:
+      call MPI_Sendrecv(rbuf_s,rc_s,mpi_real8,rproc,3, &
+             lbuf_r,lc_r,mpi_real8,lproc,3,mpi_comm_world,istatus,ierr)
+
+      call MPI_Sendrecv(lbuf_s,lc_s,mpi_real8,lproc,4, &
+             rbuf_r,rc_r,mpi_real8,rproc,4,mpi_comm_world,istatus,ierr)
+
+      !Top/bottom:
+      call MPI_Sendrecv(tbuf_s,tc_s,mpi_real8,tproc,5, &
+             bbuf_r,bc_r,mpi_real8,bproc,5,mpi_comm_world,istatus,ierr)
+
+      call MPI_Sendrecv(bbuf_s,bc_s,mpi_real8,bproc,6, &
+            tbuf_r,tc_r,mpi_real8,tproc,6,mpi_comm_world,istatus,ierr)
+
+      !Top right/bottom left:
+      call MPI_Sendrecv(trbuf_s,trc_s,mpi_real8,trproc,7, &
+             blbuf_r,blc_r,mpi_real8,blproc,7, &
+             mpi_comm_world,istatus,ierr)
+
+      call MPI_Sendrecv(blbuf_s,blc_s,mpi_real8,blproc,8, &
+             trbuf_r,trc_r,mpi_real8,trproc,8, &
+             mpi_comm_world,istatus,ierr)
+
+       !Top left/bottom right:
+      call MPI_Sendrecv(tlbuf_s,tlc_s,mpi_real8,tlproc,9, &
+             brbuf_r,brc_r,mpi_real8,brproc,9, &
+             mpi_comm_world,istatus,ierr)
+
+      call MPI_Sendrecv(brbuf_s,brc_s,mpi_real8,brproc,10, &
+              tlbuf_r,tlc_r,mpi_real8,tlproc,10, &
+              mpi_comm_world,istatus,ierr)
+
+!Now fill the ext arrays with the recieved buffers:
+      sigm_sext(0:nnz+1,iys:iye,mxe+1:mxe+3) = tbuf_r(1:nnz+2,1:iye-iys+1,1:3,1)
+      sigm_sext(0:nnz+1,iye+1:iye+3,mxe+1:mxe+3) = trbuf_r(1:nnz+2,1:3,1:3,1)
+      sigm_sext(0:nnz+1,iye+1:iye+3,mxs:mxe) = rbuf_r(1:nnz+2,1:3,1:mxe-mxs+1,1)
+      sigm_sext(0:nnz+1,iye+1:iye+3,mxs-2:mxs-1) = brbuf_r(1:nnz+2,1:3,1:2,1)
+      sigm_sext(0:nnz+1,iys:iye,mxs-2:mxs-1) = bbuf_r(1:nnz+2,1:iye-iys+1,1:2,1)
+      sigm_sext(0:nnz+1,iys-2:iys-1,mxs-2:mxs-1) = blbuf_r(1:nnz+2,1:2,1:2,1)
+      sigm_sext(0:nnz+1,iys-2:iys-1,mxs:mxe) = lbuf_r(1:nnz+2,1:2,1:mxe-mxs+1,1)
+      sigm_sext(0:nnz+1,iys-2:iys-1,mxe+1:mxe+3) = tlbuf_r(1:nnz+2,1:2,1:3,1)
+
+      sigm_sdxext(0:nnz+1,iys:iye,mxe+1:mxe+3) = tbuf_r(1:nnz+2,1:iye-iys+1,1:3,2)
+      sigm_sdxext(0:nnz+1,iye+1:iye+3,mxe+1:mxe+3) = trbuf_r(1:nnz+2,1:3,1:3,2)
+      sigm_sdxext(0:nnz+1,iye+1:iye+3,mxs:mxe) = rbuf_r(1:nnz+2,1:3,1:mxe-mxs+1,2)
+      sigm_sdxext(0:nnz+1,iye+1:iye+3,mxs-2:mxs-1) = brbuf_r(1:nnz+2,1:3,1:2,2)
+      sigm_sdxext(0:nnz+1,iys:iye,mxs-2:mxs-1) = bbuf_r(1:nnz+2,1:iye-iys+1,1:2,2)
+      sigm_sdxext(0:nnz+1,iys-2:iys-1,mxs-2:mxs-1) = blbuf_r(1:nnz+2,1:2,1:2,2)
+      sigm_sdxext(0:nnz+1,iys-2:iys-1,mxs:mxe) = lbuf_r(1:nnz+2,1:2,1:mxe-mxs+1,2)
+      sigm_sdxext(0:nnz+1,iys-2:iys-1,mxe+1:mxe+3) = tlbuf_r(1:nnz+2,1:2,1:3,2)
+
+      sigm_sdyext(0:nnz+1,iys:iye,mxe+1:mxe+3) = tbuf_r(1:nnz+2,1:iye-iys+1,1:3,3)
+      sigm_sdyext(0:nnz+1,iye+1:iye+3,mxe+1:mxe+3) = trbuf_r(1:nnz+2,1:3,1:3,3)
+      sigm_sdyext(0:nnz+1,iye+1:iye+3,mxs:mxe) = rbuf_r(1:nnz+2,1:3,1:mxe-mxs+1,3)
+      sigm_sdyext(0:nnz+1,iye+1:iye+3,mxs-2:mxs-1) = brbuf_r(1:nnz+2,1:3,1:2,3)
+      sigm_sdyext(0:nnz+1,iys:iye,mxs-2:mxs-1) = bbuf_r(1:nnz+2,1:iye-iys+1,1:2,3)
+      sigm_sdyext(0:nnz+1,iys-2:iys-1,mxs-2:mxs-1) = blbuf_r(1:nnz+2,1:2,1:2,3)
+      sigm_sdyext(0:nnz+1,iys-2:iys-1,mxs:mxe) = lbuf_r(1:nnz+2,1:2,1:mxe-mxs+1,3)
+      sigm_sdyext(0:nnz+1,iys-2:iys-1,mxe+1:mxe+3) = tlbuf_r(1:nnz+2,1:2,1:3,3)
+
+      sigm_sdzext(0:nnz+1,iys:iye,mxe+1:mxe+3) = tbuf_r(1:nnz+2,1:iye-iys+1,1:3,4)
+      sigm_sdzext(0:nnz+1,iye+1:iye+3,mxe+1:mxe+3) = trbuf_r(1:nnz+2,1:3,1:3,4)
+      sigm_sdzext(0:nnz+1,iye+1:iye+3,mxs:mxe) = rbuf_r(1:nnz+2,1:3,1:mxe-mxs+1,4)
+      sigm_sdzext(0:nnz+1,iye+1:iye+3,mxs-2:mxs-1) = brbuf_r(1:nnz+2,1:3,1:2,4)
+      sigm_sdzext(0:nnz+1,iys:iye,mxs-2:mxs-1) = bbuf_r(1:nnz+2,1:iye-iys+1,1:2,4)
+      sigm_sdzext(0:nnz+1,iys-2:iys-1,mxs-2:mxs-1) = blbuf_r(1:nnz+2,1:2,1:2,4)
+      sigm_sdzext(0:nnz+1,iys-2:iys-1,mxs:mxe) = lbuf_r(1:nnz+2,1:2,1:mxe-mxs+1,4)
+      sigm_sdzext(0:nnz+1,iys-2:iys-1,mxe+1:mxe+3) = tlbuf_r(1:nnz+2,1:2,1:3,4)
+
+
+      vis_sext(0:nnz+1,iys:iye,mxe+1:mxe+3) = tbuf_r(1:nnz+2,1:iye-iys+1,1:3,5)
+      vis_sext(0:nnz+1,iye+1:iye+3,mxe+1:mxe+3) = trbuf_r(1:nnz+2,1:3,1:3,5)
+      vis_sext(0:nnz+1,iye+1:iye+3,mxs:mxe) = rbuf_r(1:nnz+2,1:3,1:mxe-mxs+1,5)
+      vis_sext(0:nnz+1,iye+1:iye+3,mxs-2:mxs-1) = brbuf_r(1:nnz+2,1:3,1:2,5)
+      vis_sext(0:nnz+1,iys:iye,mxs-2:mxs-1) = bbuf_r(1:nnz+2,1:iye-iys+1,1:2,5)
+      vis_sext(0:nnz+1,iys-2:iys-1,mxs-2:mxs-1) = blbuf_r(1:nnz+2,1:2,1:2,5)
+      vis_sext(0:nnz+1,iys-2:iys-1,mxs:mxe) = lbuf_r(1:nnz+2,1:2,1:mxe-mxs+1,5)
+      vis_sext(0:nnz+1,iys-2:iys-1,mxe+1:mxe+3) = tlbuf_r(1:nnz+2,1:2,1:3,5)
+
+end subroutine fill_extSFS
 
 function mod_Magnus(T)
       implicit none
