@@ -7812,6 +7812,7 @@ c ---- root closes and checks the files
 c
       close(nrad)
       close(nres)
+      close(nactres)
       inquire(file=path_rad_hist,exist=there)
       if(.not.there) then
          write(6,8100) path_rad_hist
@@ -7824,15 +7825,24 @@ c
          call mpi_finalize(ierr)
          stop
       endif
+      inquire(file=path_actres_hist,exist=there)
+      if(.not.there) then
+         write(6,8300) path_actres_hist
+         call mpi_finalize(ierr)
+         stop
+      endif
       write(6,7100) path_rad_hist
       write(6,7200) path_res_hist
+      write(6,7300) path_actres_hist
 c
       return
 c -------------------- process write errors
  7100 format(' RADHIST DATA IS WRITTEN IN FILE  ',a80)
  7200 format(' RESHIST DATA IS WRITTEN IN FILE  ',a80)
+ 7300 format(' ACTRESHIST DATA IS WRITTEN IN FILE  ',a80)
  8100 format(' SR. SAVE_RADPDF: Trouble rad histogram file =',a80)
  8200 format(' SR. SAVE_RESPDF: Trouble res histogram file =',a80)
+ 8300 format(' SR. SAVE_ACTRESPDF: Trouble res histogram file =',a80)
       end
       subroutine close_his
 c
@@ -7847,6 +7857,7 @@ c
       close(nhisp)
       close(nrad)
       close(nres)
+      close(nactres)
       inquire(file=path_sav_h,exist=there)
       if(.not.there) then
          write(6,8000) path_sav_h
@@ -9031,6 +9042,7 @@ c
       nhis1 = 40
       nrad = 45
       nres = 46
+      nactres = 47
       nvelc = 50
       nhisp = 60
       nviz_z = 80
@@ -9110,6 +9122,9 @@ c
       path_res_hist = path_histog(1:iblnk-1)//'/reshist'//
      +       cgrid(1:4)//case(1:3)//'.'//iblks(1:15)//'.txt'      
 
+      path_actres_hist = path_histog(1:iblnk-1)//'/actreshist'//
+     +       cgrid(1:4)//case(1:3)//'.'//iblks(1:15)//'.txt'      
+
 
 c
 c ----------------- save data in directory
@@ -9122,6 +9137,9 @@ c
 
       close(nres)
       open(nres,err=4600,file=path_res_hist,form='formatted')
+
+      close(nactres)
+      open(nactres,err=4700,file=path_actres_hist,form='formatted')
 
       endif
 c
@@ -9138,6 +9156,12 @@ c-------------------
       write(6,6303) nres, path_res_hist
  6304 format(' 6303, SR. OPEN_RESPDF:',/,
      +       '    cannot open reshist file on unit = ',i2,/,
+     +       '    path = ',a80)
+      stop
+ 4700 continue
+      write(6,6305) nactres, path_actres_hist
+ 6305 format(' 6305, SR. OPEN_ACTRESPDF:',/,
+     +       '    cannot open actreshist file on unit = ',i2,/,
      +       '    path = ',a80)
       stop
       end
@@ -10701,34 +10725,46 @@ c
 
 
 
-               if (isnan(rt_zeroes(1)).OR.(rt_zeroes(1)<0)
-     +    .OR.isnan(rt_zeroes(2)).OR.(rt_zeroes(2)<0)) then
+               if       (isnan(rt_zeroes(1))
+     +             .OR. (rt_zeroes(1)*part%radius<0)
+     +             .OR. isnan(rt_zeroes(2))
+     +             .OR. (rt_zeroes(2)<0)
+     +             .OR. (rt_zeroes(2)*part%Tp > Tbot(1)*1.1)    !These last 2 are very specific to pi chamber
+     +             .OR. (rt_zeroes(2)*part%Tp < Ttop(1)*0.9))
+     +         then
+
                 numimpos = numimpos + 1  !How many have failed?
                 !If they failed (should be very small number), radius,
                 !temp remain unchanged
                 rt_zeroes(1) = 1.0
                 rt_zeroes(2) = part%Tf/part%Tp
-                write(*,'(a30,12e15.6)') 'WARNING: CONVERGENCE', 
+
+                write(*,'(a30,14e15.6)') 'WARNING: CONVERGENCE', 
      +          part%radius,part%qinf,part%Tp,part%Tf,part%xp(3),
      +          part%Os,part%m_s,part%vp(1),part%vp(2),part%vp(3),
-     +          part%res,part%sigm_s
-               !Remove the rare case where droplet
-               !explodes due to BE procedure
-               !Still not 100% certain why this happens, but only occurs under
-               !very specific and rare circumstances
+     +          part%res,part%sigm_s,rt_zeroes(1),rt_zeroes(2)
+
                end if
 
                !Get the critical radius based on old temp
-               part%rc = crit_radius(part%m_s,part%Os,part%Tf) 
+               part%rc = crit_radius(part%m_s,part%Os,part%Tp) 
 
                !Count if activated/deactivated
                if (part%radius > part%rc .AND.
      +             part%radius*rt_zeroes(1) < part%rc) then
                    denum = denum + 1
 
+                   !Also add activated lifetime to histogram
+               call add_histogram(bins_actres,hist_actres,
+     +         histbins+2,part%actres,part%mult)
+                   
+
                elseif (part%radius < part%rc .AND.
      +             part%radius*rt_zeroes(1) > part%rc) then
                    actnum = actnum + 1
+
+                   !Reset the activation lifetime
+                   part%actres = 0.0
 
                endif
 
@@ -10800,6 +10836,7 @@ c
      +                               + part_grav(1:3)
 
         part%res = part%res + dt
+        part%actres = part%actres + dt
 
 
       part => part%next
@@ -11390,6 +11427,7 @@ c
       part%nbr_procidx = -1
       part%mult = mult
       part%res = 0.0
+      part%actres = 0.0
       part%m_s = m_s
       part%Os = Os
       part%dist = 0.0
@@ -11485,6 +11523,10 @@ c
          !Before destroying it, put its residence time in histogram
          call add_histogram(bins_res,hist_res,
      +    histbins+2,part%res,part%mult)
+
+         !Also count this as a "deactivation"
+         call add_histogram(bins_actres,hist_actres,
+     +    histbins+2,part%actres,part%mult)
 
          call destroy_particle
 
@@ -14060,6 +14102,9 @@ c        part%qinf = 0.0 ! Brian 7/14/14
       !Residence time histogram
       call set_binsdata(bins_res,histbins+2,1.0e-1,1.0e4)
 
+      !Activated time histogram
+      call set_binsdata(bins_actres,histbins+2,1.0e-1,1.0e4)
+
 
       !Initialize the linked list of particles:
       nullify(part,first_particle)
@@ -14067,7 +14112,7 @@ c        part%qinf = 0.0 ! Brian 7/14/14
       !Set up MPI datatypes for sending particle information
       !MUST UPDATE IF THINGS ARE ADDED/REMOVED FROM PARTICLE STRUCTURE
 
-      num_reals = 6*3+14
+      num_reals = 6*3+15
       num_integers = 4
       num_longs = 3
       
@@ -14742,8 +14787,10 @@ c        part%qinf = 0.0 ! Brian 7/14/14
 
       real :: sumbuf_rad(histbins+2)
       real :: sumbuf_res(histbins+2)
+      real :: sumbuf_actres(histbins+2)
       real :: binval_rad(histbins+2)
       real :: binval_res(histbins+2)
+      real :: binval_actres(histbins+2)
 
       character :: fformat*10, num*3
 
@@ -14751,6 +14798,7 @@ c        part%qinf = 0.0 ! Brian 7/14/14
 c -------------- record bins for histogram file -----------
         binval_rad = bins_rad(:)
         binval_res = bins_res(:)
+        binval_actres = bins_actres(:)
 
 
 c -------------- Collect all histogram from different processors
@@ -14762,6 +14810,9 @@ c -------------- Collect all histogram from different processors
         !Residence time PDF
 
         call mpi_reduce(hist_res,sumbuf_res,num_entries,
+     +   mpi_real8,mpi_sum,0,mpi_comm_world,ierr)
+
+        call mpi_reduce(hist_actres,sumbuf_actres,num_entries,
      +   mpi_real8,mpi_sum,0,mpi_comm_world,ierr)
 
 
@@ -14780,12 +14831,14 @@ c ---------------- save data
 
         write(nrad,fformat),sumbuf_rad(1:histbins+2)
         write(nres,fformat),sumbuf_res(1:histbins+2)
+        write(nactres,fformat),sumbuf_actres(1:histbins+2)
 
         end if
 
         end if
 
         hist_res = 0.0  !Reset this one every time it writes
+        hist_actres = 0.0  !Reset this one every time it writes
 
       end subroutine write_histograms
       subroutine set_binsdata(binsdata,sizea,rmin,rmax)

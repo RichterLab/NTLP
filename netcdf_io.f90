@@ -30,6 +30,7 @@ integer :: qstarm_vid
 integer :: Nc_vid,ql_vid
 integer :: radbins_vid,resbins_vid
 integer :: radhist_vid,reshist_vid
+integer :: actresbins_vid,actreshist_vid
 integer :: his_counter,histog_counter
 character(len=80) :: path_netcdf_his,path_netcdf_histog
 
@@ -248,52 +249,6 @@ subroutine netcdf_init
 
 end subroutine netcdf_init
 
-subroutine netcdf_init_histog
-      use netcdf
-      use pars
-      use particles
-      implicit none
-
-      integer :: dimids(1),dimids_bins(1),dimids_t_bins(2)
-
-      path_netcdf_histog = trim(adjustl(path_his))//"histograms.nc"
-
-      call netcdf_check( nf90_create(path_netcdf_histog,nf90_clobber,ncid_histog))
-
-      call netcdf_check( nf90_def_dim(ncid_histog, "time",NF90_UNLIMITED, time_histog_dimid) )
-
-      call netcdf_check( nf90_def_dim(ncid_histog,"histbins",histbins+2,histbins_dimid) )
-
-      dimids = (/ time_histog_dimid /)
-      dimids_bins = (/ histbins_dimid /)
-      dimids_t_bins = (/histbins_dimid, time_histog_dimid /)
-
-
-!!! Single quantities
-      call netcdf_check( nf90_def_var(ncid_histog,"time",NF90_REAL,dimids,time_histog_vid) )
-      call netcdf_check( nf90_put_att(ncid_histog,time_histog_vid,"title","Simulation time") )
-
-!! Store the bin definitions
-      call netcdf_check( nf90_def_var(ncid_histog,"radbins",NF90_REAL,dimids_bins,radbins_vid) )
-      call netcdf_check( nf90_put_att(ncid_histog,radbins_vid,"title","Bin centers of particle radii histogram") )
-
-      call netcdf_check( nf90_def_var(ncid_histog,"resbins",NF90_REAL,dimids_bins,resbins_vid) )
-      call netcdf_check( nf90_put_att(ncid_histog,resbins_vid,"title","Bin centers of particle residence time histogram") )
-
-
-!!! Histograms
-      call netcdf_check( nf90_def_var(ncid_histog, "radhist", NF90_REAL, dimids_t_bins,radhist_vid) )
-      call netcdf_check( nf90_put_att(ncid_histog,radhist_vid,"title","Histogram of particle radius at snapshot") )
-
-      call netcdf_check( nf90_def_var(ncid_histog, "reshist", NF90_REAL, dimids_t_bins,reshist_vid) )
-      call netcdf_check( nf90_put_att(ncid_histog,reshist_vid,"title","Histogram of residence time of particles which died over past ihst") )
-
-      call netcdf_check( nf90_enddef(ncid_histog) )
-
-      histog_counter = 1
-
-end subroutine netcdf_init_histog
-
 subroutine write_his_netcdf
       use netcdf
       use pars
@@ -386,6 +341,58 @@ subroutine write_his_netcdf
 
 end subroutine write_his_netcdf
 
+subroutine netcdf_init_histog
+      use netcdf
+      use pars
+      use particles
+      implicit none
+
+      integer :: dimids(1),dimids_bins(1),dimids_t_bins(2)
+
+      path_netcdf_histog = trim(adjustl(path_his))//"histograms.nc"
+
+      call netcdf_check( nf90_create(path_netcdf_histog,nf90_clobber,ncid_histog))
+
+      call netcdf_check( nf90_def_dim(ncid_histog, "time",NF90_UNLIMITED, time_histog_dimid) )
+
+      call netcdf_check( nf90_def_dim(ncid_histog,"histbins",histbins+2,histbins_dimid) )
+
+      dimids = (/ time_histog_dimid /)
+      dimids_bins = (/ histbins_dimid /)
+      dimids_t_bins = (/histbins_dimid, time_histog_dimid /)
+
+
+!!! Single quantities
+      call netcdf_check( nf90_def_var(ncid_histog,"time",NF90_REAL,dimids,time_histog_vid) )
+      call netcdf_check( nf90_put_att(ncid_histog,time_histog_vid,"title","Simulation time") )
+
+!! Store the bin definitions
+      call netcdf_check( nf90_def_var(ncid_histog,"radbins",NF90_REAL,dimids_bins,radbins_vid) )
+      call netcdf_check( nf90_put_att(ncid_histog,radbins_vid,"title","Bin centers of particle radii histogram") )
+
+      call netcdf_check( nf90_def_var(ncid_histog,"resbins",NF90_REAL,dimids_bins,resbins_vid) )
+      call netcdf_check( nf90_put_att(ncid_histog,resbins_vid,"title","Bin centers of particle residence time histogram") )
+
+      call netcdf_check( nf90_def_var(ncid_histog,"actresbins",NF90_REAL,dimids_bins,actresbins_vid) )
+      call netcdf_check( nf90_put_att(ncid_histog,actresbins_vid,"title","Bin centers of particle activated residence time histogram") )
+
+
+!!! Histograms
+      call netcdf_check( nf90_def_var(ncid_histog, "radhist", NF90_REAL, dimids_t_bins,radhist_vid) )
+      call netcdf_check( nf90_put_att(ncid_histog,radhist_vid,"title","Histogram of particle radius at snapshot") )
+
+      call netcdf_check( nf90_def_var(ncid_histog, "reshist", NF90_REAL, dimids_t_bins,reshist_vid) )
+      call netcdf_check( nf90_put_att(ncid_histog,reshist_vid,"title","Histogram of residence time of particles which died over past ihst") )
+
+      call netcdf_check( nf90_def_var(ncid_histog, "actreshist", NF90_REAL, dimids_t_bins,actreshist_vid) )
+      call netcdf_check( nf90_put_att(ncid_histog,actreshist_vid,"title","Histogram of residence time of particles which deactivated OR died over past ihst") )
+
+      call netcdf_check( nf90_enddef(ncid_histog) )
+
+      histog_counter = 1
+
+end subroutine netcdf_init_histog
+
 subroutine write_histog_netcdf
       use netcdf
       use pars
@@ -403,11 +410,13 @@ subroutine write_histog_netcdf
 
       call netcdf_check( nf90_put_var(ncid_histog, radbins_vid, real(bins_rad),start=(/ 1 /)) )
       call netcdf_check( nf90_put_var(ncid_histog, resbins_vid, real(bins_res),start=(/ 1 /)) )
+      call netcdf_check( nf90_put_var(ncid_histog, actresbins_vid, real(bins_actres),start=(/ 1 /)) )
 
       end if
 
       call netcdf_check( nf90_put_var(ncid_histog, radhist_vid, real(hist_rad),start=(/1,histog_counter/)) )
       call netcdf_check( nf90_put_var(ncid_histog, reshist_vid, real(hist_res),start=(/1,histog_counter/)) )
+      call netcdf_check( nf90_put_var(ncid_histog, actreshist_vid, real(hist_actres),start=(/1,histog_counter/)) )
 
       histog_counter = histog_counter + 1
 

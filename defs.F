@@ -49,7 +49,7 @@ c     ----------------------------------------------------------------------
 c     ----------------------------------------------------------------------
       character case*3
 c     ----------------------------------------------------------------------
-      integer  ::   nvel, npre, nhis1, nprt,nrad,nres,
+      integer  ::   nvel, npre, nhis1, nprt,nrad,nres,nactres,
      +     nhisp, nvelc, 
      +     nviz_z, nviz_y, 
      +     nviz_x, nviz_s,
@@ -91,7 +91,7 @@ c     ----------------------------------------------------------------------
      +     path_v, path_c, path_p, path_h,
      +     path_sav_v, path_sav_c,
      +     path_sav_p, path_sav_h, path_sav_part,
-     +     path_histog, path_rad_hist, path_res_hist,
+     +     path_histog, path_rad_hist, path_res_hist, path_actres_hist,
      +     bad_news
       character case_inp*3
       character*80 path_viz_xy, path_viz_xz, path_viz_yz, path_stuf,
