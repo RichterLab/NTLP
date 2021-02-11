@@ -4719,7 +4719,6 @@ c
       use con_stats
       use particles
       real buf(3+nscl)
-      real :: mod_Magnus
 c
       parameter (iter_mo = 30, zeta_min = -6.0, zeta_max = 3.0)
 
@@ -5264,7 +5263,7 @@ c
       use con_stats
       use particles
 c
-      real :: RHT,RHB,mod_Magnus
+      real :: RHT,RHB
 
       pi   = 4.0*atan(1.0)
       pi2  = 2.0*pi
@@ -5776,7 +5775,7 @@ c
       use particles
       real psi(nnx,iys:iye), psix(nnx,iys:iye),
      +     psiy(nnx,iys:iye,izs:izs), uxx(nnx,iys:iye),
-     +     vyy(nnx,iys:iye,izs:izs),mod_Magnus,Ttmp
+     +     vyy(nnx,iys:iye,izs:izs),Ttmp
 
       real :: slope_q,slope_t
       real :: z_switch,t_switch,q_switch
@@ -10182,7 +10181,6 @@ c
       real :: mylwc_sum,myphiw_sum,myphiv_sum,Volp      
       real :: Eff_C,Eff_S
       real :: t_s,t_f,t_s1,t_f1
-      real :: mod_Magnus
 
 
       !First fill extended velocity field for interpolation
@@ -10551,7 +10549,7 @@ c
       real :: rt_start(2)
       real :: rt_zeroes(2)
       real :: taup0, dt_taup0, temp_r, temp_t, guess
-      real :: mod_Magnus,tmp_coeff,crit_radius
+      real :: tmp_coeff
       real :: xp3i
 
 
@@ -11238,7 +11236,7 @@ c
       real :: esa, dnext,  m_w, rhop, Rep, taup,
      +         vprime(3), rprime, Tprime, qstr, Shp, Nup, dp, VolP,
      +         diff(3), diffnorm, Tnext, rnext, T
-      real :: taup0, g(3), mod_Magnus
+      real :: taup0, g(3)
 
 
         taup0 = (((part%m_s)/((2./3.)*pi2*radius_init**3) + rhow) *
@@ -11309,7 +11307,6 @@ c
       real, intent(OUT) :: guess
       integer, intent(OUT) :: mflag
       real :: a, c, esa, Q, R, M, val, theta, S, T
-      real :: mod_Magnus
 
       mflag = 0
       esa = mod_Magnus(part%Tf)
@@ -15293,57 +15290,6 @@ c       Add the current event to the histogram
        end if
        return
       end
-      function mod_Magnus(T)
-      implicit none
-
-      !Take in T in Kelvin and return saturation vapor pressure using
-      !function of Alduchov and Eskridge, 1996
-      real,intent(in) :: T  
-      real :: mod_Magnus
-
-      
-      mod_Magnus = 610.94 *exp((17.6257*(T-273.15))/
-     +  (243.04+(T-273.15)))
-       
-      
-      end function mod_Magnus
-      function crit_radius(m_s,Os,Tf)
-      use particles
-      use pars
-      use con_data
-      implicit none
-
-      integer :: i,maxidx(1)
-      integer, parameter :: N=1000
-      real :: m_s,Os,Tf
-      real :: radval(N),SS(N)
-      real :: radstart,radend,dr
-      real :: crit_radius
-      real :: firstterm,secterm
-
-      radstart = -8
-      radend = -3
-      dr = (radstart-radend)/N
-
-       
-      do i=1,N
-
-         radval(i) = 10**(radstart - (i-1)*dr)
-
-         firstterm = 2*Mw*Gam/Ru/rhow/radval(i)/Tf
-         secterm =Ion*Os*m_s*(Mw/Ms)/(rhow*pi2*2.0/3.0*radval(i)**3)
-
-         SS(i) = exp( 2*Mw*Gam/Ru/rhow/radval(i)/Tf - 
-     +   Ion*Os*m_s*(Mw/Ms)/(rhow*pi2*2.0/3.0*radval(i)**3))
-
-      end do
-
-      maxidx = maxloc(SS)
-      
-      crit_radius = radval(maxidx(1))
-      
-
-      end function crit_radius
       function cdf_func_single(d,CDF,M,S)
       implicit none
       real :: d,CDF,M,S,cdf_func_single
