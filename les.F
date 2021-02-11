@@ -10551,7 +10551,7 @@ c
       real :: rt_start(2)
       real :: rt_zeroes(2)
       real :: taup0, dt_taup0, temp_r, temp_t, guess
-      real :: mod_Magnus,tmp_coeff
+      real :: mod_Magnus,tmp_coeff,crit_radius
       real :: xp3i
 
 
@@ -10717,15 +10717,16 @@ c
                !very specific and rare circumstances
                end if
 
+               !Get the critical radius based on old temp
+               part%rc = crit_radius(part%m_s,part%Os,part%Tf) 
 
-               !Crude way of counting activation. Better would be
-               !computing critical radius
-               if (part%radius > 1.0e-6 .AND.
-     +             part%radius*rt_zeroes(1) < 1.0e-6) then
+               !Count if activated/deactivated
+               if (part%radius > part%rc .AND.
+     +             part%radius*rt_zeroes(1) < part%rc) then
                    denum = denum + 1
 
-               elseif (part%radius < 1.0e-6 .AND.
-     +             part%radius*rt_zeroes(1) > 1.0e-6) then
+               elseif (part%radius < part%rc .AND.
+     +             part%radius*rt_zeroes(1) > part%rc) then
                    actnum = actnum + 1
 
                endif
@@ -14342,7 +14343,7 @@ c        part%qinf = 0.0 ! Brian 7/14/14
       !Set up MPI datatypes for sending particle information
       !MUST UPDATE IF THINGS ARE ADDED/REMOVED FROM PARTICLE STRUCTURE
 
-      num_reals = 6*3+13
+      num_reals = 6*3+14
       num_integers = 4
       num_longs = 3
       
@@ -15306,6 +15307,43 @@ c       Add the current event to the histogram
        
       
       end function mod_Magnus
+      function crit_radius(m_s,Os,Tf)
+      use particles
+      use pars
+      use con_data
+      implicit none
+
+      integer :: i,maxidx(1)
+      integer, parameter :: N=1000
+      real :: m_s,Os,Tf
+      real :: radval(N),SS(N)
+      real :: radstart,radend,dr
+      real :: crit_radius
+      real :: firstterm,secterm
+
+      radstart = -8
+      radend = -3
+      dr = (radstart-radend)/N
+
+       
+      do i=1,N
+
+         radval(i) = 10**(radstart - (i-1)*dr)
+
+         firstterm = 2*Mw*Gam/Ru/rhow/radval(i)/Tf
+         secterm =Ion*Os*m_s*(Mw/Ms)/(rhow*pi2*2.0/3.0*radval(i)**3)
+
+         SS(i) = exp( 2*Mw*Gam/Ru/rhow/radval(i)/Tf - 
+     +   Ion*Os*m_s*(Mw/Ms)/(rhow*pi2*2.0/3.0*radval(i)**3))
+
+      end do
+
+      maxidx = maxloc(SS)
+      
+      crit_radius = radval(maxidx(1))
+      
+
+      end function crit_radius
       function cdf_func_single(d,CDF,M,S)
       implicit none
       real :: d,CDF,M,S,cdf_func_single
