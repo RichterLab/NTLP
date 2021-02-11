@@ -2,9 +2,11 @@ module netcdf_io
 implicit none
 
 
-integer :: ncid
+integer :: ncid,ncid_histog
 integer :: time_dimid,zu_vid,zu_dimid,s_dimid
-integer :: time_vid,dt_vid
+integer :: time_histog_dimid
+integer :: histbins_dimid
+integer :: time_vid,dt_vid,time_histog_vid
 integer :: utau_vid,uwsfc_vid
 integer :: Tsfc_vid,qsfc_vid,wtsfc_vid,wqsfc_vid
 integer :: tnumpart_vid,tnum_destroy_vid,tot_reintro_vid
@@ -26,9 +28,10 @@ integer :: Tfmean_vid,qfmean_vid
 integer :: radmean_vid,rad2mean_vid
 integer :: qstarm_vid
 integer :: Nc_vid,ql_vid
-integer :: dimids(1),dimids_zu(2),dimids_zw(2),dimids_zu_s(3),dimids_zw_s(3)
-integer :: his_counter
-character(len=80) :: path_netcdf_his
+integer :: radbins_vid,resbins_vid
+integer :: radhist_vid,reshist_vid
+integer :: his_counter,histog_counter
+character(len=80) :: path_netcdf_his,path_netcdf_histog
 
 CONTAINS
 
@@ -48,6 +51,8 @@ subroutine netcdf_init
       use netcdf
       use pars
       implicit none
+
+      integer :: dimids(1),dimids_zu(2),dimids_zw(2),dimids_zu_s(3),dimids_zw_s(3)
 
       path_netcdf_his = trim(adjustl(path_his))//"history.nc"
 
@@ -243,6 +248,52 @@ subroutine netcdf_init
 
 end subroutine netcdf_init
 
+subroutine netcdf_init_histog
+      use netcdf
+      use pars
+      use particles
+      implicit none
+
+      integer :: dimids(1),dimids_bins(1),dimids_t_bins(2)
+
+      path_netcdf_histog = trim(adjustl(path_his))//"histograms.nc"
+
+      call netcdf_check( nf90_create(path_netcdf_histog,nf90_clobber,ncid_histog))
+
+      call netcdf_check( nf90_def_dim(ncid_histog, "time",NF90_UNLIMITED, time_histog_dimid) )
+
+      call netcdf_check( nf90_def_dim(ncid_histog,"histbins",histbins+2,histbins_dimid) )
+
+      dimids = (/ time_histog_dimid /)
+      dimids_bins = (/ histbins_dimid /)
+      dimids_t_bins = (/histbins_dimid, time_histog_dimid /)
+
+
+!!! Single quantities
+      call netcdf_check( nf90_def_var(ncid_histog,"time",NF90_REAL,dimids,time_histog_vid) )
+      call netcdf_check( nf90_put_att(ncid_histog,time_histog_vid,"title","Simulation time") )
+
+!! Store the bin definitions
+      call netcdf_check( nf90_def_var(ncid_histog,"radbins",NF90_REAL,dimids_bins,radbins_vid) )
+      call netcdf_check( nf90_put_att(ncid_histog,radbins_vid,"title","Bin centers of particle radii histogram") )
+
+      call netcdf_check( nf90_def_var(ncid_histog,"resbins",NF90_REAL,dimids_bins,resbins_vid) )
+      call netcdf_check( nf90_put_att(ncid_histog,resbins_vid,"title","Bin centers of particle residence time histogram") )
+
+
+!!! Histograms
+      call netcdf_check( nf90_def_var(ncid_histog, "radhist", NF90_REAL, dimids_t_bins,radhist_vid) )
+      call netcdf_check( nf90_put_att(ncid_histog,radhist_vid,"title","Histogram of particle radius at snapshot") )
+
+      call netcdf_check( nf90_def_var(ncid_histog, "reshist", NF90_REAL, dimids_t_bins,reshist_vid) )
+      call netcdf_check( nf90_put_att(ncid_histog,reshist_vid,"title","Histogram of residence time of particles which died over past ihst") )
+
+      call netcdf_check( nf90_enddef(ncid_histog) )
+
+      histog_counter = 1
+
+end subroutine netcdf_init_histog
+
 subroutine write_his_netcdf
       use netcdf
       use pars
@@ -334,6 +385,34 @@ subroutine write_his_netcdf
       his_counter = his_counter + 1
 
 end subroutine write_his_netcdf
+
+subroutine write_histog_netcdf
+      use netcdf
+      use pars
+      use fields
+      use con_data
+      use con_stats
+      use particles
+
+      implicit none
+
+      call netcdf_check( nf90_put_var(ncid_histog, time_histog_vid, real(time),start=(/histog_counter/)) )
+
+      !Store bin definitions only once
+      if (histog_counter == 1) then
+
+      call netcdf_check( nf90_put_var(ncid_histog, radbins_vid, real(bins_rad),start=(/ 1 /)) )
+      call netcdf_check( nf90_put_var(ncid_histog, resbins_vid, real(bins_res),start=(/ 1 /)) )
+
+      end if
+
+      call netcdf_check( nf90_put_var(ncid_histog, radhist_vid, real(hist_rad),start=(/1,histog_counter/)) )
+      call netcdf_check( nf90_put_var(ncid_histog, reshist_vid, real(hist_res),start=(/1,histog_counter/)) )
+
+      histog_counter = histog_counter + 1
+
+end subroutine write_histog_netcdf
+
 subroutine close_his_netcdf
       use netcdf
       use pars
@@ -342,6 +421,16 @@ subroutine close_his_netcdf
       call netcdf_check( nf90_close(ncid) )
 
 end subroutine close_his_netcdf
+
+subroutine close_histog_netcdf
+      use netcdf
+      use pars
+      implicit none
+
+      call netcdf_check( nf90_close(ncid_histog) )
+
+end subroutine close_histog_netcdf
+
 subroutine open_his_netcdf
       use netcdf
       use pars
@@ -350,11 +439,22 @@ subroutine open_his_netcdf
       call netcdf_check( nf90_open(path_netcdf_his,NF90_WRITE,ncid) )
 
 end subroutine open_his_netcdf
+
+subroutine open_histog_netcdf
+      use netcdf
+      use pars
+      implicit none
+
+      call netcdf_check( nf90_open(path_netcdf_histog,NF90_WRITE,ncid_histog) )
+
+end subroutine open_histog_netcdf
+
 subroutine netcdf_restart
       use netcdf
       use pars
       implicit none
 
+      !!!!! NOT EVEN CLOSE TO FINISHED
        
       path_netcdf_his = trim(adjustl(path_his))//"history.nc"
       call netcdf_check( nf90_open(path_netcdf_his,NF90_WRITE,ncid) )

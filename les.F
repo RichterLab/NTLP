@@ -97,6 +97,7 @@ c
          call setup(it)
          if (inetcdf .eq. 1) then
          call netcdf_init
+         call netcdf_init_histog
          end if
 
          call particle_setup
@@ -331,10 +332,11 @@ c
          if (inetcdf .eq. 1) then
             if(mhis  .and. istage .eq. 1)  call write_his_netcdf
          if(mhis  .and. istage .eq. 1 .and. mtape) call close_his_netcdf
-         if(mhis  .and. istage .eq. 1 .and. mtape) call close_histograms
+      if(mhis  .and. istage .eq. 1 .and. mtape) call close_histog_netcdf
          else
             if(mhis  .and. istage .eq. 1)  call write_his(itop)
             if(mhis  .and. istage .eq. 1 .and. mtape) call close_his
+         if(mhis  .and. istage .eq. 1 .and. mtape) call close_histograms
          end if
       endif
 c
@@ -6710,8 +6712,9 @@ c
       if((ihst .gt. 0) .and. (it .ge. it_his_nxt)) then
          if (inetcdf .eq. 1) then
             call open_his_netcdf
-            call open_histograms(it)
+            call open_histog_netcdf
          else
+            call open_histograms(it)
             call open_his(it)
          end if
          it_his_nxt = it_his_nxt + itape
@@ -12759,282 +12762,6 @@ c       -----------------
 
       end subroutine particle_exchange
 
-      subroutine fill_ext 
-      use pars
-      use particles
-      use fields
-      use con_stats
-      use con_data
-      implicit none
-      include 'mpif.h'
-
-      integer :: istatus(mpi_status_size),ierr
-      integer :: ix,iy,iz
-      !preceding letter: r=right,l=left,t=top,b=bot.
-      !_s: buf of things to send TO r,l,t,b
-      !_r: buf of things to recv FROM r,l,t,b 
-      real :: tbuf_s(nnz+2,iye-iys+1,2,5),tbuf_r(nnz+2,iye-iys+1,3,5)
-      real :: bbuf_s(nnz+2,iye-iys+1,3,5),bbuf_r(nnz+2,iye-iys+1,2,5)
-      real :: rbuf_s(nnz+2,2,mxe-mxs+1,5),rbuf_r(nnz+2,3,mxe-mxs+1,5)
-      real :: lbuf_s(nnz+2,3,mxe-mxs+1,5),lbuf_r(nnz+2,2,mxe-mxs+1,5)
-
-      !Corners:
-      real :: trbuf_s(nnz+2,2,2,5),trbuf_r(nnz+2,3,3,5) 
-      real :: brbuf_s(nnz+2,2,3,5),brbuf_r(nnz+2,3,2,5)
-      real :: blbuf_s(nnz+2,3,3,5),blbuf_r(nnz+2,2,2,5)
-      real :: tlbuf_s(nnz+2,3,2,5),tlbuf_r(nnz+2,2,3,5)
-
-      !MPI send counts:
-      integer :: rc_s,rc_r,trc_s,trc_r,tc_s,tc_r,tlc_s,tlc_r
-      integer :: lc_s,lc_r,blc_s,blc_r,bc_s,bc_r,brc_s,brc_r
-
-      !Debugging:
-      real :: xv,yv,zv
- 
-      !To update the particle ODE in time, need the interpolated
-      !velocity field
-      !This requires filling uext,vext,wext from nearby procs
-      uext = 0.0
-      vext = 0.0
-      wext = 0.0
-      Text = 0.0
-      T2ext = 0.0   ! Brian 7/14/14
-
-      !FOR CHECKING INTERPOLATION: create an artificial velocity field
-      !to interpolate from:
-!      do iz=izs-1,ize+1
-!        do iy=iys,iye
-!          do ix=1,nnx
-!            xv = dx*(ix-1)
-!            yv = dy*(iy-1)
-!            zv = z(iz)
-!            u(ix,iy,iz) = 10.0 
-!            v(ix,iy,iz) = 0.0 
-!            w(ix,iy,iz) = 0.0 
-!            u(ix,iy,iz) = 0.3*xv**6 + 0.5*xv*yv**3*zv + 3.0*xv**3*zv**2+
-!     +                      0.7*yv**2*zv**3 + 0.5*zv**3 + 0.1*yv**2
-!          end do
-!        end do
-!      end do
-
-      !First fill the center, since this is just u,v,w on that proc:
-
-      !In the column setup, need to tranpose u,v,w first into u_t,v_t,w_t:
-      call xtoz_trans(u(1:nnx,iys:iye,izs-1:ize+1),u_t,nnx,nnz,
-     +                mxs,mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,
-     +                myid,ncpu_s,numprocs)
-      call xtoz_trans(v(1:nnx,iys:iye,izs-1:ize+1),v_t,nnx,nnz,
-     +                mxs,mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,
-     +                myid,ncpu_s,numprocs)
-      call xtoz_trans(w(1:nnx,iys:iye,izs-1:ize+1),w_t,nnx,nnz,
-     +                mxs,mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,
-     +                myid,ncpu_s,numprocs)
-      call xtoz_trans(t(1:nnx,iys:iye,1,izs-1:ize+1),T_t,nnx,nnz,
-     +                mxs,mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,
-     +                myid,ncpu_s,numprocs)
-      call xtoz_trans(t(1:nnx,iys:iye,2,izs-1:ize+1),T2_t,nnx,nnz,
-     +                mxs,mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,
-     +                myid,ncpu_s,numprocs) 
-
-      uext(0:nnz+1,iys:iye,mxs:mxe) = u_t(0:nnz+1,iys:iye,mxs:mxe)
-      vext(0:nnz+1,iys:iye,mxs:mxe) = v_t(0:nnz+1,iys:iye,mxs:mxe)
-      wext(0:nnz+1,iys:iye,mxs:mxe) = w_t(0:nnz+1,iys:iye,mxs:mxe)
-      Text(0:nnz+1,iys:iye,mxs:mxe) = T_t(0:nnz+1,iys:iye,mxs:mxe)
-      T2ext(0:nnz+1,iys:iye,mxs:mxe) = T2_t(0:nnz+1,iys:iye,mxs:mxe)
-
-
-      !Recall that SR assign_nbrs assigned rproc,lproc, etc.
-
-      !Going to call 6 sendrecv calls - one for each proc. nbr.:
-      
-      !Fill the send buffers:
-      
-      !I know these are redundant, but so I can keep them straight...
-      tc_s = 5*(nnz+2)*2*(iye-iys+1)
-      tc_r = 5*(nnz+2)*3*(iye-iys+1)
-      trc_s = 5*(nnz+2)*2*2
-      trc_r = 5*(nnz+2)*3*3
-      rc_s = 5*(nnz+2)*(mxe-mxs+1)*2 
-      rc_r = 5*(nnz+2)*(mxe-mxs+1)*3 
-      tlc_s = 5*(nnz+2)*3*2 
-      tlc_r = 5*(nnz+2)*2*3 
-      bc_s = 5*(nnz+2)*3*(iye-iys+1) 
-      bc_r = 5*(nnz+2)*2*(iye-iys+1)
-      blc_s = 5*(nnz+2)*3*3
-      blc_r = 5*(nnz+2)*2*2
-      lc_s = 5*(nnz+2)*(mxe-mxs+1)*3 
-      lc_r = 5*(nnz+2)*(mxe-mxs+1)*2
-      brc_s = 5*(nnz+2)*2*3 
-      brc_r = 5*(nnz+2)*3*2 
-     
-      !First u:
-      tbuf_s(1:nnz+2,1:iye-iys+1,1:2,1) = u_t(0:nnz+1,iys:iye,mxe-1:mxe)
-      trbuf_s(1:nnz+2,1:2,1:2,1) = u_t(0:nnz+1,iye-1:iye,mxe-1:mxe)
-      rbuf_s(1:nnz+2,1:2,1:mxe-mxs+1,1) = u_t(0:nnz+1,iye-1:iye,mxs:mxe)
-      brbuf_s(1:nnz+2,1:2,1:3,1) = u_t(0:nnz+1,iye-1:iye,mxs:mxs+2)
-      bbuf_s(1:nnz+2,1:iye-iys+1,1:3,1) = u_t(0:nnz+1,iys:iye,mxs:mxs+2)
-      blbuf_s(1:nnz+2,1:3,1:3,1) = u_t(0:nnz+1,iys:iys+2,mxs:mxs+2)
-      lbuf_s(1:nnz+2,1:3,1:mxe-mxs+1,1) = u_t(0:nnz+1,iys:iys+2,mxs:mxe)
-      tlbuf_s(1:nnz+2,1:3,1:2,1) = u_t(0:nnz+1,iys:iys+2,mxe-1:mxe)
-
-      !v:
-      tbuf_s(1:nnz+2,1:iye-iys+1,1:2,2) = v_t(0:nnz+1,iys:iye,mxe-1:mxe)
-      trbuf_s(1:nnz+2,1:2,1:2,2) = v_t(0:nnz+1,iye-1:iye,mxe-1:mxe)
-      rbuf_s(1:nnz+2,1:2,1:mxe-mxs+1,2) = v_t(0:nnz+1,iye-1:iye,mxs:mxe)
-      brbuf_s(1:nnz+2,1:2,1:3,2) = v_t(0:nnz+1,iye-1:iye,mxs:mxs+2)
-      bbuf_s(1:nnz+2,1:iye-iys+1,1:3,2) = v_t(0:nnz+1,iys:iye,mxs:mxs+2)
-      blbuf_s(1:nnz+2,1:3,1:3,2) = v_t(0:nnz+1,iys:iys+2,mxs:mxs+2)
-      lbuf_s(1:nnz+2,1:3,1:mxe-mxs+1,2) = v_t(0:nnz+1,iys:iys+2,mxs:mxe)
-      tlbuf_s(1:nnz+2,1:3,1:2,2) = v_t(0:nnz+1,iys:iys+2,mxe-1:mxe)
-
-      !w:
-      tbuf_s(1:nnz+2,1:iye-iys+1,1:2,3) = w_t(0:nnz+1,iys:iye,mxe-1:mxe)
-      trbuf_s(1:nnz+2,1:2,1:2,3) = w_t(0:nnz+1,iye-1:iye,mxe-1:mxe)
-      rbuf_s(1:nnz+2,1:2,1:mxe-mxs+1,3) = w_t(0:nnz+1,iye-1:iye,mxs:mxe)
-      brbuf_s(1:nnz+2,1:2,1:3,3) = w_t(0:nnz+1,iye-1:iye,mxs:mxs+2)
-      bbuf_s(1:nnz+2,1:iye-iys+1,1:3,3) = w_t(0:nnz+1,iys:iye,mxs:mxs+2)
-      blbuf_s(1:nnz+2,1:3,1:3,3) = w_t(0:nnz+1,iys:iys+2,mxs:mxs+2)
-      lbuf_s(1:nnz+2,1:3,1:mxe-mxs+1,3) = w_t(0:nnz+1,iys:iys+2,mxs:mxe)
-      tlbuf_s(1:nnz+2,1:3,1:2,3) = w_t(0:nnz+1,iys:iys+2,mxe-1:mxe)
-
-      !T:
-      tbuf_s(1:nnz+2,1:iye-iys+1,1:2,4) = T_t(0:nnz+1,iys:iye,mxe-1:mxe)
-      trbuf_s(1:nnz+2,1:2,1:2,4) = T_t(0:nnz+1,iye-1:iye,mxe-1:mxe)
-      rbuf_s(1:nnz+2,1:2,1:mxe-mxs+1,4) = T_t(0:nnz+1,iye-1:iye,mxs:mxe)
-      brbuf_s(1:nnz+2,1:2,1:3,4) = T_t(0:nnz+1,iye-1:iye,mxs:mxs+2)
-      bbuf_s(1:nnz+2,1:iye-iys+1,1:3,4) = T_t(0:nnz+1,iys:iye,mxs:mxs+2)
-      blbuf_s(1:nnz+2,1:3,1:3,4) = T_t(0:nnz+1,iys:iys+2,mxs:mxs+2)
-      lbuf_s(1:nnz+2,1:3,1:mxe-mxs+1,4) = T_t(0:nnz+1,iys:iys+2,mxs:mxe)
-      tlbuf_s(1:nnz+2,1:3,1:2,4) = T_t(0:nnz+1,iys:iys+2,mxe-1:mxe)
-     
-      !T2:
-      tbuf_s(1:nnz+2,1:iye-iys+1,1:2,5) =
-     +      T2_t(0:nnz+1,iys:iye,mxe-1:mxe) !Brian 7/14/14
-      trbuf_s(1:nnz+2,1:2,1:2,5) = 
-     +      T2_t(0:nnz+1,iye-1:iye,mxe-1:mxe) !Brian 7/14/14
-      rbuf_s(1:nnz+2,1:2,1:mxe-mxs+1,5) = 
-     +      T2_t(0:nnz+1,iye-1:iye,mxs:mxe) !Brian 7/14/14
-      brbuf_s(1:nnz+2,1:2,1:3,5) = 
-     +      T2_t(0:nnz+1,iye-1:iye,mxs:mxs+2) !Brian 7/14/14
-      bbuf_s(1:nnz+2,1:iye-iys+1,1:3,5) = 
-     +      T2_t(0:nnz+1,iys:iye,mxs:mxs+2) !Brian 7/14/14
-      blbuf_s(1:nnz+2,1:3,1:3,5) = 
-     +      T2_t(0:nnz+1,iys:iys+2,mxs:mxs+2) !Brian 7/14/14
-      lbuf_s(1:nnz+2,1:3,1:mxe-mxs+1,5) = 
-     +      T2_t(0:nnz+1,iys:iys+2,mxs:mxe) !Brian 7/14/14
-      tlbuf_s(1:nnz+2,1:3,1:2,5) = 
-     +      T2_t(0:nnz+1,iys:iys+2,mxe-1:mxe) !Brian 7/14/14
-     
-      !Zero out recieve buffers 
-      rbuf_r=0.0;trbuf_r=0.0;tbuf_r=0.0;tlbuf_r=0.0;lbuf_r=0.0
-      blbuf_r=0.0;bbuf_r=0.0;brbuf_r=0.0
-
-      !Left/right:
-      call MPI_Sendrecv(rbuf_s,rc_s,mpi_real8,rproc,3,
-     +        lbuf_r,lc_r,mpi_real8,lproc,3,mpi_comm_world,istatus,ierr)
-
-      call mpi_barrier(mpi_comm_world,ierr)
-      call MPI_Sendrecv(lbuf_s,lc_s,mpi_real8,lproc,4,
-     +        rbuf_r,rc_r,mpi_real8,rproc,4,mpi_comm_world,istatus,ierr)
-
-      !Top/bottom:
-      call MPI_Sendrecv(tbuf_s,tc_s,mpi_real8,tproc,5,
-     +        bbuf_r,bc_r,mpi_real8,bproc,5,mpi_comm_world,istatus,ierr)
-
-      call MPI_Sendrecv(bbuf_s,bc_s,mpi_real8,bproc,6,
-     +        tbuf_r,tc_r,mpi_real8,tproc,6,mpi_comm_world,istatus,ierr)
-
-      !Top right/bottom left:
-      call MPI_Sendrecv(trbuf_s,trc_s,mpi_real8,trproc,7,
-     +        blbuf_r,blc_r,mpi_real8,blproc,7,
-     +        mpi_comm_world,istatus,ierr)
-
-      call MPI_Sendrecv(blbuf_s,blc_s,mpi_real8,blproc,8,
-     +        trbuf_r,trc_r,mpi_real8,trproc,8,
-     +        mpi_comm_world,istatus,ierr)
-
-       !Top left/bottom right:
-      call MPI_Sendrecv(tlbuf_s,tlc_s,mpi_real8,tlproc,9,
-     +        brbuf_r,brc_r,mpi_real8,brproc,9,
-     +        mpi_comm_world,istatus,ierr)
-
-      call MPI_Sendrecv(brbuf_s,brc_s,mpi_real8,brproc,10,
-     +         tlbuf_r,tlc_r,mpi_real8,tlproc,10,
-     +         mpi_comm_world,istatus,ierr)
-
-      !Now fill the ext arrays with the recieved buffers:
-      uext(0:nnz+1,iys:iye,mxe+1:mxe+3) = 
-     +     tbuf_r(1:nnz+2,1:iye-iys+1,1:3,1)
-      uext(0:nnz+1,iye+1:iye+3,mxe+1:mxe+3) = trbuf_r(1:nnz+2,1:3,1:3,1)
-      uext(0:nnz+1,iye+1:iye+3,mxs:mxe) =
-     +     rbuf_r(1:nnz+2,1:3,1:mxe-mxs+1,1)
-      uext(0:nnz+1,iye+1:iye+3,mxs-2:mxs-1) = brbuf_r(1:nnz+2,1:3,1:2,1)
-      uext(0:nnz+1,iys:iye,mxs-2:mxs-1) = 
-     +     bbuf_r(1:nnz+2,1:iye-iys+1,1:2,1)
-      uext(0:nnz+1,iys-2:iys-1,mxs-2:mxs-1) = blbuf_r(1:nnz+2,1:2,1:2,1)
-      uext(0:nnz+1,iys-2:iys-1,mxs:mxe) =
-     +     lbuf_r(1:nnz+2,1:2,1:mxe-mxs+1,1)
-      uext(0:nnz+1,iys-2:iys-1,mxe+1:mxe+3) = tlbuf_r(1:nnz+2,1:2,1:3,1)
- 
-      vext(0:nnz+1,iys:iye,mxe+1:mxe+3) = 
-     +     tbuf_r(1:nnz+2,1:iye-iys+1,1:3,2)
-      vext(0:nnz+1,iye+1:iye+3,mxe+1:mxe+3) = trbuf_r(1:nnz+2,1:3,1:3,2)
-      vext(0:nnz+1,iye+1:iye+3,mxs:mxe) =
-     +     rbuf_r(1:nnz+2,1:3,1:mxe-mxs+1,2)
-      vext(0:nnz+1,iye+1:iye+3,mxs-2:mxs-1) = brbuf_r(1:nnz+2,1:3,1:2,2)
-      vext(0:nnz+1,iys:iye,mxs-2:mxs-1) = 
-     +     bbuf_r(1:nnz+2,1:iye-iys+1,1:2,2)
-      vext(0:nnz+1,iys-2:iys-1,mxs-2:mxs-1) = blbuf_r(1:nnz+2,1:2,1:2,2)
-      vext(0:nnz+1,iys-2:iys-1,mxs:mxe) =
-     +     lbuf_r(1:nnz+2,1:2,1:mxe-mxs+1,2)
-      vext(0:nnz+1,iys-2:iys-1,mxe+1:mxe+3) = tlbuf_r(1:nnz+2,1:2,1:3,2)
-
-      wext(0:nnz+1,iys:iye,mxe+1:mxe+3) = 
-     +     tbuf_r(1:nnz+2,1:iye-iys+1,1:3,3)
-      wext(0:nnz+1,iye+1:iye+3,mxe+1:mxe+3) = trbuf_r(1:nnz+2,1:3,1:3,3)
-      wext(0:nnz+1,iye+1:iye+3,mxs:mxe) =
-     +     rbuf_r(1:nnz+2,1:3,1:mxe-mxs+1,3)
-      wext(0:nnz+1,iye+1:iye+3,mxs-2:mxs-1) = brbuf_r(1:nnz+2,1:3,1:2,3)
-      wext(0:nnz+1,iys:iye,mxs-2:mxs-1) = 
-     +     bbuf_r(1:nnz+2,1:iye-iys+1,1:2,3)
-      wext(0:nnz+1,iys-2:iys-1,mxs-2:mxs-1) = blbuf_r(1:nnz+2,1:2,1:2,3)
-      wext(0:nnz+1,iys-2:iys-1,mxs:mxe) =
-     +     lbuf_r(1:nnz+2,1:2,1:mxe-mxs+1,3)
-      wext(0:nnz+1,iys-2:iys-1,mxe+1:mxe+3) = tlbuf_r(1:nnz+2,1:2,1:3,3)
-
-      Text(0:nnz+1,iys:iye,mxe+1:mxe+3) = 
-     +     tbuf_r(1:nnz+2,1:iye-iys+1,1:3,4)
-      Text(0:nnz+1,iye+1:iye+3,mxe+1:mxe+3) = trbuf_r(1:nnz+2,1:3,1:3,4)
-      Text(0:nnz+1,iye+1:iye+3,mxs:mxe) =
-     +     rbuf_r(1:nnz+2,1:3,1:mxe-mxs+1,4)
-      Text(0:nnz+1,iye+1:iye+3,mxs-2:mxs-1) = brbuf_r(1:nnz+2,1:3,1:2,4)
-      Text(0:nnz+1,iys:iye,mxs-2:mxs-1) = 
-     +     bbuf_r(1:nnz+2,1:iye-iys+1,1:2,4)
-      Text(0:nnz+1,iys-2:iys-1,mxs-2:mxs-1) = blbuf_r(1:nnz+2,1:2,1:2,4)
-      Text(0:nnz+1,iys-2:iys-1,mxs:mxe) =
-     +     lbuf_r(1:nnz+2,1:2,1:mxe-mxs+1,4)
-      Text(0:nnz+1,iys-2:iys-1,mxe+1:mxe+3) = tlbuf_r(1:nnz+2,1:2,1:3,4)
-
-
-      T2ext(0:nnz+1,iys:iye,mxe+1:mxe+3) = 
-     +     tbuf_r(1:nnz+2,1:iye-iys+1,1:3,5) !Brian 7/14/14
-      T2ext(0:nnz+1,iye+1:iye+3,mxe+1:mxe+3) = 
-     +     trbuf_r(1:nnz+2,1:3,1:3,5)!Brian 7/14/14
-      T2ext(0:nnz+1,iye+1:iye+3,mxs:mxe) =
-     +     rbuf_r(1:nnz+2,1:3,1:mxe-mxs+1,5)!Brian 7/14/14
-      T2ext(0:nnz+1,iye+1:iye+3,mxs-2:mxs-1) = 
-     +     brbuf_r(1:nnz+2,1:3,1:2,5)!Brian 7/14/14
-      T2ext(0:nnz+1,iys:iye,mxs-2:mxs-1) = 
-     +     bbuf_r(1:nnz+2,1:iye-iys+1,1:2,5)!Brian 7/14/14
-      T2ext(0:nnz+1,iys-2:iys-1,mxs-2:mxs-1) = 
-     +     blbuf_r(1:nnz+2,1:2,1:2,5)!Brian 7/14/14
-      T2ext(0:nnz+1,iys-2:iys-1,mxs:mxe) =
-     +     lbuf_r(1:nnz+2,1:2,1:mxe-mxs+1,5)!Brian 7/14/14
-      T2ext(0:nnz+1,iys-2:iys-1,mxe+1:mxe+3) = 
-     +     tlbuf_r(1:nnz+2,1:2,1:3,5)!Brian 7/14/14
-
-
-      end subroutine fill_ext
       subroutine fill_extSFS
 c       This subroutine calculte the extented fields for SFS velocity
 c       calculations
@@ -15002,6 +14729,7 @@ c        part%qinf = 0.0 ! Brian 7/14/14
       use con_data
       use con_stats
       use particles
+      use netcdf_io
       implicit none
 
       include 'mpif.h'
@@ -15031,35 +14759,33 @@ c -------------- Collect all histogram from different processors
         num_entries = (histbins+2)
         call mpi_reduce(hist_rad,sumbuf_rad,num_entries,
      +   mpi_real8,mpi_sum,0,mpi_comm_world,ierr)
+        !Residence time PDF
+
+        call mpi_reduce(hist_res,sumbuf_res,num_entries,
+     +   mpi_real8,mpi_sum,0,mpi_comm_world,ierr)
+
 
         if (myid==0) then
 
 c ---------------- save data 
+
+        if (inetcdf .eq. 1) then
+      
+            call write_histog_netcdf
+
+        else
 
         write(num,'(i3.3)') histbins+2
         fformat = '('//num//'e15.6)'
 
         write(nrad,fformat),sumbuf_rad(1:histbins+2)
-
-        end if
-
-        !Residence time PDF
-        num_entries = (histbins+2)
-        call mpi_reduce(hist_res,sumbuf_res,num_entries,
-     +   mpi_real8,mpi_sum,0,mpi_comm_world,ierr)
-
-        hist_res = 0.0  !Reset it every time it writes
-
-        if (myid==0) then
-
-c ---------------- save data 
-
-        write(num,'(i3.3)') histbins+2
-        fformat = '('//num//'e15.6)'
-
         write(nres,fformat),sumbuf_res(1:histbins+2)
 
         end if
+
+        end if
+
+        hist_res = 0.0  !Reset this one every time it writes
 
       end subroutine write_histograms
       subroutine set_binsdata(binsdata,sizea,rmin,rmax)
