@@ -2,7 +2,7 @@ module netcdf_io
 implicit none
 
 
-integer :: ncid,ncid_histog
+integer :: ncid,ncid_histog,ncid_viz
 integer :: time_dimid,zu_vid,zu_dimid,s_dimid
 integer :: time_histog_dimid
 integer :: histbins_dimid
@@ -31,8 +31,13 @@ integer :: Nc_vid,ql_vid
 integer :: radbins_vid,resbins_vid
 integer :: radhist_vid,reshist_vid
 integer :: actresbins_vid,actreshist_vid
-integer :: his_counter,histog_counter
-character(len=80) :: path_netcdf_his,path_netcdf_histog
+
+!Viz:
+integer :: time_viz_dimid,viz_nx_dimid,viz_ny_dimid,viz_nz_dimid
+integer :: time_viz_vid,u_xy_vid
+
+integer :: his_counter,histog_counter,viz_counter
+character(len=80) :: path_netcdf_his,path_netcdf_histog,path_netcdf_viz
 
 CONTAINS
 
@@ -422,6 +427,118 @@ subroutine write_histog_netcdf
 
 end subroutine write_histog_netcdf
 
+subroutine netcdf_init_viz
+      use netcdf
+      use pars
+      use particles
+      implicit none
+      include 'mpif.h'
+
+      integer :: dimids(1),dimids_xy(3)
+      integer :: mynx,myny,ierr
+
+      mynx = nnx
+      myny = (iye-iys)+1
+      myny = nny
+
+      path_netcdf_viz = trim(adjustl(path_his))//"viz.nc"
+
+      call mpi_barrier(mpi_comm_world,ierr)
+      write(*,*) 'DHR1'
+      print *, trim(nf90_inq_libvers())
+      call netcdf_check( nf90_create(path_netcdf_viz,IOR(NF90_NETCDF4,NF90_MPIIO),ncid_viz,comm=mpi_comm_world,info=mpi_info_null) )
+      !call netcdf_check( nf90_create_par(path_netcdf_viz,IOR(NF90_MPIIO,NF90_NETCDF4),mpi_comm_world,mpi_info_null,ncid_viz) )
+
+      write(*,*) 'DHR2'
+
+      call netcdf_check( nf90_def_dim(ncid_viz, "time",NF90_UNLIMITED, time_viz_dimid) )
+
+      call mpi_barrier(mpi_comm_world,ierr)
+      write(*,*) 'DHR3'
+
+      call netcdf_check( nf90_def_dim(ncid_viz,"nx",mynx,viz_nx_dimid) )
+      call netcdf_check( nf90_def_dim(ncid_viz,"ny",myny,viz_ny_dimid) )
+
+      dimids = (/ time_viz_dimid /)
+      dimids_xy = (/viz_nx_dimid, viz_ny_dimid, time_viz_dimid /)
+
+      call mpi_barrier(mpi_comm_world,ierr)
+      write(*,*) 'DHR4'
+
+
+!!! Single quantities
+      call netcdf_check( nf90_def_var(ncid_viz,"time",NF90_REAL,dimids,time_viz_vid) )
+      call netcdf_check( nf90_put_att(ncid_viz,time_viz_vid,"title","Simulation time") )
+
+      call mpi_barrier(mpi_comm_world,ierr)
+      write(*,*) 'DHR5'
+
+!! Would need to store grid values
+
+
+!!! Slices
+      call netcdf_check( nf90_def_var(ncid_viz, "u_xy", NF90_REAL, dimids_xy,u_xy_vid) )
+      call netcdf_check( nf90_put_att(ncid_viz,u_xy_vid,"title","xy slice of u-velocity") )
+
+      call mpi_barrier(mpi_comm_world,ierr)
+      write(*,*) 'DHR6'
+
+      call netcdf_check( nf90_enddef(ncid_viz) )
+
+      viz_counter = 1
+
+end subroutine netcdf_init_viz
+
+subroutine write_viz_netcdf
+      use netcdf
+      use pars
+      use fields
+      use con_data
+      use con_stats
+      use particles
+      implicit none
+      include 'mpif.h'
+
+      integer :: ierr
+      integer :: startsxy(3),countsxy(3)
+      integer :: xyslice
+
+      countsxy(1) = nnx
+      countsxy(2) = (iye-iys)+1
+      countsxy(3) = NF90_UNLIMITED
+
+      startsxy(1) = 1
+      startsxy(2) = iys
+      startsxy(3) = viz_counter
+
+      if (myid==0) then
+      call netcdf_check( nf90_put_var(ncid_viz, time_viz_vid, real(time),start=(/viz_counter/)) )
+
+      !Store grid definitions only once
+      if (viz_counter == 1) then
+
+
+      end if
+
+
+      end if
+      
+
+      xyslice = nnz/2  !Choose the nz value for the xy slice
+
+      write(*,'(a5,7i)') 'DHR8:',myid,xyslice,ize,izs,startsxy(1:3)
+
+      if (xyslice .le. ize .and. xyslice .ge. izs) then
+         write(*,*) 'I am here!',myid,startsxy
+         !call netcdf_check( nf90_put_var(ncid_viz, u_xy_vid, real(u(1:nnx,iys:iye,xyslice)), start=startsxy, count=countsxy) )
+         call netcdf_check( nf90_put_var(ncid_viz, u_xy_vid, real(u(1:nnx,iys:iye,xyslice)), start=startsxy) )
+      end if
+
+      call mpi_barrier(mpi_comm_world,ierr)
+
+      viz_counter = viz_counter + 1
+
+end subroutine write_viz_netcdf
 subroutine close_his_netcdf
       use netcdf
       use pars
@@ -439,6 +556,15 @@ subroutine close_histog_netcdf
       call netcdf_check( nf90_close(ncid_histog) )
 
 end subroutine close_histog_netcdf
+
+subroutine close_viz_netcdf
+      use netcdf
+      use pars
+      implicit none
+
+      call netcdf_check( nf90_close(ncid_viz) )
+
+end subroutine close_viz_netcdf
 
 subroutine open_his_netcdf
       use netcdf
@@ -458,12 +584,24 @@ subroutine open_histog_netcdf
 
 end subroutine open_histog_netcdf
 
+subroutine open_viz_netcdf
+      use netcdf
+      use pars
+      implicit none
+      include 'mpif.h'
+
+      call netcdf_check( nf90_open(path_netcdf_viz,NF90_WRITE,ncid_viz,comm=mpi_comm_world,info=mpi_info_null) )
+
+end subroutine open_viz_netcdf
+
 subroutine netcdf_restart
       use netcdf
       use pars
       implicit none
 
       !!!!! NOT EVEN CLOSE TO FINISHED
+!This is helpful:
+!https://www.unidata.ucar.edu/software/netcdf/docs-fortran/f90-use-of-the-netcdf-library.html#f90-writing-data-in-an-existing-netcdf-dataset
        
       path_netcdf_his = trim(adjustl(path_his))//"history.nc"
       call netcdf_check( nf90_open(path_netcdf_his,NF90_WRITE,ncid) )

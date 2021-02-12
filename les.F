@@ -98,6 +98,8 @@ c
          if (inetcdf .eq. 1) then
          call netcdf_init
          call netcdf_init_histog
+         call netcdf_init_viz
+         write(*,*) 'DHR7:',myid
          end if
 
          call particle_setup
@@ -255,7 +257,11 @@ c
          call save_particles
       endif
       if(msave_v .and. istage .eq. 1) then
-         call save_viz(it)
+         if (inetcdf) then
+            call  write_viz_netcdf
+         else
+            call save_viz(it)
+         end if
       endif
 c
 c ------------ save pressure field
@@ -6694,16 +6700,25 @@ c
 c
 c ---------- decide whether viz fields are saved
 c
-      !msave_v = .false.
-      !if(it .ge. itstr .and. mviz .and. i_viz .gt. 0) then
-      !   msave_v = .true.
-      !   if(ionce .eq. 0) then
-      !      ionce = 1
-      !      call open_viz
-      !   endif
-      !endif
+      msave_v = .false.
+      if(it .ge. itstr .and. mviz .and. i_viz .gt. 0) then
+         msave_v = .true.
+         if(ionce .eq. 0) then
+            ionce = 1
+            if (inetcdf) then
+               call open_viz_netcdf
+            else
+               call open_viz
+            end if
+         endif
+      endif
       if((i_viz .gt. 0) .and. (it .ge. it_viz_nxt)) then
-        call viz_output_filename(it)
+        if (inetcdf) then
+           call close_viz_netcdf
+           call open_viz_netcdf
+        else
+           call viz_output_filename(it)
+        end if
         it_viz_nxt = it_viz_nxt + itape
       endif
 c
