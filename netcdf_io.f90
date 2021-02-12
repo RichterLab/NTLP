@@ -441,11 +441,13 @@ subroutine netcdf_init_viz
       myny = (iye-iys)+1
       myny = nny
 
+!!! NOTE: An error arises if the netcdf library being used doesn't support parallel:
+!"NetCDF: Parallel operation on file opened for non-parallel access"
+
       path_netcdf_viz = trim(adjustl(path_his))//"viz.nc"
 
       call mpi_barrier(mpi_comm_world,ierr)
       write(*,*) 'DHR1'
-      print *, trim(nf90_inq_libvers())
       call netcdf_check( nf90_create(path_netcdf_viz,IOR(NF90_NETCDF4,NF90_MPIIO),ncid_viz,comm=mpi_comm_world,info=mpi_info_null) )
       !call netcdf_check( nf90_create_par(path_netcdf_viz,IOR(NF90_MPIIO,NF90_NETCDF4),mpi_comm_world,mpi_info_null,ncid_viz) )
 

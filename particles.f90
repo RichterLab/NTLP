@@ -527,6 +527,510 @@ CONTAINS
 
   end subroutine fill_extSFS
 
+  subroutine particle_coupling_exchange
+      use pars
+      use con_data
+      use con_stats
+      implicit none
+      include 'mpif.h'
+      real :: ctbuf_s(nnz+2,1:iye-iys+2,6),cbbuf_r(nnz+2,1:iye-iys+2,6)
+      real :: crbuf_s(nnz+2,1:mxe-mxs+1,6),clbuf_r(nnz+2,1:mxe-mxs+1,6)
+      integer :: istatus(mpi_status_size),ierr,ncount
+
+
+      !Now, partsrc and partTsrc have halos on each processor - give these to the rightful owner:
+      crbuf_s=0.0;ctbuf_s=0.0
+      clbuf_r=0.0;cbbuf_r=0.0
+
+      !First send top: 
+      !get send buffer ready:
+      ctbuf_s(1:nnz+2,1:iye-iys+2,1:3)=partsrc_t(0:nnz+1,iys:iye+1,mxe+1,1:3)
+      ctbuf_s(1:nnz+2,1:iye-iys+2,4)=partTsrc_t(0:nnz+1,iys:iye+1,mxe+1)
+      ctbuf_s(1:nnz+2,1:iye-iys+2,5)=partHsrc_t(0:nnz+1,iys:iye+1,mxe+1)
+      ctbuf_s(1:nnz+2,1:iye-iys+2,6)=partTEsrc_t(0:nnz+1,iys:iye+1,mxe+1)
+
+      ncount = 6*(nnz+2)*(iye-iys+2)
+      call mpi_sendrecv(ctbuf_s,ncount,mpi_real8,tproc,1, &
+           cbbuf_r,ncount,mpi_real8,bproc,1,mpi_comm_world,istatus,ierr)
+
+      !Now just add the contents of the receive buffer into the entire iys column of this proc:
+
+      partsrc_t(0:nnz+1,iys:iye+1,mxs,1:3) = partsrc_t(0:nnz+1,iys:iye+1,mxs,1:3) + cbbuf_r(1:nnz+2,1:iye-iys+2,1:3)
+      partTsrc_t(0:nnz+1,iys:iye+1,mxs) = partTsrc_t(0:nnz+1,iys:iye+1,mxs) + cbbuf_r(1:nnz+2,1:iye-iys+2,4)
+      partHsrc_t(0:nnz+1,iys:iye+1,mxs) = partHsrc_t(0:nnz+1,iys:iye+1,mxs) + cbbuf_r(1:nnz+2,1:iye-iys+2,5)
+      partTEsrc_t(0:nnz+1,iys:iye+1,mxs) = partTEsrc_t(0:nnz+1,iys:iye+1,mxs) + cbbuf_r(1:nnz+2,1:iye-iys+2,6)
+
+      !Now get the right send buffer ready:
+      crbuf_s(1:nnz+2,1:mxe-mxs+1,1:3)=partsrc_t(0:nnz+1,iye+1,mxs:mxe,1:3)
+      crbuf_s(1:nnz+2,1:mxe-mxs+1,4)=partTsrc_t(0:nnz+1,iye+1,mxs:mxe)
+      crbuf_s(1:nnz+2,1:mxe-mxs+1,5)=partHsrc_t(0:nnz+1,iye+1,mxs:mxe)
+      crbuf_s(1:nnz+2,1:mxe-mxs+1,6)=partTEsrc_t(0:nnz+1,iye+1,mxs:mxe)
+
+      !Now send to right:
+      ncount = 6*(nnz+2)*(mxe-mxs+1)
+      call mpi_sendrecv(crbuf_s,ncount,mpi_real8,rproc,2, &
+           clbuf_r,ncount,mpi_real8,lproc,2,mpi_comm_world,istatus,ierr)
+
+      !And again add the contents to the top/bottom rows of partsrc:
+      partsrc_t(0:nnz+1,iys,mxs:mxe,1:3) = partsrc_t(0:nnz+1,iys,mxs:mxe,1:3) + clbuf_r(1:nnz+2,1:mxe-mxs+1,1:3)
+
+      partTsrc_t(0:nnz+1,iys,mxs:mxe) = partTsrc_t(0:nnz+1,iys,mxs:mxe) + clbuf_r(1:nnz+2,1:mxe-mxs+1,4)
+      partHsrc_t(0:nnz+1,iys,mxs:mxe) = partHsrc_t(0:nnz+1,iys,mxs:mxe) + clbuf_r(1:nnz+2,1:mxe-mxs+1,5)
+      partTEsrc_t(0:nnz+1,iys,mxs:mxe) = partTEsrc_t(0:nnz+1,iys,mxs:mxe) + clbuf_r(1:nnz+2,1:mxe-mxs+1,6)
+
+
+  end subroutine particle_coupling_exchange
+
+  subroutine assign_nbrs
+        use pars
+        include 'mpif.h'
+      !Figure out which processors lie to all sides: 
+      !NOTE: For this updated case, where particles lie in columns not 
+      !aligning with the velocity, there will be no MPI_PROC_NULL since
+      !x and y are BOTH periodic
+     
+      !On right boundary:
+      if ( mod(myid+1,ncpu_s) == 0 ) then
+         !On the top:
+         if ( myid .GE. ncpu_s*(ncpu_z-1) ) then
+            rproc = myid-ncpu_s+1
+            trproc = 0 
+            tproc = ncpu_s-1 
+            tlproc = ncpu_s-2 
+            lproc = myid-1
+            blproc = myid-ncpu_s-1
+            bproc = myid-ncpu_s
+            brproc = myid-ncpu_s - ncpu_s+1
+         !On the bottom:
+         elseif ( myid .LT. ncpu_s ) then
+            rproc = myid-ncpu_s+1
+            trproc = myid+1
+            tproc = myid+ncpu_s
+            tlproc = myid+ncpu_s-1
+            lproc = myid-1
+            blproc = myid+ncpu_s*(ncpu_z-1)-1 
+            bproc = myid+ncpu_s*(ncpu_z-1) 
+            brproc = ncpu_s*(ncpu_z-1) 
+         !In the middle of right side:
+         else 
+            rproc = myid-ncpu_s+1
+            trproc = myid+1
+            tproc = myid+ncpu_s
+            tlproc = myid+ncpu_s-1
+            lproc = myid-1
+            blproc = myid-ncpu_s-1
+            bproc = myid-ncpu_s
+            brproc = myid-ncpu_s - ncpu_s+1
+         end if 
+
+      !On the left boundary:
+      elseif ( mod(myid,ncpu_s) == 0) then
+         !On the top:
+         if ( myid .GE. ncpu_s*(ncpu_z-1) ) then
+            rproc = myid+1
+            trproc = 1 
+            tproc = 0 
+            tlproc = ncpu_s-1
+            lproc = myid+ncpu_s-1
+            blproc = myid-1
+            bproc = myid-ncpu_s
+            brproc = myid-ncpu_s+1
+         !On the bottom:
+         elseif ( myid .LT. ncpu_s ) then
+            rproc = myid+1
+            trproc = myid+ncpu_s+1
+            tproc = myid+ncpu_s
+            tlproc = myid+ncpu_s+ncpu_s-1
+            lproc = myid+ncpu_s-1
+            blproc = numprocs-1 
+            bproc = ncpu_s*(ncpu_z-1) 
+            brproc = ncpu_s*(ncpu_z-1)+1 
+         !In the middle of left side:
+         else
+            rproc = myid+1
+            trproc = myid+ncpu_s+1
+            tproc = myid+ncpu_s
+            tlproc = myid+ncpu_s + ncpu_s-1
+            lproc = myid+ncpu_s-1
+            blproc = myid-1
+            bproc = myid-ncpu_s
+            brproc = myid-ncpu_s+1
+         end if
+      !On the top boundary
+      elseif ( myid .GE. ncpu_s*(ncpu_z-1) ) then
+         !Only check if in the middle:
+         if ( .NOT. ( mod(myid,ncpu_s) == 0) ) then
+            if ( .NOT. (mod(myid+1,ncpu_s) == 0) ) then
+               rproc = myid+1
+               trproc = myid-(ncpu_s*(ncpu_z-1))+1 
+               tproc = myid-(ncpu_s*(ncpu_z-1)) 
+               tlproc = myid-(ncpu_s*(ncpu_z-1))-1 
+               lproc = myid-1
+               blproc = myid-ncpu_s-1
+               bproc = myid-ncpu_s
+               brproc = myid-ncpu_s+1
+            end if
+         end if 
+      !On the bottom boundary
+      elseif ( myid .LT. ncpu_s) then
+         if ( .NOT. ( mod(myid,ncpu_s) == 0) ) then
+            if ( .NOT. (mod(myid+1,ncpu_s) == 0) ) then
+               rproc = myid+1
+               trproc = myid+ncpu_s+1
+               tproc = myid+ncpu_s
+               tlproc = myid+ncpu_s-1
+               lproc = myid-1
+               blproc = myid+ncpu_s*(ncpu_z-1)-1
+               bproc = myid+ncpu_s*(ncpu_z-1) 
+               brproc = myid+ncpu_s*(ncpu_z-1)+1 
+            end if
+         end if
+      !Everywhere else:
+      else 
+         rproc = myid+1
+         trproc = myid+ncpu_s+1
+         tproc = myid+ncpu_s
+         tlproc = myid+ncpu_s-1
+         lproc = myid-1
+         blproc = myid-ncpu_s-1
+         bproc = myid-ncpu_s
+         brproc = myid-ncpu_s+1
+      end if
+
+      return
+  end subroutine assign_nbrs
+
+  subroutine particle_exchange
+      use pars
+      use con_data
+      use con_stats
+      implicit none
+      include 'mpif.h'
+
+      type(particle), pointer :: tmp
+      integer :: idx,psum,csum
+      integer :: ir,itr,itop,itl,il,ibl,ib,ibr
+      integer :: istatus(mpi_status_size),ierr
+      integer :: status_array(mpi_status_size,16),req(16)
+      type(particle), allocatable :: rbuf_s(:),trbuf_s(:)
+      type(particle), allocatable :: tbuf_s(:),tlbuf_s(:)
+      type(particle), allocatable :: lbuf_s(:),blbuf_s(:)
+      type(particle), allocatable :: bbuf_s(:),brbuf_s(:)
+      type(particle), allocatable :: rbuf_r(:),trbuf_r(:)
+      type(particle), allocatable :: tbuf_r(:),tlbuf_r(:)
+      type(particle), allocatable :: lbuf_r(:),blbuf_r(:)
+      type(particle), allocatable :: bbuf_r(:),brbuf_r(:)
+      type(particle), allocatable :: totalbuf(:)
+      
+      !Zero out the counters for how many particles to send each dir.
+      pr_s=0;ptr_s=0;pt_s=0;ptl_s=0;pl_s=0;pbl_s=0;pb_s=0;pbr_s=0
+      
+      !As soon as the location is updated, must check to see if it left the proc:
+      !May be a better way of doing this, but it seems most reasonable:
+      part => first_particle
+      do while (associated(part))     
+
+         !First get numbers being sent to all sides:
+         if (part%xp(2) .GT. ymax) then 
+            if (part%xp(1) .GT. xmax) then !top right
+               ptr_s = ptr_s + 1
+            elseif (part%xp(1) .LT. xmin) then !bottom right
+               pbr_s = pbr_s + 1
+            else  !right
+               pr_s = pr_s + 1
+            end if
+         elseif (part%xp(2) .LT. ymin) then
+            if (part%xp(1) .GT. xmax) then !top left
+               ptl_s = ptl_s + 1
+            else if (part%xp(1) .LT. xmin) then !bottom left
+               pbl_s = pbl_s + 1
+            else  !left
+               pl_s = pl_s + 1
+            end if
+         elseif ( (part%xp(1) .GT. xmax) .AND. &
+                  (part%xp(2) .LT. ymax) .AND. &
+                  (part%xp(2) .GT. ymin) ) then !top
+            pt_s = pt_s + 1
+         elseif ( (part%xp(1) .LT. xmin) .AND. &
+                  (part%xp(2) .LT. ymax) .AND. &
+                  (part%xp(2) .GT. ymin) ) then !bottom
+            pb_s = pb_s + 1
+         end if
+         
+         part => part%next
+      end do
+      
+      !Now allocate the send buffers based on these counts:
+      allocate(rbuf_s(pr_s),trbuf_s(ptr_s),tbuf_s(pt_s),tlbuf_s(ptl_s))
+      allocate(lbuf_s(pl_s),blbuf_s(pbl_s),bbuf_s(pb_s),brbuf_s(pbr_s))
+
+      !Now loop back through the particles and fill the buffers:
+      !NOTE: If it finds one, add it to buffer and REMOVE from list
+      ir=1;itr=1;itop=1;itl=1;il=1;ibl=1;ib=1;ibr=1
+
+      part => first_particle
+      do while (associated(part))
+         
+         if (part%xp(2) .GT. ymax) then 
+            if (part%xp(1) .GT. xmax) then !top right
+               trbuf_s(itr) = part
+               call destroy_particle
+               itr = itr + 1 
+            elseif (part%xp(1) .LT. xmin) then !bottom right
+               brbuf_s(ibr) = part
+               call destroy_particle
+               ibr = ibr + 1
+            else   !right
+               rbuf_s(ir) = part
+               call destroy_particle
+               ir = ir + 1
+            end if
+         elseif (part%xp(2) .LT. ymin) then
+            if (part%xp(1) .GT. xmax) then !top left
+               tlbuf_s(itl) = part
+               call destroy_particle
+               itl = itl + 1
+            else if (part%xp(1) .LT. xmin) then !bottom left
+               blbuf_s(ibl) = part
+               call destroy_particle
+               ibl = ibl + 1
+            else  !left
+               lbuf_s(il) = part
+               call destroy_particle
+               il = il + 1
+            end if
+         elseif ( (part%xp(1) .GT. xmax) .AND. &
+                  (part%xp(2) .LT. ymax) .AND. &
+                  (part%xp(2) .GT. ymin) ) then !top
+            tbuf_s(itop) = part
+            call destroy_particle
+            itop = itop + 1
+         elseif ( (part%xp(1) .LT. xmin) .AND. &
+                  (part%xp(2) .LT. ymax) .AND. &
+                  (part%xp(2) .GT. ymin) ) then !bottom
+            bbuf_s(ib) = part
+            call destroy_particle
+            ib = ib + 1 
+         else
+         part => part%next
+         end if 
+         
+      end do
+
+      !Now everyone exchanges the counts with all neighbors:
+      !Left/right:
+      call MPI_Sendrecv(pr_s,1,mpi_integer,rproc,3, &
+             pl_r,1,mpi_integer,lproc,3,mpi_comm_world,istatus,ierr)
+
+      call MPI_Sendrecv(pl_s,1,mpi_integer,lproc,4, &
+             pr_r,1,mpi_integer,rproc,4,mpi_comm_world,istatus,ierr)
+
+      !Top/bottom:
+      call MPI_Sendrecv(pt_s,1,mpi_integer,tproc,5, &
+             pb_r,1,mpi_integer,bproc,5,mpi_comm_world,istatus,ierr)
+
+      call MPI_Sendrecv(pb_s,1,mpi_integer,bproc,6, &
+             pt_r,1,mpi_integer,tproc,6,mpi_comm_world,istatus,ierr)
+
+      !Top right/bottom left:
+      call MPI_Sendrecv(ptr_s,1,mpi_integer,trproc,7, &
+             pbl_r,1,mpi_integer,blproc,7,mpi_comm_world,istatus,ierr)
+
+      call MPI_Sendrecv(pbl_s,1,mpi_integer,blproc,8, &
+             ptr_r,1,mpi_integer,trproc,8,mpi_comm_world,istatus,ierr)
+
+       !Top left/bottom right:
+      call MPI_Sendrecv(ptl_s,1,mpi_integer,tlproc,9, &
+             pbr_r,1,mpi_integer,brproc,9,mpi_comm_world,istatus,ierr)
+
+      call MPI_Sendrecv(pbr_s,1,mpi_integer,brproc,10, &
+              ptl_r,1,mpi_integer,tlproc,10,mpi_comm_world,istatus,ierr)
+
+      !Now everyone has the number of particles arriving from every neighbor
+      !If the count is greater than zero, exchange:
+
+      !Allocate room to receive from each side
+      allocate(rbuf_r(pr_r),trbuf_r(ptr_r),tbuf_r(pt_r),tlbuf_r(ptl_r))
+      allocate(lbuf_r(pl_r),blbuf_r(pbl_r),bbuf_r(pb_r),brbuf_r(pbr_r))
+     
+      !Send to right:
+      if (pr_s .GT. 0) then
+      call mpi_isend(rbuf_s,pr_s,particletype,rproc,11,mpi_comm_world,req(1),ierr)
+      else
+      req(1) = mpi_request_null
+      end if
+
+      !Receive from left:
+      if (pl_r .GT. 0) then
+      call mpi_irecv(lbuf_r,pl_r,particletype,lproc,11,mpi_comm_world,req(2),ierr)
+      else
+      req(2) = mpi_request_null
+      end if
+
+      !Send to left:
+      if (pl_s .GT. 0) then
+      call mpi_isend(lbuf_s,pl_s,particletype,lproc,12,mpi_comm_world,req(3),ierr)
+      else
+      req(3) = mpi_request_null
+      end if
+
+      !Receive from right:
+      if (pr_r .GT. 0) then
+      call mpi_irecv(rbuf_r,pr_r,particletype,rproc,12,mpi_comm_world,req(4),ierr)
+      else
+      req(4) = mpi_request_null
+      end if
+
+      !Send to top:
+      if (pt_s .GT. 0) then
+      call mpi_isend(tbuf_s,pt_s,particletype,tproc,13,mpi_comm_world,req(5),ierr)
+      else
+      req(5) = mpi_request_null
+      end if
+      
+      !Receive from bottom:
+      if (pb_r .GT. 0) then
+      call mpi_irecv(bbuf_r,pb_r,particletype,bproc,13,mpi_comm_world,req(6),ierr)
+      else
+      req(6) = mpi_request_null
+      end if
+
+      !Send to bottom:
+      if (pb_s .GT. 0) then
+      call mpi_isend(bbuf_s,pb_s,particletype,bproc,14,mpi_comm_world,req(7),ierr)
+      else
+      req(7) = mpi_request_null
+      end if
+      
+      !Recieve from top:
+      if (pt_r .GT. 0) then
+      call mpi_irecv(tbuf_r,pt_r,particletype,tproc,14,mpi_comm_world,req(8),ierr)
+      else
+      req(8) = mpi_request_null
+      end if
+
+      !Send to top right:
+      if (ptr_s .GT. 0) then
+      call mpi_isend(trbuf_s,ptr_s,particletype,trproc,15,mpi_comm_world,req(9),ierr)
+      else
+      req(9) = mpi_request_null
+      end if
+     
+      !Receive from bottom left:
+      if (pbl_r .GT. 0) then
+      call mpi_irecv(blbuf_r,pbl_r,particletype,blproc,15,mpi_comm_world,req(10),ierr)
+      else 
+      req(10) = mpi_request_null
+      end if
+    
+      !Send to bottom left:
+      if (pbl_s .GT. 0) then
+      call mpi_isend(blbuf_s,pbl_s,particletype,blproc,16,mpi_comm_world,req(11),ierr)
+      else
+      req(11) = mpi_request_null
+      end if
+     
+      !Receive from top right:
+      if (ptr_r .GT. 0) then
+      call mpi_irecv(trbuf_r,ptr_r,particletype,trproc,16,mpi_comm_world,req(12),ierr)
+      else 
+      req(12) = mpi_request_null
+      end if
+
+      !Send to top left:
+      if (ptl_s .GT. 0) then
+      call mpi_isend(tlbuf_s,ptl_s,particletype,tlproc,17,mpi_comm_world,req(13),ierr)
+      else 
+      req(13) = mpi_request_null
+      end if
+    
+      !Receive from bottom right:
+      if (pbr_r .GT. 0) then
+      call mpi_irecv(brbuf_r,pbr_r,particletype,brproc,17,mpi_comm_world,req(14),ierr)
+      else 
+      req(14) = mpi_request_null
+      end if
+  
+      !Send to bottom right:
+      if (pbr_s .GT. 0) then
+      call mpi_isend(brbuf_s,pbr_s,particletype,brproc,18,mpi_comm_world,req(15),ierr)
+      else
+      req(15) = mpi_request_null
+      end if
+  
+      !Receive from top left:
+      if (ptl_r .GT. 0) then
+      call mpi_irecv(tlbuf_r,ptl_r,particletype,tlproc,18,mpi_comm_world,req(16),ierr)
+      else
+      req(16) = mpi_request_null
+      end if
+
+      call mpi_waitall(16,req,status_array,ierr)
+
+      !Now add incoming particles to linked list:
+      !NOTE: add them to beginning since it's easiest to access (first_particle)
+
+      !Form one large buffer to loop through and add:
+      psum = pr_r+ptr_r+pt_r+ptl_r+pl_r+pbl_r+pb_r+pbr_r
+      csum = 0
+      allocate(totalbuf(psum))
+      if (pr_r .GT. 0) then 
+         totalbuf(1:pr_r) = rbuf_r(1:pr_r)
+         csum = csum + pr_r 
+      end if
+      if (ptr_r .GT. 0) then 
+         totalbuf(csum+1:csum+ptr_r) = trbuf_r(1:ptr_r)
+         csum = csum + ptr_r
+      end if
+      if (pt_r .GT. 0) then 
+         totalbuf(csum+1:csum+pt_r) = tbuf_r(1:pt_r)
+         csum = csum + pt_r
+      end if
+      if (ptl_r .GT. 0) then 
+         totalbuf(csum+1:csum+ptl_r) = tlbuf_r(1:ptl_r)
+         csum = csum + ptl_r
+      end if
+      if (pl_r .GT. 0) then 
+         totalbuf(csum+1:csum+pl_r) = lbuf_r(1:pl_r)
+         csum = csum + pl_r
+      end if
+      if (pbl_r .GT. 0) then 
+         totalbuf(csum+1:csum+pbl_r) = blbuf_r(1:pbl_r)
+         csum = csum + pbl_r
+      end if
+      if (pb_r .GT. 0) then 
+         totalbuf(csum+1:csum+pb_r) = bbuf_r(1:pb_r)
+         csum = csum + pb_r
+      end if
+      if (pbr_r .GT. 0) then 
+         totalbuf(csum+1:csum+pbr_r) = brbuf_r(1:pbr_r)
+         csum = csum + pbr_r
+      end if
+
+      do idx = 1,psum
+        if (.NOT. associated(first_particle)) then
+           allocate(first_particle)
+           first_particle = totalbuf(idx)
+           nullify(first_particle%next,first_particle%prev)
+        else
+           allocate(first_particle%prev)
+           tmp => first_particle%prev
+           tmp = totalbuf(idx)
+           tmp%next => first_particle
+           nullify(tmp%prev)
+           first_particle => tmp
+           nullify(tmp)
+        end if
+      end do  
+      
+      deallocate(rbuf_s,trbuf_s,tbuf_s,tlbuf_s)
+      deallocate(lbuf_s,blbuf_s,bbuf_s,brbuf_s)
+      deallocate(rbuf_r,trbuf_r,tbuf_r,tlbuf_r)
+      deallocate(lbuf_r,blbuf_r,bbuf_r,brbuf_r)
+      deallocate(totalbuf)
+
+  end subroutine particle_exchange
+
   function mod_Magnus(T)
     implicit none
 
