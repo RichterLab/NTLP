@@ -260,6 +260,7 @@ c
       if(msave_v .and. istage .eq. 1) then
          if (iviznetcdf) then
             call  write_viz_netcdf
+            write(*,*) 'DHR10'
          else
             call save_viz(it)
          end if
@@ -10745,7 +10746,8 @@ c
      +             .OR. (rt_zeroes(1)*part%radius<0)
      +             .OR. isnan(rt_zeroes(2))
      +             .OR. (rt_zeroes(2)<0)
-     +             .OR. (rt_zeroes(2)*part%Tp > Tbot(1)*1.1)    !These last 2 are very specific to pi chamber
+     +             .OR. (rt_zeroes(1)*part%radius>1.0e-2) !These last 3 are very specific to pi chamber
+     +             .OR. (rt_zeroes(2)*part%Tp > Tbot(1)*1.1)  
      +             .OR. (rt_zeroes(2)*part%Tp < Ttop(1)*0.9))
      +         then
 
@@ -10778,6 +10780,7 @@ c
                elseif (part%radius < part%rc .AND.
      +             part%radius*rt_zeroes(1) > part%rc) then
                    actnum = actnum + 1
+                   part%numact = part%numact + 1.0
 
                    !Reset the activation lifetime
                    part%actres = 0.0
@@ -11449,6 +11452,7 @@ c
       part%dist = 0.0
       part%u_sub(1:3) = 0.0
       part%sigm_s = 0.0
+      part%numact = 0.0
 
       
       end subroutine create_particle
@@ -11543,6 +11547,10 @@ c
          !Also count this as a "deactivation"
          call add_histogram(bins_actres,hist_actres,
      +    histbins+2,part%actres,part%mult)
+
+         !Also record the number of activations
+         call add_histogram_integer(bins_numact,hist_numact,
+     +    histbins+2,part%numact)
 
          call destroy_particle
 
@@ -13440,6 +13448,9 @@ c        part%qinf = 0.0 ! Brian 7/14/14
       !Activated time histogram
       call set_binsdata(bins_actres,histbins+2,1.0e-1,1.0e4)
 
+      !Num activations histogram
+      call set_binsdata_integer(bins_numact,histbins+2,0.0)
+
 
       !Initialize the linked list of particles:
       nullify(part,first_particle)
@@ -13447,7 +13458,7 @@ c        part%qinf = 0.0 ! Brian 7/14/14
       !Set up MPI datatypes for sending particle information
       !MUST UPDATE IF THINGS ARE ADDED/REMOVED FROM PARTICLE STRUCTURE
 
-      num_reals = 6*3+15
+      num_reals = 6*3+16
       num_integers = 4
       num_longs = 3
       
@@ -13918,6 +13929,7 @@ c        part%qinf = 0.0 ! Brian 7/14/14
       real :: sumbuf_rad(histbins+2)
       real :: sumbuf_res(histbins+2)
       real :: sumbuf_actres(histbins+2)
+      real :: sumbuf_numact(histbins+2)
       real :: binval_rad(histbins+2)
       real :: binval_res(histbins+2)
       real :: binval_actres(histbins+2)
@@ -13933,16 +13945,26 @@ c -------------- record bins for histogram file -----------
 
 c -------------- Collect all histogram from different processors
 
-        !Radius PDF
         num_entries = (histbins+2)
-        call mpi_reduce(hist_rad,sumbuf_rad,num_entries,
+
+        !Radius PDF
+        sumbuf_rad = hist_rad
+        call mpi_reduce(sumbuf_rad,hist_rad,num_entries,
      +   mpi_real8,mpi_sum,0,mpi_comm_world,ierr)
+
         !Residence time PDF
-
-        call mpi_reduce(hist_res,sumbuf_res,num_entries,
+        sumbuf_res = hist_res
+        call mpi_reduce(sumbuf_res,hist_res,num_entries,
      +   mpi_real8,mpi_sum,0,mpi_comm_world,ierr)
 
-        call mpi_reduce(hist_actres,sumbuf_actres,num_entries,
+        !Activation residence time PDF
+        sumbuf_actres = hist_actres
+        call mpi_reduce(sumbuf_actres,hist_actres,num_entries,
+     +   mpi_real8,mpi_sum,0,mpi_comm_world,ierr)
+
+        !# of activations PDF
+        sumbuf_numact = hist_numact
+        call mpi_reduce(sumbuf_numact,hist_numact,num_entries,
      +   mpi_real8,mpi_sum,0,mpi_comm_world,ierr)
 
 
@@ -13959,9 +13981,9 @@ c ---------------- save data
         write(num,'(i3.3)') histbins+2
         fformat = '('//num//'e15.6)'
 
-        write(nrad,fformat),sumbuf_rad(1:histbins+2)
-        write(nres,fformat),sumbuf_res(1:histbins+2)
-        write(nactres,fformat),sumbuf_actres(1:histbins+2)
+        write(nrad,fformat),hist_rad(1:histbins+2)
+        write(nres,fformat),hist_res(1:histbins+2)
+        write(nactres,fformat),hist_actres(1:histbins+2)
 
         end if
 
@@ -13969,6 +13991,7 @@ c ---------------- save data
 
         hist_res = 0.0  !Reset this one every time it writes
         hist_actres = 0.0  !Reset this one every time it writes
+        hist_numact = 0.0  !Reset this one every time it writes
 
       end subroutine write_histograms
       subroutine set_binsdata(binsdata,sizea,rmin,rmax)
@@ -14003,6 +14026,35 @@ c       ===== update x-axis for each bin =====
 
 
       end subroutine set_binsdata
+      subroutine set_binsdata_integer(binsdata,sizea,rmin)
+      use pars
+      use fields
+      use con_data
+      use con_stats
+      use particles
+      implicit none
+
+      integer :: i,nbin,ibin,nbinnew
+      real :: dh
+
+      integer,intent(in) :: sizea
+      real,intent(inout) :: binsdata(sizea)
+
+      real :: rmin
+
+        nbin = histbins !From Module Particle 
+
+c       Calculate size of interval
+        dh = 1.0
+
+c       ===== update x-axis for each bin ===== 
+        binsdata(1) = rmin-dh
+        do i = 1,histbins+1
+          binsdata(i+1)= dh+binsdata(i)
+        end do
+
+
+      end subroutine set_binsdata_integer
       subroutine add_histogram(binsdata,histdata,sizea,val1,mult)
 
       use pars
@@ -14044,6 +14096,45 @@ c       Add the current event to the histogram
         histdata(ibin) = histdata(ibin) + real(mult)
 
       end subroutine add_histogram
+      subroutine add_histogram_integer(binsdata,histdata,sizea,val)
+
+      use pars
+      use fields
+      use con_data
+      use con_stats
+      use particles
+      implicit none
+
+      integer :: i,nbin,nbinnew,ibin
+      real :: dh
+      real,intent(in) :: val
+
+      integer,intent(in) :: sizea
+      real,intent(in) :: binsdata(sizea)
+      real,intent(inout) :: histdata(sizea)
+
+      real :: rmin,rmax
+
+        rmin = binsdata(2)
+        nbin = histbins !From Module Particle 
+        rmax = binsdata(nbin+1)
+
+c       Calculate size of interval
+        dh = (rmax-rmin)/(nbin-1)
+
+        if (val .gt. rmax+0.5*dh) then
+                ibin = nbin + 2
+        elseif (val .lt. rmin-0.5*dh) then
+                ibin = 1
+        else
+                ibin = (floor((val-(rmin-0.5*dh))/dh)+1)+1
+        end if
+
+
+c       Add the current event to the histogram
+        histdata(ibin) = histdata(ibin) + 1.0
+
+      end subroutine add_histogram_integer
       subroutine radius_histogram
       use particles
       implicit none
@@ -14051,10 +14142,8 @@ c       Add the current event to the histogram
       hist_rad = 0.0
       part => first_particle
       do while (associated(part))
-         if (part%xp(3) .lt. 30.0) then
          call add_histogram(bins_rad,hist_rad,
      +    histbins+2,part%radius,part%mult)
-         end if
       part => part%next
       end do
 
@@ -14093,10 +14182,11 @@ c       Add the current event to the histogram
 
       meanRH_curr = meanRH_curr/numprocs
 
-      Swall = Swall + (meanRH_target - meanRH_curr)*1.0e-5
+      !Swall = Swall + (meanRH_target - meanRH_curr)*1.0e-9
 
 
-      !Swall = -2.25E-6
+      !Swall = -2.25E-6  !What I got from Daniel
+      Swall = -2.154e-6 !My first attempt with relaxation of 1e-10
 
       if (myid==0) print*, 'Swall', Swall
       if (myid==0) print*, 'meanRH_curr', meanRH_curr

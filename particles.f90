@@ -60,13 +60,15 @@ module particles
   real :: hist_actres(histbins+2)
   real :: bins_actres(histbins+2)
 
+  real :: hist_numact(histbins+2)
+  real :: bins_numact(histbins+2)
 
   !REMEMBER: IF ADDING ANYTHING, MUST UPDATE MPI DATATYPE!
   type :: particle
     integer :: pidx,procidx,nbr_pidx,nbr_procidx
     real :: vp(3),xp(3),uf(3),xrhs(3),vrhs(3),Tp,Tprhs_s
     real :: Tprhs_L,Tf,radius,radrhs,qinf,qstar,dist
-    real :: res,m_s,Os,rc,actres
+    real :: res,m_s,Os,rc,actres,numact
     real :: u_sub(3),sigm_s
     integer*8 :: mult
     type(particle), pointer :: prev,next
