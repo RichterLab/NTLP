@@ -260,7 +260,6 @@ c
       if(msave_v .and. istage .eq. 1) then
          if (iviznetcdf) then
             call  write_viz_netcdf
-            write(*,*) 'DHR10'
          else
             call save_viz(it)
          end if

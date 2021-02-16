@@ -453,15 +453,12 @@ subroutine netcdf_init_viz
       implicit none
       include 'mpif.h'
 
-      integer :: dimids(1),dimids_xy(3),dimids_yz(3),chunk_size(3)
+      integer :: dimids(1),dimids_xy(3),dimids_yz(3)
       integer :: ierr
-
-!!! NOTE: An error arises if the netcdf library being used doesn't support parallel:
-!"NetCDF: Parallel operation on file opened for non-parallel access"
 
       path_netcdf_viz = trim(adjustl(path_his))//"viz.nc"
 
-      call netcdf_check( nf90_create(path_netcdf_viz,IOR(NF90_NETCDF4,NF90_MPIIO),ncid_viz,comm=mpi_comm_world,info=mpi_info_null) )
+      call netcdf_check( nf90_create(path_netcdf_viz,nf90_clobber,ncid_viz))
 
       call netcdf_check( nf90_def_dim(ncid_viz, "time",NF90_UNLIMITED, time_viz_dimid) )
 
@@ -475,8 +472,8 @@ subroutine netcdf_init_viz
 
 
 !!! Single quantities
-      !call netcdf_check( nf90_def_var(ncid_viz,"time",NF90_REAL,dimids,time_viz_vid) )
-      !call netcdf_check( nf90_put_att(ncid_viz,time_viz_vid,"title","Simulation time") )
+      call netcdf_check( nf90_def_var(ncid_viz,"time",NF90_REAL,dimids,time_viz_vid) )
+      call netcdf_check( nf90_put_att(ncid_viz,time_viz_vid,"title","Simulation time") )
 
 
 !! Would need to store grid values
@@ -484,19 +481,14 @@ subroutine netcdf_init_viz
 
 
 !!! Slices
-      chunk_size = (/(iye-iys)+1,(ize-izs)+1,1/)
 
-      !call netcdf_check( nf90_def_var(ncid_viz, "u_xy", NF90_REAL, dimids_xy,u_xy_vid,chunksizes=chunk_size) )
       !call netcdf_check( nf90_def_var(ncid_viz, "u_xy", NF90_REAL, dimids_xy,u_xy_vid) )
       !call netcdf_check( nf90_put_att(ncid_viz,u_xy_vid,"title","xy slice of u-velocity") )
 
-      !call netcdf_check( nf90_def_var(ncid_viz, "u_yz", NF90_REAL, dimids_yz,u_yz_vid,chunksizes=chunk_size) )
       call netcdf_check( nf90_def_var(ncid_viz, "u_yz", NF90_REAL, dimids_yz,u_yz_vid) )
       call netcdf_check( nf90_put_att(ncid_viz,u_yz_vid,"title","yz slice of u-velocity") )
 
       call netcdf_check( nf90_enddef(ncid_viz) )
-
-
 
       viz_counter = 1
 
@@ -512,55 +504,73 @@ subroutine write_viz_netcdf
       implicit none
       include 'mpif.h'
 
-      integer :: ierr
-      integer :: startsxy(3),countsxy(3)
-      integer :: startsyz(3),countsyz(3)
-      real,allocatable :: tmp(:,:)
-
-
+      integer :: ierr,ip,mynx,myny,mynz,iystmp,iyetmp,izstmp,izetmp,istatus
+      integer :: sbuf_limits(4),rbuf_limits(4)
+      real,allocatable :: sbuf_data(:,:),rbuf_data(:,:)
+      real :: tmpyz(nny,nnz)
  
 
+      tmpyz = 0.0
+
+      !Define the slices that should be sent
       xyslice = nnz/2  !Choose the nz value for the xy slice
       yzslice = nnx/2  !Choose the nz value for the xy slice
 
+      !Now start the process of collecting the slices on myid==0
+
 !      if (xyslice .le. ize .and. xyslice .ge. izs) then
-!      countsxy(1) = nnx
-!      countsxy(2) = (iye-iys)+1
-!      countsxy(3) = 1
-!
-!      startsxy(1) = 1
-!      startsxy(2) = iys
-!      startsxy(3) = viz_counter
-!
-!      allocate(tmp(countsxy(1),countsxy(2)))
-!      tmp = real(u(1:nnx,iys:iye,xyslice))
-!      else 
-!
-!      countsxy(1) = 0
-!      countsxy(2) = 0
-!      countsxy(3) = 0
-!
-!      startsxy(1) = 0
-!      startsxy(2) = 0
-!      startsxy(3) = 0
-!     
-!      allocate(tmp(0,0))
-! 
-!      end if
 
-      countsyz(1) = (iye-iys)+1
-      countsyz(2) = (ize-izs)+1
-      countsyz(3) = 1
-
-      startsyz(1) = iys
-      startsyz(2) = izs
-      startsyz(3) = viz_counter
-
-      allocate(tmp(countsyz(1),countsyz(2)))
-      tmp(:,:) = u(yzslice,iys:iye,izs:ize)
-
+      !For the yz slice, all processors will have to send to root:
       if (myid==0) then
-      !call netcdf_check( nf90_put_var(ncid_viz, time_viz_vid, real(time),start=(/viz_counter/)) )
+
+         do ip = 1,numprocs-1
+
+            call mpi_recv(rbuf_limits,4,mpi_integer,ip,2,mpi_comm_world,istatus,ierr)
+
+            myny = (rbuf_limits(2)-rbuf_limits(1))+1
+            mynz = (rbuf_limits(4)-rbuf_limits(3))+1
+
+            iystmp = rbuf_limits(1)
+            iyetmp = rbuf_limits(2)
+            izstmp = rbuf_limits(3)
+            izetmp = rbuf_limits(4)
+
+            allocate(rbuf_data(myny,mynz))
+
+            call mpi_recv(rbuf_data,myny*mynz,mpi_real8,ip,2,mpi_comm_world,istatus,ierr)
+
+            tmpyz(iystmp:iyetmp,izstmp:izetmp) = rbuf_data
+            
+            deallocate(rbuf_data)
+         end do
+         
+
+      else  !All other processors
+
+         mynx = nnx
+         myny = (iye-iys)+1
+         mynz = (ize-izs)+1
+
+         sbuf_limits = (/iys,iye,izs,ize/)
+         call mpi_send(sbuf_limits,4,mpi_integer,0,2,mpi_comm_world,ierr)
+
+
+         allocate(sbuf_data(myny,mynz))
+
+         sbuf_data = u(yzslice,iys:iye,izs:ize)
+         call mpi_send(sbuf_data,mynz*myny,mpi_real8,0,2,mpi_comm_world,ierr)
+         
+         deallocate(sbuf_data)
+
+      end if
+
+     !Now tmp contains the whole slice on processor 0!
+
+
+      if (myid==0) then  !Only root writes
+
+
+      call netcdf_check( nf90_put_var(ncid_viz, time_viz_vid, real(time),start=(/viz_counter/)) )
 
       !Store grid definitions only once
       if (viz_counter == 1) then
@@ -568,32 +578,17 @@ subroutine write_viz_netcdf
 
       end if
 
+      call netcdf_check( nf90_put_var(ncid_viz, u_yz_vid, real(tmpyz(1:nny,1:nnz)),start=(/1,1,viz_counter/)) )
 
       end if
-      
-
-      call netcdf_check( nf90_var_par_access(ncid_viz,u_yz_vid,nf90_collective) )
-      !call netcdf_check( nf90_var_par_access(ncid_viz,time_viz_vid,1) )
-
-
-      !write(*,'(a5,10i)') 'DHR8:',myid,xyslice,ize,izs,startsxy(1:3),countsxy(1:3)
-      write(*,'(a5,10i)') 'DHR8:',myid,yzslice,ize,izs,startsyz(1:3),countsyz(1:3)
-      write(*,*) 'DHR9: ',maxval(real(tmp))
-
-      !if (xyslice .le. ize .and. xyslice .ge. izs) then
-         !call netcdf_check( nf90_put_var(ncid_viz, u_xy_vid, real(u(1:nnx,iys:iye,xyslice)), start=startsxy, count=countsxy) )
-         !call netcdf_check( nf90_put_var(ncid_viz, u_xy_vid, tmp, start=startsxy, count=countsxy) )
-      !end if
-
-      call netcdf_check( nf90_put_var(ncid_viz, u_yz_vid, real(tmp), start=startsyz, count=countsyz) )
-      !call netcdf_check( nf90_put_var(ncid_viz, u_yz_vid, real(tmp), start=startsyz) )
 
 
       viz_counter = viz_counter + 1
 
-      deallocate(tmp)
 
 end subroutine write_viz_netcdf
+
+
 subroutine close_his_netcdf
       use netcdf
       use pars
@@ -671,5 +666,157 @@ subroutine netcdf_restart
 
 end subroutine netcdf_restart
 
+
+
+!SHOVING THESE DOWN HERE: THE PARALLEL NC OUTPUT NEVER WORKED PROPERLY, AND
+!REQUIRED SPECIALIZED MODULES TO BE LOADED
+subroutine netcdf_init_viz_parallel
+      use netcdf
+      use pars
+      use particles
+      implicit none
+      include 'mpif.h'
+
+      integer :: dimids(1),dimids_xy(3),dimids_yz(3),chunk_size(3)
+      integer :: ierr
+
+!!! NOTE: An error arises if the netcdf library being used doesn't support parallel:
+!"NetCDF: Parallel operation on file opened for non-parallel access"
+
+      path_netcdf_viz = trim(adjustl(path_his))//"viz.nc"
+
+      call netcdf_check( nf90_create(path_netcdf_viz,IOR(NF90_NETCDF4,NF90_MPIIO),ncid_viz,comm=mpi_comm_world,info=mpi_info_null) )
+
+      call netcdf_check( nf90_def_dim(ncid_viz, "time",NF90_UNLIMITED, time_viz_dimid) )
+
+      call netcdf_check( nf90_def_dim(ncid_viz,"nx",nnx,viz_nx_dimid) )
+      call netcdf_check( nf90_def_dim(ncid_viz,"ny",nny,viz_ny_dimid) )
+      call netcdf_check( nf90_def_dim(ncid_viz,"nz",nnz,viz_nz_dimid) )
+
+      dimids = (/ time_viz_dimid /)
+      dimids_xy = (/viz_nx_dimid, viz_ny_dimid, time_viz_dimid /)
+      dimids_yz = (/viz_ny_dimid, viz_nz_dimid, time_viz_dimid /)
+
+
+!!! Single quantities
+      !call netcdf_check( nf90_def_var(ncid_viz,"time",NF90_REAL,dimids,time_viz_vid) )
+      !call netcdf_check( nf90_put_att(ncid_viz,time_viz_vid,"title","Simulation time") )
+
+
+!! Would need to store grid values
+
+
+
+!!! Slices
+      chunk_size = (/(iye-iys)+1,(ize-izs)+1,1/)
+
+      !call netcdf_check( nf90_def_var(ncid_viz, "u_xy", NF90_REAL, dimids_xy,u_xy_vid,chunksizes=chunk_size) )
+      !call netcdf_check( nf90_def_var(ncid_viz, "u_xy", NF90_REAL, dimids_xy,u_xy_vid) )
+      !call netcdf_check( nf90_put_att(ncid_viz,u_xy_vid,"title","xy slice of u-velocity") )
+
+      !call netcdf_check( nf90_def_var(ncid_viz, "u_yz", NF90_REAL, dimids_yz,u_yz_vid,chunksizes=chunk_size) )
+      call netcdf_check( nf90_def_var(ncid_viz, "u_yz", NF90_REAL, dimids_yz,u_yz_vid) )
+      call netcdf_check( nf90_put_att(ncid_viz,u_yz_vid,"title","yz slice of u-velocity") )
+
+      call netcdf_check( nf90_enddef(ncid_viz) )
+
+
+
+      viz_counter = 1
+
+end subroutine netcdf_init_viz_parallel
+
+subroutine write_viz_netcdf_parallel
+      use netcdf
+      use pars
+      use fields
+      use con_data
+      use con_stats
+      use particles
+      implicit none
+      include 'mpif.h'
+
+      integer :: ierr
+      integer :: startsxy(3),countsxy(3)
+      integer :: startsyz(3),countsyz(3)
+      real,allocatable :: tmp(:,:)
+
+
+ 
+
+      xyslice = nnz/2  !Choose the nz value for the xy slice
+      yzslice = nnx/2  !Choose the nz value for the xy slice
+
+!      if (xyslice .le. ize .and. xyslice .ge. izs) then
+!      countsxy(1) = nnx
+!      countsxy(2) = (iye-iys)+1
+!      countsxy(3) = 1
+!
+!      startsxy(1) = 1
+!      startsxy(2) = iys
+!      startsxy(3) = viz_counter
+!
+!      allocate(tmp(countsxy(1),countsxy(2)))
+!      tmp = real(u(1:nnx,iys:iye,xyslice))
+!      else 
+!
+!      countsxy(1) = 0
+!      countsxy(2) = 0
+!      countsxy(3) = 0
+!
+!      startsxy(1) = 0
+!      startsxy(2) = 0
+!      startsxy(3) = 0
+!     
+!      allocate(tmp(0,0))
+! 
+!      end if
+
+      countsyz(1) = (iye-iys)+1
+      countsyz(2) = (ize-izs)+1
+      countsyz(3) = 1
+
+      startsyz(1) = iys
+      startsyz(2) = izs
+      startsyz(3) = viz_counter
+
+      allocate(tmp(countsyz(1),countsyz(2)))
+      tmp(:,:) = u(yzslice,iys:iye,izs:ize)
+
+      if (myid==0) then
+      !call netcdf_check( nf90_put_var(ncid_viz, time_viz_vid, real(time),start=(/viz_counter/)) )
+
+      !Store grid definitions only once
+      if (viz_counter == 1) then
+
+
+      end if
+
+
+      end if
+      
+
+      call netcdf_check( nf90_var_par_access(ncid_viz,u_yz_vid,nf90_collective) )
+      !call netcdf_check( nf90_var_par_access(ncid_viz,time_viz_vid,1) )
+
+
+      !write(*,'(a5,10i)') 'DHR8:',myid,xyslice,ize,izs,startsxy(1:3),countsxy(1:3)
+      !write(*,'(a5,10i)') 'DHR8:',myid,yzslice,ize,izs,startsyz(1:3),countsyz(1:3)
+      !write(*,*) 'DHR9: ',maxval(real(tmp))
+
+      !if (xyslice .le. ize .and. xyslice .ge. izs) then
+         !call netcdf_check( nf90_put_var(ncid_viz, u_xy_vid, real(u(1:nnx,iys:iye,xyslice)), start=startsxy, count=countsxy) )
+         !call netcdf_check( nf90_put_var(ncid_viz, u_xy_vid, tmp, start=startsxy, count=countsxy) )
+      !end if
+
+      call netcdf_check( nf90_put_var(ncid_viz, u_yz_vid, real(tmp), start=startsyz, count=countsyz) )
+      !call netcdf_check( nf90_put_var(ncid_viz, u_yz_vid, real(tmp), start=startsyz) )
+
+
+      viz_counter = viz_counter + 1
+
+      deallocate(tmp)
+
+end subroutine write_viz_netcdf_parallel
 
 end module netcdf_io
