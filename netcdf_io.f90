@@ -36,7 +36,10 @@ integer :: numactbins_vid,numacthist_vid
 
 !Viz:
 integer :: time_viz_dimid,viz_nx_dimid,viz_ny_dimid,viz_nzu_dimid,viz_nzw_dimid
-integer :: time_viz_vid,u_xy_vid,u_yz_vid,t_yz_vid,q_yz_vid,w_yz_vid
+integer :: time_viz_vid
+integer :: u_yz_vid,t_yz_vid,q_yz_vid,w_yz_vid,v_yz_vid
+integer :: u_xy_vid,t_xy_vid,q_xy_vid,w_xy_vid,v_xy_vid
+integer :: u_xz_vid,t_xz_vid,q_xz_vid,w_xz_vid,v_xz_vid
 integer :: xgrid_vid,ygrid_vid,zugrid_vid,zwgrid_vid
 
 integer :: his_counter,histog_counter,viz_counter
@@ -500,9 +503,7 @@ subroutine netcdf_init_viz
 
 !!! Slices
 
-      !call netcdf_check( nf90_def_var(ncid_viz, "u_xy", NF90_REAL, dimids_xy,u_xy_vid) )
-      !call netcdf_check( nf90_put_att(ncid_viz,u_xy_vid,"title","xy slice of u-velocity") )
-
+      !yz slices
       call netcdf_check( nf90_def_var(ncid_viz, "u_yz", NF90_REAL, dimids_yz,u_yz_vid) )
       call netcdf_check( nf90_put_att(ncid_viz,u_yz_vid,"title","yz slice of u-velocity") )
 
@@ -514,6 +515,41 @@ subroutine netcdf_init_viz
 
       call netcdf_check( nf90_def_var(ncid_viz, "w_yz", NF90_REAL, dimids_yz,w_yz_vid) )
       call netcdf_check( nf90_put_att(ncid_viz,w_yz_vid,"title","yz slice of w-velocity") )
+
+      call netcdf_check( nf90_def_var(ncid_viz, "v_yz", NF90_REAL, dimids_yz,v_yz_vid) )
+      call netcdf_check( nf90_put_att(ncid_viz,v_yz_vid,"title","yz slice of v-velocity") )
+
+      !xy slices
+      call netcdf_check( nf90_def_var(ncid_viz, "u_xy", NF90_REAL, dimids_yz,u_xy_vid) )
+      call netcdf_check( nf90_put_att(ncid_viz,u_xy_vid,"title","xy slice of u-velocity") )
+
+      call netcdf_check( nf90_def_var(ncid_viz, "v_xy", NF90_REAL, dimids_yz,v_xy_vid) )
+      call netcdf_check( nf90_put_att(ncid_viz,v_xy_vid,"title","xy slice of v-velocity") )
+
+      call netcdf_check( nf90_def_var(ncid_viz, "w_xy", NF90_REAL, dimids_yz,w_xy_vid) )
+      call netcdf_check( nf90_put_att(ncid_viz,w_xy_vid,"title","xy slice of w-velocity") )
+
+      call netcdf_check( nf90_def_var(ncid_viz, "t_xy", NF90_REAL, dimids_yz,t_xy_vid) )
+      call netcdf_check( nf90_put_att(ncid_viz,t_xy_vid,"title","xy slice of temperature") )
+
+      call netcdf_check( nf90_def_var(ncid_viz, "q_xy", NF90_REAL, dimids_yz,q_xy_vid) )
+      call netcdf_check( nf90_put_att(ncid_viz,q_xy_vid,"title","xy slice of water vapor mixing ratio") )
+
+      !xz slices
+      call netcdf_check( nf90_def_var(ncid_viz, "u_xz", NF90_REAL, dimids_xz,u_xz_vid) )
+      call netcdf_check( nf90_put_att(ncid_viz,u_xz_vid,"title","xz slice of u-velocity") )
+
+      call netcdf_check( nf90_def_var(ncid_viz, "v_xz", NF90_REAL, dimids_xz,v_xz_vid) )
+      call netcdf_check( nf90_put_att(ncid_viz,v_xz_vid,"title","xz slice of v-velocity") )
+
+      call netcdf_check( nf90_def_var(ncid_viz, "w_xz", NF90_REAL, dimids_xz,w_xz_vid) )
+      call netcdf_check( nf90_put_att(ncid_viz,w_xz_vid,"title","xz slice of w-velocity") )
+
+      call netcdf_check( nf90_def_var(ncid_viz, "t_xz", NF90_REAL, dimids_xz,t_xz_vid) )
+      call netcdf_check( nf90_put_att(ncid_viz,t_xz_vid,"title","xz slice of temperature") )
+
+      call netcdf_check( nf90_def_var(ncid_viz, "q_xz", NF90_REAL, dimids_xz,q_xz_vid) )
+      call netcdf_check( nf90_put_att(ncid_viz,q_xz_vid,"title","xz slice of water vapor mixing ratio") )
 
       call netcdf_check( nf90_enddef(ncid_viz) )
 
@@ -531,9 +567,9 @@ subroutine write_viz_netcdf
       implicit none
       include 'mpif.h'
 
-      integer :: yzslice
+      integer :: yzslice,xyslice,xzslice
       integer :: ix,iy
-      real :: tmpyz(nny,nnz)
+      real :: tmpyz(nny,nnz),tmpxy(nnx,nny),tmpxz(nnx,nnz)
       real :: xvec(nnx),yvec(nny)
  
 
@@ -563,12 +599,10 @@ subroutine write_viz_netcdf
       call netcdf_check( nf90_put_var(ncid_viz, time_viz_vid, real(time),start=(/viz_counter/)) )
       end if
 
-      !Now cycle through the slices that you want
-
+      !Cycle through yz slices
       tmpyz = 0.0
 
       !Define the slices that should be sent
-      !xyslice = nnz/2  !Choose the nz value for the xy slice
       yzslice = nnx/2  !Choose the nz value for the xy slice
 
     
@@ -584,6 +618,47 @@ subroutine write_viz_netcdf
       call fill_yz_slice(yzslice,w(1:nnx,iys:iye,izs:ize),tmpyz)
       if (myid==0)  call netcdf_check( nf90_put_var(ncid_viz, w_yz_vid,real(tmpyz(1:nny,1:nnz)),start=(/1,1,viz_counter/)) ) 
 
+      call fill_yz_slice(yzslice,v(1:nnx,iys:iye,izs:ize),tmpyz)
+      if (myid==0)  call netcdf_check( nf90_put_var(ncid_viz, v_yz_vid,real(tmpyz(1:nny,1:nnz)),start=(/1,1,viz_counter/)) ) 
+
+
+      !Now do xy slices
+      tmpxy = 0.0
+      xyslice = nnz/2  !Choose the nz value for the xy slice
+
+      call fill_xy_slice(xyslice,u(1:nnx,iys:iye,izs:ize),tmpxy)
+      if (myid==0)  call netcdf_check( nf90_put_var(ncid_viz, u_xy_vid,real(tmpxy(1:nnx,1:nny)),start=(/1,1,viz_counter/)) ) 
+
+      call fill_xy_slice(xyslice,v(1:nnx,iys:iye,izs:ize),tmpxy)
+      if (myid==0)  call netcdf_check( nf90_put_var(ncid_viz, v_xy_vid,real(tmpxy(1:nnx,1:nny)),start=(/1,1,viz_counter/)) ) 
+
+      call fill_xy_slice(xyslice,w(1:nnx,iys:iye,izs:ize),tmpxy)
+      if (myid==0)  call netcdf_check( nf90_put_var(ncid_viz, w_xy_vid,real(tmpxy(1:nnx,1:nny)),start=(/1,1,viz_counter/)) ) 
+
+      call fill_xy_slice(xyslice,t(1:nnx,iys:iye,1,izs:ize),tmpxy)
+      if (myid==0)  call netcdf_check( nf90_put_var(ncid_viz, t_xy_vid,real(tmpxy(1:nnx,1:nny)),start=(/1,1,viz_counter/)) ) 
+
+      call fill_xy_slice(xyslice,t(1:nnx,iys:iye,2,izs:ize),tmpxy)
+      if (myid==0)  call netcdf_check( nf90_put_var(ncid_viz, q_xy_vid,real(tmpxy(1:nnx,1:nny)),start=(/1,1,viz_counter/)) ) 
+
+      !Now do xz slices
+      tmpxz = 0.0
+      xzslice = nny/2  !Choose the nz value for the xy slice
+
+      call fill_xz_slice(xzslice,u(1:nnx,iys:iye,izs:ize),tmpxz)
+      if (myid==0)  call netcdf_check( nf90_put_var(ncid_viz, u_xz_vid,real(tmpxz(1:nnx,1:nnz)),start=(/1,1,viz_counter/)) ) 
+
+      call fill_xz_slice(xzslice,v(1:nnx,iys:iye,izs:ize),tmpxz)
+      if (myid==0)  call netcdf_check( nf90_put_var(ncid_viz, v_xz_vid,real(tmpxz(1:nnx,1:nnz)),start=(/1,1,viz_counter/)) ) 
+
+      call fill_xz_slice(xzslice,w(1:nnx,iys:iye,izs:ize),tmpxz)
+      if (myid==0)  call netcdf_check( nf90_put_var(ncid_viz, w_xz_vid,real(tmpxz(1:nnx,1:nnz)),start=(/1,1,viz_counter/)) ) 
+
+      call fill_xz_slice(xzslice,t(1:nnx,iys:iye,1,izs:ize),tmpxz)
+      if (myid==0)  call netcdf_check( nf90_put_var(ncid_viz, t_xz_vid,real(tmpxz(1:nnx,1:nnz)),start=(/1,1,viz_counter/)) ) 
+
+      call fill_xz_slice(xzslice,t(1:nnx,iys:iye,2,izs:ize),tmpxz)
+      if (myid==0)  call netcdf_check( nf90_put_var(ncid_viz, q_xz_vid,real(tmpxz(1:nnx,1:nnz)),start=(/1,1,viz_counter/)) ) 
 
       viz_counter = viz_counter + 1
 
@@ -714,6 +789,169 @@ subroutine fill_yz_slice(yzslice,dat,tmp)
 
 end subroutine fill_yz_slice
 
+subroutine fill_xy_slice(xyslice,dat,tmp)
+!Does all the MPI communication to fill a slice on proc 0 that can be written
+      use pars
+      use fields
+      use particles
+      implicit none
+      include 'mpif.h'
+      integer :: xyslice
+      real,intent(in) :: dat(1:nnx,iys:iye,izs:ize)
+      real,intent(out) :: tmp(nnx,nny)
+      integer :: ierr,ip,mynx,myny,mynz,iystmp,iyetmp,izstmp,izetmp,istatus
+      integer :: sbuf_limits(4),rbuf_limits(4)
+      real,allocatable :: sbuf_data(:,:),rbuf_data(:,:)
+
+      !Now start the process of collecting the slices on myid==0
+
+      !For the xy slice, not all processors participate
+      if (myid==0) then
+
+         if (xyslice .le. ize .and. xyslice .ge. izs) then
+            tmp(1:nnx,iys:iye) = dat(1:nnx,iys:iye,xyslice)
+         end if
+
+         do ip = 1,numprocs-1
+
+            call mpi_recv(rbuf_limits,4,mpi_integer,ip,2,mpi_comm_world,istatus,ierr)
+
+            if (maxval(rbuf_limits) .ge. 0) then  !This is how it checks whether to accept data based on slice location
+
+            mynx = nnx
+            myny = (rbuf_limits(2)-rbuf_limits(1))+1
+            mynz = (rbuf_limits(4)-rbuf_limits(3))+1
+
+            iystmp = rbuf_limits(1)
+            iyetmp = rbuf_limits(2)
+            izstmp = rbuf_limits(3)
+            izetmp = rbuf_limits(4)
+
+            allocate(rbuf_data(mynx,myny))
+
+            call mpi_recv(rbuf_data,mynx*myny,mpi_real8,ip,2,mpi_comm_world,istatus,ierr)
+
+            tmp(1:nnx,iystmp:iyetmp) = rbuf_data
+            
+            deallocate(rbuf_data)
+
+            end if
+
+         end do
+         
+
+      else  !All other processors
+
+         mynx = nnx
+         myny = (iye-iys)+1
+         mynz = (ize-izs)+1
+
+         if (xyslice .le. ize .and. xyslice .ge. izs) then
+            sbuf_limits = (/iys,iye,izs,ize/)
+         else
+            sbuf_limits = (/-1,-1,-1,-1/)
+         end if
+
+         call mpi_send(sbuf_limits,4,mpi_integer,0,2,mpi_comm_world,ierr)
+
+         if (xyslice .le. ize .and. xyslice .ge. izs) then  !Only send to root if you have this slice
+
+         allocate(sbuf_data(mynx,myny))
+
+         sbuf_data = dat(1:nnx,iys:iye,xyslice)
+         call mpi_send(sbuf_data,mynx*myny,mpi_real8,0,2,mpi_comm_world,ierr)
+         
+         deallocate(sbuf_data)
+
+         end if
+
+      end if
+
+     !Now tmp contains the whole slice on processor 0
+
+end subroutine fill_xy_slice
+
+subroutine fill_xz_slice(xzslice,dat,tmp)
+!Does all the MPI communication to fill a slice on proc 0 that can be written
+      use pars
+      use fields
+      use particles
+      implicit none
+      include 'mpif.h'
+      integer :: xzslice
+      real,intent(in) :: dat(1:nnx,iys:iye,izs:ize)
+      real,intent(out) :: tmp(nnx,nnz)
+      integer :: ierr,ip,mynx,myny,mynz,iystmp,iyetmp,izstmp,izetmp,istatus
+      integer :: sbuf_limits(4),rbuf_limits(4)
+      real,allocatable :: sbuf_data(:,:),rbuf_data(:,:)
+
+      !Now start the process of collecting the slices on myid==0
+
+      !For the xy slice, not all processors participate
+      if (myid==0) then
+
+         if (xzslice .le. iye .and. xzslice .ge. iys) then
+            tmp(1:nnx,izs:ize) = dat(1:nnx,xzslice,izs:ize)
+         end if
+
+         do ip = 1,numprocs-1
+
+            call mpi_recv(rbuf_limits,4,mpi_integer,ip,2,mpi_comm_world,istatus,ierr)
+
+            if (maxval(rbuf_limits) .ge. 0) then  !This is how it checks whether to accept data based on slice location
+
+            mynx = nnx
+            myny = (rbuf_limits(2)-rbuf_limits(1))+1
+            mynz = (rbuf_limits(4)-rbuf_limits(3))+1
+
+            iystmp = rbuf_limits(1)
+            iyetmp = rbuf_limits(2)
+            izstmp = rbuf_limits(3)
+            izetmp = rbuf_limits(4)
+
+            allocate(rbuf_data(mynx,mynz))
+
+            call mpi_recv(rbuf_data,mynx*mynz,mpi_real8,ip,2,mpi_comm_world,istatus,ierr)
+
+            tmp(1:nnx,izstmp:izetmp) = rbuf_data
+            
+            deallocate(rbuf_data)
+
+            end if
+
+         end do
+         
+
+      else  !All other processors
+
+         mynx = nnx
+         myny = (iye-iys)+1
+         mynz = (ize-izs)+1
+
+         if (xzslice .le. iye .and. xzslice .ge. iys) then
+            sbuf_limits = (/iys,iye,izs,ize/)
+         else
+            sbuf_limits = (/-1,-1,-1,-1/)
+         end if
+
+         call mpi_send(sbuf_limits,4,mpi_integer,0,2,mpi_comm_world,ierr)
+
+         if (xzslice .le. iye .and. xzslice .ge. iys) then  !Only send to root if you have this slice
+
+         allocate(sbuf_data(mynx,mynz))
+
+         sbuf_data = dat(1:nnx,xzslice,izs:ize)
+         call mpi_send(sbuf_data,mynx*mynz,mpi_real8,0,2,mpi_comm_world,ierr)
+         
+         deallocate(sbuf_data)
+
+         end if
+
+      end if
+
+     !Now tmp contains the whole slice on processor 0
+
+end subroutine fill_xz_slice
 
 
 subroutine netcdf_restart
