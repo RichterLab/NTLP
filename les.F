@@ -259,7 +259,9 @@ c
       endif
       if(msave_v .and. istage .eq. 1) then
          if (iviznetcdf) then
-            call  write_viz_netcdf
+            call open_viz_netcdf
+            call write_viz_netcdf
+            call close_viz_netcdf
          else
             call save_viz(it)
          end if
@@ -6707,7 +6709,7 @@ c
          if(ionce .eq. 0) then
             ionce = 1
             if (iviznetcdf) then
-               call open_viz_netcdf
+               !call open_viz_netcdf
             else
                !call open_viz
             end if
@@ -6715,8 +6717,8 @@ c
       endif
       if((i_viz .gt. 0) .and. (it .ge. it_viz_nxt)) then
         if (iviznetcdf) then
-           call close_viz_netcdf
-           call open_viz_netcdf
+           !call close_viz_netcdf
+           !call open_viz_netcdf
         else
            call viz_output_filename(it)
         end if
