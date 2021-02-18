@@ -25,6 +25,7 @@ c
       real :: Uo, Ttop(nscl), Tbot(nscl),qstar(nscl),tsfcc(nscl)
       real :: grav,t00,fcor,zi,zl,xl,yl,zw1,dpdx
       real :: ugcont,vgcont,zo,surf_RH,psurf,surf_temp
+      real :: meanRH,varRH
       real :: Swall=0.0,nprime
       integer :: isfc(nscl)
 
@@ -244,7 +245,8 @@ c ----------------------------------------------------------------------
      +           Hpsrc(maxnz),TEpsrc(maxnz),
      +           qstarm(maxnz),
      +           trip(maxnz),TpSq(maxnz),Tpdqp(maxnz),
-     +           radtend(maxnz),RHxym(maxnz),tempxym(maxnz),
+     +           radtend(maxnz),
+     +           RHxym(maxnz),RHmsqr(maxnz),tempxym(maxnz),
      +           pflux(0:maxnz),pfluxdiff(0:maxnz)
         real ::  xkn(maxnx),ykn(maxny),
      +           xk(maxnx),yk(maxny),
@@ -287,7 +289,8 @@ c ----------------------------------------------------------------------
      +           Hpsrc(:), TEpsrc(:),
      +           qstarm(:),
      +           trip(:),TpSq(:),Tpdqp(:),
-     +           radtend(:),RHxym(:),tempxym(:),
+     +           radtend(:),
+     +           RHxym(:),RHmsqr(:),tempxym(:),
      +           pflux(:),pfluxdiff(:)
         real, pointer ::  
      +           xkn(:), ykn(:), xk(:), yk(:), xks(:,:), wavexy(:,:)
@@ -385,6 +388,7 @@ c
              Tpdqp => c_s%Tpdqp; isize = isize + size(Tpdqp)
              radtend => c_s%radtend; isize = isize + size(radtend)
              RHxym => c_s%RHxym; isize = isize + size(RHxym)
+             RHmsqr => c_s%RHmsqr; isize = isize + size(RHmsqr)
              tempxym => c_s%tempxym; isize = isize + size(tempxym)
              pflux => c_s%pflux; isize = isize + size(pflux)
              pfluxdiff => c_s%pfluxdiff; isize = isize + size(pfluxdiff)

@@ -11,6 +11,8 @@ integer :: utau_vid,uwsfc_vid
 integer :: Tsfc_vid,qsfc_vid,wtsfc_vid,wqsfc_vid
 integer :: tnumpart_vid,tnum_destroy_vid,tot_reintro_vid
 integer :: Swall_vid
+integer :: meanRH_vid,varRH_vid
+integer :: radavg_vid,radmsqr_vid
 integer :: tdenum_vid,tactnum_vid,tnumimpos_vid
 integer :: zw_vid,zw_dimid
 integer :: uxym_vid,vxym_vid,wxym_vid,txym_vid,RHxym_vid,tempxym_vid,exym_vid
@@ -128,6 +130,18 @@ subroutine netcdf_init
 
       call netcdf_check( nf90_def_var(ncid, "Swall", NF90_REAL, dimids,Swall_vid) )
       call netcdf_check( nf90_put_att(ncid,Swall_vid,"title","Humidity sink for Pi Chamber") )
+
+      call netcdf_check( nf90_def_var(ncid, "meanRH", NF90_REAL, dimids,meanRH_vid) )
+      call netcdf_check( nf90_put_att(ncid,meanRH_vid,"title","Volume average RH") )
+
+      call netcdf_check( nf90_def_var(ncid, "varRH", NF90_REAL, dimids,varRH_vid) )
+      call netcdf_check( nf90_put_att(ncid,varRH_vid,"title","Volume-averaged RH variance") )
+
+      call netcdf_check( nf90_def_var(ncid, "radavg", NF90_REAL, dimids,radavg_vid) )
+      call netcdf_check( nf90_put_att(ncid,radavg_vid,"title","Total mean radius in domain") )
+
+      call netcdf_check( nf90_def_var(ncid, "radmsqr", NF90_REAL, dimids,radmsqr_vid) )
+      call netcdf_check( nf90_put_att(ncid,radmsqr_vid,"title","Total mean-squared radius in domain") )
 
 
 !!! Profiles
@@ -293,6 +307,10 @@ subroutine write_his_netcdf
       call netcdf_check( nf90_put_var(ncid, wtsfc_vid, real(wtsfc(1)),start=(/his_counter/)) )
       call netcdf_check( nf90_put_var(ncid, wqsfc_vid, real(wtsfc(2)),start=(/his_counter/)) )
       call netcdf_check( nf90_put_var(ncid, Swall_vid, real(Swall),start=(/his_counter/)) )
+      call netcdf_check( nf90_put_var(ncid, meanRH_vid, real(meanRH),start=(/his_counter/)) )
+      call netcdf_check( nf90_put_var(ncid, varRH_vid, real(varRH),start=(/his_counter/)) )
+      call netcdf_check( nf90_put_var(ncid, radavg_vid, real(radavg),start=(/his_counter/)) )
+      call netcdf_check( nf90_put_var(ncid, radmsqr_vid, real(radmsqr),start=(/his_counter/)) )
 
       call netcdf_check( nf90_put_var(ncid, zu_vid, real(zz(1:nnz)),start=(/1, his_counter/)) )
       call netcdf_check( nf90_put_var(ncid, zw_vid, real(z(0:nnz)),start=(/1, his_counter/)) )

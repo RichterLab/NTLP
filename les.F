@@ -7017,7 +7017,7 @@ c ------- indices for indexing array stat(.,.)
 c         js = number of non-scalar stats
 c         ns = number of scalar stats
 c
-      parameter(js = 36, ns = 5, nstat = js + ns*nscl)
+      parameter(js = 37, ns = 5, nstat = js + ns*nscl)
       real stat(1:nnz,nstat)
       real RHtmp, Ttmp
 c
@@ -7147,6 +7147,7 @@ c
      +   t(ix,iy,2,iz)*Ru/Mw/mod_magnus(Ttmp)*rhoa*100.0
          stat(iz,35) = stat(iz,35) + RHtmp
          stat(iz,36) = stat(iz,36) + Ttmp
+         stat(iz,37) = stat(iz,37) + RHtmp**2
       enddo
       enddo
 
@@ -7262,6 +7263,7 @@ c
 
       RHxym(iz) = stat(iz,35)*fnxy
       tempxym(iz) = stat(iz,36)*fnxy
+      RHmsqr(iz) = stat(iz,37)*fnxy
 
       !Doesn't need averaging if basing radiation source on average ql:
       radtend(iz) = radsrc(iz)
@@ -10580,8 +10582,9 @@ c
       include 'mpif.h'
 
       integer :: ierr,it,fluxloc,fluxloci
-      real :: tmpbuf(5),tmpbuf_rec(5)
+      real :: tmpbuf(6),tmpbuf_rec(6)
       real :: myradavg,myradmax,myradmin,mytempmax,mytempmin
+      real :: myradmsqr
       real :: myqmin,myqmax
       real :: denom,dtl,sigma
       integer :: ix,iy,iz,im,flag,mflag
@@ -10997,6 +11000,7 @@ c
       !Get particle count:
       numpart = 0
       myradavg = 0.0
+      myradmsqr = 0.0
       myradmin=1000.0
       myradmax = 0.0
       mytempmin = 1000.0
@@ -11007,6 +11011,7 @@ c
       do while (associated(part))
       numpart = numpart + 1
       myradavg = myradavg + part%radius
+      myradmsqr = myradmsqr + part%radius**2
       if (part%radius .gt. myradmax) myradmax = part%radius
       if (part%radius .lt. myradmin) myradmin = part%radius
       if (part%Tp .gt. mytempmax) mytempmax = part%Tp
@@ -11022,7 +11027,6 @@ c
      +                   mpi_comm_world,ierr)
 
 
-
       call mpi_allreduce(denum,tdenum,1,mpi_integer,mpi_sum,
      +                   mpi_comm_world,ierr)
 
@@ -11034,6 +11038,7 @@ c
       tmpbuf(3) = myphiw_sum
       tmpbuf(4) = myphiv_sum
       tmpbuf(5) = myradavg
+      tmpbuf(6) = myradmsqr
 
 
       !calculate average particle residence time
@@ -11041,7 +11046,7 @@ c
      +    mpi_comm_world,ierr)
 
       !Combine all reals that are being summed:
-      call mpi_allreduce(tmpbuf,tmpbuf_rec,5,mpi_real8,mpi_sum,
+      call mpi_allreduce(tmpbuf,tmpbuf_rec,6,mpi_real8,mpi_sum,
      +    mpi_comm_world,ierr)
 
       call mpi_allreduce(num_destroy,tnum_destroy,1,mpi_integer,mpi_sum,
@@ -11059,11 +11064,13 @@ c
       phiw = tmpbuf_rec(3)
       phiv = tmpbuf_rec(4)
       radavg = tmpbuf_rec(5)
+      radmsqr = tmpbuf_rec(6)
 
       phiw = phiw/xl/yl/zl/rhoa
       phiv = phiv/xl/yl/zl
       Rep_avg = Rep_avg/tnumpart
       radavg = radavg/tnumpart
+      radmsqr = radmsqr/tnumpart
       tavgres = tavgres/tnum_destroy
 
       !Min and max radius
@@ -14162,6 +14169,7 @@ c       Add the current event to the histogram
       include 'mpif.h'
 
       real :: mymeanRH,meanRH_curr,meanRH_target
+      real :: mymsqrRH
       integer :: iz,ierr
 
       meanRH_target = 103.0
@@ -14182,6 +14190,27 @@ c       Add the current event to the histogram
      +         mpi_comm_world,ierr)
 
       meanRH_curr = meanRH_curr/numprocs
+
+      !!!!As an aside, also compute the variance of the RH:
+      mymsqrRH = 0.0
+      do iz=1,nnz-1
+         mymsqrRH = mymsqrRH + 
+     +   0.5*(zz(iz+1)-zz(iz))*(RHmsqr(iz)+RHmsqr(iz+1))
+
+      end do 
+
+      mymsqrRH = mymsqrRH/zl
+
+      call mpi_allreduce(mymsqrRH,varRH,1,mpi_real8,mpi_sum,
+     +         mpi_comm_world,ierr)
+
+      varRH = varRH/numprocs
+
+      !Now save the volume average and variance:
+      meanRH = meanRH_curr
+      varRH = varRH - meanRH**2
+      !!!! 
+      
 
       !Swall = Swall + (meanRH_target - meanRH_curr)*1.0e-9
 

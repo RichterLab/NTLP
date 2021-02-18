@@ -43,7 +43,7 @@ module particles
   integer :: tot_reintro=0
 
   real :: Rep_avg,part_grav(3)
-  real :: radavg,radmin,radmax,tempmin,tempmax,qmin,qmax
+  real :: radavg,radmin,radmax,radmsqr,tempmin,tempmax,qmin,qmax
   real :: vp_init(3),Tp_init,radius_init
   real :: pdf_factor,pdf_prob
   integer*8 :: mult_init,mult_factor,mult_a,mult_c
