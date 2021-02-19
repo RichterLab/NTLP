@@ -15,7 +15,7 @@ integer :: meanRH_vid,varRH_vid
 integer :: radavg_vid,radmsqr_vid
 integer :: tdenum_vid,tactnum_vid,tnumimpos_vid
 integer :: zw_vid,zw_dimid
-integer :: uxym_vid,vxym_vid,wxym_vid,txym_vid,RHxym_vid,tempxym_vid,exym_vid
+integer :: uxym_vid,vxym_vid,wxym_vid,txym_vid,RHxym_vid,tempxym_vid,exym_vid,RHmsqr_vid
 integer :: ups_vid,vps_vid,wps_vid,tps_vid
 integer :: wtle_vid,wtsb_vid
 integer :: uwle_vid,uwsb_vid
@@ -138,10 +138,10 @@ subroutine netcdf_init
       call netcdf_check( nf90_put_att(ncid,varRH_vid,"title","Volume-averaged RH variance") )
 
       call netcdf_check( nf90_def_var(ncid, "radavg", NF90_REAL, dimids,radavg_vid) )
-      call netcdf_check( nf90_put_att(ncid,radavg_vid,"title","Total mean radius in domain") )
+      call netcdf_check( nf90_put_att(ncid,radavg_vid,"title","Mean radius of activated droplets") )
 
       call netcdf_check( nf90_def_var(ncid, "radmsqr", NF90_REAL, dimids,radmsqr_vid) )
-      call netcdf_check( nf90_put_att(ncid,radmsqr_vid,"title","Total mean-squared radius in domain") )
+      call netcdf_check( nf90_put_att(ncid,radmsqr_vid,"title","Mean-squared radius of activated droplets") )
 
 
 !!! Profiles
@@ -168,6 +168,9 @@ subroutine netcdf_init
 
       call netcdf_check( nf90_def_var(ncid,"RHxym",NF90_REAL, dimids_zu,RHxym_vid) )
       call netcdf_check( nf90_put_att(ncid,RHxym_vid,"title","Horiz. avg. relative humidity") )
+
+      call netcdf_check( nf90_def_var(ncid,"RHmsqr",NF90_REAL, dimids_zu,RHmsqr_vid) )
+      call netcdf_check( nf90_put_att(ncid,RHmsqr_vid,"title","Horiz. <RH^2>") )
 
       call netcdf_check( nf90_def_var(ncid,"tempxym",NF90_REAL, dimids_zu,tempxym_vid) )
       call netcdf_check( nf90_put_att(ncid,tempxym_vid,"title","Horiz. avg. temperature") )
@@ -321,6 +324,7 @@ subroutine write_his_netcdf
       call netcdf_check( nf90_put_var(ncid,txym_vid,real(txym(1:nnz,1:nscl)),start=(/1,1,his_counter/)) )
       call netcdf_check( nf90_put_var(ncid,exym_vid,real(e_mn(0:nnz)),start=(/1, his_counter/)) )
       call netcdf_check( nf90_put_var(ncid,RHxym_vid,real(RHxym(1:nnz)),start=(/1,his_counter/)) )
+      call netcdf_check( nf90_put_var(ncid,RHmsqr_vid,real(RHmsqr(1:nnz)),start=(/1,his_counter/)) )
       call netcdf_check( nf90_put_var(ncid,tempxym_vid,real(tempxym(1:nnz)),start=(/1,his_counter/)) )
 
       call netcdf_check( nf90_put_var(ncid,ups_vid,real(ups(1:nnz)),start=(/1, his_counter/)) )

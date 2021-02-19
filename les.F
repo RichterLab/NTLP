@@ -10587,7 +10587,7 @@ c
       real :: myradmsqr
       real :: myqmin,myqmax
       real :: denom,dtl,sigma
-      integer :: ix,iy,iz,im,flag,mflag
+      integer :: ix,iy,iz,im,flag,mflag,act_tmp,myact_tmp
       real :: Rep,diff(3),diffnorm,corrfac,myRep_avg
       real :: xtmp(3),vtmp(3),Tptmp,radiustmp
       real :: Nup,Shp,rhop,taup_i,estar,einf
@@ -10999,6 +10999,7 @@ c
 
       !Get particle count:
       numpart = 0
+      myact_tmp = 0
       myradavg = 0.0
       myradmsqr = 0.0
       myradmin=1000.0
@@ -11010,8 +11011,12 @@ c
       part => first_particle
       do while (associated(part))
       numpart = numpart + 1
-      myradavg = myradavg + part%radius
-      myradmsqr = myradmsqr + part%radius**2
+      !Radavg and radmsqr will be only of ACTIVATED droplets
+      if (part%radius .gt. part%rc) then
+         myradavg = myradavg + part%radius
+         myradmsqr = myradmsqr + part%radius**2
+         myact_tmp = myact_tmp + 1
+      end if
       if (part%radius .gt. myradmax) myradmax = part%radius
       if (part%radius .lt. myradmin) myradmin = part%radius
       if (part%Tp .gt. mytempmax) mytempmax = part%Tp
@@ -11031,6 +11036,9 @@ c
      +                   mpi_comm_world,ierr)
 
       call mpi_allreduce(actnum,tactnum,1,mpi_integer,mpi_sum,
+     +                   mpi_comm_world,ierr)
+
+      call mpi_allreduce(myact_tmp,act_tmp,1,mpi_integer,mpi_sum,
      +                   mpi_comm_world,ierr)
 
       tmpbuf(1) = myRep_avg
@@ -11069,8 +11077,8 @@ c
       phiw = phiw/xl/yl/zl/rhoa
       phiv = phiv/xl/yl/zl
       Rep_avg = Rep_avg/tnumpart
-      radavg = radavg/tnumpart
-      radmsqr = radmsqr/tnumpart
+      radavg = radavg/act_tmp
+      radmsqr = radmsqr/act_tmp
       tavgres = tavgres/tnum_destroy
 
       !Min and max radius
@@ -11409,105 +11417,6 @@ c
 
       end subroutine rad_solver2
 
-      subroutine create_particle(xp,vp,Tp,m_s,Os,mult,rad_init,idx,
-     +            procidx)
-      use particles
-      use pars
-      implicit none
-
-      real :: xp(3),vp(3),Tp,qinfp,rad_init,pi,m_s,Os
-      integer :: idx,procidx
-      integer*8 :: mult
-
-      if (.NOT. associated(first_particle)) then
-         allocate(first_particle)
-         part => first_particle
-         nullify(part%next,part%prev)
-      else
-         !Add to beginning of list since it's more convenient
-         part => first_particle
-         allocate(part%prev)
-         first_particle => part%prev
-         part%prev%next => part
-         part => first_particle
-         nullify(part%prev)
-      end if
-
-      pi = 4.0*atan(1.0)
-  
-      part%xp(1:3) = xp(1:3)
-      part%vp(1:3) = vp(1:3)
-      part%Tp = Tp
-      part%radius = rad_init
-      part%uf(1:3) = vp(1:3)
-      part%qinf = tsfcc(2)
-      part%qstar = 0.008
-      part%Tf = Tp
-      part%xrhs(1:3) = 0.0
-      part%vrhs(1:3) = 0.0 
-      part%Tprhs_s = 0.0
-      part%Tprhs_L = 0.0
-      part%radrhs = 0.0
-      part%pidx = idx 
-      part%procidx = procidx
-      part%nbr_pidx = -1
-      part%nbr_procidx = -1
-      part%mult = mult
-      part%res = 0.0
-      part%actres = 0.0
-      part%m_s = m_s
-      part%Os = Os
-      part%dist = 0.0
-      part%u_sub(1:3) = 0.0
-      part%sigm_s = 0.0
-      part%numact = 0.0
-
-      
-      end subroutine create_particle
-      subroutine particle_reintro(it)
-      use particles
-      use pars
-      use con_data
-      use con_stats
-      use fields
-      implicit none
-      include 'mpif.h'
-
-      integer :: it
-      integer :: ierr,randproc,np,my_reintro
-      real :: xp_init(3),ran2,Os,m_s
-
-      my_reintro = nprime*(1./60.)*(10.**6.)*dt*4/numprocs*10.0 !4m^3 (vol chamber)
-
-      tot_reintro = 0
-
-      if (mod(it, 10)==0) then
-      tot_reintro = my_reintro*numprocs
-      if (myid==0) write(*,*) 'time,tot_reintro:',time,
-     +                  tot_reintro
-      do np=1,my_reintro
-
-      !Proc 0 gets a random proc ID, broadcasts it out:
-      !if (myid==0) randproc = floor(ran2(iseed)*numprocs)
-      !call mpi_bcast(randproc,1,mpi_integer,0,mpi_comm_world,ierr)
-
-
-         xp_init(1) = ran2(iseed)*(xmax-xmin) + xmin
-         xp_init(2) = ran2(iseed)*(ymax-ymin) + ymin
-         xp_init(3) = ran2(iseed)*zl/2.0
-
-         Os = 1.0
-         m_s = radius_init**3*pi2*2.0/3.0*rhow*Sal  !Using the salinity specified in params.in
-         
-
-         call create_particle(xp_init,vp_init,
-     +         Tp_init,m_s,Os,mult_init,radius_init,2,myid) 
-
-      end do
-      end if
-
-
-      end subroutine particle_reintro
 
       subroutine particle_bcs_nonperiodic
       use particles
@@ -14168,58 +14077,62 @@ c       Add the current event to the histogram
       implicit none
       include 'mpif.h'
 
-      real :: mymeanRH,meanRH_curr,meanRH_target
-      real :: mymsqrRH
+      real :: meanRH_curr,meanRH_target,msqrRH
+      real :: varRH_test,meanRH_test
       integer :: iz,ierr
 
       meanRH_target = 103.0
       
 
       !Trapezoidal rule to get current volume mean RH:
-      mymeanRH = 0.0
+      meanRH = 0.0
       do iz=1,nnz-1
 
-         mymeanRH = mymeanRH + 
+         meanRH = meanRH + 
      +   0.5*(zz(iz+1)-zz(iz))*(RHxym(iz)+RHxym(iz+1))
 
       end do 
     
-      mymeanRH = mymeanRH/zl
+      meanRH = meanRH/zl
 
-      call mpi_allreduce(mymeanRH,meanRH_curr,1,mpi_real8,mpi_sum,
-     +         mpi_comm_world,ierr)
+!      call mpi_allreduce(mymeanRH,meanRH_curr,1,mpi_real8,mpi_sum,
+!     +         mpi_comm_world,ierr)
 
-      meanRH_curr = meanRH_curr/numprocs
+      meanRH_curr = meanRH
 
       !!!!As an aside, also compute the variance of the RH:
-      mymsqrRH = 0.0
+      msqrRH = 0.0
       do iz=1,nnz-1
-         mymsqrRH = mymsqrRH + 
+         msqrRH = msqrRH + 
      +   0.5*(zz(iz+1)-zz(iz))*(RHmsqr(iz)+RHmsqr(iz+1))
 
       end do 
+     
+      msqrRH = msqrRH/zl
 
-      mymsqrRH = mymsqrRH/zl
+!      call mpi_allreduce(mymsqrRH,varRH,1,mpi_real8,mpi_sum,
+!     +         mpi_comm_world,ierr)
 
-      call mpi_allreduce(mymsqrRH,varRH,1,mpi_real8,mpi_sum,
-     +         mpi_comm_world,ierr)
-
-      varRH = varRH/numprocs
-
-      !Now save the volume average and variance:
-      meanRH = meanRH_curr
-      varRH = varRH - meanRH**2
+      varRH = msqrRH - meanRH**2
       !!!! 
-      
+
+
+      !Here is the way Theo was originally doing it, which isn't a
+      !proper average in the vertical direction due to stretched grid
+      meanRH_test = sum(RHxym)/nnz
+      varRH_test = sum(RHmsqr)/nnz
+      varRH_test = varRH_test - meanRH_test**2
 
       !Swall = Swall + (meanRH_target - meanRH_curr)*1.0e-9
 
 
       !Swall = -2.25E-6  !What I got from Daniel
-      Swall = -2.154e-6 !My first attempt with relaxation of 1e-10
+      Swall = -2.15e-6 !My first attempt with relaxation of 1e-10
 
       if (myid==0) print*, 'Swall', Swall
       if (myid==0) print*, 'meanRH_curr', meanRH_curr
+      if (myid==0) print*, 'meanRH,varRH=',meanRH,varRH
+      if (myid==0) print*, 'varRH_test=',varRH_test
 
       end subroutine humidity_control
 

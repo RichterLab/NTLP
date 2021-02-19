@@ -1033,6 +1033,106 @@ CONTAINS
 
   end subroutine particle_exchange
 
+  subroutine particle_reintro(it)
+      use pars
+      use con_data
+      use con_stats
+      use fields
+      implicit none
+      include 'mpif.h'
+
+      integer :: it
+      integer :: ierr,randproc,np,my_reintro
+      real :: xp_init(3),ran2,Os,m_s
+
+      my_reintro = nprime*(1./60.)*(10.**6.)*dt*4/numprocs*10.0 !4m^3 (vol chamber)
+
+      tot_reintro = 0
+
+      if (mod(it, 10)==0) then
+
+      tot_reintro = my_reintro*numprocs
+
+      if (myid==0) write(*,*) 'time,tot_reintro:',time,tot_reintro
+
+      do np=1,my_reintro
+
+      !Proc 0 gets a random proc ID, broadcasts it out:
+      !if (myid==0) randproc = floor(ran2(iseed)*numprocs)
+      !call mpi_bcast(randproc,1,mpi_integer,0,mpi_comm_world,ierr)
+
+
+         xp_init(1) = ran2(iseed)*(xmax-xmin) + xmin
+         xp_init(2) = ran2(iseed)*(ymax-ymin) + ymin
+         xp_init(3) = ran2(iseed)*zl/2.0
+
+         Os = 1.0
+         m_s = radius_init**3*pi2*2.0/3.0*rhow*Sal  !Using the salinity specified in params.in
+         
+
+         call create_particle(xp_init,vp_init, &
+              Tp_init,m_s,Os,mult_init,radius_init,2,myid) 
+
+      end do
+      end if
+
+
+  end subroutine particle_reintro
+
+  subroutine create_particle(xp,vp,Tp,m_s,Os,mult,rad_init,idx,procidx)
+      use pars
+      implicit none
+
+      real :: xp(3),vp(3),Tp,qinfp,rad_init,pi,m_s,Os
+      integer :: idx,procidx
+      integer*8 :: mult
+
+      if (.NOT. associated(first_particle)) then
+         allocate(first_particle)
+         part => first_particle
+         nullify(part%next,part%prev)
+      else
+         !Add to beginning of list since it's more convenient
+         part => first_particle
+         allocate(part%prev)
+         first_particle => part%prev
+         part%prev%next => part
+         part => first_particle
+         nullify(part%prev)
+      end if
+
+      pi = 4.0*atan(1.0)
+  
+      part%xp(1:3) = xp(1:3)
+      part%vp(1:3) = vp(1:3)
+      part%Tp = Tp
+      part%radius = rad_init
+      part%uf(1:3) = vp(1:3)
+      part%qinf = tsfcc(2)
+      part%qstar = 0.008
+      part%Tf = Tp
+      part%xrhs(1:3) = 0.0
+      part%vrhs(1:3) = 0.0 
+      part%Tprhs_s = 0.0
+      part%Tprhs_L = 0.0
+      part%radrhs = 0.0
+      part%pidx = idx 
+      part%procidx = procidx
+      part%nbr_pidx = -1
+      part%nbr_procidx = -1
+      part%mult = mult
+      part%res = 0.0
+      part%actres = 0.0
+      part%m_s = m_s
+      part%Os = Os
+      part%dist = 0.0
+      part%u_sub(1:3) = 0.0
+      part%sigm_s = 0.0
+      part%numact = 0.0
+
+      
+  end subroutine create_particle
+
   function mod_Magnus(T)
     implicit none
 
