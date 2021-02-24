@@ -165,6 +165,7 @@ c
       write(*,'(a7,2e15.6)') 'ms1:',time,part%m_s
       write(*,'(a7,2e15.6)') 'res1:',time,part%res
       write(*,'(a7,e15.6,i)') 'mult1:',time,part%mult
+      write(*,'(a7,2e15.6)') 'rc1:',time,part%rc
 
       end if
 
@@ -577,8 +578,8 @@ c
 
       end do
 
-      if (tauc/15.0 .lt. dt_new) then
-            dt_new = tauc/15.0
+      if (tauc/10.0 .lt. dt_new) then
+            dt_new = tauc/10.0
             if (l_root) then
             write(6,6210) dt_new, dt_cfl, tauc
  6210       format(' 6210 cfl time step too large for droplets',/,
@@ -11013,6 +11014,7 @@ c
       numpart = numpart + 1
       !Radavg and radmsqr will be only of ACTIVATED droplets
       if (part%radius .gt. part%rc) then
+      !if (part%radius .gt. 1.5e-6) then
          myradavg = myradavg + part%radius
          myradmsqr = myradmsqr + part%radius**2
          myact_tmp = myact_tmp + 1
