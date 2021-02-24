@@ -1133,6 +1133,656 @@ CONTAINS
       
   end subroutine create_particle
 
+  subroutine particle_bcs_periodic
+      use pars
+      implicit none 
+
+      !Assumes domain goes from [0,xl),[0,yl),[0,zl] 
+      !Also maintain the number of particles on each proc
+      
+      part => first_particle
+      do while (associated(part))
+
+      !x,y periodic
+   
+      if (part%xp(1) .GT. xl) then
+         part%xp(1) = part%xp(1)-xl
+      elseif (part%xp(1) .LT. 0) then
+         part%xp(1) = xl + part%xp(1)
+      end if
+
+      if (part%xp(2) .GT. yl) then
+         part%xp(2) = part%xp(2)-yl
+      elseif (part%xp(2) .LT. 0) then
+         part%xp(2) = yl + part%xp(2)
+      end if
+
+      part => part%next
+
+      end do
+
+
+  end subroutine particle_bcs_periodic
+
+  subroutine particle_update_rk3(it,istage)
+      use pars
+      use con_data
+      use con_stats
+      implicit none
+      include 'mpif.h'
+
+      integer :: istage,ierr,it
+      real :: pi
+      real :: denom,dtl,sigma
+      integer :: ix,iy,iz
+      real :: Rep,diff(3),diffnorm,corrfac,myRep_avg
+      real :: xtmp(3),vtmp(3),Tptmp,radiustmp
+      real :: Nup,Shp,rhop,taup_i,estar,einf
+      real :: mylwc_sum,myphiw_sum,myphiv_sum,Volp      
+      real :: Eff_C,Eff_S
+      real :: t_s,t_f,t_s1,t_f1
+
+
+      !First fill extended velocity field for interpolation
+      !t_s = mpi_wtime()
+      call fill_ext 
+      !t_f = mpi_wtime()
+      !call mpi_barrier(mpi_comm_world,ierr)
+      !if (myid==5) write(*,*) 'time fill_ext:',t_f-t_s
+
+
+      partcount_t = 0.0
+      vpsum_t = 0.0
+      upwp_t = 0.0
+      vpsqrsum_t = 0.0
+      Tpsum_t = 0.0
+      Tfsum_t = 0.0
+      qfsum_t = 0.0
+      radsum_t = 0.0  
+      rad2sum_t = 0.0  
+      multcount_t = 0.0
+      mwsum_t = 0.0
+      Tpsqrsum_t = 0.0
+      wpTpsum_t = 0.0
+      myRep_avg = 0.0
+      mylwc_sum = 0.0
+      myphiw_sum = 0.0
+      myphiv_sum = 0.0
+      qstarsum_t = 0.0 
+
+      t_s = mpi_wtime()
+
+
+      !If you want, you can have the particles calculate nearest neighbor
+      !Brute is there for checking, but WAY slower
+      if (ineighbor) then
+      !t_s = mpi_wtime()
+
+      call particle_neighbor_search_kd
+      !call particle_neighbor_search_brute
+
+      !call mpi_barrier(mpi_comm_world,ierr)
+      !t_f = mpi_wtime()
+      !if (myid==5) write(*,*) 'time neighbor:', t_f - t_s
+      end if
+
+
+      !Loop over the linked list of particles:
+      part => first_particle
+      do while (associated(part))     
+         !First, interpolate to get the fluid velocity part%uf(1:3):
+         if (ilin .eq. 1) then
+            call uf_interp_lin   !Use trilinear interpolation
+         else
+            call uf_interp       !Use 6th order Lagrange interpolation
+         end if
+
+         if (iexner .eq. 1) then
+             part%Tf = part%Tf*(psurf/(psurf-part%xp(3)*rhoa*grav))**(-Rd/Cpa)
+         end if
+
+
+         if (it .LE. 1 ) then 
+            !part%xrhs(1:3) = part%vp(1:3)
+            !part%xp(1:3) = xtmp(1:3) + dt*gama(istage)*part%xrhs(1:3)
+            part%vp(1:3) = part%uf
+            part%Tp = part%Tf
+         endif
+
+         !Now advance the particle and position via RK3 (same as velocity)
+        
+         !Intermediate Values
+         pi = 4.0*atan(1.0)  
+         diff(1:3) = part%vp - part%uf
+         diffnorm = sqrt(diff(1)**2 + diff(2)**2 + diff(3)**2)
+         Rep = 2.0*part%radius*diffnorm/nuf  
+         Volp = pi2*2.0/3.0*part%radius**3
+         rhop = (part%m_s+Volp*rhow)/Volp
+         taup_i = 18.0*rhoa*nuf/rhop/(2.0*part%radius)**2 
+
+         myRep_avg = myRep_avg + Rep
+         corrfac = (1.0 + 0.15*Rep**(0.687))
+         mylwc_sum = mylwc_sum + Volp*rhop*real(part%mult)
+         myphiw_sum = myphiw_sum + Volp*rhow
+         myphiv_sum = myphiv_sum + Volp
+
+
+         !Compute Nusselt number for particle:
+         !Ranz-Marshall relation
+         Nup = 2.0 + 0.6*Rep**(1.0/2.0)*Pra**(1.0/3.0)
+         Shp = 2.0 + 0.6*Rep**(1.0/2.0)*Sc**(1.0/3.0)
+
+
+         !Mass Transfer calculations
+         einf = mod_Magnus(part%Tf)
+         Eff_C = 2.0*Mw*Gam/(Ru*rhow*part%radius*part%Tp)
+         Eff_S = Ion*part%Os*part%m_s*Mw/Ms/(Volp*rhop-part%m_s)
+         estar = einf*exp(Mw*Lv/Ru*(1.0/part%Tf-1.0/part%Tp)+Eff_C-Eff_S)
+         part%qstar = Mw/Ru*estar/part%Tp/rhoa
+
+  
+         xtmp(1:3) = part%xp(1:3) + dt*zetas(istage)*part%xrhs(1:3)
+         vtmp(1:3) = part%vp(1:3) + dt*zetas(istage)*part%vrhs(1:3) 
+         Tptmp = part%Tp + dt*zetas(istage)*part%Tprhs_s
+         Tptmp = Tptmp + dt*zetas(istage)*part%Tprhs_L
+         radiustmp = part%radius + dt*zetas(istage)*part%radrhs
+
+         part%xrhs(1:3) = part%vp(1:3)
+         part%vrhs(1:3) = corrfac*taup_i*(part%uf(1:3)-part%vp(1:3)) + part_grav(1:3)
+
+         if (ievap .EQ. 1) then      
+            part%radrhs = Shp/9.0/Sc*rhop/rhow*part%radius*taup_i*(part%qinf-part%qstar) !assumes qinf=rhov/rhoa rather than rhov/rhom
+         else
+            part%radrhs = 0.0
+         end if
+
+
+         part%Tprhs_s = -Nup/3.0/Pra*CpaCpp*rhop/rhow*taup_i*(part%Tp-part%Tf)
+         part%Tprhs_L = 3.0*Lv/Cpp/part%radius*part%radrhs
+
+
+
+  
+         part%xp(1:3) = xtmp(1:3) + dt*gama(istage)*part%xrhs(1:3)
+         part%vp(1:3) = vtmp(1:3) + dt*gama(istage)*part%vrhs(1:3)
+         part%Tp = Tptmp + dt*gama(istage)*part%Tprhs_s
+         part%Tp = part%Tp + dt*gama(istage)*part%Tprhs_L
+         part%radius = radiustmp + dt*gama(istage)*part%radrhs
+
+
+         if (istage .eq. 3) part%res = part%res + dt
+
+
+        part => part%next
+      end do
+
+
+
+      !t_f1 = mpi_wtime()
+      !write(*,*) 'proc,loop time: ',myid,t_f1-t_s
+      call mpi_barrier(mpi_comm_world,ierr)
+      t_f = mpi_wtime()
+      if (myid==5) write(*,*) 'time loop:', t_f-t_s
+
+      !Enforce nonperiodic bcs (either elastic or destroying particles)
+      !t_s = mpi_wtime()
+      call particle_bcs_nonperiodic
+      !call mpi_barrier(mpi_comm_world,ierr)
+      !t_f = mpi_wtime()
+      !if (myid==5) write(*,*) 'time bc_non:', t_f - t_s
+
+      !Check to see if particles left processor
+      !If they did, remove from one list and add to another
+      t_s = mpi_wtime()
+      call particle_exchange
+      call mpi_barrier(mpi_comm_world,ierr)
+      t_f = mpi_wtime()
+      if (myid==5) write(*,*) 'time exchg:', t_f - t_s
+
+      !Now enforce periodic bcs 
+      !just updates x,y locations if over xl,yl or under 0
+      !t_s = mpi_wtime()
+      call particle_bcs_periodic
+      !call mpi_barrier(mpi_comm_world,ierr)
+      !t_f = mpi_wtime()
+      !if (myid==5) write(*,*) 'time bc_per:', t_f - t_s
+
+      part => first_particle
+      do while (associated(part))     
+
+
+      part => part%next
+      end do
+
+      !Now that particles are in their updated position, 
+      !compute their contribution to the momentum coupling:
+      !t_s = mpi_wtime()
+      call particle_coupling_update
+      !call mpi_barrier(mpi_comm_world,ierr)
+      !t_f = mpi_wtime()
+      !if (myid==5) write(*,*) 'time cpl: ', t_f - t_s
+
+      call particle_coupling_exchange
+
+ 
+      !Finally, now that coupling and statistics arrays are filled, 
+      !Transpose them back to align with the velocities:
+      call ztox_trans(partsrc_t(0:nnz+1,iys:iye,mxs:mxe,1), &
+                     partsrc(1:nnx,iys:iye,izs-1:ize+1,1),nnx,nnz,mxs, &
+                     mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid, &
+                     ncpu_s,numprocs)
+      call ztox_trans(partsrc_t(0:nnz+1,iys:iye,mxs:mxe,2), &
+                     partsrc(1:nnx,iys:iye,izs-1:ize+1,2),nnx,nnz,mxs, &
+                     mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid, &
+                     ncpu_s,numprocs)
+      call ztox_trans(partsrc_t(0:nnz+1,iys:iye,mxs:mxe,3), &
+                     partsrc(1:nnx,iys:iye,izs-1:ize+1,3),nnx,nnz,mxs, &
+                     mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid, &
+                     ncpu_s,numprocs)
+      call ztox_trans(partTsrc_t(0:nnz+1,iys:iye,mxs:mxe), &
+                     partTsrc(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,mxs, &
+                     mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid, &
+                     ncpu_s,numprocs)
+      call ztox_trans(partHsrc_t(0:nnz+1,iys:iye,mxs:mxe), &
+                     partHsrc(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,mxs, &
+                     mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid, &
+                     ncpu_s,numprocs)
+
+      call ztox_trans(partTEsrc_t(0:nnz+1,iys:iye,mxs:mxe), &
+                     partTEsrc(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,mxs, &
+                     mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid, &
+                     ncpu_s,numprocs)
+
+      call ztox_trans(mwsum_t(0:nnz+1,iys:iye,mxs:mxe), &
+                     mwsum(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,mxs, &
+                     mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid, &
+                     ncpu_s,numprocs)
+
+      !Try only calling these when the history data is being written:
+      if(mtrans  .and. istage .eq. 3) then
+      call ztox_trans(upwp_t(0:nnz+1,iys:iye,mxs:mxe), &
+                     upwp(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,mxs, &
+                     mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid, &
+                     ncpu_s,numprocs)
+
+      call ztox_trans(vpsum_t(0:nnz+1,iys:iye,mxs:mxe,1), &
+                     vpsum(1:nnx,iys:iye,izs-1:ize+1,1),nnx,nnz,mxs, &
+                     mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid, &
+                     ncpu_s,numprocs)
+      call ztox_trans(vpsum_t(0:nnz+1,iys:iye,mxs:mxe,2), &
+                     vpsum(1:nnx,iys:iye,izs-1:ize+1,2),nnx,nnz,mxs, &
+                     mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid, &
+                     ncpu_s,numprocs)
+      call ztox_trans(vpsum_t(0:nnz+1,iys:iye,mxs:mxe,3), &
+                     vpsum(1:nnx,iys:iye,izs-1:ize+1,3),nnx,nnz,mxs, &
+                     mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid, &
+                     ncpu_s,numprocs)
+
+      call ztox_trans(vpsqrsum_t(0:nnz+1,iys:iye,mxs:mxe,1), &
+                     vpsqrsum(1:nnx,iys:iye,izs-1:ize+1,1),nnx,nnz,mxs, &
+                     mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid, &
+                     ncpu_s,numprocs)
+      call ztox_trans(vpsqrsum_t(0:nnz+1,iys:iye,mxs:mxe,2), &
+                     vpsqrsum(1:nnx,iys:iye,izs-1:ize+1,2),nnx,nnz,mxs, &
+                     mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid, &
+                     ncpu_s,numprocs)
+      call ztox_trans(vpsqrsum_t(0:nnz+1,iys:iye,mxs:mxe,3), &
+                     vpsqrsum(1:nnx,iys:iye,izs-1:ize+1,3),nnx,nnz,mxs, &
+                     mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid, &
+                     ncpu_s,numprocs)
+
+      call ztox_trans(Tpsum_t(0:nnz+1,iys:iye,mxs:mxe), &
+                     Tpsum(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,mxs, &
+                     mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid, &
+                     ncpu_s,numprocs)
+      call ztox_trans(Tpsqrsum_t(0:nnz+1,iys:iye,mxs:mxe), &
+                     Tpsqrsum(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,mxs, &
+                     mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid, &
+                     ncpu_s,numprocs)
+      call ztox_trans(Tfsum_t(0:nnz+1,iys:iye,mxs:mxe), &
+                     Tfsum(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,mxs, &
+                     mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid, &
+                     ncpu_s,numprocs)
+      call ztox_trans(qfsum_t(0:nnz+1,iys:iye,mxs:mxe), &
+                     qfsum(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,mxs, &
+                     mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid, &
+                     ncpu_s,numprocs)
+      call ztox_trans(wpTpsum_t(0:nnz+1,iys:iye,mxs:mxe), &
+                     wpTpsum(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,mxs, &
+                     mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid, &
+                     ncpu_s,numprocs)
+
+      call ztox_trans(partcount_t(0:nnz+1,iys:iye,mxs:mxe), &
+                     partcount(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,mxs, &
+                     mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid, &
+                     ncpu_s,numprocs)
+
+      call ztox_trans(radsum_t(0:nnz+1,iys:iye,mxs:mxe), &
+                     radsum(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,mxs, &
+                     mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid, &
+                     ncpu_s,numprocs)
+
+      call ztox_trans(rad2sum_t(0:nnz+1,iys:iye,mxs:mxe), &
+                     rad2sum(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,mxs, &
+                     mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid, &
+                     ncpu_s,numprocs) 
+
+      call ztox_trans(multcount_t(0:nnz+1,iys:iye,mxs:mxe), &
+                     multcount(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,mxs, &
+                     mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid, &
+                     ncpu_s,numprocs)
+
+
+      call ztox_trans(qstarsum_t(0:nnz+1,iys:iye,mxs:mxe), &
+                     qstarsum(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,mxs, &
+                     mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid, &
+                     ncpu_s,numprocs)
+
+      end if
+
+
+      !t_s = mpi_wtime
+      !Get particle count:
+      numpart = 0
+      part => first_particle
+      do while (associated(part))
+      numpart = numpart + 1
+      part => part%next
+      end do
+      !call mpi_barrier(mpi_comm_world,ierr)
+      !t_f = mpi_wtime()
+      !if (myid==5) write(*,*) 'time numpart: ', t_f - t_s
+ 
+      !t_s = mpi_wtime()
+      !Compute total number of particles
+      call mpi_allreduce(numpart,tnumpart,1,mpi_integer,mpi_sum,mpi_comm_world,ierr)
+      !Compute average particle Reynolds number
+      call mpi_allreduce(myRep_avg,Rep_avg,1,mpi_real8,mpi_sum,mpi_comm_world,ierr)
+
+      Rep_avg = Rep_avg/tnumpart
+
+      call mpi_allreduce(mylwc_sum,lwc,1,mpi_real8,mpi_sum,mpi_comm_world,ierr)
+
+      call mpi_allreduce(myphiw_sum,phiw,1,mpi_real8,mpi_sum,mpi_comm_world,ierr)
+
+      call mpi_allreduce(myphiv_sum,phiv,1,mpi_real8,mpi_sum,mpi_comm_world,ierr)
+
+      
+      phiw = phiw/xl/yl/zl/rhoa
+      phiv = phiv/xl/yl/zl
+
+      !call mpi_barrier(mpi_comm_world,ierr)
+      !t_f = mpi_wtime()
+      !if (myid==5) write(*,*) 'time mpi_allreduce: ', t_f - t_s
+
+  end subroutine particle_update_rk3
+
+  subroutine destroy_particle
+      implicit none
+
+      type(particle), pointer :: tmp
+
+      !Is it the first and last in the list?
+      if (associated(part,first_particle) .AND. (.NOT. associated(part%next)) ) then
+          nullify(first_particle)
+          deallocate(part)
+      else
+        if (associated(part,first_particle)) then !Is it the first particle?
+           first_particle => part%next
+           part => first_particle
+           deallocate(part%prev)
+        elseif (.NOT. associated(part%next)) then !Is it the last particle?
+           nullify(part%prev%next)
+           deallocate(part)
+        else
+           tmp => part
+           part => part%next
+           tmp%prev%next => tmp%next
+           tmp%next%prev => tmp%prev
+           deallocate(tmp)
+        end if
+      end if
+   
+  end subroutine destroy_particle
+
+  subroutine particle_coalesce
+      use pars
+      use kd_tree
+      use pars
+      use con_data
+      implicit none 
+
+      type(particle), pointer :: part_tmp
+      type(tree_master_record), pointer :: tree
+
+      real, allocatable :: xp_data(:,:),distances(:),rad_data(:)
+      real, allocatable :: vel_data(:,:)
+      integer, allocatable :: index_data(:,:),indexes(:)
+      integer*8, allocatable :: mult_data(:)
+      integer, allocatable :: destroy_data(:)
+      integer, allocatable :: coal_data(:),ran_nq(:)
+
+      integer :: i,nq,coal_idx,j,ran_idx,tmp_int,gm,gam_til
+      integer :: ns,k_idx,j_idx
+      integer*8 :: mult_tmp_j,mult_tmp_k,xi_j,xi_k
+      real :: qv(3),dist_tmp,xdist,ydist,zdist,ran2
+      real :: phi,K,Pjk,veldiff,E,dV,p_alpha,pvol_j,pvol_k,golovin_b
+      real :: rad_j_tmp,rad_k_tmp
+
+      !For whatever reason, the kd-search sometimes misses edge cases,
+      !and you should do nq+1 if you actually want nq
+      nq = 11
+
+      allocate(xp_data(numpart,3),index_data(numpart,2))
+      allocate(vel_data(numpart,3))
+      allocate(distances(nq),indexes(nq),ran_nq(2:nq-1))
+      allocate(rad_data(numpart),mult_data(numpart),coal_data(numpart))
+      allocate(destroy_data(numpart))
+
+      !Loop over particles and fill arrays
+      i = 1
+      part_tmp => first_particle
+      do while (associated(part_tmp))
+
+         xp_data(i,1:3) = part_tmp%xp(1:3) 
+         index_data(i,1) = part_tmp%pidx
+         index_data(i,2) = part_tmp%procidx
+
+         rad_data(i) = part_tmp%radius
+         mult_data(i) = part_tmp%mult
+         coal_data(i) = 0
+
+         vel_data(i,1:3) = part_tmp%vp(1:3)
+
+      i = i+1   
+      part_tmp => part_tmp%next
+      end do
+
+      !Build the kd-tree
+      tree => create_tree(xp_data) 
+
+      !Do the search for each of the particles
+      part_tmp => first_particle
+      do i=1,numpart
+
+         qv(1:3) = xp_data(i,1:3)
+         call n_nearest_to(tree,qv,nq,indexes,distances)
+         !call n_nearest_to_brute_force(tree,qv,nq,indexes,distances)
+ 
+         !Go back through and assign the shortest distance and index
+         !NOTE: Must use 2nd one since it finds itself as nearest neighbor
+         !Keep this turned on despite "ineighbor" flag -- consider it a bonus
+         part_tmp%dist = sqrt(distances(2))
+         part_tmp%nbr_pidx = index_data(indexes(2),1)
+         part_tmp%nbr_procidx = index_data(indexes(2),2)
+
+         !Okay, now the particle knows who the nearest nq particles are
+         !--> pick one at random and apply coalescence rules
+         !Loop over all nq until you find one that hasn't coalesced
+         !Don't coalesce if all nq nearby have already done so
+
+         !Set up an array 2,3,...,nq-1
+         do j=2,nq-1
+            ran_nq(j) = j
+         end do
+
+         !Get a random permutation of this array
+         do j=2,nq-1
+            ran_idx = floor(ran2(iseed)*(nq-3)) + 2 !Get a number between 2 and nq-1
+            tmp_int = ran_nq(j) 
+            ran_nq(j) = ran_nq(ran_idx)
+            ran_nq(ran_idx) = tmp_int
+         end do
+
+         !Now loop through these coalescence candidates and take first one that hasn't already coalesced
+         coal_idx = -1
+         if (coal_data(i) .eq. 0) then
+         do j=2,nq-1
+
+             if (.not. coal_data(indexes(ran_nq(j)))) then        !Found one that has not already coalesced
+                coal_idx = indexes(ran_nq(j))              !The index of the coalescence candidate in the arrays
+                goto 101
+             end if
+         
+         end do
+         end if !coal_data = 0
+   
+101   continue
+
+
+      !Now apply the coalescence rules to the pair (i,coal_idx) assuming a coal_idx was found (.ne. -1)
+      if (coal_idx .ge. 1) then
+
+         phi = ran2(iseed) 
+         dV = 2*pi2/3.0*(sqrt(distances(nq-1)))**3  !The volume will be the sphere formed by outermost droplet considered
+         E = 1.0  !Collision efficiency -- obviously this needs to be updated from 1.0
+         
+         veldiff = sqrt( (vel_data(i,1)-vel_data(coal_idx,1))**2 +  &
+                         (vel_data(i,2)-vel_data(coal_idx,2))**2 +  &
+                         (vel_data(i,3)-vel_data(coal_idx,3))**2 )
+
+         if (mult_data(i) .ge. mult_data(coal_idx)) then
+            xi_j = mult_data(i)
+            xi_k = mult_data(coal_idx)
+            j_idx = i
+            k_idx = coal_idx
+         else
+            xi_j = mult_data(coal_idx)
+            xi_k = mult_data(i)
+            j_idx = coal_idx
+            k_idx = i
+         end if
+
+         !Choose the kernel:
+         K = pi2/2.0*E*veldiff*(rad_data(i) + rad_data(coal_idx))**2
+
+         !Golovin (1963) kernel:
+         !pvol_j = pi2*2.0/3.0*rad_data(j_idx)**3.0
+         !pvol_k = pi2*2.0/3.0*rad_data(k_idx)**3.0
+         !golovin_b = 1.5e3
+         !K = golovin_b*(pvol_j + pvol_k)
+
+         Pjk = K*dt/dV*xi_j
+
+         !TESTING: cheat here and hard-code a different dt and dV than the flow
+         !since there are issues
+         !Pjk = K*1.0/1.0e6*xi_j
+         !ns = tnumpart
+
+         !ns = nq-1   !This would be the number of particles in the "cell" according to Shima et al. 2009
+         p_alpha = Pjk*(real(ns)*(real(ns)-1.0)/2.0)/(real(ns)/2.0)
+
+         !if (p_alpha .gt. 1) write(*,*) 'WARNING: p_alpha > 1'
+
+         if (phi .lt. p_alpha-floor(p_alpha)) then
+            gm = floor(p_alpha) + 1
+         else
+            gm = floor(p_alpha)
+         end if
+
+
+         if (gm .gt. 0) then  !Only update radii and multiplicities if the coin flip indicates
+       
+            gam_til = min(gm,floor(real(xi_j)/real(xi_k)))
+
+
+            if (xi_j - gam_til*xi_k .gt. 0) then
+
+            !Update particle j's multiplicity
+            mult_data(j_idx) = mult_data(j_idx)-gam_til*mult_data(k_idx)
+               
+            !Update particle k's radius
+            rad_data(k_idx) = (gam_til*rad_data(j_idx)**3 + rad_data(k_idx)**3)**(1.0/3.0)
+
+
+            elseif (xi_j - gam_til*xi_k .eq. 0) then
+
+            mult_tmp_j = floor(real(mult_data(k_idx))/2.0)
+            mult_tmp_k = mult_data(k_idx) - floor(real(mult_data(k_idx))/2.0)
+       
+            mult_data(j_idx) = mult_tmp_j
+            mult_data(k_idx) = mult_tmp_k
+
+            rad_j_tmp = (gam_til*rad_data(j_idx)**3 + rad_data(k_idx)**3)**(1.0/3.0)
+            rad_k_tmp = (gam_til*rad_data(j_idx)**3 + rad_data(k_idx)**3)**(1.0/3.0)
+
+            rad_data(j_idx) = rad_j_tmp
+            rad_data(k_idx) = rad_k_tmp
+
+            end if
+
+
+          end if !gm .gt. 0
+
+       !Now exclude both of these from checking again
+       coal_data(coal_idx) = 1
+       coal_data(i) = 1
+      end if  !coal_idx .gt. 1
+         
+         
+
+      part_tmp => part_tmp%next
+      end do
+
+      !Now finally update the particle linked list
+      i = 1
+      part_tmp => first_particle
+      do while (associated(part_tmp))
+
+         !Only things which should change are radius and multiplicity
+         part_tmp%radius = rad_data(i)
+         part_tmp%mult = mult_data(i)
+
+      i = i+1   
+      part_tmp => part_tmp%next
+      end do
+
+      !Finally remove dead particles from coalescence
+      i = 1
+      numpart = 0
+      part => first_particle
+      do while (associated(part))
+         if (mult_data(i) .eq. 0) then
+            call destroy_particle
+         else
+            numpart = numpart + 1
+            part => part%next
+         end if
+
+      i = i+1
+      end do
+
+
+
+      call destroy_tree(tree)
+      deallocate(xp_data,index_data)
+      deallocate(vel_data,distances,indexes,ran_nq)
+      deallocate(rad_data,mult_data,coal_data,destroy_data)
+
+
+  end subroutine particle_coalesce
+
+
   function mod_Magnus(T)
     implicit none
 
