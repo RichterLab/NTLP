@@ -5867,10 +5867,10 @@ c
 
    
       z_switch = 80.0
-      t_switch = 285.0
-      t_surf = 285.0
-      q_switch = 0.02
-      q_surf = 0.02
+      t_switch = 290.0
+      t_surf = 290.0
+      q_switch = 0.015
+      q_surf = 0.015
 
       !Slopes below the inversion
       !slope_t = (t_switch-t_surf)/z_switch
@@ -13461,11 +13461,10 @@ c       Add the current event to the histogram
       varRH_test = sum(RHmsqr)/nnz
       varRH_test = varRH_test - meanRH_test**2
 
+
       !Swall = Swall + (meanRH_target - meanRH_curr)*1.0e-9
 
-
-      !Swall = -2.25E-6  !What I got from Daniel
-      Swall = -2.15e-6 !My first attempt with relaxation of 1e-10
+      Swall = -2.15e-6 !For 128^3 and Ra = 7.9e6
 
       if (myid==0) print*, 'Swall', Swall
       if (myid==0) print*, 'meanRH_curr', meanRH_curr

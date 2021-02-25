@@ -542,19 +542,19 @@ subroutine netcdf_init_viz
       call netcdf_check( nf90_put_att(ncid_viz,v_yz_vid,"title","yz slice of v-velocity") )
 
       !xy slices
-      call netcdf_check( nf90_def_var(ncid_viz, "u_xy", NF90_REAL, dimids_yz,u_xy_vid) )
+      call netcdf_check( nf90_def_var(ncid_viz, "u_xy", NF90_REAL, dimids_xy,u_xy_vid) )
       call netcdf_check( nf90_put_att(ncid_viz,u_xy_vid,"title","xy slice of u-velocity") )
 
-      call netcdf_check( nf90_def_var(ncid_viz, "v_xy", NF90_REAL, dimids_yz,v_xy_vid) )
+      call netcdf_check( nf90_def_var(ncid_viz, "v_xy", NF90_REAL, dimids_xy,v_xy_vid) )
       call netcdf_check( nf90_put_att(ncid_viz,v_xy_vid,"title","xy slice of v-velocity") )
 
-      call netcdf_check( nf90_def_var(ncid_viz, "w_xy", NF90_REAL, dimids_yz,w_xy_vid) )
+      call netcdf_check( nf90_def_var(ncid_viz, "w_xy", NF90_REAL, dimids_xy,w_xy_vid) )
       call netcdf_check( nf90_put_att(ncid_viz,w_xy_vid,"title","xy slice of w-velocity") )
 
-      call netcdf_check( nf90_def_var(ncid_viz, "t_xy", NF90_REAL, dimids_yz,t_xy_vid) )
+      call netcdf_check( nf90_def_var(ncid_viz, "t_xy", NF90_REAL, dimids_xy,t_xy_vid) )
       call netcdf_check( nf90_put_att(ncid_viz,t_xy_vid,"title","xy slice of temperature") )
 
-      call netcdf_check( nf90_def_var(ncid_viz, "q_xy", NF90_REAL, dimids_yz,q_xy_vid) )
+      call netcdf_check( nf90_def_var(ncid_viz, "q_xy", NF90_REAL, dimids_xy,q_xy_vid) )
       call netcdf_check( nf90_put_att(ncid_viz,q_xy_vid,"title","xy slice of water vapor mixing ratio") )
 
       !xz slices
