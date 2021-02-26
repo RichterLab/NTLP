@@ -12529,59 +12529,6 @@ c        part%qinf = 0.0 ! Brian 7/14/14
       end subroutine double_lognormal_dist
 
 
-      subroutine particle_stats(ipt,jpt,kpt)
-      use particles
-      use pars
-      implicit none
-      integer :: i,ipt,jpt,kpt
-      real :: rhop,pi
-
-
-      pi   = 4.0*atan(1.0)
-
-      rhop = (part%m_s+4.0/3.0*pi*part%radius**3*rhow)/
-     +                           (4.0/3.0*pi*part%radius**3)
-
-
-      !Takes in ipt,jpt,kpt as the node to the "bottom left" of the particle
-      !(i.e. the node in the negative direction for x,y,z)
-      !and computes quantities needed to get particle statistics
-
-      partcount_t(kpt,jpt,ipt) = partcount_t(kpt,jpt,ipt) + 1.0
-      
-      !Get su mean, mean-squared of particle velocities at each level
-      upwp_t(kpt,jpt,ipt) = upwp_t(kpt,jpt,ipt) + part%vp(1)*part%vp(3)
-      do i = 1,3
-      vpsum_t(kpt,jpt,ipt,i) = vpsum_t(kpt,jpt,ipt,i) + part%vp(i)
-      vpsqrsum_t(kpt,jpt,ipt,i)=vpsqrsum_t(kpt,jpt,ipt,i)+part%vp(i)**2
-      end do
-
-      Tpsum_t(kpt,jpt,ipt) = Tpsum_t(kpt,jpt,ipt) + part%Tp
-      Tpsqrsum_t(kpt,jpt,ipt) = Tpsqrsum_t(kpt,jpt,ipt) + part%Tp**2
-
-      Tfsum_t(kpt,jpt,ipt) = Tfsum_t(kpt,jpt,ipt) + part%Tf
-
-      qfsum_t(kpt,jpt,ipt) = qfsum_t(kpt,jpt,ipt) + part%qinf
-
-      wpTpsum_t(kpt,jpt,ipt) = wpTpsum_t(kpt,jpt,ipt) + 
-     +                          part%Tp*part%vp(3)
-
-
-      radsum_t(kpt,jpt,ipt) = radsum_t(kpt,jpt,ipt) + part%radius 
-
-      rad2sum_t(kpt,jpt,ipt) = rad2sum_t(kpt,jpt,ipt) + part%radius**2  
-
-      multcount_t(kpt,jpt,ipt) = multcount_t(kpt,jpt,ipt) + 
-     +               real(part%mult)
-
-      mwsum_t(kpt,jpt,ipt) = mwsum_t(kpt,jpt,ipt) + 
-     +               real(part%mult)*(rhow*4.0/3.0*pi*part%radius**3)
-
-      qstarsum_t(kpt,jpt,ipt) = qstarsum_t(kpt,jpt,ipt) + part%qstar
-
-
-
-      end subroutine particle_stats
       subroutine particle_coupling_update
       use particles
       use pars
