@@ -13032,7 +13032,7 @@ c       Add the current event to the histogram
 
       !Swall = Swall + (meanRH_target - meanRH_curr)*1.0e-9
 
-      Swall = -2.15e-6 !For 128^3 and Ra = 7.9e6
+      !Swall = -2.15e-6 !For 128^3 and Ra = 7.9e6
 
       if (myid==0) print*, 'Swall', Swall
       if (myid==0) print*, 'meanRH_curr', meanRH_curr
@@ -13054,7 +13054,7 @@ c       Add the current event to the histogram
 
       namelist /grid_params/ ncpu_s, Uo, Ttop, Tbot,
      +         qstar, tsfcc, ugcont, vgcont,
-     +         zi, zl, xl, yl, zw1, dpdx,
+     +         zi, zl, xl, yl, zw1, dpdx, Swall,
      +         cfl,dt_new,surf_RH,psurf,surf_temp,
      +         rad_kappa,rad_Fct,rad_Fcb
 

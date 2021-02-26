@@ -1397,8 +1397,7 @@ CONTAINS
 
       allocate(readbuf(readpart))
 
-      call mpi_file_read_at_all(fh,offset,readbuf,readpart,
-     +                       particletype,istatus,ierr)
+      call mpi_file_read_at_all(fh,offset,readbuf,readpart,particletype,istatus,ierr)
 
       do i = 1,readpart
         !Now - does it lie within this proc's bounds?

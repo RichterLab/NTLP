@@ -17,7 +17,7 @@ c
       integer, parameter :: j_recl=4, k8=8
 
       integer, parameter :: nscl = 2, nvar = (4+nscl)
-      integer, parameter :: maxnx=128,maxny=128,maxnz=128
+      integer, parameter :: maxnx=256,maxny=256,maxnz=128
       integer, parameter :: maxnz1=maxnz+1,
      + maxnz2=maxnz+2,maxnx2=maxnx+2,maxny2=maxny+2
 
@@ -26,7 +26,7 @@ c
       real :: grav,t00,fcor,zi,zl,xl,yl,zw1,dpdx
       real :: ugcont,vgcont,zo,surf_RH,psurf,surf_temp
       real :: meanRH,varRH
-      real :: Swall=0.0,nprime
+      real :: Swall,nprime
       integer :: isfc(nscl)
 
       !Radiation parameters
