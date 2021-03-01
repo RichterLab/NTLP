@@ -1767,12 +1767,6 @@ CONTAINS
       !t_f = mpi_wtime()
       !if (myid==5) write(*,*) 'time bc_per:', t_f - t_s
 
-      part => first_particle
-      do while (associated(part))     
-
-
-      part => part%next
-      end do
 
       !Now that particles are in their updated position, 
       !compute their contribution to the momentum coupling:
@@ -1783,6 +1777,8 @@ CONTAINS
       !if (myid==5) write(*,*) 'time cpl: ', t_f - t_s
 
       call particle_coupling_exchange
+
+      call particle_stats
 
  
       !Finally, now that coupling and statistics arrays are filled, 
@@ -1965,12 +1961,20 @@ CONTAINS
    
   end subroutine destroy_particle
 
-  subroutine particle_stats(ipt,jpt,kpt)
+  subroutine particle_stats
       use pars
+      use con_stats
+      use con_data
       implicit none
       integer :: i,ipt,jpt,kpt
       real :: rhop,pi
 
+      part => first_particle
+      do while (associated(part))     
+
+      ipt = floor(part%xp(1)/dx) + 1
+      jpt = floor(part%xp(2)/dy) + 1
+      kpt = minloc(z,1,mask=(z.gt.part%xp(3))) - 1
 
       pi   = 4.0*atan(1.0)
 
@@ -2009,7 +2013,8 @@ CONTAINS
 
       qstarsum_t(kpt,jpt,ipt) = qstarsum_t(kpt,jpt,ipt) + part%qstar
 
-
+      part => part%next
+      end do
 
   end subroutine particle_stats
 

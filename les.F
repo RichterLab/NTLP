@@ -359,9 +359,7 @@ c
       t_stage_f = mpi_wtime()
       !if (myid==5) write(*,*) 'time stage: ',t_stage_f - t_stage_s
 
-      if (ihumiditycontrol .eq. 1) then
       call humidity_control
-      end if
 
       if (ipart_method .eq. 2) then
          t_s = mpi_wtime()
@@ -10524,6 +10522,9 @@ c
       call particle_coupling_update
 
       call particle_coupling_exchange
+
+      call particle_stats
+
       !Finally, now that coupling and statistics arrays are filled, 
       !Transpose them back to align with the velocities:
       call ztox_trans(partsrc_t(0:nnz+1,iys:iye,mxs:mxe,1),
@@ -11761,12 +11762,7 @@ c       -----------------
       !Will get a k-index for (u,v) and one for w
       
       !Do (u,v) loop first:
-      do iz=0,nnz+1
-         if (zz(iz) .GT. part%xp(3)) go to 1199
-      end do
-1199  continue
-
-      kuvpts(3) = iz-1
+      kuvpts(3) = minloc(zz,1,mask=(zz.gt.part%xp(3))) - 2
       !Then fill in the rest:
       kuvpts(4) = kuvpts(3)+1
       kuvpts(5) = kuvpts(4)+1
@@ -11774,29 +11770,14 @@ c       -----------------
       kuvpts(2) = kuvpts(3)-1
       kuvpts(1) = kuvpts(2)-1
 
-      !Do again for w:
-      do iz = 0,nnz+1 
-         if (z(iz) .GT. part%xp(3)) go to 1120
-      end do
-1120  continue
-   
-      kwpts(3) = iz-1
+
+      kwpts(3) = minloc(z,1,mask=(z.gt.part%xp(3))) - 2
       !Then fill in the rest:
       kwpts(4) = kwpts(3)+1
       kwpts(5) = kwpts(4)+1
       kwpts(6) = kwpts(5)+1
       kwpts(2) = kwpts(3)-1
       kwpts(1) = kwpts(2)-1
-
-
-!---------
-!      !As an aside, use ijpts,kwpts to update the particle numbers at each cell:
-!
-!      !call inputs  are the nodes associated with the volume that each part. lies in
-!      !The +1 on kwpts is since stats are stored at uv (center) points in z
-!      call particle_stats(ijpts(1,3),ijpts(2,3),kwpts(3)+1)
-!   
-!---------
 
       !Fill in the weights:
       !First for x and y since they are periodic:
@@ -11979,26 +11960,12 @@ c       -----------------
       ipt = floor(part%xp(1)/dx) + 1 
       jpt = floor(part%xp(2)/dy) + 1
      
-     
       !Finding the k-lhnode is different since grid may be stretched
       !AND since (u,v) and w stored differently
       !Will get a k-index for (u,v) and one for w
       
-      !Do (u,v) loop first:
-      do iz=0,nnz+1
-         if (zz(iz) .GT. part%xp(3)) go to 1199
-      end do
-1199  continue
-
-      kpt = iz-1
-
-      !Do again for w:
-      do iz = 0,nnz+1 
-         if (z(iz) .GT. part%xp(3)) go to 1120
-      end do
-1120  continue
-   
-      kwpt = iz-1
+      kpt = minloc(zz,1,mask=(zz.gt.part%xp(3))) - 2
+      kwpt = minloc(z,1,mask=(z.gt.part%xp(3))) - 2
 
 
       part%uf(1:3) = 0.0
@@ -12098,13 +12065,8 @@ c       -----------------
       !AND since (u,v) and w stored differently
       !Will get a k-index for (u,v) and one for w
 
-      !Do (u,v) loop first:
-      do iz=0,nnz+1
-         if (zz(iz) .GT. part%xp(3)) go to 1199
-      end do
-1199  continue
-c      iz_part = iz-1
-      kuvpts(3) = iz-1
+      !Do (u,v) first
+      kuvpts(3) = minloc(zz,1,mask=(zz.gt.part%xp(3))) - 2
       !Then fill in the rest:
       kuvpts(4) = kuvpts(3)+1
       kuvpts(5) = kuvpts(4)+1
@@ -12112,14 +12074,8 @@ c      iz_part = iz-1
       kuvpts(2) = kuvpts(3)-1
       kuvpts(1) = kuvpts(2)-1
 
-      !Do again for w:
-      do iz = 0,nnz+1
-         if (z(iz) .GT. part%xp(3)) go to 1120
-      end do
-1120  continue
-      iz_part = iz-1
-
-      kwpts(3) = iz-1
+      kwpts(3) = minloc(z,1,mask=(z.gt.part%xp(3))) - 2
+      iz_part = kwpts(3)
       !Then fill in the rest:
       kwpts(4) = kwpts(3)+1
       kwpts(5) = kwpts(4)+1
@@ -12561,28 +12517,9 @@ c        part%qinf = 0.0 ! Brian 7/14/14
      
       ipt = floor(part%xp(1)/dx) + 1
       jpt = floor(part%xp(2)/dy) + 1
-      do iz=0,nnz+1
-         if (zz(iz) .GT. part%xp(3)) go to 1299
-      end do
-1299  continue
-      kpt = iz-1
+      kpt = minloc(zz,1,mask=(zz.gt.part%xp(3))) - 2
+      kwpt = minloc(z,1,mask=(z.gt.part%xp(3))) - 1
 
-      !Do again for w:
-      do iz = 0,nnz+1
-         if (z(iz) .GT. part%xp(3)) go to 1120
-      end do
-1120  continue
-
-      kwpt = iz
-
-
-!---------
-      !As an aside, use ipt,jpt,kwpt to update the particle numbers at each cell:
-
-      !call inputs are the nodes associated with the volume that each part. lies in
-      call particle_stats(ipt,jpt,kwpt)
-  
-!---------
 
       !Add contribution to each of the 8 surrounding nodes:
       do i=0,1
@@ -12934,8 +12871,6 @@ c       Add the current event to the histogram
       real :: varRH_test,meanRH_test
       integer :: iz,ierr
 
-      meanRH_target = 103.0
-      
 
       !Trapezoidal rule to get current volume mean RH:
       meanRH = 0.0
@@ -12946,10 +12881,7 @@ c       Add the current event to the histogram
 
       end do 
     
-      meanRH = meanRH/zl
-
-!      call mpi_allreduce(mymeanRH,meanRH_curr,1,mpi_real8,mpi_sum,
-!     +         mpi_comm_world,ierr)
+      meanRH = meanRH/(zz(nnz)-zz(1))  !Note: divide by the distance between the points, not the entire zl, to get the true average
 
       meanRH_curr = meanRH
 
@@ -12961,10 +12893,7 @@ c       Add the current event to the histogram
 
       end do 
      
-      msqrRH = msqrRH/zl
-
-!      call mpi_allreduce(mymsqrRH,varRH,1,mpi_real8,mpi_sum,
-!     +         mpi_comm_world,ierr)
+      msqrRH = msqrRH/(zz(nnz)-zz(1))
 
       varRH = msqrRH - meanRH**2
       !!!! 
@@ -12977,9 +12906,11 @@ c       Add the current event to the histogram
       varRH_test = varRH_test - meanRH_test**2
 
 
-      !Swall = Swall + (meanRH_target - meanRH_curr)*1.0e-9
+      if (ihumiditycontrol) then
+          meanRH_target = 103.0
+          Swall = Swall + (meanRH_target - meanRH_curr)*1.0e-9
+      end if
 
-      !Swall = -2.15e-6 !For 128^3 and Ra = 7.9e6
 
       if (myid==0) print*, 'Swall', Swall
       if (myid==0) print*, 'meanRH_curr', meanRH_curr
