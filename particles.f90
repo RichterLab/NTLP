@@ -1465,11 +1465,11 @@ CONTAINS
       integer :: ierr,randproc,np,my_reintro
       real :: xp_init(3),ran2,Os,m_s
 
-      my_reintro = nprime*(1./60.)*(10.**6.)*dt*4/numprocs*10.0 !4m^3 (vol chamber)
+      my_reintro = nprime*(1./60.)*(10.**6.)*dt*4/numprocs*20.0 !4m^3 (vol chamber)
 
       tot_reintro = 0
 
-      if (mod(it, 10)==0) then
+      if (mod(it, 20)==0) then
 
       tot_reintro = my_reintro*numprocs
 
