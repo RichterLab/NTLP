@@ -4,8 +4,6 @@
 #$ -m n
 #$ -pe mpi-16 64
 #$ -q *@@richter
-# #$ -q gpu@qa-xp-011,gpu@d8civy053,gpu@d8civy054,gpu@d8civy059
-# #$ -l gpu_card=1
 #$ -N Theo_Pi_1
 #$ -j y
 

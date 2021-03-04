@@ -2,7 +2,7 @@
 !Time step information
 &step_params
 iti=0          !Time step to begin
-itmax=200000   !Max number of time steps
+itmax=50000   !Max number of time steps
 imean=100    !Number of time steps between writing mean profiles to output log file
 ihst=100     !Number of time steps between writing profiles to history file
 itape=10000  !Number of time steps before opening new history file and writing full 3D volumes
@@ -20,7 +20,7 @@ ibuoy=1, ifilt=0, itcut=1, isubs=0, ibrcl=0, iocean=0
 method=3, idebug=1, iz_space=1, ivis0=1, ifix_dt=1, new_vis=-1
 isfc = 1, 1  ! isfc = 0 sets surface flux (qstar), isfc = 1 sets surface condition (Dirichlet through tsfcc)
 iDNS = 1
-ifields = 1  ! if set to 1, reads the initial condition from path_ran below; otherwise calls subroutine random
+ifields = 0  ! if set to 1, reads the initial condition from path_ran below; otherwise calls subroutine random
 ilin = 1   !1 means linear interpolation for particle, 6th order otherwise
 icouple=1
 iTcouple=1
@@ -66,7 +66,7 @@ vgcont = 0.0   !The initial v-velocity
 
 dpdx = 0.0  !The pressure gradient for channel flow (gets put into u_geo for DNS)
 
-Swall = -4.15e-6  !Set the CONSTANT humidity sink to use if ihumiditycontrol = 0
+Swall = -2.15e-6  !Set the CONSTANT humidity sink to use if ihumiditycontrol = 0
 
 zi = 1.0  !This has to do with grid stretching; make equal to zl for Couette/channel
 zl = 1.0
