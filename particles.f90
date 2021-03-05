@@ -35,6 +35,8 @@ module particles
 
   integer :: particletype,pad_diff
   integer :: numpart,tnumpart,ngidx
+  integer :: numdrop,tnumdrop
+  integer :: numaerosol,tnumaerosol
   integer :: iseed
   integer :: num100=0, num1000=0, numimpos=0
   integer :: tnum100, tnum1000, tnumimpos
@@ -44,6 +46,7 @@ module particles
 
   real :: Rep_avg,part_grav(3)
   real :: radavg,radmin,radmax,radmsqr,tempmin,tempmax,qmin,qmax
+  real :: radavg_center,radmsqr_center
   real :: vp_init(3),Tp_init,radius_init
   real :: pdf_factor,pdf_prob
   integer*8 :: mult_init,mult_factor,mult_a,mult_c
@@ -1941,12 +1944,14 @@ CONTAINS
       include 'mpif.h'
 
       integer :: ierr,it,fluxloc,fluxloci
-      real :: tmpbuf(6),tmpbuf_rec(6)
+      real :: tmpbuf(9),tmpbuf_rec(9)
+      integer :: intbuf(9),intbuf_rec(9)
       real :: myradavg,myradmax,myradmin,mytempmax,mytempmin
+      real :: myradavg_center,myradmsqr_center
       real :: myradmsqr
       real :: myqmin,myqmax
       real :: denom,dtl,sigma
-      integer :: ix,iy,iz,im,flag,mflag,act_tmp,myact_tmp
+      integer :: ix,iy,iz,im,flag,mflag
       real :: Rep,diff(3),diffnorm,corrfac,myRep_avg
       real :: xtmp(3),vtmp(3),Tptmp,radiustmp
       real :: Nup,Shp,rhop,taup_i,estar,einf
@@ -2345,9 +2350,13 @@ CONTAINS
 
       !Get particle count:
       numpart = 0
-      myact_tmp = 0
+      numdrop = 0
+      numaerosol = 0
+
       myradavg = 0.0
       myradmsqr = 0.0
+      myradavg_center = 0.0
+      myradmsqr_center = 0.0
       myradmin=1000.0
       myradmax = 0.0
       mytempmin = 1000.0
@@ -2357,32 +2366,59 @@ CONTAINS
       part => first_particle
       do while (associated(part))
       numpart = numpart + 1
+
       !Radavg and radmsqr will be only of ACTIVATED droplets
       if (part%radius .gt. part%rc) then
-      !if (part%radius .gt. 1.5e-6) then
          myradavg = myradavg + part%radius
          myradmsqr = myradmsqr + part%radius**2
-         myact_tmp = myact_tmp + 1
+         numdrop = numdrop + 1
+
+         !Want to get droplet statistics only in the interior
+         if (part%xp(3) .gt. 0.25*zl .AND. part%xp(3) .lt. 0.75*zl) then
+            myradavg_center = myradavg_center + part%radius
+            myradmsqr_center = myradmsqr_center + part%radius**2
+         end if
+
+      else
+         numaerosol = numaerosol + 1
       end if
+
       if (part%radius .gt. myradmax) myradmax = part%radius
       if (part%radius .lt. myradmin) myradmin = part%radius
       if (part%Tp .gt. mytempmax) mytempmax = part%Tp
       if (part%Tp .lt. mytempmin) mytempmin = part%Tp
       if (part%qstar .gt. myqmax) myqmax = part%qinf
       if (part%qstar .lt. myqmin) myqmin = part%qinf
+
       part => part%next
       end do
 
 
-      !Compute total number of particles
-      call mpi_allreduce(numpart,tnumpart,1,mpi_integer,mpi_sum,mpi_comm_world,ierr)
+      !Compute sums of integer quantities
+      intbuf(1) = numpart
+      intbuf(2) = numdrop
+      intbuf(3) = numaerosol
+      intbuf(4) = denum
+      intbuf(5) = actnum
+      intbuf(6) = num_destroy
+      intbuf(7) = num100
+      intbuf(8) = num1000
+      intbuf(9) = numimpos
 
+      call mpi_allreduce(intbuf,intbuf_rec,9,mpi_integer,mpi_sum,mpi_comm_world,ierr)
 
-      call mpi_allreduce(denum,tdenum,1,mpi_integer,mpi_sum,mpi_comm_world,ierr)
+      tnumpart = intbuf_rec(1)
+      tnumdrop = intbuf_rec(2)
+      tnumaerosol = intbuf_rec(3)
+      tdenum = intbuf_rec(4)
+      tactnum = intbuf_rec(5)
+      tnum_destroy = intbuf_rec(6)
+      tnum100 = intbuf_rec(7)
+      tnum1000 = intbuf_rec(8)
+      tnumimpos = intbuf_rec(9)
 
-      call mpi_allreduce(actnum,tactnum,1,mpi_integer,mpi_sum,mpi_comm_world,ierr)
-
-      call mpi_allreduce(myact_tmp,act_tmp,1,mpi_integer,mpi_sum,mpi_comm_world,ierr)
+      
+      !Compute sums of real quantities
 
       tmpbuf(1) = myRep_avg
       tmpbuf(2) = mylwc_sum
@@ -2390,32 +2426,29 @@ CONTAINS
       tmpbuf(4) = myphiv_sum
       tmpbuf(5) = myradavg
       tmpbuf(6) = myradmsqr
+      tmpbuf(7) = avgres
+      tmpbuf(8) = myradavg_center
+      tmpbuf(9) = myradmsqr_center
 
-
-      !calculate average particle residence time
-      call mpi_allreduce(avgres,tavgres,1,mpi_real8,mpi_sum,mpi_comm_world,ierr)
-
-      !Combine all reals that are being summed:
-      call mpi_allreduce(tmpbuf,tmpbuf_rec,6,mpi_real8,mpi_sum,mpi_comm_world,ierr)
-
-      call mpi_allreduce(num_destroy,tnum_destroy,1,mpi_integer,mpi_sum,mpi_comm_world,ierr)
-
-      call mpi_allreduce(num100,tnum100,1,mpi_integer,mpi_sum,mpi_comm_world,ierr)
-      call mpi_allreduce(num1000,tnum1000,1,mpi_integer,mpi_sum,mpi_comm_world,ierr)
-      call mpi_allreduce(numimpos,tnumimpos,1,mpi_integer,mpi_sum,mpi_comm_world,ierr)
+      call mpi_allreduce(tmpbuf,tmpbuf_rec,9,mpi_real8,mpi_sum,mpi_comm_world,ierr)
 
       Rep_avg = tmpbuf_rec(1)
-      lwc = tmpbuf(2)
+      lwc = tmpbuf_rec(2)
       phiw = tmpbuf_rec(3)
       phiv = tmpbuf_rec(4)
       radavg = tmpbuf_rec(5)
       radmsqr = tmpbuf_rec(6)
+      tavgres = tmpbuf_rec(7)
+      radavg_center = tmpbuf_rec(8)
+      radmsqr_center = tmpbuf_rec(9)
+
+
 
       phiw = phiw/xl/yl/zl/rhoa
       phiv = phiv/xl/yl/zl
       Rep_avg = Rep_avg/tnumpart
-      radavg = radavg/act_tmp
-      radmsqr = radmsqr/act_tmp
+      radavg = radavg/tnumdrop
+      radmsqr = radmsqr/tnumdrop
       tavgres = tavgres/tnum_destroy
 
       !Min and max radius

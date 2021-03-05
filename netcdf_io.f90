@@ -10,9 +10,11 @@ integer :: time_vid,dt_vid,time_histog_vid
 integer :: utau_vid,uwsfc_vid
 integer :: Tsfc_vid,qsfc_vid,wtsfc_vid,wqsfc_vid
 integer :: tnumpart_vid,tnum_destroy_vid,tot_reintro_vid
+integer :: tnumdrop_vid,tnumaerosol_vid
 integer :: Swall_vid
 integer :: meanRH_vid,varRH_vid
 integer :: radavg_vid,radmsqr_vid
+integer :: radavg_center_vid,radmsqr_center_vid
 integer :: tdenum_vid,tactnum_vid,tnumimpos_vid
 integer :: zw_vid,zw_dimid
 integer :: uxym_vid,vxym_vid,wxym_vid,txym_vid,RHxym_vid,tempxym_vid,exym_vid,RHmsqr_vid
@@ -101,6 +103,12 @@ subroutine netcdf_init
       call netcdf_check( nf90_def_var(ncid, "tnumpart", NF90_REAL, dimids,tnumpart_vid) )
       call netcdf_check( nf90_put_att(ncid,tnumpart_vid,"title","Total number of particles") )
 
+      call netcdf_check( nf90_def_var(ncid, "tnumdrop", NF90_REAL, dimids,tnumdrop_vid) )
+      call netcdf_check( nf90_put_att(ncid,tnumdrop_vid,"title","Total number of droplets defined by r>rc") )
+
+      call netcdf_check( nf90_def_var(ncid, "tnumaerosol", NF90_REAL, dimids,tnumaerosol_vid) )
+      call netcdf_check( nf90_put_att(ncid,tnumaerosol_vid,"title","Total number of aerosols defined by r<rc") )
+
       call netcdf_check( nf90_def_var(ncid, "tnum_destroy", NF90_REAL, dimids,tnum_destroy_vid) )
       call netcdf_check( nf90_put_att(ncid,tnum_destroy_vid,"title","Particles killed this time step") )
 
@@ -142,6 +150,12 @@ subroutine netcdf_init
 
       call netcdf_check( nf90_def_var(ncid, "radmsqr", NF90_REAL, dimids,radmsqr_vid) )
       call netcdf_check( nf90_put_att(ncid,radmsqr_vid,"title","Mean-squared radius of activated droplets") )
+
+      call netcdf_check( nf90_def_var(ncid, "radavg_center", NF90_REAL, dimids,radavg_center_vid) )
+      call netcdf_check( nf90_put_att(ncid,radavg_center_vid,"title","Mean radius of activated droplets only in domain interior") )
+
+      call netcdf_check( nf90_def_var(ncid, "radmsqr_center", NF90_REAL, dimids,radmsqr_center_vid) )
+      call netcdf_check( nf90_put_att(ncid,radmsqr_center_vid,"title","Mean-squared radius of activated droplets only in domain interior") )
 
 
 !!! Profiles
@@ -300,6 +314,8 @@ subroutine write_his_netcdf
       call netcdf_check( nf90_put_var(ncid, utau_vid, real(utau),start=(/his_counter/)) )
       call netcdf_check( nf90_put_var(ncid, uwsfc_vid, real(uwsfc),start=(/his_counter/)) )
       call netcdf_check( nf90_put_var(ncid, tnumpart_vid, real(tnumpart),start=(/his_counter/)) )
+      call netcdf_check( nf90_put_var(ncid, tnumdrop_vid, real(tnumdrop),start=(/his_counter/)) )
+      call netcdf_check( nf90_put_var(ncid, tnumaerosol_vid, real(tnumaerosol),start=(/his_counter/)) )
       call netcdf_check( nf90_put_var(ncid, tnum_destroy_vid, real(tnum_destroy),start=(/his_counter/)) )
       call netcdf_check( nf90_put_var(ncid, tdenum_vid, real(tdenum),start=(/his_counter/)) )
       call netcdf_check( nf90_put_var(ncid, tactnum_vid, real(tactnum),start=(/his_counter/)) )
@@ -314,6 +330,8 @@ subroutine write_his_netcdf
       call netcdf_check( nf90_put_var(ncid, varRH_vid, real(varRH),start=(/his_counter/)) )
       call netcdf_check( nf90_put_var(ncid, radavg_vid, real(radavg),start=(/his_counter/)) )
       call netcdf_check( nf90_put_var(ncid, radmsqr_vid, real(radmsqr),start=(/his_counter/)) )
+      call netcdf_check( nf90_put_var(ncid, radavg_center_vid, real(radavg_center),start=(/his_counter/)) )
+      call netcdf_check( nf90_put_var(ncid, radmsqr_center_vid, real(radmsqr_center),start=(/his_counter/)) )
 
       call netcdf_check( nf90_put_var(ncid, zu_vid, real(zz(1:nnz)),start=(/1, his_counter/)) )
       call netcdf_check( nf90_put_var(ncid, zw_vid, real(z(0:nnz)),start=(/1, his_counter/)) )
