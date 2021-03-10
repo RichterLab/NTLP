@@ -63,6 +63,9 @@ module particles
   real :: hist_actres(histbins+2)
   real :: bins_actres(histbins+2)
 
+  real :: hist_acttodeath(histbins+2)
+  real :: bins_acttodeath(histbins+2)
+
   real :: hist_numact(histbins+2)
   real :: bins_numact(histbins+2)
 
@@ -1230,6 +1233,9 @@ CONTAINS
       !Activated time histogram
       call set_binsdata(bins_actres,histbins+2,1.0e-1,1.0e4)
 
+      !Activated time until death histogram
+      call set_binsdata(bins_acttodeath,histbins+2,1.0e-1,1.0e4)
+
       !Num activations histogram
       call set_binsdata_integer(bins_numact,histbins+2,0.0)
 
@@ -1945,7 +1951,8 @@ CONTAINS
 
       integer :: ierr,it,fluxloc,fluxloci
       real :: tmpbuf(9),tmpbuf_rec(9)
-      integer :: intbuf(9),intbuf_rec(9)
+      integer :: intbuf(10),intbuf_rec(10)
+      integer :: numdrop_center,tnumdrop_center
       real :: myradavg,myradmax,myradmin,mytempmax,mytempmin
       real :: myradavg_center,myradmsqr_center
       real :: myradmsqr
@@ -2351,6 +2358,7 @@ CONTAINS
       !Get particle count:
       numpart = 0
       numdrop = 0
+      numdrop_center = 0
       numaerosol = 0
 
       myradavg = 0.0
@@ -2363,6 +2371,7 @@ CONTAINS
       mytempmax = 0.0
       myqmin = 1000.0
       myqmax = 0.0
+
       part => first_particle
       do while (associated(part))
       numpart = numpart + 1
@@ -2377,6 +2386,7 @@ CONTAINS
          if (part%xp(3) .gt. 0.25*zl .AND. part%xp(3) .lt. 0.75*zl) then
             myradavg_center = myradavg_center + part%radius
             myradmsqr_center = myradmsqr_center + part%radius**2
+            numdrop_center = numdrop_center + 1
          end if
 
       else
@@ -2404,8 +2414,9 @@ CONTAINS
       intbuf(7) = num100
       intbuf(8) = num1000
       intbuf(9) = numimpos
+      intbuf(10) = numdrop_center
 
-      call mpi_allreduce(intbuf,intbuf_rec,9,mpi_integer,mpi_sum,mpi_comm_world,ierr)
+      call mpi_allreduce(intbuf,intbuf_rec,10,mpi_integer,mpi_sum,mpi_comm_world,ierr)
 
       tnumpart = intbuf_rec(1)
       tnumdrop = intbuf_rec(2)
@@ -2416,6 +2427,7 @@ CONTAINS
       tnum100 = intbuf_rec(7)
       tnum1000 = intbuf_rec(8)
       tnumimpos = intbuf_rec(9)
+      tnumdrop_center = intbuf_rec(10)
 
       
       !Compute sums of real quantities
@@ -2450,6 +2462,8 @@ CONTAINS
       radavg = radavg/tnumdrop
       radmsqr = radmsqr/tnumdrop
       tavgres = tavgres/tnum_destroy
+      radavg_center = radavg_center/tnumdrop_center
+      radmsqr_center = radmsqr_center/tnumdrop_center
 
       !Min and max radius
       call mpi_allreduce(myradmin,radmin,1,mpi_real8,mpi_min,mpi_comm_world,ierr)

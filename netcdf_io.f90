@@ -36,6 +36,7 @@ integer :: Nc_vid,ql_vid
 integer :: radbins_vid,resbins_vid
 integer :: radhist_vid,reshist_vid
 integer :: actresbins_vid,actreshist_vid
+integer :: acttodeathbins_vid,acttodeathhist_vid
 integer :: numactbins_vid,numacthist_vid
 
 !Viz:
@@ -426,16 +427,19 @@ subroutine netcdf_init_histog
       call netcdf_check( nf90_put_att(ncid_histog,time_histog_vid,"title","Simulation time") )
 
 !! Store the bin definitions
-      call netcdf_check( nf90_def_var(ncid_histog,"radbins",NF90_REAL,dimids_bins,radbins_vid) )
+      call netcdf_check( nf90_def_var(ncid_histog,"radbins",NF90_DOUBLE,dimids_bins,radbins_vid) )
       call netcdf_check( nf90_put_att(ncid_histog,radbins_vid,"title","Bin centers of particle radii histogram") )
 
-      call netcdf_check( nf90_def_var(ncid_histog,"resbins",NF90_REAL,dimids_bins,resbins_vid) )
+      call netcdf_check( nf90_def_var(ncid_histog,"resbins",NF90_DOUBLE,dimids_bins,resbins_vid) )
       call netcdf_check( nf90_put_att(ncid_histog,resbins_vid,"title","Bin centers of particle residence time histogram") )
 
-      call netcdf_check( nf90_def_var(ncid_histog,"actresbins",NF90_REAL,dimids_bins,actresbins_vid) )
+      call netcdf_check( nf90_def_var(ncid_histog,"actresbins",NF90_DOUBLE,dimids_bins,actresbins_vid) )
       call netcdf_check( nf90_put_att(ncid_histog,actresbins_vid,"title","Bin centers of particle activated residence time histogram") )
 
-      call netcdf_check( nf90_def_var(ncid_histog,"numactbins",NF90_REAL,dimids_bins,numactbins_vid) )
+      call netcdf_check( nf90_def_var(ncid_histog,"acttodeathbins",NF90_DOUBLE,dimids_bins,acttodeathbins_vid) )
+      call netcdf_check( nf90_put_att(ncid_histog,acttodeathbins_vid,"title","Bin centers of particle activated residence time till death histogram") )
+
+      call netcdf_check( nf90_def_var(ncid_histog,"numactbins",NF90_DOUBLE,dimids_bins,numactbins_vid) )
       call netcdf_check( nf90_put_att(ncid_histog,numactbins_vid,"title","Bin centers of histogram of number of activations in lifetime") )
 
 
@@ -448,6 +452,9 @@ subroutine netcdf_init_histog
 
       call netcdf_check( nf90_def_var(ncid_histog, "actreshist", NF90_REAL, dimids_t_bins,actreshist_vid) )
       call netcdf_check( nf90_put_att(ncid_histog,actreshist_vid,"title","Histogram of residence time of particles which deactivated OR died over past ihst") )
+
+      call netcdf_check( nf90_def_var(ncid_histog, "acttodeathhist", NF90_REAL, dimids_t_bins,acttodeathhist_vid) )
+      call netcdf_check( nf90_put_att(ncid_histog,acttodeathhist_vid,"title","Histogram of residence time of particles which deactivated OR died over past ihst") )
 
       call netcdf_check( nf90_def_var(ncid_histog, "numacthist", NF90_REAL, dimids_t_bins,numacthist_vid) )
       call netcdf_check( nf90_put_att(ncid_histog,numacthist_vid,"title","Histogram of number of activations of particles which died over past ihst") )
@@ -473,16 +480,18 @@ subroutine write_histog_netcdf
       !Store bin definitions only once
       if (histog_counter == 1) then
 
-      call netcdf_check( nf90_put_var(ncid_histog, radbins_vid, real(bins_rad),start=(/ 1 /)) )
-      call netcdf_check( nf90_put_var(ncid_histog, resbins_vid, real(bins_res),start=(/ 1 /)) )
-      call netcdf_check( nf90_put_var(ncid_histog, actresbins_vid, real(bins_actres),start=(/ 1 /)) )
-      call netcdf_check( nf90_put_var(ncid_histog, numactbins_vid, real(bins_numact),start=(/ 1 /)) )
+      call netcdf_check( nf90_put_var(ncid_histog, radbins_vid, bins_rad,start=(/ 1 /)) )
+      call netcdf_check( nf90_put_var(ncid_histog, resbins_vid, bins_res,start=(/ 1 /)) )
+      call netcdf_check( nf90_put_var(ncid_histog, actresbins_vid, bins_actres,start=(/ 1 /)) )
+      call netcdf_check( nf90_put_var(ncid_histog, acttodeathbins_vid, bins_acttodeath,start=(/ 1 /)) )
+      call netcdf_check( nf90_put_var(ncid_histog, numactbins_vid, bins_numact,start=(/ 1 /)) )
 
       end if
 
       call netcdf_check( nf90_put_var(ncid_histog, radhist_vid, real(hist_rad),start=(/1,histog_counter/)) )
       call netcdf_check( nf90_put_var(ncid_histog, reshist_vid, real(hist_res),start=(/1,histog_counter/)) )
       call netcdf_check( nf90_put_var(ncid_histog, actreshist_vid, real(hist_actres),start=(/1,histog_counter/)) )
+      call netcdf_check( nf90_put_var(ncid_histog, acttodeathhist_vid, real(hist_acttodeath),start=(/1,histog_counter/)) )
       call netcdf_check( nf90_put_var(ncid_histog, numacthist_vid, real(hist_numact),start=(/1,histog_counter/)) )
 
       histog_counter = histog_counter + 1

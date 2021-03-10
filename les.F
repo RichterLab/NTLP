@@ -10255,9 +10255,11 @@ c
          call add_histogram(bins_res,hist_res,
      +    histbins+2,part%res,part%mult)
 
-         !Also count this as a "deactivation"
-         call add_histogram(bins_actres,hist_actres,
+         !Also record this in the "activation till death" residence time
+         if (part%radius .gt. part%rc) then
+         call add_histogram(bins_acttodeath,hist_acttodeath,
      +    histbins+2,part%actres,part%mult)
+         end if
 
          !Also record the number of activations
          call add_histogram_integer(bins_numact,hist_numact,
@@ -11785,18 +11787,11 @@ c        part%qinf = 0.0 ! Brian 7/14/14
       real :: sumbuf_rad(histbins+2)
       real :: sumbuf_res(histbins+2)
       real :: sumbuf_actres(histbins+2)
+      real :: sumbuf_acttodeath(histbins+2)
       real :: sumbuf_numact(histbins+2)
-      real :: binval_rad(histbins+2)
-      real :: binval_res(histbins+2)
-      real :: binval_actres(histbins+2)
 
       character :: fformat*10, num*3
 
-
-c -------------- record bins for histogram file -----------
-        binval_rad = bins_rad(:)
-        binval_res = bins_res(:)
-        binval_actres = bins_actres(:)
 
 
 c -------------- Collect all histogram from different processors
@@ -11816,6 +11811,11 @@ c -------------- Collect all histogram from different processors
         !Activation residence time PDF
         sumbuf_actres = hist_actres
         call mpi_reduce(sumbuf_actres,hist_actres,num_entries,
+     +   mpi_real8,mpi_sum,0,mpi_comm_world,ierr)
+
+        !Activation residence time until death PDF
+        sumbuf_acttodeath = hist_acttodeath
+        call mpi_reduce(sumbuf_acttodeath,hist_acttodeath,num_entries,
      +   mpi_real8,mpi_sum,0,mpi_comm_world,ierr)
 
         !# of activations PDF
@@ -11847,6 +11847,7 @@ c ---------------- save data
 
         hist_res = 0.0  !Reset this one every time it writes
         hist_actres = 0.0  !Reset this one every time it writes
+        hist_acttodeath = 0.0  !Reset this one every time it writes
         hist_numact = 0.0  !Reset this one every time it writes
 
       end subroutine write_histograms
@@ -11947,9 +11948,8 @@ c       Calculate size of interval
                 ibin = (floor((logval1-(rmin-0.5*dh))/dh)+1)+1
         end if
 
-
 c       Add the current event to the histogram
-        histdata(ibin) = histdata(ibin) + real(mult)
+        histdata(ibin) = histdata(ibin) + dble(mult)
 
       end subroutine add_histogram
       subroutine add_histogram_integer(binsdata,histdata,sizea,val)
