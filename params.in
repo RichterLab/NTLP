@@ -20,7 +20,7 @@ ibuoy=1, ifilt=0, itcut=1, isubs=0, ibrcl=0, iocean=0
 method=3, idebug=1, iz_space=1, ivis0=1, ifix_dt=1, new_vis=-1
 isfc = 1, 1  ! isfc = 0 sets surface flux (qstar), isfc = 1 sets surface condition (Dirichlet through tsfcc)
 iDNS = 1
-ifields = 1  ! if set to 1, reads the initial condition from path_ran below; otherwise calls subroutine random
+ifields = 0  ! if set to 1, reads the initial condition from path_ran below; otherwise calls subroutine random
 ilin = 1   !1 means linear interpolation for particle, 6th order otherwise
 icouple=1
 iTcouple=1
