@@ -403,7 +403,10 @@ c
          call particle_reintro(it)
       end if
 
-      call radius_histogram
+      if (mhis) then
+         call radius_histogram
+         call particle_write_traj(it)
+      end if
 
       call get_max
       call get_dt

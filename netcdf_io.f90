@@ -22,6 +22,7 @@ integer :: ups_vid,vps_vid,wps_vid,tps_vid
 integer :: wtle_vid,wtsb_vid
 integer :: uwle_vid,uwsb_vid
 integer :: vwle_vid,vwsb_vid
+integer :: t_diss_vid
 integer :: zconc_vid
 integer :: pflux_vid,pfluxdiff_vid
 integer :: vp1mean_vid,vp2mean_vid,vp3mean_vid
@@ -220,6 +221,9 @@ subroutine netcdf_init
       call netcdf_check( nf90_def_var(ncid,"wtsb",NF90_REAL, dimids_zw_s,wtsb_vid) )
       call netcdf_check( nf90_put_att(ncid,wtsb_vid,"title","Subgrid <w't'>") )
 
+      call netcdf_check( nf90_def_var(ncid,"t_diss",NF90_REAL, dimids_zw,t_diss_vid) )
+      call netcdf_check( nf90_put_att(ncid,t_diss_vid,"title","TKE dissipation") )
+
       call netcdf_check( nf90_def_var(ncid,"zconc",NF90_REAL, dimids_zu,zconc_vid) )
       call netcdf_check( nf90_put_att(ncid,zconc_vid,"title","Computational droplet number concentration") )
 
@@ -368,6 +372,10 @@ subroutine write_his_netcdf
       tmp_s(1:nnz,1:nscl) = wtle(1:nnz,1:nscl)
       call netcdf_check( nf90_put_var(ncid,wtle_vid,real(tmp_s),start=(/1,1, his_counter/)) )
       call netcdf_check( nf90_put_var(ncid,wtsb_vid,real(wtsb(0:nnz,1:nscl)),start=(/1,1, his_counter/)) )
+
+      tmp(0) = 0
+      tmp(1:nnz) = t_diss(1:nnz)
+      call netcdf_check( nf90_put_var(ncid,t_diss_vid,real(tmp),start=(/1, his_counter/)) )
 
       call netcdf_check( nf90_put_var(ncid,zconc_vid,real(zconc(1:nnz)),start=(/1, his_counter/)) )
       call netcdf_check( nf90_put_var(ncid,pflux_vid,real(pflux(0:nnz)),start=(/1, his_counter/)) )

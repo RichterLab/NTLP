@@ -2,14 +2,14 @@
 !Time step information
 &step_params
 iti=0          !Time step to begin
-itmax=50000   !Max number of time steps
+itmax=150000   !Max number of time steps
 imean=100    !Number of time steps between writing mean profiles to output log file
-ihst=100     !Number of time steps between writing profiles to history file
-itape=10000  !Number of time steps before opening new history file and writing full 3D volumes
+ihst=20     !Number of time steps between writing profiles to history file
+itape=2000  !Number of time steps before opening new history file and writing full 3D volumes
 itstr=1
 it_his=1     !Time step to begin recording history files
 it_viz=1     !Time step to begin recording viz files
-i_viz=2000   !Time steps between writing to viz file
+i_viz=500   !Time steps between writing to viz file
 itn = 0  !Index for "u.le.cou001" files
 /
 
@@ -20,7 +20,7 @@ ibuoy=1, ifilt=0, itcut=1, isubs=0, ibrcl=0, iocean=0
 method=3, idebug=1, iz_space=1, ivis0=1, ifix_dt=1, new_vis=-1
 isfc = 1, 1  ! isfc = 0 sets surface flux (qstar), isfc = 1 sets surface condition (Dirichlet through tsfcc)
 iDNS = 1
-ifields = 0  ! if set to 1, reads the initial condition from path_ran below; otherwise calls subroutine random
+ifields = 1  ! if set to 1, reads the initial condition from path_ran below; otherwise calls subroutine random
 ilin = 1   !1 means linear interpolation for particle, 6th order otherwise
 icouple=1
 iTcouple=1
@@ -45,7 +45,7 @@ ncpu_s=8
 
 !Time step
 cfl = 0.5
-dt_new = 0.01
+dt_new = 0.05
 
 !Use for DNS:
 Uo = 0.0  !Sets the magnitude of the top and bottom plate velocities (Couette flow -- assumes equal and opposite)
@@ -73,7 +73,7 @@ zl = 1.0
 xl = 2.0
 yl = 2.0
 
-zw1 = 0.0008  !The first grid point
+zw1 = 0.0033333  !The first grid point
 
 !Radiation parameters
 rad_kappa = 120.0  !The absorptivity in the radiation expression (see Larson et al. 2007)
@@ -84,23 +84,23 @@ rad_Fcb = 0.0    !Net radiative flux at cloud (or domain) base
 
 !Set the paths for code I/O. Must be on the scratch directory, not AFS!
 &path_names
-path_seed="/scratch365/drichte2/Theo_Pi/case7/"
-path_part="/scratch365/drichte2/Theo_Pi/case7/part.le.cou000"
-path_res="/scratch365/drichte2/Theo_Pi/case7/u.le.cou000"
-path_sav="/scratch365/drichte2/Theo_Pi/case7/"
-path_his="/scratch365/drichte2/Theo_Pi/case7/"
-path_viz_xy="/scratch365/drichte2/Theo_Pi/case7/"
-path_viz_xz="/scratch365/drichte2/Theo_Pi/case7/"
-path_viz_yz="/scratch365/drichte2/Theo_Pi/case7/"
-path_stuf="/scratch365/drichte2/Theo_Pi/case7/"
-path_ran="/scratch365/drichte2/Theo_Pi/case7/u.le.cou000"
-path_histog="/scratch365/drichte2/Theo_Pi/case7/"
+path_seed="/scratch365/drichte2/Theo_Pi/case1/"
+path_part="/scratch365/drichte2/Theo_Pi/case1/part.le.cou000"
+path_res="/scratch365/drichte2/Theo_Pi/case1/u.le.cou000"
+path_sav="/scratch365/drichte2/Theo_Pi/case1/"
+path_his="/scratch365/drichte2/Theo_Pi/case1/"
+path_viz_xy="/scratch365/drichte2/Theo_Pi/case1/"
+path_viz_xz="/scratch365/drichte2/Theo_Pi/case1/"
+path_viz_yz="/scratch365/drichte2/Theo_Pi/case1/"
+path_stuf="/scratch365/drichte2/Theo_Pi/case1/"
+path_ran="/scratch365/drichte2/Theo_Pi/case1/u.le.cou000"
+path_histog="/scratch365/drichte2/Theo_Pi/case1/"
 /
 
 
 !Material and particle properties and other constants
 &constants
-grav = 0.4
+grav = 0.043
 t00 = 273.0 !Reference temp for buoyancy
 fcor = 0.0  !Coriolis parameter
 zo = 3.2e-5       !Roughness height (for LES)
@@ -115,10 +115,10 @@ Rd = 286.9     !J/kg-K  dry air gas constant
 
 !Particles:
 tnumpart = 0
-mult_init = 100
+mult_init = 1.0e2
 rhow=1000.0  !kg/m^3
 rhos = 2000.0 !Density of salt, kg/m^3
-part_grav = 0,0,-1.981
+part_grav = 0,0,-0.6494
 Cpp = 4179.0  !J/kg-K
 Mw = 0.018015  !kg/mol
 Ru = 8.3144    !J/mol-K Universal gas constant

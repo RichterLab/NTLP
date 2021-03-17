@@ -1074,8 +1074,6 @@ CONTAINS
       call date_and_time(VALUES=values)
       iseed = -(myid+values(8)+values(7)+values(6))
 
-      !Initialize ngidx, the particle global index
-      ngidx = 1
   
       !For the channel case, set the total number of particles:
       deltaz = zmax-zmin
@@ -1084,6 +1082,9 @@ CONTAINS
       if (myid == 0) then
       numpart = numpart + MOD(tnumpart,numprocs)
       endif
+
+      !Initialize ngidx, the particle global index for this processor
+      ngidx = 1
 
       !Initialize the linked list of particles:
       nullify(part,first_particle)
@@ -1177,7 +1178,9 @@ CONTAINS
          xp_init(2) = ran2(iseed)*(ymax-ymin) + ymin
          xp_init(3) = ran2(iseed)*zl
 
-      call create_particle(xp_init,vp_init,Tp_init,m_s,Os,mult,rad_init,idx,myid) 
+      call create_particle(xp_init,vp_init,Tp_init,m_s,Os,mult,rad_init,ngidx,myid) 
+
+      ngidx = ngidx + 1
       end do
 
 
@@ -1203,12 +1206,20 @@ CONTAINS
       integer(kind=MPI_ADDRESS_KIND) :: extent,lb
       integer(kind=MPI_ADDRESS_KIND) :: extent2,lb2,displs(3)
       integer :: num_reals,num_integers,num_longs
+      character*4 :: myid_char
+      character*80 :: traj_file
 
       !First set up the neighbors for the interpolation stage:
       call assign_nbrs
 
       !Also assign the x,y,z max and mins to track particles leaving
       call set_bounds
+
+      !Set up the path for the trajectory files
+      write(myid_char,'(i4.4)') myid
+      path_traj = trim(adjustl(path_his))//"particle_traj/"//myid_char//".dat"
+      ntraj = 128
+      open(ntraj,file=path_traj,form='formatted',status='replace')
 
 
       !Lognormal distribution parameters  -- Must be called even on
@@ -1493,14 +1504,18 @@ CONTAINS
 
          xp_init(1) = ran2(iseed)*(xmax-xmin) + xmin
          xp_init(2) = ran2(iseed)*(ymax-ymin) + ymin
-         xp_init(3) = ran2(iseed)*zl/2.0
+         !xp_init(3) = ran2(iseed)*zl/2.0
+         xp_init(3) = zl/2.0
 
          Os = 1.0
          m_s = radius_init**3*pi2*2.0/3.0*rhow*Sal  !Using the salinity specified in params.in
          
 
          call create_particle(xp_init,vp_init, &
-              Tp_init,m_s,Os,mult_init,radius_init,2,myid) 
+              Tp_init,m_s,Os,mult_init,radius_init,ngidx,myid) 
+
+         !Update this processor's global ID for each one created:
+         ngidx = ngidx + 1
 
       end do
       end if
@@ -2563,6 +2578,30 @@ CONTAINS
       end do
 
   end subroutine particle_stats
+
+  subroutine particle_write_traj(it)
+   use con_data
+   use pars
+   implicit none
+
+   integer :: it
+
+   
+   part => first_particle
+   do while (associated(part))
+      
+      if (mod(part%pidx,400) .eq. 0) then
+          write(ntraj,'(2i,12e15.6)') part%pidx,part%procidx,time,part%xp(1),part%xp(2),part%xp(3),part%vp(1),part%vp(2),part%vp(3),part%radius,part%Tp,part%Tf,part%qinf,part%qstar
+      end if
+
+   part => part%next
+   end do
+
+   if (it .ge. itmax) then
+      close(ntraj)
+   end if
+
+  end subroutine particle_write_traj
 
   subroutine particle_coalesce
       use pars
