@@ -36,7 +36,8 @@ ilongwave = 0   !Use simple longwave radiation scheme when clouds/fog present
 inetcdf = 1  !Set to 1 to output history and histogram data to netcdf format, otherwise original binary format
 iviznetcdf = 1  !Set to 1 to slice viz files to netcdf format (WARNING: it's been a long time since the original have been used)
 ihumiditycontrol = 0  !Adaptive humidity source/sink (used for Pi Chamber; subroutine humidity_control)
-ireintro=0
+ireintro=0   !Aerosol injection
+itrajout=0   !Write the particle trajectory files. Needs a directory within the scratch space, and each processor writes a file (requires postprocessing to stitch together)
 /
 
 !Grid and domain parameters

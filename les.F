@@ -405,7 +405,9 @@ c
 
       if (mhis) then
          call radius_histogram
+         if (itrajout) then
          call particle_write_traj(it)
+         end if
       end if
 
       call get_max
@@ -12098,7 +12100,8 @@ c       Add the current event to the histogram
      +         icouple,iTcouple,iHcouple,ievap,ifields,ilin,
      +         ineighbor,icoalesce,ipart_method,
      +         ipartdiff,isfs,iexner,ilongwave,
-     +         inetcdf,iviznetcdf,ihumiditycontrol,ireintro
+     +         inetcdf,iviznetcdf,ihumiditycontrol,ireintro,
+     +         itrajout
 
 
       namelist /constants/ rhoa, nuf, Cpa, Pra, Sc,

@@ -9,7 +9,7 @@ c     ----------------------------------------------------------------------
      +     idebug,iz_space,ivis0,ifix_dt,new_vis,iDNS,
      +     icouple,iTcouple,iHcouple,ievap,ifields,ilin,ineighbor,
      +     icoalesce,ipart_method,ipartdiff,isfs,iexner,ilongwave,
-     +     inetcdf,iviznetcdf,ihumiditycontrol,ireintro
+     +     inetcdf,iviznetcdf,ihumiditycontrol,ireintro,itrajout
 c     
 c     -------- j_recl = record length in "bytes" for history file
 c     k8     = kind parameter for integers in mpi_io routines
