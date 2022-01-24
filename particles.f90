@@ -1089,96 +1089,12 @@ CONTAINS
       !Initialize the linked list of particles:
       nullify(part,first_particle)
       
-      !Now initialize all particles with a random location on that processor
-      maxx=0.0
-      maxy=0.0
-      maxz=0.0
-      num_a = 0
-      num_c = 0
+
       do idx=1,numpart
-      xv = ran2(iseed)*(xmax-xmin) + xmin
-      yv = ran2(iseed)*(ymax-ymin) + ymin
-      zv = ran2(iseed)*(zi-zw1) + zw1
-      xp_init = (/xv,yv,zv/)
 
-      !Get the initial droplet size based on some distribution:
+         ! Call new_particle, which creates a new particle basd on some strategy dictated by inewpart
+         call new_particle(idx)
 
-      !From params file -- all particles identical
-      !rad_init = radius_init
-      !m_s = Sal*2.0/3.0*pi2*radius_init**3*rhow
-
-      !call exponential_dist(rad_init)  !From Shima et al. (2009) test case
-      !m_s = Sal*4.0/3.0*pi*radius_init**3*rhow
-
-
-!!!!!!! DOUBLE LOGNORMAL
-      !Generate a double lognormal from individual coarse & accumulation modes
-      !call double_lognormal_dist(rad_init,m_s,Os,mult)  !First attempt!
-
-
-      !Generate
-!      if (ran2(iseed) .gt. pdf_prob) then   !It's accumulation mode
-!         S = 0.5
-!         M = -1.95
-!         Os = 0.5
-!         mult = mult_a
-!
-!         !With these parameters, get m_s and rad_init from distribution
-!         call lognormal_dist(rad_init,m_s,Os,M,S)
-!         num_a = num_a + 1
-!
-!       else  !It's coarse mode
-!
-!         S = 0.45
-!         M = 0.0
-!         Os = 1.0
-!         mult = mult_c
-!
-!         !With these parameters, get m_s and rad_init from distribution
-!         call lognormal_dist(rad_init,m_s,Os,M,S)
-!         num_c = num_c + 1
-!
-!       end if
-
-
-
-!!!!!!! UNIFORM
-
-!      if (ran2(iseed) .gt. 0.5) then
-!      Os = 0.5
-!      else
-!      Os = 1.0
-!      end if
-!      mult = mult_init
-!      call uniform_dist(rad_init,m_s,Os)
-
-!       !Force the output particle to be a coarse mode particle
-!       if (idx==1 .and. myid==0) then
-!            !Force particle log output to be a coarse mode in fog layer -- "giant mode"
-!            S = 0.45
-!            M = 0.0
-!            Os = 1.0
-!            mult = mult_c
-!
-!            !With these parameters, get m_s and rad_init from distribution
-!            call lognormal_dist(rad_init,m_s,Os,M,S)
-!            xp_init(3) = 10.0
-!        end if
-
-
-!!!!! More appropriate for sea spray:
-         Os = 1.0
-         mult = mult_init
-         rad_init = radius_init   ! From the params.in file
-         m_s = rad_init**3*pi2*2.0/3.0*rhow*Sal  !Using the salinity specified in params.in
-         
-         Tp_init = tsfcc(1)
-
-         xp_init(1) = ran2(iseed)*(xmax-xmin) + xmin
-         xp_init(2) = ran2(iseed)*(ymax-ymin) + ymin
-         xp_init(3) = ran2(iseed)*zl
-
-      call create_particle(xp_init,vp_init,Tp_init,m_s,Os,mult,rad_init,ngidx,myid) 
 
       ngidx = ngidx + 1
       end do
@@ -1224,14 +1140,12 @@ CONTAINS
       end if
 
 
-      !Lognormal distribution parameters  -- Must be called even on
-      !restart!
+      !Lognormal distribution parameters  -- Must be called even on restart!
       mult_factor = 200
       pdf_factor = 0.02*real(mult_factor)
       pdf_prob = pdf_factor/(1 + pdf_factor)
 
-      !Adjust the multiplicity so that the total number of particles
-      !isn't altered:
+      !Adjust the multiplicity so that the total number of particles isn't altered:
       mult_c = mult_init/mult_factor
       mult_a = mult_init/(1.0-pdf_prob)*(1 - pdf_prob/real(mult_factor))
 
@@ -1501,27 +1415,12 @@ CONTAINS
 
       do np=1,my_reintro
 
-      !Proc 0 gets a random proc ID, broadcasts it out:
-      !if (myid==0) randproc = floor(ran2(iseed)*numprocs)
-      !call mpi_bcast(randproc,1,mpi_integer,0,mpi_comm_world,ierr)
+         !Proc 0 gets a random proc ID, broadcasts it out:
+         !if (myid==0) randproc = floor(ran2(iseed)*numprocs)
+         !call mpi_bcast(randproc,1,mpi_integer,0,mpi_comm_world,ierr)
 
+         call new_particle(np)
 
-         xp_init(1) = ran2(iseed)*(xmax-xmin) + xmin
-         xp_init(2) = ran2(iseed)*(ymax-ymin) + ymin
-         !xp_init(3) = ran2(iseed)*zl/2.0
-         xp_init(3) = zl/2.0
-
-         ! Set distribution for initial radius
-         radius_dinit = abs(radius_std*sqrt(-2*log(ran2(iseed)))*cos(2*pi*ran2(iseed)) + radius_init)
-
-         ! Set distribution for Os 
-         Os = abs(Os_std * sqrt(-2*log(ran2(iseed)))*cos(2*pi*ran2(iseed)) + Os_init)
-
-         m_s = radius_dinit**3*pi2*2.0/3.0*rhow*Sal  !Using the salinity specified in params.in
-         
-
-         call create_particle(xp_init,vp_init, &
-              Tp_init,m_s,Os,mult_init,radius_dinit,ngidx,myid) 
 
          !Update this processor's global ID for each one created:
          ngidx = ngidx + 1
@@ -1585,6 +1484,245 @@ CONTAINS
 
       
   end subroutine create_particle
+
+  subroutine new_particle(idx)
+  use pars
+  use con_data
+  implicit none
+
+  real :: xv,yv,zv,ran2,m_s
+  real :: Os_dinit,radius_dinit
+  real :: xp_init(3)
+  integer :: idx
+
+  !C-FOG parameters: lognormal of accumulation + lognormal of coarse, with extra "resolution" on the coarse mode
+  real :: S,M,Os,rad_init
+  real :: num_a,num_c,totnum_a,totnum_c
+  integer*8 :: mult
+
+  if (inewpart==1) then  !Simple: properties as in params.in, randomly located in domain
+
+      xv = ran2(iseed)*(xmax-xmin) + xmin
+      yv = ran2(iseed)*(ymax-ymin) + ymin
+      zv = ran2(iseed)*(zmax-zmin) + zmin
+      xp_init = (/xv,yv,zv/) 
+
+      m_s = radius_init**3*pi2*2.0/3.0*rhow*Sal  !Using the salinity specified in params.in
+
+      call create_particle(xp_init,vp_init,Tp_init,m_s,Os_init,mult_init,radius_init,ngidx,myid)
+
+
+
+
+   elseif (inewpart==2) then  !Same as above, but with NORMAL distribution of radius and Os given by radius_std and Os_std
+
+      xv = ran2(iseed)*(xmax-xmin) + xmin
+      yv = ran2(iseed)*(ymax-ymin) + ymin
+      zv = ran2(iseed)*(zmax-zmin) + zmin
+      xp_init = (/xv,yv,zv/) 
+
+      ! Set distribution for initial radius
+      radius_dinit = abs(radius_std*sqrt(-2*log(ran2(iseed)))*cos(pi2*ran2(iseed)) + radius_init)
+
+      ! Set distribution for Os 
+      Os_dinit = abs(Os_std * sqrt(-2*log(ran2(iseed)))*cos(pi2*ran2(iseed)) + Os_init)
+
+      m_s = radius_dinit**3*pi2*2.0/3.0*rhow*Sal  !Using the salinity specified in params.in
+
+      call create_particle(xp_init,vp_init,Tp_init,m_s,Os_dinit,mult_init,radius_dinit,ngidx,myid)
+
+
+
+
+    elseif (inewpart==3) then !Special for C-FOG: the scheme used in Richter et al., BLM, 2021
+
+      xv = ran2(iseed)*(xmax-xmin) + xmin
+      yv = ran2(iseed)*(ymax-ymin) + ymin
+      zv = ran2(iseed)*(zmax-zmin) + zmin
+      xp_init = (/xv,yv,zv/) 
+
+
+      !Generate
+      if (ran2(iseed) .gt. pdf_prob) then   !It's accumulation mode
+         S = 0.5
+         M = -1.95
+         Os = 0.5
+         mult = mult_a
+
+         !With these parameters, get m_s and rad_init from distribution
+         call lognormal_dist(rad_init,m_s,Os,M,S)
+         num_a = num_a + 1
+
+      else  !It's coarse mode
+
+         S = 0.45
+         M = 0.0
+         Os = 1.0
+         mult = mult_c
+
+         !With these parameters, get m_s and rad_init from distribution
+         call lognormal_dist(rad_init,m_s,Os,M,S)
+         num_c = num_c + 1
+
+      end if      
+
+      !Force the output particle to be a coarse mode particle
+      if (idx==1 .and. myid==0) then
+         !Force particle log output to be a coarse mode in fog layer -- "giant mode"
+         S = 0.45
+         M = 0.0
+         Os = 1.0
+         mult = mult_c
+
+         !With these parameters, get m_s and rad_init from distribution
+         call lognormal_dist(rad_init,m_s,Os,M,S)
+         xp_init(3) = 10.0
+      end if
+
+
+      call create_particle(xp_init,vp_init,Tp_init,m_s,Os,mult,rad_init,idx,myid)
+
+
+
+   elseif (inewpart==4) then  !Crude approxmation of sea spray
+
+      
+         m_s = rad_init**3*pi2*2.0/3.0*rhow*Sal  !Using the salinity specified in params.in
+         
+         Tp_init = tsfcc(1)
+
+         xp_init(1) = ran2(iseed)*(xmax-xmin) + xmin
+         xp_init(2) = ran2(iseed)*(ymax-ymin) + ymin
+         xp_init(3) = ran2(iseed)*zw1
+
+
+         call create_particle(xp_init,vp_init,Tp_init,m_s,Os_init,mult_init,rad_init,ngidx,myid) 
+      
+
+   end if
+
+  end subroutine new_particle
+
+  subroutine lognormal_dist(rad_init,m_s,Os,M,S)
+  use pars
+  use con_data
+  implicit none
+  include 'mpif.h'
+
+  real, intent(inout) :: rad_init,m_s,Os
+  real :: ran2,cdf_func_single
+  real :: M,S
+  real :: d1,d2,err,dhalf,ftest,CDF
+  real :: daerosol
+  real :: a,b,c,d,p,q
+  integer :: iter
+
+  !Use bisection to get the radius based on the CDF contained in
+  !function cdf_func
+  d1 = 100.0
+  d2 = 0.01
+  err = 1.0
+  iter = 0
+  CDF = ran2(iseed)
+
+  do while (err > 1.0e-10)
+
+     dhalf = 0.5*(d1+d2)
+     ftest = cdf_func_single(dhalf,CDF,M,S)
+     if (ftest < 0.0) then
+        d2 = dhalf
+     else
+        d1 = dhalf
+     end if
+
+     err = abs(cdf_func_single(dhalf,CDF,M,S))
+     iter = iter + 1
+
+     if (iter .gt. 1000) then
+        d1 = 0.1
+        write(*,'(a12)') 'CDF convergence error'
+        exit
+     end if
+
+
+  end do
+
+  daerosol = d1*1.0e-6  !Don't forget to convert micron to m
+  m_s = 2.0/3.0*pi2*(daerosol/2.0)**3*rhos
+
+  !Now have the dry aerosol diameter and mass, must rehydrate it using Kohler
+  !theory to get the proper initial condition
+  !Rehydrate to 95% RH
+
+  !The equation for the equilibrium radius is a cubic -- take positive root:
+  a = log(0.95)  !RH = 95%
+  b = -2.0*Mw*Gam/Ru/rhow/Tp_init
+  c = 0.0
+  d = Ion*Os*m_s*(Mw/Ms)/(2.0/3.0*pi2*rhow)
+
+  p = -b/3.0/a
+  q = p**3 - 3.0*a*d/6.0/a**2
+
+  rad_init = (q + (q**2 - p**6)**(0.5))**(1./3.) + (q - (q**2-p**6)**(0.5))**(1./3.) + p
+
+  end subroutine lognormal_dist
+
+  subroutine particle_bcs_nonperiodic
+  use con_stats
+  use pars
+  implicit none
+  real :: top,bot
+  integer :: idx,procidx,idx_old,procidx_old
+
+
+  !Assumes domain goes from [0,xl),[0,yl),[0,zl]
+  !Also maintain the number of particles on each proc
+
+  part => first_particle
+  do while (associated(part))
+
+    !perfectly elastic collisions on top, bottom walls
+    !i.e. location is reflected, w-velocity is negated
+
+    top = z(nnz)
+    !bot = 0.0 + part%radius
+    !bot = zw1
+    bot = 0.0
+
+    if (part%xp(3) .GT. top) then
+       part%xp(3) = top - (part%xp(3)-top)
+       part%vp(3) = -part%vp(3)
+       part => part%next
+    elseif (part%xp(3) .LT. bot) then
+       !part%xp(3) = bot + (bot-part%xp(3))
+       !part%vp(3) = -part%vp(3)
+       !part => part%next
+
+       idx_old = part%pidx
+       procidx_old = part%procidx
+
+       !Before destroying it, put its residence time in histogram
+       call add_histogram(bins_res,hist_res,histbins+2,part%res,part%mult)
+
+       !Also record this in the "activation till death" residence time
+       if (part%radius .gt. part%rc) then
+         call add_histogram(bins_acttodeath,hist_acttodeath,histbins+2,part%actres,part%mult)
+       end if
+
+       !Also record the number of activations
+       call add_histogram_integer(bins_numact,hist_numact,histbins+2,part%numact)
+
+       call destroy_particle
+
+       num_destroy = num_destroy + 1
+
+    else
+       part => part%next
+    end if
+
+  end do
+
+  end subroutine particle_bcs_nonperiodic
 
   subroutine particle_bcs_periodic
       use pars
@@ -3122,6 +3260,227 @@ CONTAINS
       end if
 
   end subroutine rad_solver2
+
+  subroutine SFS_velocity
+  !This subroutine calculate the SFS velocity for particles
+  !Uses Weil et al. (2004) formulation
+  use pars
+  use fields
+  use fftwk
+  use con_data
+  use con_stats
+  implicit none
+  include 'mpif.h'
+  real :: sigm_sdxp,sigm_sdyp,sigm_sdzp,vis_sp
+  real :: sigm_su,sigm_sl,us_ran,gasdev,tengz,englez_bar
+  real :: engsbz_bar,sigm_w, sigm_ws
+  real :: L_flt,epsn,fs,C0,a1,a2,a3,sigm_sprev,fs1
+  real :: weit,weit1,weit3,weit4, T_lagr
+  real :: us(3)
+  real :: xp3i
+  integer :: ix,iy,iz,izp1,izm1,ind,iz_part,ierr
+  integer :: fluxloc,fluxloci
+
+!       ---initialize -------
+  fs = 0.0
+  C0 = 0.0
+  T_lagr = 0.0
+  l_flt = 0.0
+  epsn = 0.0
+  tengz = 0.0
+  englez_bar =0.0
+  engsbz_bar = 0.0
+  sigm_s = 0.0
+  sigm_sdx = 0.0
+  sigm_sdy = 0.0
+  sigm_sdz = 0.0
+  sigm_su = 0.0
+  sigm_sl  = 0.0
+  us_ran = 0.0
+  us = 0.0
+  sigm_ws = 0.0
+  sigm_w = 0.0
+  pfluxdiff = 0.0
+
+!       ------------------
+!       compute sigma squre (sigm_s) based on subgrid energy field
+!       -----------------       
+  do iz =izs,ize
+    izp1 = iz+1
+    izm1 = iz-1
+    weit = dzw(iz)/(dzw(iz)+dzw(izp1))
+    weit1 = 1-weit
+    weit3 = dzw(izm1)/(dzw(iz)+dzw(izm1))
+    weit4 = 1-weit3
+    do ix =1,nnx
+    do iy = iys,iye
+       sigm_s(ix,iy,iz) = 2.0*e(ix,iy,iz)/3.0
+       vis_ss(ix,iy,iz) = vis_s(ix,iy,1,iz)
+       sigm_sdx(ix,iy,iz) =  sigm_s(ix,iy,iz)       !for xderiv
+       sigm_sdy(ix,iy,iz) =  sigm_s(ix,iy,iz)       !for yderiv
+
+!     --------------------
+!     calculate z derivative of sigma_s
+!     this will be at the u-point!
+!     --------------------
+       sigm_sdz(ix,iy,iz)=(sigm_s(ix,iy,iz)-sigm_s(ix,iy,izm1))*dzw_i(iz)
+      end do
+      end do
+
+!     -------------------
+!     calculate x derivatives of sigma_s
+!     -------------------
+     call xderivp(sigm_sdx(1,iys,iz),trigx(1,1),xk(1),nnx,iys,iye)
+
+  end do
+
+!     ------------------
+!     calculate y derivative of sigma_s
+!     ------------------
+
+  call yd_mpi(sigm_sdy(1,iys,izs),trigx(1,2),yk(1),nnx,nny,ixs,ixe,ix_s,ix_e,iys,iye,iy_s,iy_e,izs,ize,myid,ncpu_s,numprocs)
+
+!     ----------------
+!    calculate extented fileds of sigm_s and its derivatives
+!     ---------------
+
+  call fill_extSFS
+
+  !Loop over the linked list of particles:
+  part => first_particle
+  do while (associated(part))
+
+    ! interpolate sigm_s and its derivative at particle location
+    sigm_sprev = part%sigm_s
+    call sigm_interp(sigm_sdxp,sigm_sdyp,sigm_sdzp,vis_sp,iz_part)
+
+    part%sigm_s = abs(part%sigm_s)  !Interpolation near surface can give small negative numbers
+    part%sigm_s = max(part%sigm_s,1.0e-4) !Prevent it from getting too small, makes time derivative term singular
+
+!     -----------------
+!     calculate the subgrid velocity Weil et al ,2004-isotropic turb.
+!     ----------------
+     l_flt = (2.25*dx*dy*dzw(iz_part+1))**(1.0/3.0)! filtered with
+     epsn = (0.93/l_flt)*(3.0*part%sigm_s/2.0)**(1.5) ! tur. dis.rt
+     ! TKE : resolved + Subgrid at grid center
+      !---------------------------------
+!      tot_eng = (engsbz(iz_part+1) + engz(iz_part+1))
+     englez_bar = 0.5*(englez(iz_part)+englez(iz_part+1))
+     engsbz_bar = 0.5*(engsbz(iz_part)+engsbz(iz_part+1))
+     tengz = englez_bar + engsbz_bar
+    !---------------------------------
+    ! Calculate fs basd on w-componet of velocity
+     sigm_w = 0.5*(wps(iz_part)+wps(iz_part+1))
+     sigm_ws = 0.5*(engsbz(iz_part)+engsbz(iz_part+1))/3.0
+
+!     ---------write for single droplet ---------
+!       write(*,*)'sigm_w:', sigm_w,sigm_ws
+!     ------------------------------------------
+    if(tengz.gt.0.0)then
+!      fs = engsbz(iz_part+1)/(engsbz(iz_part+1) + engz(iz_part+1))
+!      fs = engsbz_bar/tengz
+       fs = sigm_ws/(sigm_w + sigm_ws)
+    else
+       fs =0.0
+    end if
+    C0 = 6.0  ! Changed to 6.0 from 3.0 Indrjith 11-20-17
+
+!     ---------Check for single-part----------
+       T_lagr = 2*part%sigm_s/(C0*epsn)   ! Lagrangian time scale
+!       write(*,*) 'L_time:',part%xp(3),T_lagr
+!     -----------------------------------
+!    ------------------
+!      Calculate subgrid velocity components
+!     -----------------
+     us(1:3) = part%u_sub(1:3)
+!    -----x component ----------------
+     a1 = 0.0
+     a2 =0.0
+     a3 = 0.0
+     a1 =(-0.5)*fs*C0*epsn*part%u_sub(1)/part%sigm_s
+     a2 =0.5*(fs/part%sigm_s)*part%u_sub(1)*(part%sigm_s - sigm_sprev)/dt
+     a3 = 0.5*fs*sigm_sdxp
+     us_ran = sqrt(fs*C0*epsn*dt)*gasdev(iseed)
+     part%u_sub(1) = (a1+a2+a3)*dt + us_ran
+
+!     ----------------------------------
+!     -----y component ----------------
+    a1 = 0.0
+    a2 =0.0
+    a3 = 0.0
+    a1 =(-0.5)*fs*C0*epsn*part%u_sub(2)/part%sigm_s
+    a2 =0.5*(fs/part%sigm_s)*part%u_sub(2)*(part%sigm_s - sigm_sprev)/dt
+    a3 = 0.5*fs*sigm_sdyp
+    us_ran = sqrt(fs*C0*epsn*dt)*gasdev(iseed)
+    part%u_sub(2) = (a1+a2+a3)*dt + us_ran
+
+!     ----------------------------------
+!     -----z component ----------------
+    a1 = 0.0
+    a2 =0.0
+    a3 = 0.0
+    a1 =(-0.5)*fs*C0*epsn*part%u_sub(3)/part%sigm_s
+    a2 =0.5*(fs/part%sigm_s)*part%u_sub(3)*(part%sigm_s - sigm_sprev)/dt
+    a3 = 0.5*fs*sigm_sdzp
+    us_ran = sqrt(fs*C0*epsn*dt)*gasdev(iseed)
+    part%u_sub(3) = (a1+a2+a3)*dt + us_ran
+
+!     -------------------
+!     Update particle location and velocity
+!     ------------------
+    xp3i = part%xp(3)
+    do ind = 1,3
+      part%xp(ind) = part%xp(ind) + part%u_sub(ind)*dt
+    end do
+!     ---------------------------------        
+
+    !Store the particle flux now that we have the new position
+    if (part%xp(3) .gt. zl) then   !This will get treated in particle_bcs_nonperiodic, but record here
+       fluxloc = nnz+1
+       fluxloci = minloc(z,1,mask=(z.gt.xp3i))-1
+    elseif (part%xp(3) .lt. 0.0) then !This will get treated in particle_bcs_nonperiodic, but record here
+       fluxloci = minloc(z,1,mask=(z.gt.xp3i))-1
+       fluxloc = 0
+    else
+       fluxloc = minloc(z,1,mask=(z.gt.part%xp(3)))-1
+       fluxloci = minloc(z,1,mask=(z.gt.xp3i))-1
+    end if  !Only apply flux calc to particles in domain
+
+    if (xp3i .lt. part%xp(3)) then !Particle moved up
+
+      do iz=fluxloci,fluxloc-1
+         pfluxdiff(iz) = pfluxdiff(iz) + part%mult
+      end do
+
+    elseif (xp3i .gt. part%xp(3)) then !Particle moved down
+
+      do iz=fluxloc,fluxloci-1
+         pfluxdiff(iz) = pfluxdiff(iz) - part%mult
+      end do
+
+    end if  !Up/down conditional statement
+
+
+    part => part%next
+  end do
+
+
+  call particle_bcs_nonperiodic
+  call particle_exchange
+  call particle_bcs_periodic
+
+  numpart = 0
+  part => first_particle
+  do while (associated(part))
+    numpart = numpart + 1
+    part => part%next
+  end do
+
+  !Compute total number of particles
+  call mpi_allreduce(numpart,tnumpart,1,mpi_integer,mpi_sum,mpi_comm_world,ierr)
+
+  end subroutine SFS_velocity
+  
 
   function mod_Magnus(T)
     implicit none

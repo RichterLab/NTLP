@@ -30,6 +30,7 @@ ineighbor=0
 icoalesce=0
 ipart_method=2   !1 = same RK3 as flow, 2 = backward Euler
 ipartdiff = 0
+inewpart = 1  !1 = new particles have initial conditions defined below, random location in domain; 2 = same, but normal distributions of radius and Os, given by radius_std and Os_std
 isfs = 2   !isfs=1 is simple random walk, isfs=2 is Weil et al. (2004) particle subgrid
 iexner = 0  !iexner = 1 applies a correction to part%Tf to account for conversion b/w potential temp and temp. (need in PBL)
 ilongwave = 0   !Use simple longwave radiation scheme when clouds/fog present
@@ -133,9 +134,9 @@ nprime = 0.01  !particles/cm^3/min, real rate is nprime*multiplicity
 
 !Particle initial conditions:
 radius_init=2.0e-7
-radius_std=0.05e-7
+radius_std=0.0
 Os_init=1.0
-Os_std=0.08
+Os_std=0.00
 Tp_init = 290.0
 vp_init = 0.0, 0.0, 0.0
 /
