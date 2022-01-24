@@ -47,7 +47,7 @@ module particles
   real :: Rep_avg,part_grav(3)
   real :: radavg,radmin,radmax,radmsqr,tempmin,tempmax,qmin,qmax
   real :: radavg_center,radmsqr_center
-  real :: vp_init(3),Tp_init,radius_init
+  real :: vp_init(3),Tp_init,radius_init,radius_std,Os_init,Os_std
   real :: pdf_factor,pdf_prob
   integer*8 :: mult_init,mult_factor,mult_a,mult_c
 
@@ -1485,7 +1485,9 @@ CONTAINS
 
       integer :: it
       integer :: ierr,randproc,np,my_reintro
-      real :: xp_init(3),ran2,Os,m_s
+      real :: xp_init(3),ran2,Os,m_s,pi,radius_dinit
+
+      pi = 4.0*atan(1.0)
 
       my_reintro = nprime*(1./60.)*(10.**6.)*dt*4/numprocs*20.0 !4m^3 (vol chamber)
 
@@ -1509,12 +1511,17 @@ CONTAINS
          !xp_init(3) = ran2(iseed)*zl/2.0
          xp_init(3) = zl/2.0
 
-         Os = 1.0
-         m_s = radius_init**3*pi2*2.0/3.0*rhow*Sal  !Using the salinity specified in params.in
+         ! Set distribution for initial radius
+         radius_dinit = abs(radius_std*sqrt(-2*log(ran2(iseed)))*cos(2*pi*ran2(iseed)) + radius_init)
+
+         ! Set distribution for Os 
+         Os = abs(Os_std * sqrt(-2*log(ran2(iseed)))*cos(2*pi*ran2(iseed)) + Os_init)
+
+         m_s = radius_dinit**3*pi2*2.0/3.0*rhow*Sal  !Using the salinity specified in params.in
          
 
          call create_particle(xp_init,vp_init, &
-              Tp_init,m_s,Os,mult_init,radius_init,ngidx,myid) 
+              Tp_init,m_s,Os,mult_init,radius_dinit,ngidx,myid) 
 
          !Update this processor's global ID for each one created:
          ngidx = ngidx + 1

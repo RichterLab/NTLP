@@ -12107,7 +12107,7 @@ c       Add the current event to the histogram
       namelist /constants/ rhoa, nuf, Cpa, Pra, Sc,
      +         tnumpart,mult_init,rhow,part_grav,rhos,
      +         Cpp,Mw,Ms,Ru,Gam,Ion,Sal,Rd,
-     +         radius_init,
+     +         radius_init,radius_std,Os_init,Os_std,
      +         grav, t00,fcor,zo,
      +         vp_init,Tp_init,nprime
 
