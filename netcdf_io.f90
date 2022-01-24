@@ -1183,4 +1183,83 @@ subroutine write_viz_netcdf_parallel
 
 end subroutine write_viz_netcdf_parallel
 
+subroutine write_histograms
+use particles
+use pars
+use fields
+use con_data
+use con_stats
+implicit none
+
+include 'mpif.h'
+integer :: i,j
+integer :: ierr
+logical :: isfirst
+
+integer :: iblnk
+integer :: num_entries
+
+real :: sumbuf_rad(histbins+2)
+real :: sumbuf_res(histbins+2)
+real :: sumbuf_actres(histbins+2)
+real :: sumbuf_acttodeath(histbins+2)
+real :: sumbuf_numact(histbins+2)
+
+character :: fformat*10, num*3
+
+
+
+! -------------- Collect all histogram from different processors
+
+  num_entries = (histbins+2)
+
+  !Radius PDF
+  sumbuf_rad = hist_rad
+  call mpi_reduce(sumbuf_rad,hist_rad,num_entries,mpi_real8,mpi_sum,0,mpi_comm_world,ierr)
+
+  !Residence time PDF
+  sumbuf_res = hist_res
+  call mpi_reduce(sumbuf_res,hist_res,num_entries,mpi_real8,mpi_sum,0,mpi_comm_world,ierr)
+
+  !Activation residence time PDF
+  sumbuf_actres = hist_actres
+  call mpi_reduce(sumbuf_actres,hist_actres,num_entries,mpi_real8,mpi_sum,0,mpi_comm_world,ierr)
+
+  !Activation residence time until death PDF
+  sumbuf_acttodeath = hist_acttodeath
+  call mpi_reduce(sumbuf_acttodeath,hist_acttodeath,num_entries,mpi_real8,mpi_sum,0,mpi_comm_world,ierr)
+
+  !# of activations PDF
+  sumbuf_numact = hist_numact
+  call mpi_reduce(sumbuf_numact,hist_numact,num_entries,mpi_real8,mpi_sum,0,mpi_comm_world,ierr)
+
+
+  if (myid==0) then
+
+! ---------------- save data 
+
+  if (inetcdf .eq. 1) then
+
+      call write_histog_netcdf
+
+  else
+
+  write(num,'(i3.3)') histbins+2
+  fformat = '('//num//'e15.6)'
+
+  write(nrad,fformat),hist_rad(1:histbins+2)
+  write(nres,fformat),hist_res(1:histbins+2)
+  write(nactres,fformat),hist_actres(1:histbins+2)
+
+  end if
+
+  end if
+
+  hist_res = 0.0  !Reset this one every time it writes
+  hist_actres = 0.0  !Reset this one every time it writes
+  hist_acttodeath = 0.0  !Reset this one every time it writes
+  hist_numact = 0.0  !Reset this one every time it writes
+
+end subroutine write_histograms
+
 end module netcdf_io

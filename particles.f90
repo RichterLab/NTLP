@@ -51,6 +51,10 @@ module particles
   real :: pdf_factor,pdf_prob
   integer*8 :: mult_init,mult_factor,mult_a,mult_c
 
+  real,parameter :: Cvv=1463.0
+  real,parameter :: Cpv = 1952.0
+  real,parameter :: Cva = 717.04
+
   real :: avgres=0,tavgres=0
 
   integer, parameter :: histbins = 512
@@ -535,6 +539,513 @@ CONTAINS
 
   end subroutine fill_extSFS
 
+  subroutine uf_interp
+  use pars
+  use fields
+  use con_stats
+  use con_data
+  implicit none
+       
+  integer :: ix,iy,izuv,izw,iz,i,k,j
+  integer :: first,last
+  real :: xkval,xjval,pj,dxvec(2)
+  integer :: ijpts(2,6),kuvpts(6),kwpts(6)
+  real :: wt(4,6)
+  real :: ran2
+      
+  !get the "leftmost" node
+  !This is just the minimum (i,j,k) on the volume 
+
+  ijpts(1,3) = floor(part%xp(1)/dx) + 1 
+  ijpts(2,3) = floor(part%xp(2)/dy) + 1
+ 
+  !Fill in the neighbors:
+  ijpts(1,2) = ijpts(1,3)-1
+  ijpts(1,1) = ijpts(1,2)-1
+  ijpts(1,4) = ijpts(1,3)+1
+  ijpts(1,5) = ijpts(1,4)+1
+  ijpts(1,6) = ijpts(1,5)+1
+
+  ijpts(2,2) = ijpts(2,3)-1
+  ijpts(2,1) = ijpts(2,2)-1
+  ijpts(2,4) = ijpts(2,3)+1
+  ijpts(2,5) = ijpts(2,4)+1
+  ijpts(2,6) = ijpts(2,5)+1
+ 
+  !Finding the k-lhnode is different since grid may be stretched
+  !AND since (u,v) and w stored differently
+  !Will get a k-index for (u,v) and one for w
+  
+  !Do (u,v) loop first:
+  kuvpts(3) = minloc(zz,1,mask=(zz.gt.part%xp(3))) - 2
+  !Then fill in the rest:
+  kuvpts(4) = kuvpts(3)+1
+  kuvpts(5) = kuvpts(4)+1
+  kuvpts(6) = kuvpts(5)+1
+  kuvpts(2) = kuvpts(3)-1
+  kuvpts(1) = kuvpts(2)-1
+
+
+  kwpts(3) = minloc(z,1,mask=(z.gt.part%xp(3))) - 2
+  !Then fill in the rest:
+  kwpts(4) = kwpts(3)+1
+  kwpts(5) = kwpts(4)+1
+  kwpts(6) = kwpts(5)+1
+  kwpts(2) = kwpts(3)-1
+  kwpts(1) = kwpts(2)-1
+
+  !Fill in the weights:
+  !First for x and y since they are periodic:
+  wt(1:4,1:6) = 0.0
+  dxvec(1) = dx
+  dxvec(2) = dy
+  do iz = 1,2
+  do j = 1,6
+     xjval = dxvec(iz)*(ijpts(iz,j)-1)
+     pj = 1.0
+     do k = 1,6
+        xkval = dxvec(iz)*(ijpts(iz,k)-1)
+        if (j .NE. k) then
+              pj = pj*(part%xp(iz)-xkval)/(xjval-xkval)
+        end if
+     end do
+     wt(iz,j) = pj
+   end do
+   end do
+  
+     
+   !Now compute weights in z-dir
+   !There are 2 sections: weights at (u,v) nodes (kuvpts) 
+   !And weights computed at w nodes (kwpts)
+
+   !Compute weights at kuvpts
+   !Must check to see how close we are to a top/bot boundary
+   if (kuvpts(3) == 1) then
+      first = 3
+      last = 4
+      !Set these equal to 1 so uext(-1) won't be accessed
+      !Note: the value doesn't matter since weight will be 0
+      kuvpts(1) = 1
+      kuvpts(2) = 1
+   elseif (kuvpts(3) == 0) then
+      first = 4
+      last = 5
+      kuvpts(1) = 1
+      kuvpts(2) = 1
+      kuvpts(3) = 1
+   elseif (kuvpts(3) .LT. 0) then 
+      first = 0
+      last = 0
+   elseif (kuvpts(3) == 2) then 
+      first = 2
+      last = 5
+   !Between top cell center and the domain boundary
+   elseif (kuvpts(3) == nnz) then
+      first = 2
+      last = 3
+      kuvpts(4) = nnz
+      kuvpts(5) = nnz
+      kuvpts(6) = nnz
+   elseif (kuvpts(3) .GT. nnz) then
+      first = 0
+      last = 0
+   !Between 2nd to last and last cell center at top
+   elseif (kuvpts(3) == nnz-1) then
+      first = 3
+      last = 4
+      kuvpts(5) = nnz
+      kuvpts(6) = nnz
+   elseif (kuvpts(3) == nnz-2) then
+      first = 2
+      last = 5
+   else
+      first = 1
+      last = 6
+   end if
+
+   !Recall that wt has been set to zero, so
+   !weights will be zero if (first,last) isn't (1,6)
+   do j = first,last
+       xjval = zz(kuvpts(j))
+       pj = 1.0
+       do k = first,last
+          xkval = zz(kuvpts(k))
+          if (j .NE. k) then
+             pj = pj*(part%xp(3)-xkval)/(xjval-xkval)
+          end if
+       end do
+       wt(3,j) = pj
+  end do
+
+   !Now compute weights at kwpts
+   !Again must check to see how close we are to a top/bot boundary
+   if (kwpts(3) == 0) then
+      first = 3
+      last = 4
+      kwpts(1) = 1
+      kwpts(2) = 1
+   elseif (kwpts(3) .LT. 0) then 
+      first = 0
+      last = 0
+      kwpts(1) = 1
+      kwpts(2) = 1
+      kwpts(3) = 1
+   elseif (kwpts(3) == 1) then 
+      first = 2
+      last = 5
+      kwpts(1) = 1
+   elseif (kwpts(3) == nnz-1) then
+      first = 3
+      last = 4
+      kwpts(5) = nnz
+      kwpts(6) = nnz
+   elseif (kwpts(3) .GE. nnz) then
+      first = 0
+      last = 0
+      kwpts(3) = nnz
+      kwpts(4) = nnz
+      kwpts(5) = nnz
+      kwpts(6) = nnz
+   elseif (kwpts(3) == nnz-2) then
+      first = 2
+      last = 5
+      kwpts(6) = nnz
+   else
+      first = 1
+      last = 6
+   end if
+
+   !Recall that wt has been set to zero, so
+   !weights will be zero if (first,last) isn't (1,6)
+   do j = first,last
+       xjval = z(kwpts(j))
+       pj = 1.0
+       do k = first,last
+          xkval = z(kwpts(k))
+          if (j .NE. k) then
+             pj = pj*(part%xp(3)-xkval)/(xjval-xkval)
+          end if
+       end do
+       wt(4,j) = pj
+  end do
+
+  !Now we have the weights - compute the velocity at xp:
+    part%uf(1:3) = 0.0
+    part%Tf = 0.0
+    part%qinf = 0.0
+    do k = 1,6
+    do j = 1,6
+    do i = 1,6
+        ix = ijpts(1,i)
+        iy = ijpts(2,j)
+        izuv = kuvpts(k)
+        izw = kwpts(k)
+
+        part%uf(1) = part%uf(1)+uext(izuv,iy,ix)*wt(1,i)*wt(2,j)*wt(3,k) 
+        part%uf(2) = part%uf(2)+vext(izuv,iy,ix)*wt(1,i)*wt(2,j)*wt(3,k) 
+        part%uf(3) = part%uf(3)+wext(izw,iy,ix)*wt(1,i)*wt(2,j)*wt(4,k) 
+        part%Tf = part%Tf+Text(izuv,iy,ix)*wt(1,i)*wt(2,j)*wt(3,k)
+        part%qinf = part%qinf+T2ext(izuv,iy,ix)*wt(1,i)*wt(2,j)*wt(3,k) 
+     end do
+     end do 
+     end do
+
+  end subroutine uf_interp 
+
+  subroutine uf_interp_lin
+  use pars
+  use fields
+  use con_stats
+  use con_data
+  implicit none
+   
+  integer :: ix,iy,izuv,izw,iz,i,k,j
+  integer :: ipt,jpt,kpt,kwpt
+  real :: wtx,wty,wtz,wtzw,wtt,wttw
+  real :: xv,yv,zv,zwv
+  
+
+  ipt = floor(part%xp(1)/dx) + 1 
+  jpt = floor(part%xp(2)/dy) + 1
+ 
+  !Finding the k-lhnode is different since grid may be stretched
+  !AND since (u,v) and w stored differently
+  !Will get a k-index for (u,v) and one for w
+  
+  kpt = minloc(zz,1,mask=(zz.gt.part%xp(3))) - 2
+  kwpt = minloc(z,1,mask=(z.gt.part%xp(3))) - 2
+
+
+  part%uf(1:3) = 0.0
+  part%Tf = 0.0
+  part%qinf = 0.0
+  do i=0,1
+  do j=0,1
+  do k=0,1
+
+     xv = dx*(i+ipt-1)
+     yv = dy*(j+jpt-1)
+     zv = zz(k+kpt)
+     zwv = z(k+kwpt)
+
+     wtx = (1.0 - abs(part%xp(1)-xv)/dx)
+     wty = (1.0 - abs(part%xp(2)-yv)/dy)
+     wtz = (1.0 - abs(part%xp(3)-zv)/dzu(kpt+1))
+     wtzw = (1.0 - abs(part%xp(3)-zwv)/dzw(kwpt+1))
+
+     ix = ipt+i
+     iy = jpt+i
+     izuv = kpt+k
+     izw = kwpt+k
+
+
+     part%uf(1) = part%uf(1) + uext(izuv,iy,ix)*wtx*wty*wtz
+     part%uf(2) = part%uf(2) + vext(izuv,iy,ix)*wtx*wty*wtz
+     part%uf(3) = part%uf(3) + wext(izw,iy,ix)*wtx*wty*wtzw
+
+     part%Tf = part%Tf + Text(izuv,iy,ix)*wtx*wty*wtz
+     part%qinf = part%qinf + T2ext(izuv,iy,ix)*wtx*wty*wtz
+
+  end do
+
+  !Since the ghost points don't follow the filling of "ext", a quick
+  !fix is to use 0th order interpolation if between last (uv) point
+  !and wall
+  if (kpt .eq. nnz) then
+     part%uf(1) = uext(kpt,iy,ix)
+     part%uf(2) = vext(kpt,iy,ix)
+     part%Tf = Text(kpt,iy,ix)
+     part%qinf = T2ext(kpt,iy,ix)
+  end if
+  if (kpt .eq. 0) then
+     part%uf(1) = uext(1,iy,ix)
+     part%uf(2) = vext(1,iy,ix)
+     part%Tf = Text(1,iy,ix)
+     part%qinf = T2ext(1,iy,ix)
+  end if
+  end do
+  end do
+
+
+  end subroutine uf_interp_lin
+
+  subroutine sigm_interp(sigm_sdxp,sigm_sdyp,sigm_sdzp,vis_sp,iz_part)
+  use pars
+  use fields
+  use con_stats
+  use con_data
+  implicit none
+
+  integer :: ix,iy,izuv,izw,iz,i,k,j
+  integer :: first,last
+  real :: xkval,xjval,pj,dxvec(2)
+  integer :: ijpts(2,6),kuvpts(6),kwpts(6),iz_part
+  real :: wt(4,6)
+  real :: ran2
+  real :: sigm_sdxp,sigm_sdyp,sigm_sdzp,vis_sp
+  !get the "leftmost" node
+  !This is just the minimum (i,j,k) on the volume
+
+  ijpts(1,3) = floor(part%xp(1)/dx) + 1
+  ijpts(2,3) = floor(part%xp(2)/dy) + 1
+
+  !Fill in the neighbors:
+  ijpts(1,2) = ijpts(1,3)-1
+  ijpts(1,1) = ijpts(1,2)-1
+  ijpts(1,4) = ijpts(1,3)+1
+  ijpts(1,5) = ijpts(1,4)+1
+  ijpts(1,6) = ijpts(1,5)+1
+
+  ijpts(2,2) = ijpts(2,3)-1
+  ijpts(2,1) = ijpts(2,2)-1
+  ijpts(2,4) = ijpts(2,3)+1
+  ijpts(2,5) = ijpts(2,4)+1
+  ijpts(2,6) = ijpts(2,5)+1
+
+  !Finding the k-lhnode is different since grid may be stretched
+  !AND since (u,v) and w stored differently
+  !Will get a k-index for (u,v) and one for w
+
+  !Do (u,v) first
+  kuvpts(3) = minloc(zz,1,mask=(zz.gt.part%xp(3))) - 2
+  !Then fill in the rest:
+  kuvpts(4) = kuvpts(3)+1
+  kuvpts(5) = kuvpts(4)+1
+  kuvpts(6) = kuvpts(5)+1
+  kuvpts(2) = kuvpts(3)-1
+  kuvpts(1) = kuvpts(2)-1
+
+  kwpts(3) = minloc(z,1,mask=(z.gt.part%xp(3))) - 2
+  iz_part = kwpts(3)
+  !Then fill in the rest:
+  kwpts(4) = kwpts(3)+1
+  kwpts(5) = kwpts(4)+1
+  kwpts(6) = kwpts(5)+1
+  kwpts(2) = kwpts(3)-1
+  kwpts(1) = kwpts(2)-1
+
+  !Fill in the weights:
+  !First for x and y since they are periodic:
+  wt(1:4,1:6) = 0.0
+  dxvec(1) = dx
+  dxvec(2) = dy
+  do iz = 1,2
+  do j = 1,6
+     xjval = dxvec(iz)*(ijpts(iz,j)-1)
+     pj = 1.0
+     do k = 1,6
+        xkval = dxvec(iz)*(ijpts(iz,k)-1)
+        if (j .NE. k) then
+              pj = pj*(part%xp(iz)-xkval)/(xjval-xkval)
+        end if
+     end do
+     wt(iz,j) = pj
+   end do
+   end do
+   !Compute weights at kuvpts
+   !Must check to see how close we are to a top/bot boundary
+   if (kuvpts(3) == 1) then
+      first = 3
+      last = 4
+      !Set these equal to 1 so uext(-1) won't be accessed
+      !Note: the value doesn't matter since weight will be 0
+      kuvpts(1) = 1
+      kuvpts(2) = 1
+   elseif (kuvpts(3) == 0) then
+      first = 4
+      last = 5
+      kuvpts(1) = 1
+      kuvpts(2) = 1
+      kuvpts(3) = 1
+   elseif (kuvpts(3) .LT. 0) then
+      first = 0
+      last = 0
+   elseif (kuvpts(3) == 2) then
+      first = 2
+      last = 5
+      kuvpts(1) = 1
+      kuvpts(6) = 1
+   !Between top cell center and the domain boundary
+   elseif (kuvpts(3) == nnz) then
+      first = 2
+      last = 3
+      kuvpts(4) = nnz
+      kuvpts(5) = nnz
+      kuvpts(6) = nnz
+   elseif (kuvpts(3) .GT. nnz) then
+      first = 0
+      last = 0
+   !Between 2nd to last and last cell center at top
+   elseif (kuvpts(3) == nnz-1) then
+      first = 3
+      last = 4
+      kuvpts(5) = nnz
+      kuvpts(6) = nnz
+   elseif (kuvpts(3) == nnz-2) then
+      first = 2
+      last = 5
+      kuvpts(1) = nnz
+      kuvpts(6) = nnz
+   else
+      first = 1
+      last = 6
+   end if
+
+   !Recall that wt has been set to zero, so
+   !weights will be zero if (first,last) isn't (1,6)
+   do j = first,last
+       xjval = zz(kuvpts(j))
+       pj = 1.0
+       do k = first,last
+          xkval = zz(kuvpts(k))
+          if (j .NE. k) then
+             pj = pj*(part%xp(3)-xkval)/(xjval-xkval)
+          end if
+       end do
+       wt(3,j) = pj
+  end do
+   !Now compute weights at kwpts
+   !Again must check to see how close we are to a top/bot boundary
+   if (kwpts(3) == 0) then
+      first = 3
+      last = 4
+      kwpts(1) = 1
+      kwpts(2) = 1
+   elseif (kwpts(3) .LT. 0) then
+      first = 0
+      last = 0
+      kwpts(1) = 1
+      kwpts(2) = 1
+      kwpts(3) = 1
+   elseif (kwpts(3) == 1) then
+      first = 2
+      last = 5
+      kwpts(1) = 1
+   elseif (kwpts(3) == nnz-1) then
+      first = 3
+      last = 4
+      kwpts(5) = nnz
+      kwpts(6) = nnz
+   elseif (kwpts(3) .GE. nnz) then
+      first = 0
+      last = 0
+      kwpts(3) = nnz
+      kwpts(4) = nnz
+      kwpts(5) = nnz
+      kwpts(6) = nnz
+   elseif (kwpts(3) == nnz-2) then
+      first = 2
+      last = 5
+      kwpts(6) = nnz
+   else
+      first = 1
+      last = 6
+   end if
+   !Recall that wt has been set to zero, so weights will be zero if (first,last) isn't (1,6)
+   do j = first,last
+       xjval = z(kwpts(j))
+       pj = 1.0
+       do k = first,last
+          xkval = z(kwpts(k))
+          if (j .NE. k) then
+             pj = pj*(part%xp(3)-xkval)/(xjval-xkval)
+          end if
+       end do
+       wt(4,j) = pj
+  end do
+
+  !Now we have the weights - compute the sigma_s and derivatives at xp:
+  part%sigm_s = 0.0
+  sigm_sdxp = 0.0
+  sigm_sdyp = 0.0
+  sigm_sdzp = 0.0
+  vis_sp = 0.0
+  do k = 1,6
+  do j = 1,6
+  do i = 1,6
+      ix = ijpts(1,i)
+      iy = ijpts(2,j)
+      izuv = kuvpts(k)
+      izw = kwpts(k)
+      part%sigm_s = part%sigm_s+sigm_sext(izw,iy,ix)*wt(1,i)*wt(2,j)*wt(4,k)
+      sigm_sdxp = sigm_sdxp+ sigm_sdxext(izw,iy,ix)*wt(1,i)*wt(2,j)*wt(4,k)
+      sigm_sdyp = sigm_sdyp+sigm_sdyext(izw,iy,ix)*wt(1,i)*wt(2,j)*wt(4,k)
+      sigm_sdzp = sigm_sdzp+sigm_sdzext(izuv,iy,ix)*wt(1,i)*wt(2,j)*wt(3,k)
+
+      vis_sp =vis_sp +vis_sext(izw,iy,ix)*wt(1,i)*wt(2,j)*wt(4,k)
+
+  if (isnan(vis_sp)) then
+        write(*,*) 'WARNING:',vis_sext(izw,iy,ix),wt(1,i),wt(2,j),wt(4,k),part%xp(3),i,j,k,kwpts(3)
+  end if
+
+
+  end do
+  end do
+  end do
+
+
+  end subroutine sigm_interp
+
   subroutine particle_coupling_exchange
       use pars
       use con_data
@@ -588,6 +1099,114 @@ CONTAINS
 
 
   end subroutine particle_coupling_exchange
+
+  subroutine particle_coupling_update
+  use pars
+  use con_data
+  use con_stats
+  implicit none
+  include 'mpif.h'
+  real :: wtx,wty,wtz,wtt,dV
+  real :: rhop,taup_i,partmass
+  real :: xv,yv,zv
+  real :: ctbuf_s(nnz+2,1:iye-iys+2,6),cbbuf_r(nnz+2,1:iye-iys+2,6)
+  real :: crbuf_s(nnz+2,1:mxe-mxs+1,6),clbuf_r(nnz+2,1:mxe-mxs+1,6)
+  integer :: i,j,k,ncount,ipt,jpt,kpt,kwpt
+  integer :: istatus(mpi_status_size),ierr
+  integer :: ix,iy,iz
+
+  partsrc_t = 0.0
+  partTsrc_t = 0.0
+  partHsrc_t = 0.0
+  partTEsrc_t = 0.0
+
+
+  part => first_particle
+  do while (associated(part))
+
+  !First, as done in uf_interp, must find the "leftmost" node
+  !of volume where particle belongs:
+  !(must repeat since now particle locations have been updated)
+ 
+  ipt = floor(part%xp(1)/dx) + 1
+  jpt = floor(part%xp(2)/dy) + 1
+  kpt = minloc(zz,1,mask=(zz.gt.part%xp(3))) - 2
+  kwpt = minloc(z,1,mask=(z.gt.part%xp(3))) - 1
+
+
+  !Add contribution to each of the 8 surrounding nodes:
+  do i=0,1
+  do j=0,1
+  do k=0,1
+
+     xv = dx*(i+ipt-1)
+     yv = dy*(j+jpt-1)
+     zv = zz(k+kpt)
+
+     dV = dx*dy*dzu(kpt+1)
+
+     wtx = (1.0 - abs(part%xp(1)-xv)/dx)
+     wty = (1.0 - abs(part%xp(2)-yv)/dy)
+     wtz = (1.0 - abs(part%xp(3)-zv)/dzu(kpt+1))
+     wtt = wtx*wty*wtz
+
+     rhop = (part%m_s+pi2*2.0/3.0*part%radius**3*rhow)/(pi2*2.0/3.0*part%radius**3)
+     partmass = rhop*2.0/3.0*pi2*(part%radius)**3
+     taup_i = 18.0*rhoa*nuf/rhop/(2.0*part%radius)**2 !Brian 8/4/14
+
+     ix = ipt+i
+     iy = jpt+j
+     iz = kpt+k
+
+     if (ix .gt. mxe+1) write(*,*) 'proc',myid,'has ix = ',ix
+     if (ix .lt. mxs) write(*,*) 'proc',myid,'has ix = ',ix
+     if (iy .gt. iye+1) write(*,*) 'proc',myid,'has iy = ',iy
+     if (iy .lt. iys) write(*,*) 'proc',myid,'has iy = ',iy
+     if (iz .gt. nnz+1) write(*,*) 'proc',myid,'has iz = ',iz
+     if (iz .lt. 0) then
+         write(*,*) 'proc',myid,'has iz = ',iz
+         write(*,*) 'DHR:',part%radius,part%xp(3),part%mult,part%vp(3)
+     end if
+
+     !Recall to subtract g since momentum is extracted form
+     !fluid only through drag term - NOT the gravity term as well
+
+     if (icouple == 1) then
+
+      !drag momentum coupling
+      partsrc_t(iz,iy,ix,1:3) = &
+          partsrc_t(iz,iy,ix,1:3) - partmass/rhoa*(part%vrhs(1:3)-part_grav(1:3))*wtt/dV*real(part%mult)
+
+      !vapor momentum coupling
+      partsrc_t(iz,iy,ix,1:3) = &
+          partsrc_t(iz,iy,ix,1:3) - rhow/rhoa*pi2*2*part%radius**2*part%radrhs*part%vp(1:3)*wtt/dV*real(part%mult)
+     endif
+
+     if (iTcouple == 1) then
+      partTsrc_t(iz,iy,ix) = &
+          partTsrc_t(iz,iy,ix) - (part%Tprhs_s*6.0*rhow/rhop/CpaCpp/taup_i*(pi2/2.0)*part%radius*nuf)*wtt/dV*real(part%mult)
+     endif
+
+     if (iHcouple == 1) then
+      partHsrc_t(iz,iy,ix) = &
+          partHsrc_t(iz,iy,ix) - rhow/rhoa*pi2*2*part%radius**2*part%radrhs*wtt/dV*real(part%mult)
+
+
+      partTEsrc_t(iz,iy,ix) = &
+          partTEsrc_t(iz,iy,ix) - rhow/rhoa*pi2*2*part%radius**2*part%radrhs*Cpv/Cpa*part%Tp*wtt/dV*real(part%mult) - &
+              rhow/rhoa*pi2*2*part%radius**2*part%radrhs*Cpv/Cpa*part%Tf*wtt/dV*real(part%mult)
+
+     endif
+
+
+     end do
+     end do
+     end do
+
+     part => part%next
+  end do
+
+  end subroutine particle_coupling_update
 
   subroutine assign_nbrs
         use pars
@@ -3480,7 +4099,415 @@ CONTAINS
   call mpi_allreduce(numpart,tnumpart,1,mpi_integer,mpi_sum,mpi_comm_world,ierr)
 
   end subroutine SFS_velocity
+
+  subroutine SFS_position
+  !Use a more simplistic SFS treatment: Stochastic particle position rather than velocity
+  !Designed to be consistent with LES subgrid eddy diffusivity
+  !Does not use Weil et al. 2004 formulation at all
+  use pars
+  use fields
+  use fftwk
+  use con_data
+  use con_stats
+  implicit none
+  include 'mpif.h'
+
+  real :: sigm_sdxp,sigm_sdyp,sigm_sdzp,vis_sp
+  real :: phim,phis,psim,psis,zeta
+  real :: dadz,gasdev
+  real :: xp3i
+  integer :: ix,iy,iz,izp1,izm1,ind,iz_part,ierr
+  integer :: fluxloc,fluxloci
+
+    sigm_s = 0.0
+    pfluxdiff = 0.0
+
+!       ------------------
+!       compute sigma squre (sigm_s) based on subgrid energy field
+!       -----------------       
+    do iz =izs,ize
+    izp1 = iz+1
+    izm1 = iz-1
+    do ix =1,nnx
+    do iy = iys,iye
+       sigm_s(ix,iy,iz) = 2.0*e(ix,iy,iz)/3.0
+       vis_ss(ix,iy,iz) = vis_s(ix,iy,1,iz)
+    end do
+    end do
+    end do
+
+    call fill_extSFS
+
+    !Loop over the linked list of particles:
+    part => first_particle
+    do while (associated(part))
+
+      ! interpolate sigm_s and its derivative at particle location
+      call sigm_interp(sigm_sdxp,sigm_sdyp,sigm_sdzp,vis_sp,iz_part)
+
+      !Need vertical derivative of average vis_s:
+      !Crude approximation: 0th order interpolation -- simply take
+      !d(alphaC)/dz of the w-points surrounding the particle location
+      if (part%xp(3) .lt. zw1) then
+         !Beneath 1st zw point, use MO to approximate dadz:
+         zeta = part%xp(3)/amonin
+         call fzol(zeta,phim,phis,psim,psis)
+         dadz = utau*vk/phis
+      else
+         !Assuming diffusivity of temperature
+         dadz = (alphaC(iz_part+1,1)-alphaC(iz_part,1))*dzw_i(iz)
+      end if
+
+      xp3i = part%xp(3)
+
+      !Now simply solve Langevin equation:
+      part%xp(1) = part%xp(1) + gasdev(iseed)*sqrt(2.0*abs(vis_sp)*dt)
+      part%xp(2) = part%xp(2) + gasdev(iseed)*sqrt(2.0*abs(vis_sp)*dt)
+      part%xp(3) = part%xp(3) + gasdev(iseed)*sqrt(2.0*abs(vis_sp)*dt) + dadz*dt
+
+
+      !Store the particle flux now that we have the new position
+      if (part%xp(3) .gt. zl) then   !This will get treated in particle_bcs_nonperiodic, but record here
+         fluxloc = nnz+1
+         fluxloci = minloc(z,1,mask=(z.gt.xp3i))-1
+      elseif (part%xp(3) .lt. 0.0) then !This will get treated in particle_bcs_nonperiodic, but record here
+         fluxloci = minloc(z,1,mask=(z.gt.xp3i))-1
+         fluxloc = 0
+      else
+
+      fluxloc = minloc(z,1,mask=(z.gt.part%xp(3)))-1
+      fluxloci = minloc(z,1,mask=(z.gt.xp3i))-1
+
+      end if  !Only apply flux calc to particles in domain
+
+      if (xp3i .lt. part%xp(3)) then !Particle moved up
+
+      do iz=fluxloci,fluxloc-1
+         pfluxdiff(iz) = pfluxdiff(iz) + part%mult
+      end do
+
+      elseif (xp3i .gt. part%xp(3)) then !Particle moved down
+
+      do iz=fluxloc,fluxloci-1
+         pfluxdiff(iz) = pfluxdiff(iz) - part%mult
+      end do
+
+      end if  !Up/down conditional statement
+
+
+  part => part%next
+  end do
+
+  call particle_bcs_nonperiodic
+  call particle_exchange
+  call particle_bcs_periodic
+
+  numpart = 0
+  part => first_particle
+  do while (associated(part))
+     numpart = numpart + 1
+    part => part%next
+  end do
+
+  !Compute total number of particles
+  call mpi_allreduce(numpart,tnumpart,1,mpi_integer,mpi_sum,mpi_comm_world,ierr)
+
+
+  end subroutine SFS_position
+
+  subroutine particle_neighbor_search_kd
+  use pars
+  use kd_tree
+  implicit none 
+
+  type(particle), pointer :: part_tmp
+  type(tree_master_record), pointer :: tree
+
+  real, allocatable :: xp_data(:,:),distances(:)
+  integer, allocatable :: index_data(:,:),indexes(:)
+
+  integer :: i,nq,idx_check,idx_diff
+  real :: qv(3),dist_check,dist_tmp,xdist,ydist,zdist,dist_diff
+
+  !For whatever reason, the kd-search sometimes misses edge cases if
+  !nq = 2. nq = 3 fixes it
+  nq = 3
+
+  allocate(xp_data(numpart,3),index_data(numpart,2))
+  allocate(distances(nq),indexes(nq))
+
+  !Loop over particles and fill arrays
+  i = 1
+  part_tmp => first_particle
+  do while (associated(part_tmp))
+
+     xp_data(i,1:3) = part_tmp%xp(1:3) 
+     index_data(i,1) = part_tmp%pidx
+     index_data(i,2) = part_tmp%procidx
+
+     i = i+1   
+     part_tmp => part_tmp%next
+  end do
+
+  !Build the kd-tree
+  tree => create_tree(xp_data) 
+
+  !Do the search for each of the particles
+  part_tmp => first_particle
+  do i=1,numpart
+
+     qv(1:3) = xp_data(i,1:3)
+     call n_nearest_to(tree,qv,nq,indexes,distances)
+     !call n_nearest_to_brute_force(tree,qv,nq,indexes,distances)
+
+     !Go back through and assign the shortest distance and index
+     !NOTE: Must use 2nd one since it finds itself as nearest neighbor
+     part_tmp%dist = sqrt(distances(2))
+     part_tmp%nbr_pidx = index_data(indexes(2),1)
+     part_tmp%nbr_procidx = index_data(indexes(2),2)
+
+     !if (myid==0) write(*,*) 'dist = ',part_tmp%dist
+     !if (myid==0) write(*,*) 'index = ',part_tmp%pidx
+
+     part_tmp => part_tmp%next
+  end do
+
+
+  !Do a check on the first particle in the array that a brute force
+  !search finds the same particle and distance
+  dist_check = 1.0e6
+  part_tmp => first_particle%next
+  do while (associated(part_tmp))
+
+        xdist = first_particle%xp(1) - part_tmp%xp(1)
+        ydist = first_particle%xp(2) - part_tmp%xp(2)
+        zdist = first_particle%xp(3) - part_tmp%xp(3)
+
+        dist_tmp = sqrt(xdist**2 + ydist**2 + zdist**2)
+
+     if (dist_tmp .lt. dist_check) then
+        dist_check = dist_tmp
+        idx_check = part_tmp%pidx
+      end if
+
+     part_tmp => part_tmp%next
+  end do
+
+  idx_diff = idx_check-first_particle%nbr_pidx
+  dist_diff = abs(dist_check - first_particle%dist)
+  if (idx_diff .ne. 0) then
+     write(*,'(a30,3i)') 'WARNING in neighbor,idx:',idx_check,first_particle%nbr_pidx,myid
+  end if
+  if (dist_diff .gt. 1.0e-8) then
+     write(*,'(a30,2e15.6,i)') 'WARNING in neighbor,dist:',dist_check,first_particle%dist,myid
+  end if
+
+  deallocate(xp_data,index_data)
+
+
+  end subroutine particle_neighbor_search_kd
+
+  subroutine particle_neighbor_search_brute
+  use pars
+  implicit none 
+
+  type(particle), pointer :: part_ref,part_query
+  real :: dist_tmp,xdist,ydist,zdist,distance
+  integer :: nbr_pidx,nbr_procidx,ip
+
   
+  !Loop over the points that need to perform search
+  part_query => first_particle
+  do while (associated(part_query))
+
+
+     distance = 1.0e6
+     ip = 1
+     !Loop over points to be searched
+     part_ref => first_particle
+     do while (associated(part_ref))
+
+        xdist = part_query%xp(1) - part_ref%xp(1)
+        ydist = part_query%xp(2) - part_ref%xp(2)
+        zdist = part_query%xp(3) - part_ref%xp(3)
+
+        dist_tmp = sqrt(xdist**2 + ydist**2 + zdist**2)
+
+
+        !Record distance and ID of nearest particle
+        if (dist_tmp .lt. part_query%dist) then
+           distance = dist_tmp
+           nbr_pidx = part_ref%pidx
+           nbr_procidx = part_ref%procidx
+        end if
+
+     ip = ip + 1
+     part_ref => part_ref%next
+     end do
+
+     part_query%dist = distance
+     part_query%nbr_pidx = nbr_pidx
+     part_query%nbr_procidx = nbr_procidx
+     
+
+     part_query => part_query%next
+  end do
+
+
+  end subroutine particle_neighbor_search_brute
+
+
+  subroutine set_binsdata(binsdata,sizea,rmin,rmax)
+  use pars
+  use fields
+  use con_data
+  use con_stats
+  implicit none
+
+  integer :: i,nbin,ibin,nbinnew
+  real :: dh
+
+  integer,intent(in) :: sizea
+  real,intent(inout) :: binsdata(sizea)
+
+  real :: rmin,rmax,rmin10,rmax10
+
+    nbin = histbins !From Module Particle 
+
+    rmin10 = log10(rmin)
+    rmax10 = log10(rmax)
+
+!       Calculate size of interval
+    dh = (rmax10-rmin10)/(nbin-1)
+
+!       ===== update x-axis for each bin ===== 
+    binsdata(1) = rmin10-dh
+    do i = 1,histbins+1
+      binsdata(i+1)= dh+binsdata(i)
+    end do
+
+
+  end subroutine set_binsdata
+
+  subroutine set_binsdata_integer(binsdata,sizea,rmin)
+  use pars
+  use fields
+  use con_data
+  use con_stats
+  implicit none
+
+  integer :: i,nbin,ibin,nbinnew
+  real :: dh
+
+  integer,intent(in) :: sizea
+  real,intent(inout) :: binsdata(sizea)
+
+  real :: rmin
+
+    nbin = histbins !From Module Particle 
+
+!       Calculate size of interval
+    dh = 1.0
+
+!       ===== update x-axis for each bin ===== 
+    binsdata(1) = rmin-dh
+    do i = 1,histbins+1
+      binsdata(i+1)= dh+binsdata(i)
+    end do
+
+
+  end subroutine set_binsdata_integer
+
+  subroutine add_histogram(binsdata,histdata,sizea,val1,mult)
+
+  use pars
+  use fields
+  use con_data
+  use con_stats
+  implicit none
+
+  integer :: i,nbin,nbinnew,ibin
+  integer*8, intent(in) :: mult
+  real :: dh
+  real,intent(in) :: val1
+
+  integer,intent(in) :: sizea
+  real,intent(in) :: binsdata(sizea)
+  real,intent(inout) :: histdata(sizea)
+
+  real :: rmin,rmax,logval1
+
+    rmin = binsdata(2)
+    nbin = histbins !From Module Particle 
+    rmax = binsdata(nbin+1)
+
+!       Calculate size of interval
+    dh = (rmax-rmin)/(nbin-1)
+
+    logval1 = log10(val1)
+    if (logval1 .gt. rmax+0.5*dh) then
+            ibin = nbin + 2
+    elseif (logval1 .lt. rmin-0.5*dh) then
+            ibin = 1
+    else
+            ibin = (floor((logval1-(rmin-0.5*dh))/dh)+1)+1
+    end if
+
+!       Add the current event to the histogram
+    histdata(ibin) = histdata(ibin) + dble(mult)
+
+  end subroutine add_histogram
+
+  subroutine add_histogram_integer(binsdata,histdata,sizea,val)
+
+  use pars
+  use fields
+  use con_data
+  use con_stats
+  implicit none
+
+  integer :: i,nbin,nbinnew,ibin
+  real :: dh
+  real,intent(in) :: val
+
+  integer,intent(in) :: sizea
+  real,intent(in) :: binsdata(sizea)
+  real,intent(inout) :: histdata(sizea)
+
+  real :: rmin,rmax
+
+    rmin = binsdata(2)
+    nbin = histbins !From Module Particle 
+    rmax = binsdata(nbin+1)
+
+!       Calculate size of interval
+    dh = (rmax-rmin)/(nbin-1)
+
+    if (val .gt. rmax+0.5*dh) then
+            ibin = nbin + 2
+    elseif (val .lt. rmin-0.5*dh) then
+            ibin = 1
+    else
+            ibin = (floor((val-(rmin-0.5*dh))/dh)+1)+1
+    end if
+
+
+!       Add the current event to the histogram
+    histdata(ibin) = histdata(ibin) + 1.0
+
+  end subroutine add_histogram_integer
+
+  subroutine radius_histogram
+  implicit none
+
+  hist_rad = 0.0
+  part => first_particle
+  do while (associated(part))
+     call add_histogram(bins_rad,hist_rad,histbins+2,part%radius,part%mult)
+     part => part%next
+  end do
+
+  end subroutine radius_histogram
 
   function mod_Magnus(T)
     implicit none
