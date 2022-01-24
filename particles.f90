@@ -2137,7 +2137,8 @@ CONTAINS
 
       xv = ran2(iseed)*(xmax-xmin) + xmin
       yv = ran2(iseed)*(ymax-ymin) + ymin
-      zv = ran2(iseed)*(zmax-zmin) + zmin
+      !zv = ran2(iseed)*(zmax-zmin) + zmin
+      zv = zl/2.0   !Midplane of the Pi Chamber domain
       xp_init = (/xv,yv,zv/) 
 
       ! Set distribution for initial radius
