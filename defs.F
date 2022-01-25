@@ -141,7 +141,7 @@ c     ----------------------------------------------------------------------
      +     time, zody, zody74,
      +     utau, wtsfc(nscl),
      +     uwsfc, vwsfc, amonin,
-     +     zol, hol, smal_e, sml_eg
+     +     zol, hol, smal_e, sml_eg, u10
       end type con_d
       type(con_d), target :: c_c
       real, pointer ::
@@ -154,7 +154,7 @@ c     ----------------------------------------------------------------------
      +     time, zody, zody74,
      +     utau, wtsfc(:), 
      +     uwsfc, vwsfc, amonin,
-     +     zol, hol, smal_e, sml_eg
+     +     zol, hol, smal_e, sml_eg, u10
       contains
       subroutine fill_cc
 c     
@@ -199,6 +199,7 @@ c
       hol    => c_c%hol
       smal_e => c_c%smal_e
       sml_eg => c_c%sml_eg
+      u10   => c_c%u10
       return
       end subroutine fill_cc
       end module con_data

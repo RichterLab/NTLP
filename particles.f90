@@ -2019,16 +2019,32 @@ CONTAINS
       integer :: it
       integer :: ierr,randproc,np,my_reintro
       real :: xp_init(3),ran2,Os,m_s,pi,radius_dinit
+      real :: totdrops
 
       pi = 4.0*atan(1.0)
 
-      my_reintro = nprime*(1./60.)*(10.**6.)*dt*4/numprocs*20.0 !4m^3 (vol chamber)
+      !!Sea spray, given by Andreas SSGF 98
+      !call andreas_dist_num(totdrops) ! drops per m^2 per s based on Andreas 98      
+      
+      !num_reintro = xl*yl*dt*200.0*totdrops/(numprocs*mult_init)
+      !tot_reintro = 0
+      
+      !if (mod(it,200)==0) then
 
+      !tot_reintro = my_reintro*numprocs
+
+
+      !!Pi Chamber, given by constant injection rate (nprime)
+      my_reintro = nprime*(1./60.)*(10.**6.)*dt*4/numprocs*20.0 !4m^3 (vol chamber)
       tot_reintro = 0
 
       if (mod(it, 20)==0) then
 
       tot_reintro = my_reintro*numprocs
+
+
+
+
 
       if (myid==0) write(*,*) 'time,tot_reintro:',time,tot_reintro
 
@@ -2204,7 +2220,7 @@ CONTAINS
 
 
 
-   elseif (inewpart==4) then  !Crude approxmation of sea spray
+   elseif (inewpart==4) then  !Sea spray, from Andreas 98
 
       
          m_s = rad_init**3*pi2*2.0/3.0*rhow*Sal  !Using the salinity specified in params.in
@@ -2215,6 +2231,11 @@ CONTAINS
          xp_init(2) = ran2(iseed)*(ymax-ymin) + ymin
          xp_init(3) = ran2(iseed)*zw1
 
+         call andreas_dist(rad_init)
+
+         m_s = rad_init**3*pi2*2.0/3.0*rhow*Sal  !Using the salinity specified in params.in
+
+         vp_init(3) = ran2(iseed)*4.0
 
          call create_particle(xp_init,vp_init,Tp_init,m_s,Os_init,mult_init,rad_init,ngidx,myid) 
       
@@ -2286,6 +2307,166 @@ CONTAINS
   rad_init = (q + (q**2 - p**6)**(0.5))**(1./3.) + (q - (q**2-p**6)**(0.5))**(1./3.) + p
 
   end subroutine lognormal_dist
+
+  subroutine andreas_dist(rad_init)
+  use pars
+  use fields
+  use con_data
+  implicit none
+  include 'mpif.h'
+
+  real, intent(inout) :: rad_init
+  real :: ran2,cdf_func,prob
+  real :: M_a,S_a,M_c,S_c,totarea
+  real :: daerosol,totdrops
+  real :: c1,c2,c3,u14,cdn10,a
+  real :: a1,a2,r80,r0,dh,binsdata(100)
+  real :: dFssum(101)
+  real :: dFsdr80(100),dFmsdr0(100),dr80_dr0
+  integer :: iter,i,nbin,num_create,j
+
+  ! implementing the Andreas 1998 sea spray generation function
+  !Set the parameters of the two lognormals:
+  real :: rmin,rmax,rmin10,rmax10
+
+    rmin10 = log10(2e-06)
+    rmax10 = log10(500e-06)
+    ! Testing to see if u10 is the problem
+    !u10 = 15.0
+!   Calculate size of interval
+    dh = 0.0242
+
+!   ===== update x-axis for each bin =====
+    binsdata(1) = rmin10
+    do i = 1,99
+      binsdata(i+1)= dh+binsdata(i)
+    end do
+
+    binsdata = 1e6*(10**binsdata)
+
+    ! Now figure out how many particles are produced in each of
+    ! those bins. This is a function of u10
+
+    c1 = 10*smithssgf(u10,10.0,0.4)
+    c2 = c1*(37.5**1.8)
+    c3 = c2*(100**5.2)
+    dFssum(1) = 0
+    do i = 1,100
+       r0 = binsdata(i)
+       !calculate radius at 80%RH
+       r80 = 0.518*r0**0.976;
+
+      !now apply these to Eqs. 3.5 in Andreas 1998
+       if (r80 .lt. 10) then
+         dFsdr80(i) =  smithssgf(u10,r80,0.4)
+       elseif ((r80 .ge. 10) .and. (r80 .lt. 37.5)) then
+         dFsdr80(i) = c1/r80
+       elseif ((r80 .ge. 37.5) .and. (r80 .lt. 100)) then
+         dFSdr80(i) = c2*r80**-2.8
+       elseif ((r80 .ge. 100) .and. (r80 .lt. 250)) then
+         dFsdr80(i) = c3*r80**-8
+       endif
+
+      !apply eq. 3.8 from Andreas 1998
+      dFmsdr0(i) = 3.5*dFsdr80(i)*0.506*r0**-0.024
+
+      if (i==1) then
+        dFssum(i+1) = dFmsdr0(i)
+      elseif (i .gt. 1) then
+        dFssum(i+1) = dFssum(i) + dFmsdr0(i)
+      endif
+
+    end do
+
+
+    totdrops = dFssum(101)
+    a = totdrops*ran2(iseed)
+
+    do i = 1,100
+       if ((a .gt. dFssum(i)) .and. (a .le. dFssum(i+1))) then
+          rad_init = binsdata(i) + ran2(iseed)*(binsdata(i+1)-binsdata(i))
+       endif
+    enddo
+
+    rad_init = 1e-6*rad_init
+
+  end subroutine andreas_dist
+
+  subroutine andreas_dist_num(totdrops)
+  use pars
+  use fields
+  use con_data
+  implicit none
+  include 'mpif.h'
+
+  real, intent(inout) :: totdrops
+  real :: ran2,cdf_func,prob
+  real :: M_a,S_a,M_c,S_c,totarea
+  real :: daerosol
+  real :: c1,c2,c3,u14,cdn10,a
+  real :: a1,a2,r80,r0,dh,binsdata(100)
+  real :: dFssum(101)
+  real :: dFsdr80(100),dFmsdr0(100),dr80_dr0
+  integer :: iter,i,nbin,num_create,j
+
+  !implementing the Andreas 1998 sea spray generation function
+  !Set the parameters of the two lognormals:
+  real :: rmin,rmax,rmin10,rmax10
+
+    rmin10 = log10(2e-06)
+    rmax10 = log10(500e-06)
+    ! Testing to see if u10 is the problem
+    !u10 = 15.0
+!   Calculate size of interval
+    dh = 0.0242
+
+!   ===== update x-axis for each bin =====
+    binsdata(1) = rmin10
+    do i = 1,99
+      binsdata(i+1)= dh+binsdata(i)
+    end do
+
+    binsdata = 1e6*(10**binsdata)
+
+    ! Now figure out how many particles are produced in each of
+    ! those bins. This is a function of u10
+
+    c1 = 10*smithssgf(u10,10.0,0.4)
+    c2 = c1*(37.5**1.8)
+    c3 = c2*(100**5.2)
+    dFssum(1) = 0
+    do i = 1,100
+     r0 = binsdata(i)
+     ! calculate radius at 80%RH
+     r80 = 0.518*r0**0.976;
+
+  ! now apply these to Eqs. 3.5 in Andreas 1998
+     if (r80 .lt. 10) then
+       dFsdr80(i) =  smithssgf(u10,r80,0.4)
+     elseif ((r80 .ge. 10) .and. (r80 .lt. 37.5)) then
+       dFsdr80(i) = c1/r80
+     elseif ((r80 .ge. 37.5) .and. (r80 .lt. 100)) then
+       dFSdr80(i) = c2*r80**-2.8
+     elseif ((r80 .ge. 100) .and. (r80 .lt. 250)) then
+       dFsdr80(i) = c3*r80**-8
+     endif
+
+    ! apply eq. 3.8 from Andreas 1998
+    dFmsdr0(i) = 3.5*dFsdr80(i)*0.506*r0**-0.024
+
+    if (i==1) then
+      dFssum(i+1) = dFmsdr0(i)
+    elseif (i .gt. 1) then
+      dFssum(i+1) = dFssum(i) + dFmsdr0(i)
+    endif
+
+  end do
+
+
+  totdrops = dFssum(101)
+
+  end subroutine andreas_dist_num
+
 
   subroutine particle_bcs_nonperiodic
   use con_stats
@@ -4556,6 +4737,33 @@ CONTAINS
 
 
   end function crit_radius
+
+  function smithssgf(u10,r80,vk)
+  implicit none
+  real :: u10,r80,cdn10,vk,u14
+  real :: a1,a2,smithssgf
+
+
+  ! added SEA93 function
+  if (u10 .ge. 4 .and. u10 .lt. 11) then
+     cdn10 = 1.2e-3
+  elseif (u10 .ge. 11) then
+     cdn10 = 1e-3*(0.49 + 0.065*u10)
+  end if
+
+  ! calculate 14 m wind speed
+  u14 = u10*(1 + (sqrt(cdn10)/vk)*alog(14.0/10.0))
+
+  a1 = 10**(0.0676*u14 + 2.43)
+  a2 = 10**(0.959*sqrt(u14) - 1.476)
+
+  !print*,'tdf',u10,u14,cdn10,a1,a2
+
+  ! calcaulate dFs/dr80 (Eq. A1 in Andreas 1998)
+  smithssgf = a1*exp(-3.1*(alog(r80/2.1))**2) + a2*exp(-3.3*(alog(r80/9.2))**2)
+
+  end function smithssgf
+
 
 
 end module particles

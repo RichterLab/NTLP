@@ -2942,6 +2942,7 @@ c
       use con_stats
       use particles
       real sfc_flx(2+nscl)
+      real upars(2)
 c
 
 
@@ -3044,6 +3045,14 @@ c
 c     write(nprt,2345) uwsfc, vwsfc, wtsfc(nscl), tsfcc(nscl)
  2345 format(' in lower 2345 uwsfc = ',e15.6,' vwsfc = ',e15.6,
      +       ' wtsfc = ',e15.6,' tsfcc = ',e15.6)
+
+      upars(1) = utau
+      upars(2) = u10
+      call mpi_sum_xy(upars,myid,iss,ise,2)
+      u10 = upars(2)/(ise-iss+1)
+
+      call mpi_bcast(u10,1,mpi_real8,
+     +              iss,mpi_comm_world,ierr)
 
 c
       do iy=iys,iye
@@ -4845,11 +4854,11 @@ c
           t10xy(1)  = 0.0
 
           !tsfcc(1)  = t1xy(1)
-          !  dnom = zody*vk74in
-          !  thstar(1) = (t1xy(1) - tsfcc(1))/dnom
-          !  t10xy(1)  = thstar(1)*dnom
-          !  qstar(1)  = -utau*thstar(1)
-          !  write(*,*) 'DHR INSIDE',thstar(1),t10xy(1),qstar(1)
+          dnom = zody*vk74in
+          thstar(1) = (t1xy(1) - tsfcc(1))/dnom
+          t10xy(1)  = thstar(1)*dnom
+          qstar(1)  = -utau*thstar(1)
+          u10       = utau/vk*(alog(10.0/zo))
       else
          utau = windm*vk/(zody-psim)
          dnom = (zody-psis)*vk74in
@@ -4864,6 +4873,12 @@ c
          endif
          amonin = -utau**3/(batagk*qstar(1))
          zeta   = z1/amonin
+         if (ismlt .eq. 1) then
+            call busngr(zeta,phim,phis,psim,psis)
+         else
+            call fzol(zeta,phim,phis,psim,psis)
+         endif
+         u10 = utau/vk*(alog(10.0/zo) - psim)
       endif
 c
 c ------- surface details, for debug
