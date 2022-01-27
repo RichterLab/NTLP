@@ -186,10 +186,10 @@ c
       !if (myid==0) write(*,*), 'time,denum',time,tdenum
       end if
 
-      if ( (nnz/2 .le. ize) .and. (nnz/2 .ge. izs)) then
-         write(*,'(a7,i,3e15.6)') 'T,q:',myid,time,
-     +   t(nnx/2,iys,1,nnz/2),t(nnx/2,iys,2,nnz/2)
-      end if
+!      if ( (nnz/2 .le. ize) .and. (nnz/2 .ge. izs)) then
+!         write(*,'(a7,i,3e15.6)') 'T,q:',myid,time,
+!     +   t(nnx/2,iys,1,nnz/2),t(nnx/2,iys,2,nnz/2)
+!      end if
 
 
       if(it .ge. new_vis .and. ivis0 .eq. 1) then
@@ -240,6 +240,7 @@ c
          end if
       endif
       call bcast_pbc
+      call bcast_lbc
       call get_means(istage)
       if(ivis .eq. 1) then
          call iso(it)
@@ -3047,19 +3048,10 @@ c
       vwsfc = sfc_flx(2)*fnxy
       do iscl=1,nscl
          wtsfc(iscl) = sfc_flx(2+iscl)*fnxy
+!      write(nprt,2345) uwsfc, vwsfc, wtsfc(iscl), tsfcc(iscl)
+! 2345 format(' in lower 2345 uwsfc = ',e15.6,' vwsfc = ',e15.6,
+!     +       ' wtsfc = ',e15.6,' tsfcc = ',e15.6)
       enddo
-c     write(nprt,2345) uwsfc, vwsfc, wtsfc(nscl), tsfcc(nscl)
- 2345 format(' in lower 2345 uwsfc = ',e15.6,' vwsfc = ',e15.6,
-     +       ' wtsfc = ',e15.6,' tsfcc = ',e15.6)
-
-      upars(1) = utau
-      upars(2) = u10
-      call mpi_sum_xy(upars,myid,iss,ise,2)
-      u10 = upars(2)/(ise-iss+1)
-
-      call mpi_bcast(u10,1,mpi_real8,
-     +              iss,mpi_comm_world,ierr)
-
 c
       do iy=iys,iye
       do ix=1,nnx
@@ -5006,6 +4998,7 @@ c
       do iscl = 1,nscl
       aut3m(iscl)  =  qstar(iscl)
       end do
+
 c
       return
 c
@@ -5434,8 +5427,9 @@ c
          enddo
       else
         !call vgrid(zw1,zi,zl,nnz,z(0),l_root,l_debug)
-        call vgrid_channel(zw1,zi,zl,nnz,z(0),l_root,l_debug)
+        !call vgrid_channel(zw1,zi,zl,nnz,z(0),l_root,l_debug)
         !call vgrid_channel_fstrm(zw1,zi,zl,nnz,z(0),l_root,l_debug)
+        call vgrid_uniform(zw1,zi,zl,nnz,z(0),l_root,l_debug)
       endif
 c
       call get_dz
@@ -5766,6 +5760,32 @@ c
       return
       end subroutine vgrid_channel_fstrm
 
+      subroutine vgrid_uniform(z1,zi,zl,nnz,z,l_root,ldebug)
+c
+      real z(0:nnz+1),zdiff
+      real s(0:2*nnz+1)
+      integer :: zidx
+      logical l_root, l_debug
+
+      z_frst = z1
+      n_pbl  = nnz
+      z_fac  = 1
+      zdiff = (zl-z_frst)/(nnz-1)
+      s(1) = z_frst
+      do iz=2,nnz
+         s(iz) = z_frst+(zdiff*((float(iz)-1)))
+      enddo
+      s(0)   = 0.0
+c
+      s(nnz+1) = s(nnz) + (s(nnz) - s(nnz-1))
+
+      do iz=0,nnz
+         z(iz)=s(iz)
+      enddo
+         z(nnz+1) = z(nnz) + zdiff
+      return
+      end subroutine vgrid_uniform
+
       subroutine get_dz
 c
 c --------------- compute spacing for given vertical
@@ -5896,43 +5916,31 @@ c
       !q_surf = 0.00823
 
    
-      z_switch = 80.0
-      t_switch = 290.0
-      t_surf = 290.0
-      q_switch = 0.015
-      q_surf = 0.015
+      z_switch = 250.0
+      t_switch = 301.16
+      t_surf = 300.81
+      q_switch = 0.0244
+      q_surf = 0.0232
 
       !Slopes below the inversion
-      !slope_t = (t_switch-t_surf)/z_switch
-      !slope_q = (q_switch-q_surf)/z_switch
+      slope_t = (t_switch-t_surf)/z_switch
+      slope_q = (q_switch-q_surf)/z_switch
 
-      slope_t = 0.0
-      slope_q = 0.0
+      !slope_t = 0.0
+      lope_q = 0.0
 c
       do iz=izs,ize
 
 
          !Try and alleviate the abrupt IC on the velocity
-         if (zz(iz) .ge. 0.0) then
          do iy=iys,iye
          do ix=1,nnx
-            u(ix,iy,iz) = 0.0
-            v(ix,iy,iz) = 0.0
-            w(ix,iy,iz) = 0.0
-            e(ix,iy,iz) = 0.0
-         enddo
-         enddo
-         else
-         do iy=iys,iye
-         do ix=1,nnx
-            u(ix,iy,iz) = ugcont/(log(50.0/0.5))*log(zz(iz)/0.5) - ugal
+            u(ix,iy,iz) = ugcont
             v(ix,iy,iz) = vgcont
             w(ix,iy,iz) = 0.0
             e(ix,iy,iz) = 0.0
          enddo
          enddo
-         end if
-         
 
          if(zz(iz) .le. z_switch) then
            do iy=iys,iye
@@ -5945,7 +5953,7 @@ c
            do iy=iys,iye
            do ix=1,nnx
               t(ix,iy,1,iz) = t_switch + (zz(iz) - z_switch)*dtdzf(1)
-              !t(ix,iy,2,iz) = q_switch + (zz(iz) - z_switch)*dtdzf(2)
+              t(ix,iy,2,iz) = q_switch + (zz(iz) - z_switch)*dtdzf(2)
            enddo
            enddo
          endif
@@ -10166,6 +10174,31 @@ c
 c
   999 continue
 c
+      return
+      end
+      subroutine bcast_lbc
+c
+c ---- send lower boundary condition information to everyone
+c
+      use pars
+      use fields
+      use con_data
+      implicit none
+      include 'mpif.h'
+      integer :: ierr
+      real :: upars(2) 
+
+
+      upars(1) = utau
+      upars(2) = u10
+      call mpi_sum_xy(upars,myid,iss,ise,2)
+
+      u10 = upars(2)/ncpu_s
+
+      call mpi_bcast(u10,1,mpi_real8,
+     +              0,mpi_comm_world,ierr)
+
+
       return
       end
 

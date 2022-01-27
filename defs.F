@@ -139,7 +139,7 @@ c     ----------------------------------------------------------------------
      +     cdbtm, dtdzf(nscl), dtjump, ugal, divgls,
      +     z1, utausv, dx, dy, dz, dt, 
      +     fnxy, dzdz, dsl, c23, dtgama, dtzeta, xkmax,
-     +     time, zody, zody74,
+     +     time, zody, zody74, zosdy,
      +     utau, wtsfc(nscl),
      +     uwsfc, vwsfc, amonin,
      +     zol, hol, smal_e, sml_eg, u10
@@ -152,7 +152,7 @@ c     ----------------------------------------------------------------------
      +     cdbtm, dtdzf(:), dtjump, ugal, divgls,
      +     z1, utausv, dx, dy, dz, dt,
      +     fnxy, dzdz, dsl, c23, dtgama, dtzeta, xkmax, 
-     +     time, zody, zody74,
+     +     time, zody, zody74, zosdy,
      +     utau, wtsfc(:), 
      +     uwsfc, vwsfc, amonin,
      +     zol, hol, smal_e, sml_eg, u10
@@ -191,6 +191,7 @@ c
       time   => c_c%time
       zody   => c_c%zody
       zody74 => c_c%zody74
+      zosdy   => c_c%zosdy
       utau   => c_c%utau
       wtsfc  => c_c%wtsfc
       uwsfc  => c_c%uwsfc
