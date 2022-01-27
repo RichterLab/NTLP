@@ -10,7 +10,7 @@ c     ----------------------------------------------------------------------
      +     icouple,iTcouple,iHcouple,ievap,ifields,ilin,ineighbor,
      +     icoalesce,ipart_method,ipartdiff,isfs,iexner,ilongwave,
      +     inetcdf,iviznetcdf,ihumiditycontrol,ireintro,itrajout,
-     +     inewpart
+     +     inewpart,ihurr
 c     
 c     -------- j_recl = record length in "bytes" for history file
 c     k8     = kind parameter for integers in mpi_io routines
@@ -25,9 +25,10 @@ c
       !Boundary conditions and other parameters
       real :: Uo, Ttop(nscl), Tbot(nscl),qstar(nscl),tsfcc(nscl)
       real :: grav,t00,fcor,zi,zl,xl,yl,zw1,dpdx
-      real :: ugcont,vgcont,zo,surf_RH,psurf,surf_temp
+      real :: ugcont,vgcont,zo,zos,surf_RH,psurf,surf_temp
       real :: meanRH,varRH
       real :: Swall,nprime
+      real :: dvdr,hurr_rad
       integer :: isfc(nscl)
 
       !Radiation parameters

@@ -1495,8 +1495,14 @@ c
 c
 c ------------ geostrophic wind
 c
-         u_geo = -fcor*vg(iz)
-         v_geo =  fcor*(ug(iz)-ugal)
+        if (ihurr == 1) then
+           u_geo = -fcor*vg(iz) - vg(iz)**2/hurr_rad  +
+     +                 uxym(iz)**2/hurr_rad + vxym(iz)*vg(iz)/hurr_rad
+           v_geo = -uxym(iz)*dvdr - uxym(iz)*vg(iz)/hurr_rad
+        else
+           u_geo = -fcor*vg(iz)
+           v_geo =  fcor*(ug(iz)-ugal)
+        end if
 
 c
 c ------------ totals
@@ -4854,14 +4860,14 @@ c
           t10xy(1)  = 0.0
 
           !tsfcc(1)  = t1xy(1)
-          dnom = zody*vk74in
+          dnom = zosdy*vk74in
           thstar(1) = (t1xy(1) - tsfcc(1))/dnom
           t10xy(1)  = thstar(1)*dnom
           qstar(1)  = -utau*thstar(1)
           u10       = utau/vk*(alog(10.0/zo))
       else
          utau = windm*vk/(zody-psim)
-         dnom = (zody-psis)*vk74in
+         dnom = (zosdy-psis)*vk74in
          if(isfc(1) .eq. 0) then
             thstar(1) = -qstar(1)/utau
             tsfcc(1)  = t1xy(1)-thstar(1)*dnom
@@ -4884,12 +4890,12 @@ c
 c ------- surface details, for debug
 c
 !      write(nprt,2000) windm, utau, qstar(1), tsfcc(1), amonin, zeta,
-!     +              z1, batag, vk, batagk, zo
+!     +              z1, batag, vk, batagk, zo, zos
  2000 format(' 2000 suft ',/,
      +       '    windm = ',e15.6,' utau = ',e15.6,' qstar = ',e15.6,/,
      +       '    tsfcc = ',e15.6,' MO L = ',e15.6,' z1/L = ',e15.6,/,
      +       '    z1 = ',e15.6,' batag = ',e15.6,' vk = ',e15.6,/,
-     +       '    batagk = ',e15.6,' zo = ',e15.6)
+     +       '    batagk = ',e15.6,' zo = ',e15.6,' zos = ',e15.6)
 c
       if (utau.gt.10.0) then
          write(6,9000)
@@ -4915,14 +4921,14 @@ c
           t10xy(iscl)  = 0.0
           tsfcc(iscl)  = t1xy(iscl)
 
-!          dnom = zody*vk74in
-!          tsfcc(2)=surf_RH/100.0*
-!     +    Mw/Ru/tsfcc(1)*mod_Magnus(tsfcc(1))/rhoa
-!            thstar(iscl) = (t1xy(iscl) - tsfcc(iscl))/dnom
-!            t10xy(iscl)  = thstar(iscl)*dnom
-!            qstar(iscl)  = -utau*thstar(iscl)
+          dnom = zosdy*vk74in
+          tsfcc(2)=surf_RH/100.0*
+     +    Mw/Ru/tsfcc(1)*mod_Magnus(tsfcc(1))/rhoa
+            thstar(iscl) = (t1xy(iscl) - tsfcc(iscl))/dnom
+            t10xy(iscl)  = thstar(iscl)*dnom
+            qstar(iscl)  = -utau*thstar(iscl)
       else
-         dnom = (zody-psis)*vk74in
+         dnom = (zosdy-psis)*vk74in
          if(isfc(iscl) .eq. 0) then
             thstar(iscl) = -qstar(iscl)/utau
             tsfcc(iscl)  = t1xy(iscl)-thstar(iscl)*dnom
@@ -4950,7 +4956,7 @@ c
           t10xy(iscl)  = 0.0
           tsfcc(iscl)  = t1xy(iscl)
       else
-         dnom = (zody-psis)*vk74in
+         dnom = (zosdy-psis)*vk74in
          if(isfc(iscl) .eq. 0) then
             thstar(iscl) = -qstar(iscl)/utau
             tsfcc(iscl)  = t1xy(iscl)-thstar(iscl)*dnom
@@ -5204,7 +5210,7 @@ c ----------------- first guess for utau
 c
       utau = .001
 c
-      t10xy(1) = -qstar(1)/utau*zody*vk74in
+      t10xy(1) = -qstar(1)/utau*zosdy*vk74in
       tsfcc(1) = u_level1(ix,iy,3) - t10xy(1)
       vsfc2    = u_level1(ix,iy,1)**2 + u_level1(ix,iy,2)**2
       vsfc     = sqrt(vsfc2)
@@ -5255,7 +5261,7 @@ c
   232    format(' stop because utau=',e15.6,' windm=',e15.6)
          stop 9999
       endif
-      t10xy(1) = -qstar(1)/utau*vk74in*(zody-psis)
+      t10xy(1) = -qstar(1)/utau*vk74in*(zosdy-psis)
       t_grnd(ix,iy,1) = u_level1(ix,iy,3) - t10xy(1)
 c
       zol = zeta_a
@@ -5275,7 +5281,7 @@ c
 c
 c **** get surface value of c scalar, specified surface flux
 c
-c     dnom      = (zody-psis)*vk74in
+c     dnom      = (zosdy-psis)*vk74in
 c     thstar(2) = -qstar(2)/utau
 c     tsfcc(2)  = u_level1(ix,iy,4) - dnom*thstar(2)
 c     t_grnd(ix,iy,2)  = u_level1(ix,iy,4) - dnom*thstar(2)
@@ -5456,9 +5462,10 @@ c
       vkin   = 1./vk
       ttmean = 0.
       zody   = alog(abs(z1/zo))
-      write(nprt, 9901) z1,zo,zody
+      zosdy   = alog(abs(z1/zos))
+      write(nprt, 9901) z1,zo,zody,zosdy
  9901 format(' 9901 z1 = ',e15.6,' zo = ',e15.6,/,
-     +       ' zody = ',e15.6)
+     +       ' zody = ',e15.6,' zosdy = ',e15.6)
       zodyin = 1./zody
       wstar  = abs(batag*zi*wtsfc(1))**(1./3.)
       if(ismlt .eq. 1) then
@@ -10307,7 +10314,7 @@ c
      +                       itstr,it_his,it_viz,i_viz,itn
 
       namelist /grid_params/ ncpu_s, Uo, Ttop, Tbot,
-     +         qstar, tsfcc, ugcont, vgcont,
+     +         qstar, tsfcc, ugcont, vgcont, dvdr, hurr_rad,
      +         zi, zl, xl, yl, zw1, dpdx, Swall,
      +         cfl,dt_new,surf_RH,psurf,surf_temp,
      +         rad_kappa,rad_Fct,rad_Fcb
@@ -10321,7 +10328,7 @@ c
      +         method,idebug,iz_space,ivis0,ifix_dt,new_vis,iDNS,
      +         icouple,iTcouple,iHcouple,ievap,ifields,ilin,
      +         ineighbor,icoalesce,ipart_method,inewpart,
-     +         ipartdiff,isfs,iexner,ilongwave,
+     +         ipartdiff,isfs,iexner,ilongwave,ihurr,
      +         inetcdf,iviznetcdf,ihumiditycontrol,ireintro,
      +         itrajout
 
@@ -10330,7 +10337,7 @@ c
      +         tnumpart,mult_init,rhow,part_grav,rhos,
      +         Cpp,Mw,Ms,Ru,Gam,Ion,Sal,Rd,
      +         radius_init,radius_std,Os_init,Os_std,
-     +         grav, t00,fcor,zo,
+     +         grav, t00,fcor,zo,zos,
      +         vp_init,Tp_init,nprime
 
 
