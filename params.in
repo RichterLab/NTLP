@@ -17,8 +17,9 @@ itn = 0  !Index for "u.le.cou001" files
 &flags
 ismlt=0, ifree=0, iradup=0, iupwnd=1
 ibuoy=1, ifilt=0, itcut=1, isubs=0, ibrcl=0, iocean=0
-method=3, idebug=1, iz_space=1, ivis0=1, ifix_dt=1, new_vis=-1
+method=3, idebug=1, ivis0=1, ifix_dt=1, new_vis=-1
 isfc = 1, 1  ! isfc = 0 sets surface flux (qstar), isfc = 1 sets surface condition (Dirichlet through tsfcc)
+iz_space=1, ! 0 = uniform dz, 1 = top/bottom mirror stretched ("channel"), 2 = "open channel", 3 = PBL with stretching at surface and at zi
 iDNS = 1
 ifields = 1  ! if set to 1, reads the initial condition from path_ran below; otherwise calls subroutine random
 ihurr = 0  !If set to 1, includes the hurricane forcings from Bryan et al. (2017) BLM and according to dvdr and hurr_rad below
@@ -31,7 +32,7 @@ ineighbor=0
 icoalesce=0
 ipart_method=2   !1 = same RK3 as flow, 2 = backward Euler
 ipartdiff = 0
-inewpart = 1  !1 = new particles have initial conditions defined below, random location in domain; 2 = same, but normal distributions of radius and Os, given by radius_std and Os_std; 3 = special setup for C-FOG and double lognormal of different type; 4 = crude sea spray setup
+inewpart = 2  !1 = new particles have initial conditions defined below, random location in domain; 2 = same, but normal distributions of radius and Os, given by radius_std and Os_std; 3 = special setup for C-FOG and double lognormal of different type; 4 = crude sea spray setup
 isfs = 2   !isfs=1 is simple random walk, isfs=2 is Weil et al. (2004) particle subgrid
 iexner = 0  !iexner = 1 applies a correction to part%Tf to account for conversion b/w potential temp and temp. (need in PBL)
 ilongwave = 0   !Use simple longwave radiation scheme when clouds/fog present
@@ -73,12 +74,12 @@ dpdx = 0.0  !The pressure gradient for channel flow (gets put into u_geo for DNS
 
 Swall = -2.15e-6  !Set the CONSTANT humidity sink to use if ihumiditycontrol = 0
 
-zi = 1.0  !This has to do with grid stretching; make equal to zl for Couette/channel
+zi = 1.0  !This has to do with grid stretching; make equal to zl for iz_space = 1,2; zi is inversion height for iz_space = 3
 zl = 1.0
 xl = 2.0
 yl = 2.0
 
-zw1 = 0.0033333  !The first grid point
+zw1 = 0.0033333  !The first grid point; only used if stretched grid
 
 !Radiation parameters
 rad_kappa = 120.0  !The absorptivity in the radiation expression (see Larson et al. 2007)

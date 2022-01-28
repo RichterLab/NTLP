@@ -5415,21 +5415,20 @@ c                 iz = 0,1,...,nnz+1; this allows indexing
 c                 to array elements z(0), etc.
 c
       zwstrt = 0.0
-c
-c ------------ if uniform vertical spacing then
-c
-      if(iz_space .eq. 0) then
+
 c
 c ------------ build z grid for w points
 c
+      if(iz_space .eq. 0) then
          do iz=0,nnz+1
             z(iz) = dz*float(iz) + zwstrt
          enddo
-      else
-        !call vgrid(zw1,zi,zl,nnz,z(0),l_root,l_debug)
-        !call vgrid_channel(zw1,zi,zl,nnz,z(0),l_root,l_debug)
-        !call vgrid_channel_fstrm(zw1,zi,zl,nnz,z(0),l_root,l_debug)
-        call vgrid_uniform(zw1,zi,zl,nnz,z(0),l_root,l_debug)
+      elseif (iz_space .eq. 1) then
+        call vgrid_channel(zw1,zi,zl,nnz,z(0),l_root,l_debug)
+      elseif (iz_space .eq. 2) then
+        call vgrid_channel_fstrm(zw1,zi,zl,nnz,z(0),l_root,l_debug)
+      elseif (iz_space .eq. 3) then
+        call vgrid(zw1,zi,zl,nnz,z(0),l_root,l_debug)
       endif
 c
       call get_dz
