@@ -2075,6 +2075,21 @@ c
 c ---------- SGS tau_t1, tau_t3 and resolved u*theta scalar fluxes
 c            skew symmetric advective term 0.5(udt/dx + d/dx(ut))
 c
+      if (iz.eq.nnz) then
+
+      do iy=iys,iye
+      do ix=1,nnx
+         taut3_u(ix,iy,iscl) = qstar(iscl)
+
+         fnt1(ix,iy,iz) = -0.5*((vis_s(ix,iy,iscl,iz)+
+     +           vis_s(ix,iy,iscl,izm1))*tx(ix,iy) - 
+     +           upwn*t(ix,iy,iscl,iz)*
+     +                      (u(ix,iy,iz)+stokes(iz)))
+      enddo
+      enddo
+
+      else
+
       do iy=iys,iye
       do ix=1,nnx
          taut3_u(ix,iy,iscl) = -vis_s(ix,iy,iscl,iz)*
@@ -2085,6 +2100,8 @@ c
      +                      (u(ix,iy,iz)+stokes(iz)))
       enddo
       enddo
+      end if
+
       call xderivp(fnt1(1,iys,iz),trigx(1,1),xk(1),nnx,iys,iye)
       do iy=iys,iye
       do ix=1,nnx
@@ -10185,16 +10202,23 @@ c
       implicit none
       include 'mpif.h'
       integer :: ierr
-      real :: upars(2) 
+      real :: upars(4) 
 
 
       upars(1) = utau
       upars(2) = u10
-      call mpi_sum_xy(upars,myid,iss,ise,2)
+      upars(3) = qstar(1)
+      upars(4) = qstar(2)
+
+      call mpi_sum_xy(upars,myid,iss,ise,4)
 
       u10 = upars(2)/ncpu_s
+      !qstar(1) = qstar(1)/ncpu_s
+      !qstar(2) = qstar(2)/ncpu_s
 
       call mpi_bcast(u10,1,mpi_real8,
+     +              0,mpi_comm_world,ierr)
+      call mpi_bcast(qstar,2,mpi_real8,
      +              0,mpi_comm_world,ierr)
 
 
@@ -10283,7 +10307,6 @@ c
       include 'mpif.h'
 
       real :: meanRH_curr,meanRH_target,msqrRH
-      real :: varRH_test,meanRH_test
       integer :: iz,ierr
 
 
@@ -10314,23 +10337,11 @@ c
       !!!! 
 
 
-      !Here is the way Theo was originally doing it, which isn't a
-      !proper average in the vertical direction due to stretched grid
-      meanRH_test = sum(RHxym)/nnz
-      varRH_test = sum(RHmsqr)/nnz
-      varRH_test = varRH_test - meanRH_test**2
-
-
       if (ihumiditycontrol) then
           meanRH_target = 103.0
           Swall = Swall + (meanRH_target - meanRH_curr)*1.0e-9
       end if
 
-
-      if (myid==0) print*, 'Swall', Swall
-      if (myid==0) print*, 'meanRH_curr', meanRH_curr
-      if (myid==0) print*, 'meanRH,varRH=',meanRH,varRH
-      if (myid==0) print*, 'varRH_test=',varRH_test
 
       end subroutine humidity_control
 
