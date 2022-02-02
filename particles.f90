@@ -2017,34 +2017,41 @@ CONTAINS
       implicit none
       include 'mpif.h'
 
-      integer :: it
+      integer :: it,it_delay
       integer :: ierr,randproc,np,my_reintro
       real :: xp_init(3),ran2,Os,m_s,pi,radius_dinit
       real :: totdrops
 
       pi = 4.0*atan(1.0)
 
+      if (inewpart .eq. 4) then
+
       !!Sea spray, given by Andreas SSGF 98
-      !call andreas_dist_num(totdrops) ! drops per m^2 per s based on Andreas 98      
-      
-      !num_reintro = xl*yl*dt*200.0*totdrops/(numprocs*mult_init)
-      !tot_reintro = 0
-      
-      !if (mod(it,200)==0) then
+      call andreas_dist_num(totdrops) ! drops per m^2 per s based on Andreas 98      
 
-      !tot_reintro = my_reintro*numprocs
-
+      it_delay = 200
+      
+      my_reintro = xl*yl*dt*real(it_delay)*totdrops/(numprocs*mult_init)
+      tot_reintro = 0
+      
+      elseif (inewpart .eq. 2) then
 
       !!Pi Chamber, given by constant injection rate (nprime)
-      my_reintro = nprime*(1./60.)*(10.**6.)*dt*4/numprocs*20.0 !4m^3 (vol chamber)
+      it_delay = 20
+
+      my_reintro = nprime*(1./60.)*(10.**6.)*dt*4/numprocs*real(it_delay) !4m^3 (vol chamber)
       tot_reintro = 0
 
-      if (mod(it, 20)==0) then
+      else
+
+      my_reintro = 0
+      tot_reintro = 0
+
+      end if
+
+      if (mod(it, it_delay)==0) then
 
       tot_reintro = my_reintro*numprocs
-
-
-
 
 
       if (myid==0) write(*,*) 'time,tot_reintro:',time,tot_reintro
