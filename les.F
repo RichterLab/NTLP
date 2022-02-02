@@ -2075,20 +2075,23 @@ c
 c ---------- SGS tau_t1, tau_t3 and resolved u*theta scalar fluxes
 c            skew symmetric advective term 0.5(udt/dx + d/dx(ut))
 c
-      if (iz.eq.nnz) then
 
-      do iy=iys,iye
-      do ix=1,nnx
-         taut3_u(ix,iy,iscl) = qstar(iscl)
-
-         fnt1(ix,iy,iz) = -0.5*((vis_s(ix,iy,iscl,iz)+
-     +           vis_s(ix,iy,iscl,izm1))*tx(ix,iy) - 
-     +           upwn*t(ix,iy,iscl,iz)*
-     +                      (u(ix,iy,iz)+stokes(iz)))
-      enddo
-      enddo
-
-      else
+!A modification to set the upwards flux equal to the flux at bottom for
+!getting statistically steady humidity, temp fields in hurricane PBL
+!      if (iz.eq.nnz) then
+!
+!      do iy=iys,iye
+!      do ix=1,nnx
+!         taut3_u(ix,iy,iscl) = qstar(iscl)
+!
+!         fnt1(ix,iy,iz) = -0.5*((vis_s(ix,iy,iscl,iz)+
+!     +           vis_s(ix,iy,iscl,izm1))*tx(ix,iy) - 
+!     +           upwn*t(ix,iy,iscl,iz)*
+!     +                      (u(ix,iy,iz)+stokes(iz)))
+!      enddo
+!      enddo
+!
+!      else
 
       do iy=iys,iye
       do ix=1,nnx
@@ -2100,7 +2103,7 @@ c
      +                      (u(ix,iy,iz)+stokes(iz)))
       enddo
       enddo
-      end if
+!      end if
 
       call xderivp(fnt1(1,iys,iz),trigx(1,1),xk(1),nnx,iys,iye)
       do iy=iys,iye

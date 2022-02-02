@@ -59,6 +59,7 @@ module particles
 
   integer, parameter :: histbins = 512
   real :: hist_rad(histbins+2)
+  real :: hist_raddeath(histbins+2)
   real :: bins_rad(histbins+2)
 
   real :: hist_res(histbins+2)
@@ -2512,6 +2513,9 @@ CONTAINS
 
        !Also record the number of activations
        call add_histogram_integer(bins_numact,hist_numact,histbins+2,part%numact)
+
+       !Also record the size of the dead droplet
+       call add_histogram(bins_rad,hist_raddeath,histbins+2,part%radius,part%mult)
 
        call destroy_particle
 

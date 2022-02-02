@@ -35,7 +35,7 @@ integer :: radmean_vid,rad2mean_vid
 integer :: qstarm_vid
 integer :: Nc_vid,ql_vid
 integer :: radbins_vid,resbins_vid
-integer :: radhist_vid,reshist_vid
+integer :: radhist_vid,reshist_vid,radhistdeath_vid
 integer :: actresbins_vid,actreshist_vid
 integer :: acttodeathbins_vid,acttodeathhist_vid
 integer :: numactbins_vid,numacthist_vid
@@ -455,6 +455,9 @@ subroutine netcdf_init_histog
       call netcdf_check( nf90_def_var(ncid_histog, "radhist", NF90_REAL, dimids_t_bins,radhist_vid) )
       call netcdf_check( nf90_put_att(ncid_histog,radhist_vid,"title","Histogram of particle radius at snapshot") )
 
+      call netcdf_check( nf90_def_var(ncid_histog, "radhistdeath", NF90_REAL, dimids_t_bins,radhistdeath_vid) )
+      call netcdf_check( nf90_put_att(ncid_histog,radhistdeath_vid,"title","Histogram of particle radius of those which died over past ihst") )
+
       call netcdf_check( nf90_def_var(ncid_histog, "reshist", NF90_REAL, dimids_t_bins,reshist_vid) )
       call netcdf_check( nf90_put_att(ncid_histog,reshist_vid,"title","Histogram of residence time of particles which died over past ihst") )
 
@@ -497,6 +500,7 @@ subroutine write_histog_netcdf
       end if
 
       call netcdf_check( nf90_put_var(ncid_histog, radhist_vid, real(hist_rad),start=(/1,histog_counter/)) )
+      call netcdf_check( nf90_put_var(ncid_histog, radhistdeath_vid, real(hist_raddeath),start=(/1,histog_counter/)) )
       call netcdf_check( nf90_put_var(ncid_histog, reshist_vid, real(hist_res),start=(/1,histog_counter/)) )
       call netcdf_check( nf90_put_var(ncid_histog, actreshist_vid, real(hist_actres),start=(/1,histog_counter/)) )
       call netcdf_check( nf90_put_var(ncid_histog, acttodeathhist_vid, real(hist_acttodeath),start=(/1,histog_counter/)) )
@@ -1034,155 +1038,6 @@ subroutine netcdf_restart
 end subroutine netcdf_restart
 
 
-
-!SHOVING THESE DOWN HERE: THE PARALLEL NC OUTPUT NEVER WORKED PROPERLY, AND
-!REQUIRED SPECIALIZED MODULES TO BE LOADED
-subroutine netcdf_init_viz_parallel
-      use netcdf
-      use pars
-      use particles
-      implicit none
-      include 'mpif.h'
-
-      integer :: dimids(1),dimids_xy(3),dimids_yz(3),chunk_size(3)
-      integer :: ierr
-
-!!! NOTE: An error arises if the netcdf library being used doesn't support parallel:
-!"NetCDF: Parallel operation on file opened for non-parallel access"
-
-      path_netcdf_viz = trim(adjustl(path_his))//"viz.nc"
-
-      call netcdf_check( nf90_create(path_netcdf_viz,IOR(NF90_NETCDF4,NF90_MPIIO),ncid_viz,comm=mpi_comm_world,info=mpi_info_null) )
-
-      call netcdf_check( nf90_def_dim(ncid_viz, "time",NF90_UNLIMITED, time_viz_dimid) )
-
-      call netcdf_check( nf90_def_dim(ncid_viz,"nx",nnx,viz_nx_dimid) )
-      call netcdf_check( nf90_def_dim(ncid_viz,"ny",nny,viz_ny_dimid) )
-
-      dimids = (/ time_viz_dimid /)
-      dimids_xy = (/viz_nx_dimid, viz_ny_dimid, time_viz_dimid /)
-
-
-!!! Single quantities
-      !call netcdf_check( nf90_def_var(ncid_viz,"time",NF90_REAL,dimids,time_viz_vid) )
-      !call netcdf_check( nf90_put_att(ncid_viz,time_viz_vid,"title","Simulation time") )
-
-
-!! Would need to store grid values
-
-
-
-!!! Slices
-      chunk_size = (/(iye-iys)+1,(ize-izs)+1,1/)
-
-      !call netcdf_check( nf90_def_var(ncid_viz, "u_xy", NF90_REAL, dimids_xy,u_xy_vid,chunksizes=chunk_size) )
-      !call netcdf_check( nf90_def_var(ncid_viz, "u_xy", NF90_REAL, dimids_xy,u_xy_vid) )
-      !call netcdf_check( nf90_put_att(ncid_viz,u_xy_vid,"title","xy slice of u-velocity") )
-
-      !call netcdf_check( nf90_def_var(ncid_viz, "u_yz", NF90_REAL, dimids_yz,u_yz_vid,chunksizes=chunk_size) )
-      call netcdf_check( nf90_def_var(ncid_viz, "u_yz", NF90_REAL, dimids_yz,u_yz_vid) )
-      call netcdf_check( nf90_put_att(ncid_viz,u_yz_vid,"title","yz slice of u-velocity") )
-
-      call netcdf_check( nf90_enddef(ncid_viz) )
-
-
-
-      viz_counter = 1
-
-end subroutine netcdf_init_viz_parallel
-
-subroutine write_viz_netcdf_parallel
-      use netcdf
-      use pars
-      use fields
-      use con_data
-      use con_stats
-      use particles
-      implicit none
-      include 'mpif.h'
-
-      integer :: ierr,yzslice
-      integer :: startsxy(3),countsxy(3)
-      integer :: startsyz(3),countsyz(3)
-      real,allocatable :: tmp(:,:)
-
-
- 
-
-      yzslice = nnx/2  !Choose the nz value for the xy slice
-
-!      if (xyslice .le. ize .and. xyslice .ge. izs) then
-!      countsxy(1) = nnx
-!      countsxy(2) = (iye-iys)+1
-!      countsxy(3) = 1
-!
-!      startsxy(1) = 1
-!      startsxy(2) = iys
-!      startsxy(3) = viz_counter
-!
-!      allocate(tmp(countsxy(1),countsxy(2)))
-!      tmp = real(u(1:nnx,iys:iye,xyslice))
-!      else 
-!
-!      countsxy(1) = 0
-!      countsxy(2) = 0
-!      countsxy(3) = 0
-!
-!      startsxy(1) = 0
-!      startsxy(2) = 0
-!      startsxy(3) = 0
-!     
-!      allocate(tmp(0,0))
-! 
-!      end if
-
-      countsyz(1) = (iye-iys)+1
-      countsyz(2) = (ize-izs)+1
-      countsyz(3) = 1
-
-      startsyz(1) = iys
-      startsyz(2) = izs
-      startsyz(3) = viz_counter
-
-      allocate(tmp(countsyz(1),countsyz(2)))
-      tmp(:,:) = u(yzslice,iys:iye,izs:ize)
-
-      if (myid==0) then
-      !call netcdf_check( nf90_put_var(ncid_viz, time_viz_vid, real(time),start=(/viz_counter/)) )
-
-      !Store grid definitions only once
-      if (viz_counter == 1) then
-
-
-      end if
-
-
-      end if
-      
-
-      call netcdf_check( nf90_var_par_access(ncid_viz,u_yz_vid,nf90_collective) )
-      !call netcdf_check( nf90_var_par_access(ncid_viz,time_viz_vid,1) )
-
-
-      !write(*,'(a5,10i)') 'DHR8:',myid,xyslice,ize,izs,startsxy(1:3),countsxy(1:3)
-      !write(*,'(a5,10i)') 'DHR8:',myid,yzslice,ize,izs,startsyz(1:3),countsyz(1:3)
-      !write(*,*) 'DHR9: ',maxval(real(tmp))
-
-      !if (xyslice .le. ize .and. xyslice .ge. izs) then
-         !call netcdf_check( nf90_put_var(ncid_viz, u_xy_vid, real(u(1:nnx,iys:iye,xyslice)), start=startsxy, count=countsxy) )
-         !call netcdf_check( nf90_put_var(ncid_viz, u_xy_vid, tmp, start=startsxy, count=countsxy) )
-      !end if
-
-      call netcdf_check( nf90_put_var(ncid_viz, u_yz_vid, real(tmp), start=startsyz, count=countsyz) )
-      !call netcdf_check( nf90_put_var(ncid_viz, u_yz_vid, real(tmp), start=startsyz) )
-
-
-      viz_counter = viz_counter + 1
-
-      deallocate(tmp)
-
-end subroutine write_viz_netcdf_parallel
-
 subroutine write_histograms
 use particles
 use pars
@@ -1200,6 +1055,7 @@ integer :: iblnk
 integer :: num_entries
 
 real :: sumbuf_rad(histbins+2)
+real :: sumbuf_raddeath(histbins+2)
 real :: sumbuf_res(histbins+2)
 real :: sumbuf_actres(histbins+2)
 real :: sumbuf_acttodeath(histbins+2)
@@ -1216,6 +1072,10 @@ character :: fformat*10, num*3
   !Radius PDF
   sumbuf_rad = hist_rad
   call mpi_reduce(sumbuf_rad,hist_rad,num_entries,mpi_real8,mpi_sum,0,mpi_comm_world,ierr)
+
+  !Radius PDF at death
+  sumbuf_raddeath = hist_raddeath
+  call mpi_reduce(sumbuf_raddeath,hist_raddeath,num_entries,mpi_real8,mpi_sum,0,mpi_comm_world,ierr)
 
   !Residence time PDF
   sumbuf_res = hist_res
@@ -1248,6 +1108,7 @@ character :: fformat*10, num*3
   fformat = '('//num//'e15.6)'
 
   write(nrad,fformat),hist_rad(1:histbins+2)
+  write(nrad,fformat),hist_raddeath(1:histbins+2)
   write(nres,fformat),hist_res(1:histbins+2)
   write(nactres,fformat),hist_actres(1:histbins+2)
 
@@ -1259,6 +1120,7 @@ character :: fformat*10, num*3
   hist_actres = 0.0  !Reset this one every time it writes
   hist_acttodeath = 0.0  !Reset this one every time it writes
   hist_numact = 0.0  !Reset this one every time it writes
+  hist_raddeath = 0.0 !Reset this one every time it writes
 
 end subroutine write_histograms
 
