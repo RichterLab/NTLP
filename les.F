@@ -5869,6 +5869,11 @@ c
       vpsum_t = 0.0
       vpsqrsum = 0.0
       vpsqrsum_t = 0.0
+      ufsum = 0.0
+      ufsum_t = 0.0
+      ufsqrsum = 0.0
+      ufsqrsum_t = 0.0
+      upwp_t = 0.0
       upwp_t = 0.0
       upwp = 0.0
       Tpsum = 0.0
@@ -7075,7 +7080,7 @@ c ------- indices for indexing array stat(.,.)
 c         js = number of non-scalar stats
 c         ns = number of scalar stats
 c
-      parameter(js = 37, ns = 5, nstat = js + ns*nscl)
+      parameter(js = 43, ns = 5, nstat = js + ns*nscl)
       real stat(1:nnz,nstat)
       real RHtmp, Ttmp
 c
@@ -7115,6 +7120,13 @@ c          stat(.,33) = TEpsrc
 c          stat(.,34) = qstarsum
 c          stat(.,35) = relative humidity
 c          stat(.,36) = temperature (NOT potential temp)
+c          stat(.,37) = RH^2
+c          stat(.,38) = ufsum(1) 
+c          stat(.,39) = ufsum(2) 
+c          stat(.,40) = ufsum(3) 
+c          stat(.,41) = ufsqrsum(1) 
+c          stat(.,42) = ufsqrsum(2) 
+c          stat(.,43) = ufsqrsum(3) 
 c          stat(.,m1) = resolved scalar flux wt at zw = wtle
 c          stat(.,m2) = resolved scalar flux ut at zw = utle
 c          stat(.,m3) = resolved scalar flux vt at zw = vtle
@@ -7206,6 +7218,13 @@ c
          stat(iz,35) = stat(iz,35) + RHtmp
          stat(iz,36) = stat(iz,36) + Ttmp
          stat(iz,37) = stat(iz,37) + RHtmp**2
+
+         stat(iz,38) = stat(iz,38) + ufsum(ix,iy,iz,1)
+         stat(iz,39) = stat(iz,39) + ufsum(ix,iy,iz,2)
+         stat(iz,40) = stat(iz,40) + ufsum(ix,iy,iz,3)
+         stat(iz,41) = stat(iz,41) + ufsqrsum(ix,iy,iz,1)
+         stat(iz,42) = stat(iz,42) + ufsqrsum(ix,iy,iz,2)
+         stat(iz,43) = stat(iz,43) + ufsqrsum(ix,iy,iz,3)
       enddo
       enddo
 
@@ -7292,9 +7311,9 @@ c
       vp1mean(iz) = stat(iz,12)/stat(iz,11)
       vp2mean(iz) = stat(iz,13)/stat(iz,11)
       vp3mean(iz) = stat(iz,14)/stat(iz,11)
-      vp1msqr(iz) = sqrt(stat(iz,15)/stat(iz,11)-vp1mean(iz)**2)
-      vp2msqr(iz) = sqrt(stat(iz,16)/stat(iz,11)-vp2mean(iz)**2)
-      vp3msqr(iz) = sqrt(stat(iz,17)/stat(iz,11)-vp3mean(iz)**2)
+      vp1msqr(iz) = stat(iz,15)/stat(iz,11)-vp1mean(iz)**2
+      vp2msqr(iz) = stat(iz,16)/stat(iz,11)-vp2mean(iz)**2
+      vp3msqr(iz) = stat(iz,17)/stat(iz,11)-vp3mean(iz)**2
       m1src(iz) = -stat(iz,18)*fnxy
       m2src(iz) = -stat(iz,19)*fnxy
       m3src(iz) = -stat(iz,20)*fnxy
@@ -7322,6 +7341,13 @@ c
       RHxym(iz) = stat(iz,35)*fnxy
       tempxym(iz) = stat(iz,36)*fnxy
       RHmsqr(iz) = stat(iz,37)*fnxy
+
+      uf1mean(iz) = stat(iz,38)/stat(iz,11)
+      uf2mean(iz) = stat(iz,39)/stat(iz,11)
+      uf3mean(iz) = stat(iz,40)/stat(iz,11)
+      uf1msqr(iz) = stat(iz,41)/stat(iz,11)-uf1mean(iz)**2
+      uf2msqr(iz) = stat(iz,42)/stat(iz,11)-uf2mean(iz)**2
+      uf3msqr(iz) = stat(iz,43)/stat(iz,11)-uf3mean(iz)**2
 
       !Doesn't need averaging if basing radiation source on average ql:
       radtend(iz) = radsrc(iz)
@@ -8223,6 +8249,10 @@ c
       allocate(vpsum_t(0:nnz+1,iys:iye,mxs:mxe,1:3))
       allocate(vpsqrsum(nnx,iys:iye,izs-1:ize+1,1:3))
       allocate(vpsqrsum_t(0:nnz+1,iys:iye,mxs:mxe,1:3))
+      allocate(ufsum(nnx,iys:iye,izs-1:ize+1,1:3))
+      allocate(ufsum_t(0:nnz+1,iys:iye,mxs:mxe,1:3))
+      allocate(ufsqrsum(nnx,iys:iye,izs-1:ize+1,1:3))
+      allocate(ufsqrsum_t(0:nnz+1,iys:iye,mxs:mxe,1:3))
       allocate(Tpsum(nnx,iys:iye,izs-1:ize+1))
       allocate(Tpsum_t(0:nnz+1,iys:iye,mxs:mxe))
       allocate(Tpsqrsum(nnx,iys:iye,izs-1:ize+1))

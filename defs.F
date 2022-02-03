@@ -236,6 +236,8 @@ c ----------------------------------------------------------------------
      +           zconc(maxnz),
      +           vp1mean(maxnz),vp2mean(maxnz),vp3mean(maxnz),
      +           vp1msqr(maxnz),vp2msqr(maxnz),vp3msqr(maxnz),
+     +           uf1mean(maxnz),uf2mean(maxnz),uf3mean(maxnz),
+     +           uf1msqr(maxnz),uf2msqr(maxnz),uf3msqr(maxnz),
      +           m1src(maxnz),m2src(maxnz),m3src(maxnz),
      +           upwpm(maxnz),
      +           Tpmean(maxnz),Tpmsqr(maxnz),
@@ -281,6 +283,8 @@ c ----------------------------------------------------------------------
      +           zconc(:),
      +           vp1mean(:),vp2mean(:),vp3mean(:),
      +           vp1msqr(:),vp2msqr(:),vp3msqr(:),
+     +           uf1mean(:),uf2mean(:),uf3mean(:),
+     +           uf1msqr(:),uf2msqr(:),uf3msqr(:),
      +           m1src(:),m2src(:),m3src(:),
      +           upwpm(:),
      +           Tpmean(:),Tpmsqr(:),
@@ -364,6 +368,12 @@ c
              vp1msqr  => c_s%vp1msqr ; isize = isize + size(vp1msqr)
              vp2msqr  => c_s%vp2msqr ; isize = isize + size(vp2msqr)
              vp3msqr  => c_s%vp3msqr ; isize = isize + size(vp3msqr)
+             uf1mean  => c_s%uf1mean ; isize = isize + size(uf1mean)
+             uf2mean  => c_s%uf2mean ; isize = isize + size(uf2mean)
+             uf3mean  => c_s%uf3mean ; isize = isize + size(uf3mean)
+             uf1msqr  => c_s%uf1msqr ; isize = isize + size(uf1msqr)
+             uf2msqr  => c_s%uf2msqr ; isize = isize + size(uf2msqr)
+             uf3msqr  => c_s%uf3msqr ; isize = isize + size(uf3msqr)
              m1src   => c_s%m1src    ; isize = isize + size(m1src)
              m2src   => c_s%m2src    ; isize = isize + size(m2src)
              m3src   => c_s%m3src    ; isize = isize + size(m3src)

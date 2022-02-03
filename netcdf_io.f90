@@ -27,6 +27,8 @@ integer :: zconc_vid
 integer :: pflux_vid,pfluxdiff_vid
 integer :: vp1mean_vid,vp2mean_vid,vp3mean_vid
 integer :: vp1msqr_vid,vp2msqr_vid,vp3msqr_vid
+integer :: uf1mean_vid,uf2mean_vid,uf3mean_vid
+integer :: uf1msqr_vid,uf2msqr_vid,uf3msqr_vid
 integer :: m1src_vid,m2src_vid,m3src_vid
 integer :: Tpsrc_vid,TEpsrc_vid,Hpsrc_vid
 integer :: Tpmean_vid,Tpmsqr_vid
@@ -243,13 +245,31 @@ subroutine netcdf_init
       call netcdf_check( nf90_put_att(ncid,vp3mean_vid,"title","Horiz. avg. particle velocity w") )
 
       call netcdf_check( nf90_def_var(ncid,"vp1msqr",NF90_REAL, dimids_zu,vp1msqr_vid) )
-      call netcdf_check( nf90_put_att(ncid,vp1msqr_vid,"title","Mean squared particle velocity <u^2>") )
+      call netcdf_check( nf90_put_att(ncid,vp1msqr_vid,"title","Mean squared particle velocity <u'^2>") )
 
       call netcdf_check( nf90_def_var(ncid,"vp2msqr",NF90_REAL, dimids_zu,vp2msqr_vid) )
-      call netcdf_check( nf90_put_att(ncid,vp2msqr_vid,"title","Mean squared particle velocity <v^2>") )
+      call netcdf_check( nf90_put_att(ncid,vp2msqr_vid,"title","Mean squared particle velocity <v'^2>") )
 
       call netcdf_check( nf90_def_var(ncid,"vp3msqr",NF90_REAL, dimids_zu,vp3msqr_vid) )
-      call netcdf_check( nf90_put_att(ncid,vp3msqr_vid,"title","Mean squared particle velocity <w^2>") )
+      call netcdf_check( nf90_put_att(ncid,vp3msqr_vid,"title","Mean squared particle velocity <w'^2>") )
+
+      call netcdf_check( nf90_def_var(ncid,"uf1mean",NF90_REAL, dimids_zu,uf1mean_vid) )
+      call netcdf_check( nf90_put_att(ncid,uf1mean_vid,"title","Horiz. avg. velocity u seen by particle") )
+
+      call netcdf_check( nf90_def_var(ncid,"uf2mean",NF90_REAL, dimids_zu,uf2mean_vid) )
+      call netcdf_check( nf90_put_att(ncid,uf2mean_vid,"title","Horiz. avg. velocity v seen by particle") )
+
+      call netcdf_check( nf90_def_var(ncid,"uf3mean",NF90_REAL, dimids_zu,uf3mean_vid) )
+      call netcdf_check( nf90_put_att(ncid,uf3mean_vid,"title","Horiz. avg. velocity w seen by particle") )
+
+      call netcdf_check( nf90_def_var(ncid,"uf1msqr",NF90_REAL, dimids_zu,uf1msqr_vid) )
+      call netcdf_check( nf90_put_att(ncid,uf1msqr_vid,"title","Mean squared u-velocity seen by particle <uf'^2>") )
+
+      call netcdf_check( nf90_def_var(ncid,"uf2msqr",NF90_REAL, dimids_zu,uf2msqr_vid) )
+      call netcdf_check( nf90_put_att(ncid,uf2msqr_vid,"title","Mean squared v-velocity seen by particle <vf'^2>") )
+
+      call netcdf_check( nf90_def_var(ncid,"uf3msqr",NF90_REAL, dimids_zu,uf3msqr_vid) )
+      call netcdf_check( nf90_put_att(ncid,uf3msqr_vid,"title","Mean squared w-velocity seen by particle <wf'^2>") )
 
       call netcdf_check( nf90_def_var(ncid,"m1src",NF90_REAL, dimids_zu,m1src_vid) )
       call netcdf_check( nf90_put_att(ncid,m1src_vid,"title","Particle x-momentum source") )
@@ -386,6 +406,12 @@ subroutine write_his_netcdf
       call netcdf_check( nf90_put_var(ncid,vp1msqr_vid,real(vp1msqr(1:nnz)),start=(/1, his_counter/)) )
       call netcdf_check( nf90_put_var(ncid,vp2msqr_vid,real(vp2msqr(1:nnz)),start=(/1, his_counter/)) )
       call netcdf_check( nf90_put_var(ncid,vp3msqr_vid,real(vp3msqr(1:nnz)),start=(/1, his_counter/)) )
+      call netcdf_check( nf90_put_var(ncid,uf1mean_vid,real(uf1mean(1:nnz)),start=(/1, his_counter/)) )
+      call netcdf_check( nf90_put_var(ncid,uf2mean_vid,real(uf2mean(1:nnz)),start=(/1, his_counter/)) )
+      call netcdf_check( nf90_put_var(ncid,uf3mean_vid,real(uf3mean(1:nnz)),start=(/1, his_counter/)) )
+      call netcdf_check( nf90_put_var(ncid,uf1msqr_vid,real(uf1msqr(1:nnz)),start=(/1, his_counter/)) )
+      call netcdf_check( nf90_put_var(ncid,uf2msqr_vid,real(uf2msqr(1:nnz)),start=(/1, his_counter/)) )
+      call netcdf_check( nf90_put_var(ncid,uf3msqr_vid,real(uf3msqr(1:nnz)),start=(/1, his_counter/)) )
 
       call netcdf_check( nf90_put_var(ncid,m1src_vid,real(m1src(1:nnz)),start=(/1, his_counter/)) )
       call netcdf_check( nf90_put_var(ncid,m2src_vid,real(m2src(1:nnz)),start=(/1, his_counter/)) )
