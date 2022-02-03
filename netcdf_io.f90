@@ -322,6 +322,118 @@ subroutine netcdf_init
 
 end subroutine netcdf_init
 
+subroutine netcdf_res
+!https://www.unidata.ucar.edu/software/netcdf/docs-fortran/f90-use-of-the-netcdf-library.html#f90-writing-data-in-an-existing-netcdf-dataset
+      use netcdf
+      use pars
+      implicit none
+
+      integer :: dimids(1),dimids_zu(2),dimids_zw(2),dimids_zu_s(3),dimids_zw_s(3)
+      integer :: Ntime
+
+      path_netcdf_his = trim(adjustl(path_his))//"history.nc"
+
+      call netcdf_check( nf90_open(path_netcdf_his,NF90_WRITE,ncid) )
+
+      call netcdf_check (nf90_inq_dimid(ncid,'time',time_dimid) )
+      call netcdf_check (nf90_inq_dimid(ncid,'zu',zu_dimid) )
+      call netcdf_check (nf90_inq_dimid(ncid,'zw',zw_dimid) )
+      call netcdf_check (nf90_inq_dimid(ncid,'nscl',s_dimid) )
+
+      dimids = (/ time_dimid /)
+      dimids_zu = (/ zu_dimid, time_dimid/)
+      dimids_zw = (/ zw_dimid, time_dimid/)
+      dimids_zu_s = (/ zu_dimid, s_dimid, time_dimid/)
+      dimids_zw_s = (/ zw_dimid, s_dimid, time_dimid/)
+
+      !Get the length of the unlimited time dimension
+      call netcdf_check( nf90_inquire_dimension(ncid=ncid,dimid=time_dimid,len=Ntime) )
+      his_counter = Ntime + 1
+
+      if (myid==0) write(*,*) 'Restart his_counter for netCDF = ',his_counter
+
+!!! Single quantities
+      call netcdf_check( nf90_inq_varid(ncid,"time",time_vid) )
+      call netcdf_check( nf90_inq_varid(ncid,"dt",dt_vid) )
+      call netcdf_check( nf90_inq_varid(ncid,"utau",utau_vid) )
+      call netcdf_check( nf90_inq_varid(ncid,"uwsfc",uwsfc_vid) )
+      call netcdf_check( nf90_inq_varid(ncid,"tnumpart",tnumpart_vid) )
+      call netcdf_check( nf90_inq_varid(ncid,"tnumdrop",tnumdrop_vid) )
+      call netcdf_check( nf90_inq_varid(ncid,"tnumaerosol",tnumaerosol_vid) )
+      call netcdf_check( nf90_inq_varid(ncid,"tnum_destroy",tnum_destroy_vid) )
+      call netcdf_check( nf90_inq_varid(ncid,"tdenum",tdenum_vid) )
+      call netcdf_check( nf90_inq_varid(ncid,"tactnum",tactnum_vid) )
+      call netcdf_check( nf90_inq_varid(ncid,"tnumimpos",tnumimpos_vid) )
+      call netcdf_check( nf90_inq_varid(ncid,"tot_reintro",tot_reintro_vid) )
+      call netcdf_check( nf90_inq_varid(ncid,"Tsfc",Tsfc_vid) )
+      call netcdf_check( nf90_inq_varid(ncid,"qsfc",qsfc_vid) )
+      call netcdf_check( nf90_inq_varid(ncid,"wtsfc",wtsfc_vid) )
+      call netcdf_check( nf90_inq_varid(ncid,"wqsfc",wqsfc_vid) )
+      call netcdf_check( nf90_inq_varid(ncid,"Swall",Swall_vid) )
+      call netcdf_check( nf90_inq_varid(ncid,"meanRH",meanRH_vid) )
+      call netcdf_check( nf90_inq_varid(ncid,"varRH",varRH_vid) )
+      call netcdf_check( nf90_inq_varid(ncid,"radavg",radavg_vid) )
+      call netcdf_check( nf90_inq_varid(ncid,"radmsqr",radmsqr_vid) )
+      call netcdf_check( nf90_inq_varid(ncid,"radavg_center",radavg_center_vid) )
+      call netcdf_check( nf90_inq_varid(ncid,"radmsqr_center",radmsqr_center_vid) )
+
+
+!!! Profiles
+      call netcdf_check( nf90_inq_varid(ncid,"zu",zu_vid) )
+      call netcdf_check( nf90_inq_varid(ncid,"zw",zw_vid) )
+      call netcdf_check( nf90_inq_varid(ncid,"uxym",uxym_vid) )
+      call netcdf_check( nf90_inq_varid(ncid,"vxym",vxym_vid) )
+      call netcdf_check( nf90_inq_varid(ncid,"wxym",wxym_vid) )
+      call netcdf_check( nf90_inq_varid(ncid,"txym",txym_vid) )
+      call netcdf_check( nf90_inq_varid(ncid,"exym",exym_vid) )
+      call netcdf_check( nf90_inq_varid(ncid,"RHxym",RHxym_vid) )
+      call netcdf_check( nf90_inq_varid(ncid,"RHmsqr",RHmsqr_vid) )
+      call netcdf_check( nf90_inq_varid(ncid,"tempxym",tempxym_vid) )
+      call netcdf_check( nf90_inq_varid(ncid,"ups",ups_vid) )
+      call netcdf_check( nf90_inq_varid(ncid,"vps",vps_vid) )
+      call netcdf_check( nf90_inq_varid(ncid,"wps",wps_vid) )
+      call netcdf_check( nf90_inq_varid(ncid,"tps",tps_vid) )
+      call netcdf_check( nf90_inq_varid(ncid,"uwle",uwle_vid) )
+      call netcdf_check( nf90_inq_varid(ncid,"uwsb",uwsb_vid) )
+      call netcdf_check( nf90_inq_varid(ncid,"vwle",vwle_vid) )
+      call netcdf_check( nf90_inq_varid(ncid,"vwsb",vwsb_vid) )
+      call netcdf_check( nf90_inq_varid(ncid,"wtle",wtle_vid) )
+      call netcdf_check( nf90_inq_varid(ncid,"wtsb",wtsb_vid) )
+      call netcdf_check( nf90_inq_varid(ncid,"t_diss",t_diss_vid) )
+      call netcdf_check( nf90_inq_varid(ncid,"zconc",zconc_vid) )
+      call netcdf_check( nf90_inq_varid(ncid,"pflux",pflux_vid) )
+      call netcdf_check( nf90_inq_varid(ncid,"pfluxdiff",pfluxdiff_vid) )
+      call netcdf_check( nf90_inq_varid(ncid,"vp1mean",vp1mean_vid) )
+      call netcdf_check( nf90_inq_varid(ncid,"vp2mean",vp2mean_vid) )
+      call netcdf_check( nf90_inq_varid(ncid,"vp3mean",vp3mean_vid) )
+      call netcdf_check( nf90_inq_varid(ncid,"vp1msqr",vp1msqr_vid) )
+      call netcdf_check( nf90_inq_varid(ncid,"vp2msqr",vp2msqr_vid) )
+      call netcdf_check( nf90_inq_varid(ncid,"vp3msqr",vp3msqr_vid) )
+      call netcdf_check( nf90_inq_varid(ncid,"uf1mean",uf1mean_vid) )
+      call netcdf_check( nf90_inq_varid(ncid,"uf2mean",uf2mean_vid) )
+      call netcdf_check( nf90_inq_varid(ncid,"uf3mean",uf3mean_vid) )
+      call netcdf_check( nf90_inq_varid(ncid,"uf1msqr",uf1msqr_vid) )
+      call netcdf_check( nf90_inq_varid(ncid,"uf2msqr",uf2msqr_vid) )
+      call netcdf_check( nf90_inq_varid(ncid,"uf3msqr",uf3msqr_vid) )
+      call netcdf_check( nf90_inq_varid(ncid,"m1src",m1src_vid) )
+      call netcdf_check( nf90_inq_varid(ncid,"m2src",m2src_vid) )
+      call netcdf_check( nf90_inq_varid(ncid,"m3src",m3src_vid) )
+      call netcdf_check( nf90_inq_varid(ncid,"Tpsrc",Tpsrc_vid) )
+      call netcdf_check( nf90_inq_varid(ncid,"TEpsrc",TEpsrc_vid) )
+      call netcdf_check( nf90_inq_varid(ncid,"Hpsrc",Hpsrc_vid) )
+      call netcdf_check( nf90_inq_varid(ncid,"Tpmean",Tpmean_vid) )
+      call netcdf_check( nf90_inq_varid(ncid,"Tpmsqr",Tpmsqr_vid) )
+      call netcdf_check( nf90_inq_varid(ncid,"Tfmean",Tfmean_vid) )
+      call netcdf_check( nf90_inq_varid(ncid,"qfmean",qfmean_vid) )
+      call netcdf_check( nf90_inq_varid(ncid,"radmean",radmean_vid) )
+      call netcdf_check( nf90_inq_varid(ncid,"rad2mean",rad2mean_vid) )
+      call netcdf_check( nf90_inq_varid(ncid,"qstarm",qstarm_vid) )
+      call netcdf_check( nf90_inq_varid(ncid,"Nc",Nc_vid) )
+      call netcdf_check( nf90_inq_varid(ncid,"ql",ql_vid) )
+
+
+end subroutine netcdf_res
+
 subroutine write_his_netcdf
       use netcdf
       use pars
@@ -502,6 +614,53 @@ subroutine netcdf_init_histog
 
 end subroutine netcdf_init_histog
 
+subroutine netcdf_res_histog
+      use netcdf
+      use pars
+      use particles
+      implicit none
+
+      integer :: dimids(1),dimids_bins(1),dimids_t_bins(2)
+      integer :: Ntime
+
+
+      path_netcdf_histog = trim(adjustl(path_his))//"histograms.nc"
+
+      call netcdf_check( nf90_open(path_netcdf_histog,NF90_WRITE,ncid_histog) )
+
+      call netcdf_check (nf90_inq_dimid(ncid_histog,'time',time_histog_dimid) )
+      call netcdf_check (nf90_inq_dimid(ncid_histog,'histbins',histbins_dimid) )
+
+      call netcdf_check( nf90_inquire_dimension(ncid=ncid_histog,dimid=time_histog_dimid,len=Ntime) )
+      histog_counter = Ntime + 1
+
+      if (myid==0) write(*,*) 'Restart histog_counter for netCDF = ',histog_counter
+
+      dimids = (/ time_histog_dimid /)
+      dimids_bins = (/ histbins_dimid /)
+      dimids_t_bins = (/histbins_dimid, time_histog_dimid /)
+
+
+!!! Single quantities
+      call netcdf_check( nf90_inq_varid(ncid_histog,"time",time_histog_vid) )
+
+!! Store the bin definitions
+      call netcdf_check( nf90_inq_varid(ncid_histog,"radbins",radbins_vid) )
+      call netcdf_check( nf90_inq_varid(ncid_histog,"resbins",resbins_vid) )
+      call netcdf_check( nf90_inq_varid(ncid_histog,"actresbins",actresbins_vid) )
+      call netcdf_check( nf90_inq_varid(ncid_histog,"acttodeathbins",acttodeathbins_vid) )
+      call netcdf_check( nf90_inq_varid(ncid_histog,"numactbins",numactbins_vid) )
+
+!!! Histograms
+      call netcdf_check( nf90_inq_varid(ncid_histog, "radhist",radhist_vid) )
+      call netcdf_check( nf90_inq_varid(ncid_histog, "radhistdeath",radhistdeath_vid) )
+      call netcdf_check( nf90_inq_varid(ncid_histog, "reshist",reshist_vid) )
+      call netcdf_check( nf90_inq_varid(ncid_histog, "actreshist",actreshist_vid) )
+      call netcdf_check( nf90_inq_varid(ncid_histog, "acttodeathhist",acttodeathhist_vid) )
+      call netcdf_check( nf90_inq_varid(ncid_histog, "numacthist",numacthist_vid) )
+
+end subroutine netcdf_res_histog
+
 subroutine write_histog_netcdf
       use netcdf
       use pars
@@ -643,6 +802,79 @@ subroutine netcdf_init_viz
       viz_counter = 1
 
 end subroutine netcdf_init_viz
+
+subroutine netcdf_res_viz
+      use netcdf
+      use pars
+      use particles
+      implicit none
+      include 'mpif.h'
+
+      integer :: dimids(1),dimids_xy(3),dimids_yz(3),dimids_xz(3)
+      integer :: dimids_xgrid(1),dimids_ygrid(1),dimids_zugrid(1),dimids_zwgrid(1)
+      integer :: ierr, Ntime
+
+
+      path_netcdf_viz = trim(adjustl(path_his))//"viz.nc"
+
+      call netcdf_check( nf90_open(path_netcdf_viz,NF90_WRITE,ncid_viz) )
+
+      call netcdf_check (nf90_inq_dimid(ncid_viz,'time',time_viz_dimid) )
+      call netcdf_check (nf90_inq_dimid(ncid_viz,'nx',viz_nx_dimid) )
+      call netcdf_check (nf90_inq_dimid(ncid_viz,'ny',viz_ny_dimid) )
+      call netcdf_check (nf90_inq_dimid(ncid_viz,'nzu',viz_nzu_dimid) )
+      call netcdf_check (nf90_inq_dimid(ncid_viz,'nzw',viz_nzw_dimid) )
+
+      call netcdf_check( nf90_inquire_dimension(ncid=ncid_viz,dimid=time_viz_dimid,len=Ntime) )
+      viz_counter = Ntime + 1
+
+      if (myid==0) write(*,*) 'Restart viz_counter for netCDF = ',viz_counter
+
+
+      dimids = (/ time_viz_dimid /)
+      dimids_xy = (/viz_nx_dimid, viz_ny_dimid, time_viz_dimid /)
+      dimids_yz = (/viz_ny_dimid, viz_nzu_dimid, time_viz_dimid /)
+      dimids_xz = (/viz_nx_dimid, viz_nzu_dimid, time_viz_dimid /)
+
+      dimids_xgrid = (/viz_nx_dimid /)
+      dimids_ygrid = (/viz_ny_dimid /)
+      dimids_zugrid = (/viz_nzu_dimid /)
+      dimids_zwgrid = (/viz_nzw_dimid /)
+
+!!! Single quantities
+      call netcdf_check( nf90_inq_varid(ncid_viz,"time",time_viz_vid) )
+
+!!store grid values
+
+      call netcdf_check( nf90_inq_varid(ncid_viz, "x",xgrid_vid) )
+      call netcdf_check( nf90_inq_varid(ncid_viz, "y",ygrid_vid) )
+      call netcdf_check( nf90_inq_varid(ncid_viz, "zu",zugrid_vid) )
+      call netcdf_check( nf90_inq_varid(ncid_viz, "zw",zwgrid_vid) )
+
+!!! Slices
+
+      !yz slices
+      call netcdf_check( nf90_inq_varid(ncid_viz, "u_yz",u_yz_vid) )
+      call netcdf_check( nf90_inq_varid(ncid_viz, "t_yz",t_yz_vid) )
+      call netcdf_check( nf90_inq_varid(ncid_viz, "q_yz",q_yz_vid) )
+      call netcdf_check( nf90_inq_varid(ncid_viz, "w_yz",w_yz_vid) )
+      call netcdf_check( nf90_inq_varid(ncid_viz, "v_yz",v_yz_vid) )
+
+      !xy slices
+      call netcdf_check( nf90_inq_varid(ncid_viz, "u_xy",u_xy_vid) )
+      call netcdf_check( nf90_inq_varid(ncid_viz, "v_xy",v_xy_vid) )
+      call netcdf_check( nf90_inq_varid(ncid_viz, "w_xy",w_xy_vid) )
+      call netcdf_check( nf90_inq_varid(ncid_viz, "t_xy",t_xy_vid) )
+      call netcdf_check( nf90_inq_varid(ncid_viz, "q_xy",q_xy_vid) )
+
+      !xz slices
+      call netcdf_check( nf90_inq_varid(ncid_viz, "u_xz",u_xz_vid) )
+      call netcdf_check( nf90_inq_varid(ncid_viz, "v_xz",v_xz_vid) )
+      call netcdf_check( nf90_inq_varid(ncid_viz, "w_xz",w_xz_vid) )
+      call netcdf_check( nf90_inq_varid(ncid_viz, "t_xz",t_xz_vid) )
+      call netcdf_check( nf90_inq_varid(ncid_viz, "q_xz",q_xz_vid) )
+
+end subroutine netcdf_res_viz
 
 subroutine write_viz_netcdf
       use netcdf
@@ -1039,29 +1271,6 @@ subroutine fill_xz_slice(xzslice,dat,tmp)
      !Now tmp contains the whole slice on processor 0
 
 end subroutine fill_xz_slice
-
-
-subroutine netcdf_restart
-      use netcdf
-      use pars
-      implicit none
-
-      !!!!! NOT EVEN CLOSE TO FINISHED
-!This is helpful:
-!https://www.unidata.ucar.edu/software/netcdf/docs-fortran/f90-use-of-the-netcdf-library.html#f90-writing-data-in-an-existing-netcdf-dataset
-       
-      path_netcdf_his = trim(adjustl(path_his))//"history.nc"
-      call netcdf_check( nf90_open(path_netcdf_his,NF90_WRITE,ncid) )
-
-      !Could get the length of the time dimension to initialize his_counter
-      !call netcdf_check( nf90_inq_dimlen(ncid,
-
-      !... but realized that I would need to somehow populate all of the dimids
-      !and vids! Can I loop through all of the vars in the file? How to do
-      !this efficienetly?
-
-
-end subroutine netcdf_restart
 
 
 subroutine write_histograms

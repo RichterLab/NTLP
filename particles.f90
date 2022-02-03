@@ -2586,6 +2586,7 @@ CONTAINS
       real :: mylwc_sum,myphiw_sum,myphiv_sum,Volp      
       real :: Eff_C,Eff_S
       real :: t_s,t_f,t_s1,t_f1
+      real :: mod_Magnus
 
 
       !First fill extended velocity field for interpolation
@@ -2974,6 +2975,7 @@ CONTAINS
       real :: taup0, dt_taup0, temp_r, temp_t, guess
       real :: tmp_coeff
       real :: xp3i
+      real :: mod_Magnus
 
 
 
@@ -4040,6 +4042,7 @@ CONTAINS
       real :: esa, dnext,  m_w, rhop, Rep, taup,vprime(3), rprime, Tprime, qstr, Shp, Nup, dp, VolP
       real :: diff(3), diffnorm, Tnext, rnext, T
       real :: taup0, g(3)
+      real :: mod_Magnus
 
 
         taup0 = (((part%m_s)/((2./3.)*pi2*radius_init**3) + rhow)*(radius_init*2)**2)/(18*rhoa*nuf)
@@ -4101,6 +4104,7 @@ CONTAINS
       real, intent(OUT) :: guess
       integer, intent(OUT) :: mflag
       real :: a, c, esa, Q, R, M, val, theta, S, T
+      real :: mod_Magnus
 
       mflag = 0
       esa = mod_Magnus(part%Tf)
@@ -4763,17 +4767,6 @@ CONTAINS
 
   end subroutine radius_histogram
 
-  function mod_Magnus(T)
-    implicit none
-
-    !Take in T in Kelvin and return saturation vapor pressure using function of Alduchov and Eskridge, 1996
-    real,intent(in) :: T
-    real :: mod_Magnus
-
-    mod_Magnus = 610.94 *exp((17.6257*(T-273.15))/(243.04+(T-273.15)))
-
-
-  end function mod_Magnus
 
   function crit_radius(m_s,Os,Tf)
     use pars

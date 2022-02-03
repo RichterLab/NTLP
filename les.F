@@ -87,6 +87,7 @@ c
       call get_units
       call gridd
       call setcon
+      call change_RH_bcs_to_q
 c
 c -------------- scratch run
 c
@@ -128,6 +129,7 @@ c
          call restart
          call setup(it)
 
+
          !Call dns_vis even when doing LES since vis_m needs to be initialized with something
          call dns_vis
          call get_max
@@ -135,6 +137,16 @@ c
  
          call particle_setup
          call read_part_res
+
+         if (inetcdf .eq. 1) then
+         call netcdf_res
+         call netcdf_res_histog
+         endif
+
+         if (iviznetcdf .eq. 1) then
+         call netcdf_res_viz
+         endif
+
       endif
 
 
@@ -5360,49 +5372,7 @@ c
          batag   = bfac*grav/t00
          fcor_h  = 0.0
 
-         !!!If doing DNS, BCs are set somewhat differently than when doing LES
-         if (iDNS .eq. 1) then
-
-         !Get BCs of temperature in Celsius for use in specific expressions
-         topC=(Ttop(1)-273.15)
-         botC=(Tbot(1)-273.15)  
-         
-         !Normalize the RH given in input file
-         RHT = Ttop(2)/100.0 
-         RHB = Tbot(2)/100.0
-
-         !Convert RH given in input file into specific humidity
-         Ttop(2) =  RHT*Mw/Ru/Ttop(1)*610.94*
-     +               EXP(17.6257*topC/(topC+243.04))/rhoa
-         Tbot(2) =  RHB*Mw/Ru/Tbot(1)*610.94*
-     +               EXP(17.6257*botC/(botC+243.04))/rhoa
-
-         wtsfc(1) = qstar(1)
-         wtsfc(2) = qstar(2)
-
-         else !(doing LES)
-c
-         !qstar specified in input file for isfc = 0
-        
          wtsfc = qstar
-
-         !tsfcc specified in input file for isfc = 1
-
-         !Assuming tsfcc(2) is giving RH:
-
-         surf_temp = tsfcc(1)
-
-         RHB = surf_RH/100.0
-
-         tsfcc(2) = RHB*Mw/Ru/tsfcc(1)*mod_Magnus(tsfcc(1))/rhoa
-
-         if (myid==0) then
-         write(*,*) 'SURFACE HUMIDITY: %RH, q = ',surf_RH,tsfcc(2)
-         end if
-
-
-
-         end if
 c
 c
          !Gradients of temperature and scalars above inversion (upper BC)
@@ -10378,6 +10348,43 @@ c
 
       end subroutine humidity_control
 
+      subroutine change_RH_bcs_to_q
+      !This converts the RH provided in the params file to a value of q that code needs
+      use pars
+      use con_data
+      implicit none
+      real :: RHB,RHT,mod_Magnus
+
+      !Assuming tsfcc(2),Ttop(2),Tbot(2) in params.in are giving RH:
+      if (iDNS .eq. 1) then
+
+         RHT = Ttop(2)
+         RHB = Tbot(2)
+
+         !Convert RH given in input file into specific humidity
+         Ttop(2) = RHT/100.0*Mw/Ru/Ttop(1)*mod_Magnus(Ttop(1))/rhoa
+         Tbot(2) = RHB/100.0*Mw/Ru/Tbot(1)*mod_Magnus(Tbot(1))/rhoa
+
+         if (myid==0) then
+           write(*,*) 'SURFACE HUMIDITY: %RH, q = ',RHB,Tbot(2)
+         end if
+
+      else !(doing LES)
+
+         RHB = tsfcc(2)
+
+         tsfcc(2) = RHB/100.0*Mw/Ru/tsfcc(1)*mod_Magnus(tsfcc(1))/rhoa
+
+         if (myid==0) then
+           write(*,*) 'SURFACE HUMIDITY: %RH, q = ',RHB,tsfcc(2)
+         end if
+
+      end if
+
+
+
+      end subroutine change_RH_bcs_to_q
+
       subroutine read_input_file
       use pars
       use particles
@@ -10441,7 +10448,18 @@ c
 
 
       end subroutine read_input_file
+      function mod_Magnus(T)
+      implicit none
 
+      !Take in T in Kelvin and return saturation vapor pressure using function of Alduchov and Eskridge, 1996
+      real,intent(in) :: T
+      real :: mod_Magnus
+
+      mod_Magnus = 610.94 *exp((17.6257*(T-273.15))/(243.04+(T-273.15)))
+
+
+      end function mod_Magnus
+ 
       function ran2(idum)
       integer :: idum,IM1,IM2,IMM1,IA1,IA2,IQ1,IQ2,IR1,IR2,NTAB,NDIV
       real :: ran2,AM,EPS,RNMX
