@@ -545,6 +545,7 @@ c
      +           ' vmax = ',e15.6,' wmax = ',e15.6,/,
      +           ' vel_max = ',e15.5,/,
      +           ' infinite time step !!!')
+          call mpi_finalize(ierr)
           stop
       endif
 
@@ -2090,20 +2091,20 @@ c
 
 !A modification to set the upwards flux equal to the flux at bottom for
 !getting statistically steady humidity, temp fields in hurricane PBL
-!      if (iz.eq.nnz) then
-!
-!      do iy=iys,iye
-!      do ix=1,nnx
-!         taut3_u(ix,iy,iscl) = qstar(iscl)
-!
-!         fnt1(ix,iy,iz) = -0.5*((vis_s(ix,iy,iscl,iz)+
-!     +           vis_s(ix,iy,iscl,izm1))*tx(ix,iy) - 
-!     +           upwn*t(ix,iy,iscl,iz)*
-!     +                      (u(ix,iy,iz)+stokes(iz)))
-!      enddo
-!      enddo
-!
-!      else
+      if (iz.eq.nnz) then
+
+      do iy=iys,iye
+      do ix=1,nnx
+         taut3_u(ix,iy,iscl) = qstar(iscl)
+
+         fnt1(ix,iy,iz) = -0.5*((vis_s(ix,iy,iscl,iz)+
+     +           vis_s(ix,iy,iscl,izm1))*tx(ix,iy) - 
+     +           upwn*t(ix,iy,iscl,iz)*
+     +                      (u(ix,iy,iz)+stokes(iz)))
+      enddo
+      enddo
+
+      else
 
       do iy=iys,iye
       do ix=1,nnx
@@ -2115,7 +2116,7 @@ c
      +                      (u(ix,iy,iz)+stokes(iz)))
       enddo
       enddo
-!      end if
+      end if
 
       call xderivp(fnt1(1,iys,iz),trigx(1,1),xk(1),nnx,iys,iye)
       do iy=iys,iye
@@ -5329,7 +5330,6 @@ c
       use con_stats
       use particles
 c
-      real :: RHT,RHB
 
       pi   = 4.0*atan(1.0)
       pi2  = 2.0*pi
@@ -5357,8 +5357,6 @@ c        dtdzf(1)=0.000
          divgls  = 0.
          zo      = 0.0001
          zi      = -5.
-c        izi     = (55*nnz)/100
-c        izi     = nnz
          izi     = 55
          xl      = 50.
          yl      = 50.
@@ -5382,12 +5380,6 @@ c
          dtjump  = 0.0
          divgls  = 0.0
 
-  
-c
-c ---------- if stretched grid specify location of first point
-c
-         !Particle channel:
-         izi     = (60*nnz)/100
       endif
 c
       time  = 0.0
@@ -6728,7 +6720,7 @@ c
 c ---------- decide whether velocity fields are saved
 c
       msave = .false.
-      if(it .ge. itstr .and. mtape) then
+      if(mtape) then
          itn=itn+1
          msave = .true.
          call get_output_filenames
@@ -6737,7 +6729,7 @@ c
 c ---------- decide whether viz fields are saved
 c
       msave_v = .false.
-      if(it .ge. itstr .and. mviz .and. i_viz .gt. 0) then
+      if(mviz .and. i_viz .gt. 0) then
          msave_v = .true.
          if(ionce .eq. 0) then
             ionce = 1
@@ -10394,7 +10386,7 @@ c
       character(48) :: label
       character(180) :: params_dir
       namelist /step_params/ iti,itmax,imean,ihst,itape,
-     +                       itstr,it_his,it_viz,i_viz,itn
+     +                       it_his,it_viz,i_viz,itn
 
       namelist /grid_params/ ncpu_s, Uo, Ttop, Tbot,
      +         qstar, tsfcc, ugcont, vgcont, dvdr, hurr_rad,

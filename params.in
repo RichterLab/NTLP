@@ -6,7 +6,6 @@ itmax=150000   !Max number of time steps
 imean=100    !Number of time steps between writing mean profiles to output log file
 ihst=20     !Number of time steps between writing profiles to history file
 itape=2000  !Number of time steps before opening new history file and writing full 3D volumes
-itstr=1
 it_his=1     !Time step to begin recording history files
 it_viz=1     !Time step to begin recording viz files
 i_viz=500   !Time steps between writing to viz file
