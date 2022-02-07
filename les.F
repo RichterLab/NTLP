@@ -426,6 +426,11 @@ c
       call get_max
       call get_dt
       if (it.ge.itmax) go to 99000
+
+      if (time .gt. max_time) then  !Adjust itmax if max_time has been exceeded
+         itmax = floor(real(it)/real(itape))*itape + itape  !Stop at next itape
+      end if
+
       go to 9000
 c
 99000 continue
@@ -10386,7 +10391,7 @@ c
       character(48) :: label
       character(180) :: params_dir
       namelist /step_params/ iti,itmax,imean,ihst,itape,
-     +                       it_his,it_viz,i_viz,itn
+     +                       it_his,it_viz,i_viz,itn,max_time
 
       namelist /grid_params/ ncpu_s, Uo, Ttop, Tbot,
      +         qstar, tsfcc, ugcont, vgcont, dvdr, hurr_rad,

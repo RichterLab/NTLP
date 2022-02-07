@@ -11,6 +11,8 @@ c     ----------------------------------------------------------------------
      +     icoalesce,ipart_method,ipartdiff,isfs,iexner,ilongwave,
      +     inetcdf,iviznetcdf,ihumiditycontrol,ireintro,itrajout,
      +     inewpart,ihurr
+
+      real :: max_time
 c     
 c     -------- j_recl = record length in "bytes" for history file
 c     k8     = kind parameter for integers in mpi_io routines

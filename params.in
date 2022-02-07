@@ -10,6 +10,7 @@ it_his=1     !Time step to begin recording history files
 it_viz=1     !Time step to begin recording viz files
 i_viz=500   !Time steps between writing to viz file
 itn = 0  !Index for "u.le.cou001" files
+max_time = 1.0  !Code will stop at the next itape after this time (in seconds) has been exceeded
 /
 
 !Flags for various features
