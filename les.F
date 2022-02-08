@@ -34,9 +34,6 @@ c
 c       ihst    = nn; frequency at which global variables are output in history file
 c               < 0 ; no history files
 c
-c       it_his  = time step where history files start, incremented by itape
-c
-c       it_viz  = time step where viz files start, incremented by itape
 c
 c       ismlt   = 1 ; use businger formulas in MO 
 c                 0 ; use large and everyone elses formulas in MO 
@@ -358,13 +355,19 @@ c
       endif
       if(l_root) then
          if (inetcdf .eq. 1) then
-            if(mhis  .and. istage .eq. 1)  call write_his_netcdf
-         if(mhis  .and. istage .eq. 1 .and. mtape) call close_his_netcdf
-      if(mhis  .and. istage .eq. 1 .and. mtape) call close_histog_netcdf
+           if(mhis  .and. istage .eq. 1)  call write_his_netcdf
+           if(mhis  .and. istage .eq. 1 .and. mtape) then
+              call close_his_netcdf
+           endif
+           if(mhis  .and. istage .eq. 1 .and. mtape)  then
+              call close_histog_netcdf
+           endif
          else
             if(mhis  .and. istage .eq. 1)  call write_his(itop)
             if(mhis  .and. istage .eq. 1 .and. mtape) call close_his
-         if(mhis  .and. istage .eq. 1 .and. mtape) call close_histograms
+            if(mhis  .and. istage .eq. 1 .and. mtape) then
+              call close_histograms
+            end if
          end if
       endif
 c
@@ -719,6 +722,14 @@ c
 c
 c ----------- start step for history files
 c
+      if (iti.eq.0) then
+         it_his = 1
+         it_viz = 1
+      else
+         it_his = iti+2
+         it_viz = iti+2
+      endif
+
       it_his_nxt = it_his
       it_viz_nxt = it_viz
 c
@@ -6733,18 +6744,6 @@ c
 c
 c ---------- decide whether viz fields are saved
 c
-      msave_v = .false.
-      if(mviz .and. i_viz .gt. 0) then
-         msave_v = .true.
-         if(ionce .eq. 0) then
-            ionce = 1
-            if (iviznetcdf) then
-               !call open_viz_netcdf
-            else
-               !call open_viz
-            end if
-         endif
-      endif
       if((i_viz .gt. 0) .and. (it .ge. it_viz_nxt)) then
         if (iviznetcdf) then
            !call close_viz_netcdf
@@ -7926,9 +7925,6 @@ c ---- root closes and checks the files
 c
       close(nhis1)
       close(nhisp)
-      close(nrad)
-      close(nres)
-      close(nactres)
       inquire(file=path_sav_h,exist=there)
       if(.not.there) then
          write(6,8000) path_sav_h
@@ -7941,15 +7937,8 @@ c
          call mpi_finalize(ierr)
          stop
       endif
-      inquire(file=path_sav_hist,exist=there)
-      if(.not.there) then
-         write(6,8200) path_sav_hist
-         call mpi_finalize(ierr)
-         stop
-      endif
       write(6,7000) path_sav_h
       write(6,7100) path_sav_hp
-      write(6,7200) path_sav_hist
 c
       return
 c -------------------- process write errors
@@ -8558,6 +8547,7 @@ c             Set iz_pick(iz) = iz, ix_pick(ix) = ix, iy_pick(iy) = iy
 c             Data is round-robin alternated in the data file for more than
 c             1 plane for any particular view.
 c
+
       iz_pick(12) = 12
       iz_pick(28) = 28
       iz_pick(64) = 64
@@ -8588,6 +8578,7 @@ c
          ionce_z = 1
          iviz_z =  -npln_z
          if (npln_z .ne. 0) then
+      call mpi_barrier(mpi_comm_world,ierr)
             call mpi_file_open(mpi_comm_world, path_viz_xy,
      +                         mpi_mode_create+mpi_mode_rdwr,
      +                         mpi_info_null, nviz_z, ierr)
@@ -10391,7 +10382,7 @@ c
       character(48) :: label
       character(180) :: params_dir
       namelist /step_params/ iti,itmax,imean,ihst,itape,
-     +                       it_his,it_viz,i_viz,itn,max_time
+     +                       i_viz,itn,max_time
 
       namelist /grid_params/ ncpu_s, Uo, Ttop, Tbot,
      +         qstar, tsfcc, ugcont, vgcont, dvdr, hurr_rad,

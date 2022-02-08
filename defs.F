@@ -2,7 +2,7 @@ c     ----------------------------------------------------------------------
       module pars
 c     ----------------------------------------------------------------------
       integer :: iti,itmax,imean,ihst,itape
-      integer :: itstr,it_his,it_viz,i_viz
+      integer :: itstr,i_viz
 
       integer :: ismlt,ifree,iradup,
      +     iupwnd,ibuoy,ifilt,itcut,isubs,ibrcl,iocean,method,
@@ -59,7 +59,8 @@ c     ----------------------------------------------------------------------
      +     nviz_z, nviz_y, 
      +     nviz_x, nviz_s,
      +     kfile, jfile, ibcl, ibcu,
-     +     igrdr, imach, itn, it_his_nxt, it_viz_nxt
+     +     igrdr, imach, itn, it_his_nxt, it_viz_nxt,
+     +     it_his,it_viz
       logical ::    mnout, micut, mtape, mhis, msave,mtrans,
      +     l_root, l_debug, msave_v, mviz
 c     ----------------------------------------------------------------------
