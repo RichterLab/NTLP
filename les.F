@@ -9141,18 +9141,18 @@ c --------------- build character strings for file name
 c
       cgrid = '.le.'
       write(num,'(i3.3)') itn
-      iblnk = index(path_sav,' ')
+      iblnk = index(path_seed,' ')
       call blnk(path_sav_v)
       call blnk(path_sav_p)
       call blnk(path_sav_c)
       call blnk(path_sav_part)
-      path_sav_v = path_sav(1:iblnk-1)//'/u'//
+      path_sav_v = path_seed(1:iblnk-1)//'/u'//
      +                 cgrid(1:4)//case(1:3)//num(1:3)
-      path_sav_p = path_sav(1:iblnk-1)//'/p'//
+      path_sav_p = path_seed(1:iblnk-1)//'/p'//
      +                 cgrid(1:4)//case(1:3)//num(1:3)
-      path_sav_c = path_sav(1:iblnk-1)//'/u'//
+      path_sav_c = path_seed(1:iblnk-1)//'/u'//
      +                 cgrid(1:4)//case(1:3)//num(1:3)//'.con'
-      path_sav_part = path_sav(1:iblnk-1)//'/part'//
+      path_sav_part = path_seed(1:iblnk-1)//'/part'//
      +                 cgrid(1:4)//case(1:3)//num(1:3)
 c
       return
@@ -9177,18 +9177,18 @@ c
       write(iblks(1:7),'(i7.7)') istep
       iblks(8:8) = '_'
       write(iblks(9:15),'(i7.7)') (istep+itape)
-      iblnk = index(path_histog,' ')
+      iblnk = index(path_seed,' ')
       call blnk(path_rad_hist)
       call blnk(path_res_hist)
 
 
-      path_rad_hist = path_histog(1:iblnk-1)//'/radhist'//
+      path_rad_hist = path_seed(1:iblnk-1)//'/radhist'//
      +       cgrid(1:4)//case(1:3)//'.'//iblks(1:15)//'.txt'      
 
-      path_res_hist = path_histog(1:iblnk-1)//'/reshist'//
+      path_res_hist = path_seed(1:iblnk-1)//'/reshist'//
      +       cgrid(1:4)//case(1:3)//'.'//iblks(1:15)//'.txt'      
 
-      path_actres_hist = path_histog(1:iblnk-1)//'/actreshist'//
+      path_actres_hist = path_seed(1:iblnk-1)//'/actreshist'//
      +       cgrid(1:4)//case(1:3)//'.'//iblks(1:15)//'.txt'      
 
 
@@ -9249,9 +9249,9 @@ c
       write(iblks(1:7),'(i7.7)') istep
       iblks(8:8) = '_'
       write(iblks(9:15),'(i7.7)') (istep + itape)
-      iblnk = index(path_his,' ')
+      iblnk = index(path_seed,' ')
       call blnk(path_sav_h)
-      path_sav_h = path_his(1:iblnk-1)//'/his'//
+      path_sav_h = path_seed(1:iblnk-1)//'/his'//
      +         cgrid(1:4)//case(1:3)//'.'//iblks(1:15)
 c
 c --------------- build character strings for ieee profile history file
@@ -9263,9 +9263,9 @@ c
       write(iblks(1:7),'(i7.7)') istep
       iblks(8:8) = '_'
       write(iblks(9:15),'(i7.7)') (istep + itape)
-      iblnk = index(path_his,' ')
+      iblnk = index(path_seed,' ')
       call blnk(path_sav_hp)
-      path_sav_hp = path_his(1:iblnk-1)//'/his'//
+      path_sav_hp = path_seed(1:iblnk-1)//'/his'//
      +         cgrid(1:4)//case(1:3)//'.'//iblks(1:15)//'.ieee'
 
 c
@@ -10391,8 +10391,7 @@ c
      +         rad_kappa,rad_Fct,rad_Fcb
 
       namelist /path_names/ path_seed,path_part,path_res,
-     +         path_sav,path_his,path_viz_xy,path_viz_xz,
-     +         path_viz_yz,path_stuf,path_ran,path_histog
+     +         path_stuf,path_ran
 
       namelist /flags/ ismlt,ifree,isfc,iradup,
      +         iupwnd,ibuoy,ifilt,itcut,isubs,ibrcl,iocean,

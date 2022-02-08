@@ -92,12 +92,12 @@ c     ----------------------------------------------------------------------
      +     cfl, tzero,
      +     ucfl, vcfl, wcfl
 c     ----------------------------------------------------------------------
-      character*80  path_res, path_sav, path_his, path_prt,
+      character*80  path_res, path_prt,
      +     path_hp, path_sav_hp, path_part, path_ran,
      +     path_v, path_c, path_p, path_h,
      +     path_sav_v, path_sav_c,
      +     path_sav_p, path_sav_h, path_sav_part,
-     +     path_histog, path_rad_hist, path_res_hist, path_actres_hist,
+     +     path_rad_hist, path_res_hist, path_actres_hist,
      +     path_traj,
      +     bad_news
       character case_inp*3

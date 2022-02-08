@@ -74,7 +74,7 @@ subroutine netcdf_init
 
       integer :: dimids(1),dimids_zu(2),dimids_zw(2),dimids_zu_s(3),dimids_zw_s(3)
 
-      path_netcdf_his = trim(adjustl(path_his))//"history.nc"
+      path_netcdf_his = trim(adjustl(path_seed))//"history.nc"
 
       call netcdf_check( nf90_create(path_netcdf_his,nf90_clobber,ncid))
 
@@ -331,7 +331,7 @@ subroutine netcdf_res
       integer :: dimids(1),dimids_zu(2),dimids_zw(2),dimids_zu_s(3),dimids_zw_s(3)
       integer :: Ntime
 
-      path_netcdf_his = trim(adjustl(path_his))//"history.nc"
+      path_netcdf_his = trim(adjustl(path_seed))//"history.nc"
 
       call netcdf_check( nf90_open(path_netcdf_his,NF90_WRITE,ncid) )
 
@@ -555,7 +555,7 @@ subroutine netcdf_init_histog
 
       integer :: dimids(1),dimids_bins(1),dimids_t_bins(2)
 
-      path_netcdf_histog = trim(adjustl(path_his))//"histograms.nc"
+      path_netcdf_histog = trim(adjustl(path_seed))//"histograms.nc"
 
       call netcdf_check( nf90_create(path_netcdf_histog,nf90_clobber,ncid_histog))
 
@@ -624,7 +624,7 @@ subroutine netcdf_res_histog
       integer :: Ntime
 
 
-      path_netcdf_histog = trim(adjustl(path_his))//"histograms.nc"
+      path_netcdf_histog = trim(adjustl(path_seed))//"histograms.nc"
 
       call netcdf_check( nf90_open(path_netcdf_histog,NF90_WRITE,ncid_histog) )
 
@@ -706,7 +706,7 @@ subroutine netcdf_init_viz
       integer :: dimids_xgrid(1),dimids_ygrid(1),dimids_zugrid(1),dimids_zwgrid(1)
       integer :: ierr
 
-      path_netcdf_viz = trim(adjustl(path_his))//"viz.nc"
+      path_netcdf_viz = trim(adjustl(path_seed))//"viz.nc"
 
       call netcdf_check( nf90_create(path_netcdf_viz,nf90_clobber,ncid_viz))
 
@@ -815,7 +815,7 @@ subroutine netcdf_res_viz
       integer :: ierr, Ntime
 
 
-      path_netcdf_viz = trim(adjustl(path_his))//"viz.nc"
+      path_netcdf_viz = trim(adjustl(path_seed))//"viz.nc"
 
       call netcdf_check( nf90_open(path_netcdf_viz,NF90_WRITE,ncid_viz) )
 

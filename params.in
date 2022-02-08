@@ -91,14 +91,7 @@ rad_Fcb = 0.0    !Net radiative flux at cloud (or domain) base
 path_seed="/scratch365/drichte2/Theo_Pi/case1/"
 path_part="/scratch365/drichte2/Theo_Pi/case1/part.le.cou000"
 path_res="/scratch365/drichte2/Theo_Pi/case1/u.le.cou000"
-path_sav="/scratch365/drichte2/Theo_Pi/case1/"
-path_his="/scratch365/drichte2/Theo_Pi/case1/"
-path_viz_xy="/scratch365/drichte2/Theo_Pi/case1/"
-path_viz_xz="/scratch365/drichte2/Theo_Pi/case1/"
-path_viz_yz="/scratch365/drichte2/Theo_Pi/case1/"
-path_stuf="/scratch365/drichte2/Theo_Pi/case1/"
 path_ran="/scratch365/drichte2/Theo_Pi/case1/u.le.cou000"
-path_histog="/scratch365/drichte2/Theo_Pi/case1/"
 /
 
 

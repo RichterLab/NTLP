@@ -1756,7 +1756,7 @@ CONTAINS
       !Set up the path for the trajectory files
       if (itrajout) then
       write(myid_char,'(i4.4)') myid
-      path_traj = trim(adjustl(path_his))//"particle_traj/"//myid_char//".dat"
+      path_traj = trim(adjustl(path_seed))//"particle_traj/"//myid_char//".dat"
       ntraj = 128
       open(ntraj,file=path_traj,form='formatted',status='replace')
       end if
