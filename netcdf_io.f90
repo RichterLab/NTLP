@@ -22,7 +22,7 @@ integer :: ups_vid,vps_vid,wps_vid,tps_vid
 integer :: wtle_vid,wtsb_vid
 integer :: uwle_vid,uwsb_vid
 integer :: vwle_vid,vwsb_vid
-integer :: t_diss_vid
+integer :: t_diss_vid,t_rprod_vid,t_sprod_vid,t_tran_vid,t_buoy_vid
 integer :: zconc_vid
 integer :: pflux_vid,pfluxdiff_vid
 integer :: vp1mean_vid,vp2mean_vid,vp3mean_vid
@@ -223,6 +223,18 @@ subroutine netcdf_init
       call netcdf_check( nf90_def_var(ncid,"wtsb",NF90_REAL, dimids_zw_s,wtsb_vid) )
       call netcdf_check( nf90_put_att(ncid,wtsb_vid,"title","Subgrid <w't'>") )
 
+      call netcdf_check( nf90_def_var(ncid,"t_rprod",NF90_REAL, dimids_zw,t_rprod_vid) )
+      call netcdf_check( nf90_put_att(ncid,t_rprod_vid,"title","TKE resolved production") )
+
+      call netcdf_check( nf90_def_var(ncid,"t_sprod",NF90_REAL, dimids_zw,t_sprod_vid) )
+      call netcdf_check( nf90_put_att(ncid,t_sprod_vid,"title","TKE subgrid production") )
+
+      call netcdf_check( nf90_def_var(ncid,"t_tran",NF90_REAL, dimids_zw,t_tran_vid) )
+      call netcdf_check( nf90_put_att(ncid,t_tran_vid,"title","TKE transport") )
+
+      call netcdf_check( nf90_def_var(ncid,"t_buoy",NF90_REAL, dimids_zw,t_buoy_vid) )
+      call netcdf_check( nf90_put_att(ncid,t_buoy_vid,"title","TKE buoyancy production") )
+
       call netcdf_check( nf90_def_var(ncid,"t_diss",NF90_REAL, dimids_zw,t_diss_vid) )
       call netcdf_check( nf90_put_att(ncid,t_diss_vid,"title","TKE dissipation") )
 
@@ -399,6 +411,10 @@ subroutine netcdf_res
       call netcdf_check( nf90_inq_varid(ncid,"vwsb",vwsb_vid) )
       call netcdf_check( nf90_inq_varid(ncid,"wtle",wtle_vid) )
       call netcdf_check( nf90_inq_varid(ncid,"wtsb",wtsb_vid) )
+      call netcdf_check( nf90_inq_varid(ncid,"t_rprod",t_rprod_vid) )
+      call netcdf_check( nf90_inq_varid(ncid,"t_sprod",t_sprod_vid) )
+      call netcdf_check( nf90_inq_varid(ncid,"t_tran",t_tran_vid) )
+      call netcdf_check( nf90_inq_varid(ncid,"t_buoy",t_buoy_vid) )
       call netcdf_check( nf90_inq_varid(ncid,"t_diss",t_diss_vid) )
       call netcdf_check( nf90_inq_varid(ncid,"zconc",zconc_vid) )
       call netcdf_check( nf90_inq_varid(ncid,"pflux",pflux_vid) )
@@ -505,7 +521,24 @@ subroutine write_his_netcdf
       call netcdf_check( nf90_put_var(ncid,wtle_vid,real(tmp_s),start=(/1,1, his_counter/)) )
       call netcdf_check( nf90_put_var(ncid,wtsb_vid,real(wtsb(0:nnz,1:nscl)),start=(/1,1, his_counter/)) )
 
-      tmp(0) = 0
+
+      tmp(0) = 0  !Need to change this
+      tmp(1:nnz) = t_rprod(1:nnz)
+      call netcdf_check( nf90_put_var(ncid,t_rprod_vid,real(tmp),start=(/1, his_counter/)) )
+
+      tmp(0) = 0  !Need to change this
+      tmp(1:nnz) = t_sprod(1:nnz)
+      call netcdf_check( nf90_put_var(ncid,t_sprod_vid,real(tmp),start=(/1, his_counter/)) )
+
+      tmp(0) = 0  !Need to change this
+      tmp(1:nnz) = t_tran(1:nnz)
+      call netcdf_check( nf90_put_var(ncid,t_tran_vid,real(tmp),start=(/1, his_counter/)) )
+
+      tmp(0) = 0  !Need to change this
+      tmp(1:nnz) = t_buoy(1:nnz)
+      call netcdf_check( nf90_put_var(ncid,t_buoy_vid,real(tmp),start=(/1, his_counter/)) )
+
+      tmp(0) = 0  !Need to change this
       tmp(1:nnz) = t_diss(1:nnz)
       call netcdf_check( nf90_put_var(ncid,t_diss_vid,real(tmp),start=(/1, his_counter/)) )
 

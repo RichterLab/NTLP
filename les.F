@@ -2107,20 +2107,20 @@ c
 
 !A modification to set the upwards flux equal to the flux at bottom for
 !getting statistically steady humidity, temp fields in hurricane PBL
-      if (iz.eq.nnz) then
-
-      do iy=iys,iye
-      do ix=1,nnx
-         taut3_u(ix,iy,iscl) = qstar(iscl)
-
-         fnt1(ix,iy,iz) = -0.5*((vis_s(ix,iy,iscl,iz)+
-     +           vis_s(ix,iy,iscl,izm1))*tx(ix,iy) - 
-     +           upwn*t(ix,iy,iscl,iz)*
-     +                      (u(ix,iy,iz)+stokes(iz)))
-      enddo
-      enddo
-
-      else
+!      if (iz.eq.nnz) then
+!
+!      do iy=iys,iye
+!      do ix=1,nnx
+!         taut3_u(ix,iy,iscl) = qstar(iscl)
+!
+!         fnt1(ix,iy,iz) = -0.5*((vis_s(ix,iy,iscl,iz)+
+!     +           vis_s(ix,iy,iscl,izm1))*tx(ix,iy) - 
+!     +           upwn*t(ix,iy,iscl,iz)*
+!     +                      (u(ix,iy,iz)+stokes(iz)))
+!      enddo
+!      enddo
+!
+!      else
 
       do iy=iys,iye
       do ix=1,nnx
@@ -2132,7 +2132,7 @@ c
      +                      (u(ix,iy,iz)+stokes(iz)))
       enddo
       enddo
-      end if
+!      end if
 
       call xderivp(fnt1(1,iys,iz),trigx(1,1),xk(1),nnx,iys,iye)
       do iy=iys,iye
@@ -5534,8 +5534,8 @@ c ----------------- build grid up to zi first
 c
       z_frst = z1
       z_cntr = zi*0.5
-      n_pbl  = nnz/2
-c     n_pbl  = (5*nnz)/8
+      !n_pbl  = nnz/2
+      n_pbl  = (3*nnz)/4
       z_fac1 = z_cntr/z_frst
       z_fac2 = 1.0/float(n_pbl/2)
       z_fac  = 1.1
@@ -5918,18 +5918,18 @@ c
       !q_surf = 0.00823
 
    
-      z_switch = 250.0
-      t_switch = 301.16
+      z_switch = 600.0
+      t_switch = 300.81
       t_surf = 300.81
-      q_switch = 0.0244
+      q_switch = 0.0232
       q_surf = 0.0232
 
       !Slopes below the inversion
       slope_t = (t_switch-t_surf)/z_switch
       slope_q = (q_switch-q_surf)/z_switch
 
-      !slope_t = 0.0
-      lope_q = 0.0
+      slope_t = 0.0
+      slope_q = 0.0
 c
       do iz=izs,ize
 
@@ -10391,7 +10391,7 @@ c
      +         rad_kappa,rad_Fct,rad_Fcb
 
       namelist /path_names/ path_seed,path_part,path_res,
-     +         path_stuf,path_ran
+     +         path_ran
 
       namelist /flags/ ismlt,ifree,isfc,iradup,
      +         iupwnd,ibuoy,ifilt,itcut,isubs,ibrcl,iocean,
