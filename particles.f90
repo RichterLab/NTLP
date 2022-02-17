@@ -1686,7 +1686,7 @@ CONTAINS
       integer :: values(8)
       integer :: idx,ierr
       integer*8 :: mult
-      real :: xv,yv,zv,ran2,deltaz
+      real :: xv,yv,zv,ran2
       real :: maxx,maxy,maxz
       real :: xp_init(3),rad_init,m_s,Os
       real :: S,M
@@ -1696,14 +1696,12 @@ CONTAINS
       call date_and_time(VALUES=values)
       iseed = -(myid+values(8)+values(7)+values(6))
 
-  
-      !For the channel case, set the total number of particles:
-      deltaz = zmax-zmin
 
       numpart = tnumpart/numprocs
       if (myid == 0) then
       numpart = numpart + MOD(tnumpart,numprocs)
       endif
+
 
       !Initialize ngidx, the particle global index for this processor
       ngidx = 1
@@ -2149,7 +2147,7 @@ CONTAINS
 
       xv = ran2(iseed)*(xmax-xmin) + xmin
       yv = ran2(iseed)*(ymax-ymin) + ymin
-      zv = ran2(iseed)*(zmax-zmin) + zmin
+      zv = ran2(iseed)*zl
       xp_init = (/xv,yv,zv/) 
 
       m_s = radius_init**3*pi2*2.0/3.0*rhow*Sal  !Using the salinity specified in params.in
@@ -2184,7 +2182,7 @@ CONTAINS
 
       xv = ran2(iseed)*(xmax-xmin) + xmin
       yv = ran2(iseed)*(ymax-ymin) + ymin
-      zv = ran2(iseed)*(zmax-zmin) + zmin
+      zv = ran2(iseed)*zl
       xp_init = (/xv,yv,zv/) 
 
 
@@ -3121,11 +3119,11 @@ CONTAINS
                if      (isnan(rt_zeroes(1)) &
                   .OR. (rt_zeroes(1)*part%radius<0) &
                   .OR. isnan(rt_zeroes(2)) &
-                  .OR. (rt_zeroes(2)<0) &
-                  .OR. (rt_zeroes(1)*part%radius>1.0e-2) & !These last 3 are very specific to pi chamber
-                  .OR. (rt_zeroes(2)*part%Tp > Tbot(1)*1.1)  &
-                  .OR. (rt_zeroes(2)*part%Tp < Ttop(1)*0.9)) &
-              then
+                  .OR. (rt_zeroes(2)<0)) &
+                  !.OR. (rt_zeroes(1)*part%radius>1.0e-2) & !These last 3 are very specific to pi chamber
+                  !.OR. (rt_zeroes(2)*part%Tp > Tbot(1)*1.1)  &
+                  !.OR. (rt_zeroes(2)*part%Tp < Ttop(1)*0.9)) &
+               then
 
                 numimpos = numimpos + 1  !How many have failed?
                 !If they failed (should be very small number), radius,

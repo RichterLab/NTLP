@@ -5921,8 +5921,8 @@ c
       z_switch = 600.0
       t_switch = 300.81
       t_surf = 300.81
-      q_switch = 0.0232
-      q_surf = 0.0232
+      q_switch = 0.0215
+      q_surf = 0.0215
 
       !Slopes below the inversion
       slope_t = (t_switch-t_surf)/z_switch
