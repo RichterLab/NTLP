@@ -1713,7 +1713,7 @@ CONTAINS
       do idx=1,numpart
 
          ! Call new_particle, which creates a new particle basd on some strategy dictated by inewpart
-         call new_particle(idx)
+         call new_particle(idx,myid)
 
 
       ngidx = ngidx + 1
@@ -2062,7 +2062,7 @@ CONTAINS
          !if (myid==0) randproc = floor(ran2(iseed)*numprocs)
          !call mpi_bcast(randproc,1,mpi_integer,0,mpi_comm_world,ierr)
 
-         call new_particle(np)
+         call new_particle(np,myid)
 
 
          !Update this processor's global ID for each one created:
@@ -2128,7 +2128,7 @@ CONTAINS
       
   end subroutine create_particle
 
-  subroutine new_particle(idx)
+  subroutine new_particle(idx,procidx)
   use pars
   use con_data
   implicit none
@@ -2136,7 +2136,7 @@ CONTAINS
   real :: xv,yv,zv,ran2,m_s
   real :: Os_dinit,radius_dinit
   real :: xp_init(3)
-  integer :: idx
+  integer :: idx,procidx
 
   !C-FOG parameters: lognormal of accumulation + lognormal of coarse, with extra "resolution" on the coarse mode
   real :: S,M,Os,rad_init
@@ -2152,7 +2152,7 @@ CONTAINS
 
       m_s = radius_init**3*pi2*2.0/3.0*rhow*Sal  !Using the salinity specified in params.in
 
-      call create_particle(xp_init,vp_init,Tp_init,m_s,Os_init,mult_init,radius_init,ngidx,myid)
+      call create_particle(xp_init,vp_init,Tp_init,m_s,Os_init,mult_init,radius_init,ngidx,procidx)
 
 
 
@@ -2173,7 +2173,7 @@ CONTAINS
 
       m_s = radius_dinit**3*pi2*2.0/3.0*rhow*Sal  !Using the salinity specified in params.in
 
-      call create_particle(xp_init,vp_init,Tp_init,m_s,Os_dinit,mult_init,radius_dinit,ngidx,myid)
+      call create_particle(xp_init,vp_init,Tp_init,m_s,Os_dinit,mult_init,radius_dinit,ngidx,procidx)
 
 
 
@@ -2211,7 +2211,7 @@ CONTAINS
       end if      
 
       !Force the output particle to be a coarse mode particle
-      if (idx==1 .and. myid==0) then
+      if (idx==1 .and. procidx==0) then
          !Force particle log output to be a coarse mode in fog layer -- "giant mode"
          S = 0.45
          M = 0.0
@@ -2224,7 +2224,7 @@ CONTAINS
       end if
 
 
-      call create_particle(xp_init,vp_init,Tp_init,m_s,Os,mult,rad_init,idx,myid)
+      call create_particle(xp_init,vp_init,Tp_init,m_s,Os,mult,rad_init,idx,procidx)
 
 
 
@@ -2245,7 +2245,7 @@ CONTAINS
 
          vp_init(3) = ran2(iseed)*4.0
 
-         call create_particle(xp_init,vp_init,Tp_init,m_s,Os_init,mult_init,rad_init,ngidx,myid) 
+         call create_particle(xp_init,vp_init,Tp_init,m_s,Os_init,mult_init,rad_init,ngidx,procidx) 
       
 
    end if
@@ -2527,6 +2527,12 @@ CONTAINS
        call destroy_particle
 
        num_destroy = num_destroy + 1
+
+       
+       if (ireintro .eq. 1 .and. inewpart .eq. 3) then
+          call new_particle(idx_old,procidx_old)
+       end if
+       
 
     else
        part => part%next

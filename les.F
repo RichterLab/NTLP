@@ -3003,11 +3003,11 @@ c
 
 
 !! To change the lower surface temperature at some specified time
-!          if (time .gt. 3600.0) then
-!             tsfcc(1) = surf_temp
-!          else
-!             tsfcc(1)  = 284.0
-!          end if
+          if (time .gt. 3600.0) then
+             tsfcc(1) = surf_temp
+          else
+             tsfcc(1)  = 284.0
+          end if
 
 
       iz   = 1
@@ -5904,25 +5904,18 @@ c
 
       !!!! Use for the C-FOG fog LCM case:
       !Parameters from Charlotte's C-FOG profile
-      !z_switch = 93.5
-      !t_switch = 284.5
-      !q_switch = 0.0079916
-      !t_surf = 284.0
-      !q_surf = 0.0081199
-
-      !Now play with them
-      !z_switch = 30.0
-      !t_switch = 284.05
-      !q_switch = 0.00811
-      !t_surf = 284.0
-      !q_surf = 0.00823
+      z_switch = 30.0
+      t_switch = 284.05
+      q_switch = 0.00811
+      t_surf = 284.0
+      q_surf = 0.00823
 
    
-      z_switch = 600.0
-      t_switch = 300.81
-      t_surf = 300.81
-      q_switch = 0.0215
-      q_surf = 0.0215
+      !z_switch = 600.0
+      !t_switch = 300.81
+      !t_surf = 300.81
+      !q_switch = 0.0215
+      !q_surf = 0.0215
 
       !Slopes below the inversion
       slope_t = (t_switch-t_surf)/z_switch

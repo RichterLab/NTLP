@@ -47,7 +47,7 @@ ncpu_s=8
 
 !Time step
 cfl = 0.5
-dt_new = 0.05
+dt_new = 1.0
 
 !Use for DNS:
 Uo = 0.0  !Sets the magnitude of the top and bottom plate velocities (Couette flow -- assumes equal and opposite)
@@ -56,14 +56,14 @@ Tbot(1) = 299.0, 100.0  !Currently this should be (temperature, relative humidit
 
 !Use for LES:
 qstar = 0.2, 0.2  !Surface fluxes of (temperature, humidity) (used for LES and DNS)
-tsfcc = 300.0, 100.0    !Surface conditions of (temp, humidity) (used for LES) -- make sure tsfcc is gt than t00 for both isfc=0 or 1
+tsfcc = 283.9, 100.0    !Surface conditions of (temp, humidity) (used for LES) -- make sure tsfcc is gt than t00 for both isfc=0 or 1
 
 surf_RH = 100.0
 surf_temp = 282.0  !Only use this when changing the surface temperature in time! Otherwise set tsfcc
 
 psurf = 101325  !Pa -- nominal surface pressure, for use in the definition of potential temp
 
-ugcont = 0.0   !The initial u-velocity in the field
+ugcont = 4.0   !The initial u-velocity in the field
 vgcont = 0.0   !The initial v-velocity
 dvdr = -8.0e-04  !Change in v with hurricane radius
 hurr_rad = 40e3  ! Hurricane radius
@@ -72,12 +72,12 @@ dpdx = 0.0  !The pressure gradient for channel flow (gets put into u_geo for DNS
 
 Swall = -2.15e-6  !Set the CONSTANT humidity sink to use if ihumiditycontrol = 0
 
-zi = 1.0  !This has to do with grid stretching; make equal to zl for iz_space = 1,2; zi is inversion height for iz_space = 3
-zl = 1.0
-xl = 2.0
-yl = 2.0
+zi = 80.0  !This has to do with grid stretching; make equal to zl for iz_space = 1,2; zi is inversion height for iz_space = 3
+zl = 80.0
+xl = 128.0
+yl = 128.0
 
-zw1 = 0.0033333  !The first grid point; only used if stretched grid
+zw1 = 0.1  !The first grid point; only used if stretched grid
 
 !Radiation parameters
 rad_kappa = 120.0  !The absorptivity in the radiation expression (see Larson et al. 2007)
@@ -97,14 +97,14 @@ path_ran="/scratch365/drichte2/Theo_Pi/case1/u.le.cou000"
 
 !Material and particle properties and other constants
 &constants
-grav = 0.043
+grav = 9.81
 t00 = 273.0 !Reference temp for buoyancy
 fcor = 0.0  !Coriolis parameter
 zo = 3.2e-5       !Roughness height (for LES)
 zos = 3.2e-5       !Scalar roughness height (for LES)
 
 !Air phase:
-rhoa=1.0
+rhoa=1.2
 nuf=1.57e-5  !m^2/s
 Cpa=1006.0  !J/kg-K
 Pra = 0.715
@@ -112,11 +112,11 @@ Sc = 0.615
 Rd = 286.9     !J/kg-K  dry air gas constant
 
 !Particles:
-tnumpart = 0
-mult_init = 5.0e2
+tnumpart = 1e6
+mult_init = 1.75e9
 rhow=1000.0  !kg/m^3
 rhos = 2000.0 !Density of salt, kg/m^3
-part_grav = 0,0,-0.6494
+part_grav = 0,0,-9.81
 Cpp = 4179.0  !J/kg-K
 Mw = 0.018015  !kg/mol
 Ru = 8.3144    !J/mol-K Universal gas constant
@@ -129,10 +129,10 @@ Ion = 2.0
 nprime = 0.01  !particles/cm^3/min, real rate is nprime*multiplicity
 
 !Particle initial conditions:
-radius_init=2.0e-7
+radius_init=2.5e-6
 radius_std=0.0
 Os_init=1.0
 Os_std=0.00
-Tp_init = 290.0
+Tp_init = 286.0
 vp_init = 0.0, 0.0, 0.0
 /
