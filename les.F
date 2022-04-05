@@ -2107,20 +2107,20 @@ c
 
 !A modification to set the upwards flux equal to the flux at bottom for
 !getting statistically steady humidity, temp fields in hurricane PBL
-!      if (iz.eq.nnz) then
-!
-!      do iy=iys,iye
-!      do ix=1,nnx
-!         taut3_u(ix,iy,iscl) = qstar(iscl)
-!
-!         fnt1(ix,iy,iz) = -0.5*((vis_s(ix,iy,iscl,iz)+
-!     +           vis_s(ix,iy,iscl,izm1))*tx(ix,iy) - 
-!     +           upwn*t(ix,iy,iscl,iz)*
-!     +                      (u(ix,iy,iz)+stokes(iz)))
-!      enddo
-!      enddo
-!
-!      else
+      if (iz.eq.nnz .and. icase .eq. 4) then
+
+      do iy=iys,iye
+      do ix=1,nnx
+         taut3_u(ix,iy,iscl) = qstar(iscl)
+
+         fnt1(ix,iy,iz) = -0.5*((vis_s(ix,iy,iscl,iz)+
+     +           vis_s(ix,iy,iscl,izm1))*tx(ix,iy) - 
+     +           upwn*t(ix,iy,iscl,iz)*
+     +                      (u(ix,iy,iz)+stokes(iz)))
+      enddo
+      enddo
+
+      else
 
       do iy=iys,iye
       do ix=1,nnx
@@ -2132,7 +2132,8 @@ c
      +                      (u(ix,iy,iz)+stokes(iz)))
       enddo
       enddo
-!      end if
+
+      end if
 
       call xderivp(fnt1(1,iys,iz),trigx(1,1),xk(1),nnx,iys,iye)
       do iy=iys,iye
@@ -3001,13 +3002,16 @@ c
       real upars(2)
 c
 
-
-!! To change the lower surface temperature at some specified time
-          if (time .gt. 3600.0) then
-             tsfcc(1) = surf_temp
-          else
-             tsfcc(1)  = 284.0
-          end if
+          
+      !This was for the C-FOG setup
+      if (icase .eq. 3) then
+      !! To change the lower surface temperature at some specified time
+      if (time .gt. 3600.0) then
+         tsfcc(1) = surf_temp
+      else
+         tsfcc(1)  = 284.0
+      end if
+      end if
 
 
       iz   = 1
@@ -5902,6 +5906,7 @@ c
          divz(iz) = 0.0
       enddo
 
+      if (icase .eq. 3) then
       !!!! Use for the C-FOG fog LCM case:
       !Parameters from Charlotte's C-FOG profile
       z_switch = 30.0
@@ -5909,20 +5914,25 @@ c
       q_switch = 0.00811
       t_surf = 284.0
       q_surf = 0.00823
+      end if
 
    
-      !z_switch = 600.0
-      !t_switch = 300.81
-      !t_surf = 300.81
-      !q_switch = 0.0215
-      !q_surf = 0.0215
+      if (icase .eq. 4) then
+      z_switch = 600.0
+      t_switch = 300.81
+      t_surf = 300.81
+      q_switch = 0.0215
+      q_surf = 0.0215
+      end if
 
       !Slopes below the inversion
       slope_t = (t_switch-t_surf)/z_switch
       slope_q = (q_switch-q_surf)/z_switch
 
+      if (icase .eq. 0) then
       slope_t = 0.0
       slope_q = 0.0
+      end if
 c
       do iz=izs,ize
 
@@ -5967,22 +5977,6 @@ c
 !
 !            !Get temperature based on desired RH
 !            t(ix,iy,2,iz) = surf_RH/100.0*
-!     +      Mw/Ru/Ttmp*mod_Magnus(Ttmp)/rhoa
-
-
-!     Try to copy Charlotte's IC from the fog case (overwriting the
-!     temperature profile from above)
-
-!From the first version of the paper:
-!            t(ix,iy,1,iz) = 286.0 + (1.0/128.0)*zz(iz)
-!            t(ix,iy,2,iz) = 0.0093 - (0.0005/128.0)*zz(iz)
-!
-!            t(ix,iy,1,iz) = 286.0  !Remember this is the potential temp
-!            !Actual temp
-!            Ttmp = 
-!     +      t(ix,iy,1,iz)*(psurf/(psurf - zz(iz)*rhoa*grav))**(-Rd/Cpa)
-!
-!            t(ix,iy,2,iz) = 99.0/100.0*
 !     +      Mw/Ru/Ttmp*mod_Magnus(Ttmp)/rhoa
 
 
@@ -10390,7 +10384,7 @@ c
      +         iupwnd,ibuoy,ifilt,itcut,isubs,ibrcl,iocean,
      +         method,idebug,iz_space,ivis0,ifix_dt,new_vis,iDNS,
      +         icouple,iTcouple,iHcouple,ievap,ifields,ilin,
-     +         ineighbor,icoalesce,ipart_method,inewpart,
+     +         ineighbor,icoalesce,ipart_method,inewpart,icase,
      +         ipartdiff,isfs,iexner,ilongwave,ihurr,
      +         inetcdf,iviznetcdf,ihumiditycontrol,ireintro,
      +         itrajout

@@ -2182,7 +2182,7 @@ CONTAINS
 
       xv = ran2(iseed)*(xmax-xmin) + xmin
       yv = ran2(iseed)*(ymax-ymin) + ymin
-      zv = ran2(iseed)*zl
+      zv = ran2(iseed)*(zi-zw1) + zw1
       xp_init = (/xv,yv,zv/) 
 
 
@@ -3125,8 +3125,8 @@ CONTAINS
                if      (isnan(rt_zeroes(1)) &
                   .OR. (rt_zeroes(1)*part%radius<0) &
                   .OR. isnan(rt_zeroes(2)) &
-                  .OR. (rt_zeroes(2)<0)) &
-                  !.OR. (rt_zeroes(1)*part%radius>1.0e-2) & !These last 3 are very specific to pi chamber
+                  .OR. (rt_zeroes(2)<0) &
+                  .OR. (rt_zeroes(1)*part%radius>1.0e-2)) & !These last 3 are very specific to pi chamber
                   !.OR. (rt_zeroes(2)*part%Tp > Tbot(1)*1.1)  &
                   !.OR. (rt_zeroes(2)*part%Tp < Ttop(1)*0.9)) &
                then
