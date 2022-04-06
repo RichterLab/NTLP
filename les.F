@@ -170,7 +170,7 @@ c
       write(*,'(a7,2e15.6)') 'rad1: ',time,part%radius 
       write(*,'(a7,2e15.6)') 'qinf1:',time,part%qinf 
       write(*,'(a7,2e15.6)') 'qstr1:',time,part%qstar 
-      write(*,'(a7,2e15.6)') 'Os1:',time,part%Os
+      write(*,'(a10,2e15.6)') 'kappa_s1:',time,part%kappa_s
       write(*,'(a7,2e15.6)') 'ms1:',time,part%m_s
       write(*,'(a7,2e15.6)') 'res1:',time,part%res
       write(*,'(a7,e15.6,i)') 'mult1:',time,part%mult
@@ -10393,7 +10393,7 @@ c
       namelist /constants/ rhoa, nuf, Cpa, Pra, Sc,
      +         tnumpart,mult_init,rhow,part_grav,rhos,
      +         Cpp,Mw,Ms,Ru,Gam,Ion,Sal,Rd,
-     +         radius_init,radius_std,Os_init,Os_std,
+     +         radius_init,radius_std,kappas_init,kappas_std,
      +         grav, t00,fcor,zo,zos,
      +         vp_init,Tp_init,nprime
 

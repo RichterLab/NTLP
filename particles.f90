@@ -49,7 +49,7 @@ module particles
   real :: Rep_avg,part_grav(3)
   real :: radavg,radmin,radmax,radmsqr,tempmin,tempmax,qmin,qmax
   real :: radavg_center,radmsqr_center
-  real :: vp_init(3),Tp_init,radius_init,radius_std,Os_init,Os_std
+  real :: vp_init(3),Tp_init,radius_init,radius_std,kappas_init,kappas_std
   real :: pdf_factor,pdf_prob
   integer*8 :: mult_init,mult_factor,mult_a,mult_c
 
@@ -81,7 +81,7 @@ module particles
     integer :: pidx,procidx,nbr_pidx,nbr_procidx
     real :: vp(3),xp(3),uf(3),xrhs(3),vrhs(3),Tp,Tprhs_s
     real :: Tprhs_L,Tf,radius,radrhs,qinf,qstar,dist
-    real :: res,m_s,Os,rc,actres,numact
+    real :: res,m_s,kappa_s,rc,actres,numact
     real :: u_sub(3),sigm_s
     integer*8 :: mult
     type(particle), pointer :: prev,next
@@ -1685,12 +1685,6 @@ CONTAINS
       include 'mpif.h' 
       integer :: values(8)
       integer :: idx,ierr
-      integer*8 :: mult
-      real :: xv,yv,zv,ran2
-      real :: maxx,maxy,maxz
-      real :: xp_init(3),rad_init,m_s,Os
-      real :: S,M
-      integer*8 :: num_a,num_c,totnum_a,totnum_c
 
       !Create the seed for the random number generator:
       call date_and_time(VALUES=values)
@@ -2019,10 +2013,8 @@ CONTAINS
 
       integer :: it,it_delay
       integer :: ierr,randproc,np,my_reintro
-      real :: xp_init(3),ran2,Os,m_s,pi,radius_dinit
       real :: totdrops
 
-      pi = 4.0*atan(1.0)
 
       if (inewpart .eq. 4) then
 
@@ -2058,12 +2050,7 @@ CONTAINS
 
       do np=1,my_reintro
 
-         !Proc 0 gets a random proc ID, broadcasts it out:
-         !if (myid==0) randproc = floor(ran2(iseed)*numprocs)
-         !call mpi_bcast(randproc,1,mpi_integer,0,mpi_comm_world,ierr)
-
          call new_particle(np,myid)
-
 
          !Update this processor's global ID for each one created:
          ngidx = ngidx + 1
@@ -2074,11 +2061,11 @@ CONTAINS
 
   end subroutine particle_reintro
 
-  subroutine create_particle(xp,vp,Tp,m_s,Os,mult,rad_init,idx,procidx)
+  subroutine create_particle(xp,vp,Tp,m_s,kappa_s,mult,rad_init,idx,procidx)
       use pars
       implicit none
 
-      real :: xp(3),vp(3),Tp,qinfp,rad_init,pi,m_s,Os
+      real :: xp(3),vp(3),Tp,qinfp,rad_init,pi,m_s,kappa_s
       integer :: idx,procidx
       integer*8 :: mult
 
@@ -2119,7 +2106,7 @@ CONTAINS
       part%res = 0.0
       part%actres = 0.0
       part%m_s = m_s
-      part%Os = Os
+      part%kappa_s = kappa_s
       part%dist = 0.0
       part%u_sub(1:3) = 0.0
       part%sigm_s = 0.0
@@ -2134,12 +2121,12 @@ CONTAINS
   implicit none
 
   real :: xv,yv,zv,ran2,m_s
-  real :: Os_dinit,radius_dinit
+  real :: kappas_dinit,radius_dinit
   real :: xp_init(3)
   integer :: idx,procidx
 
   !C-FOG parameters: lognormal of accumulation + lognormal of coarse, with extra "resolution" on the coarse mode
-  real :: S,M,Os,rad_init
+  real :: S,M,kappa_s,rad_init
   real :: num_a,num_c,totnum_a,totnum_c
   integer*8 :: mult
 
@@ -2152,12 +2139,12 @@ CONTAINS
 
       m_s = radius_init**3*pi2*2.0/3.0*rhow*Sal  !Using the salinity specified in params.in
 
-      call create_particle(xp_init,vp_init,Tp_init,m_s,Os_init,mult_init,radius_init,ngidx,procidx)
+      call create_particle(xp_init,vp_init,Tp_init,m_s,kappas_init,mult_init,radius_init,ngidx,procidx)
 
 
 
 
-   elseif (inewpart==2) then  !Same as above, but with NORMAL distribution of radius and Os given by radius_std and Os_std
+   elseif (inewpart==2) then  !Same as above, but with NORMAL distribution of radius and kappa given by radius_std and kappas_std
 
       xv = ran2(iseed)*(xmax-xmin) + xmin
       yv = ran2(iseed)*(ymax-ymin) + ymin
@@ -2168,12 +2155,12 @@ CONTAINS
       ! Set distribution for initial radius
       radius_dinit = abs(radius_std*sqrt(-2*log(ran2(iseed)))*cos(pi2*ran2(iseed)) + radius_init)
 
-      ! Set distribution for Os 
-      Os_dinit = abs(Os_std * sqrt(-2*log(ran2(iseed)))*cos(pi2*ran2(iseed)) + Os_init)
+      ! Set distribution for kappa_s
+      kappas_dinit = abs(kappas_std * sqrt(-2*log(ran2(iseed)))*cos(pi2*ran2(iseed)) + kappas_init)
 
       m_s = radius_dinit**3*pi2*2.0/3.0*rhow*Sal  !Using the salinity specified in params.in
 
-      call create_particle(xp_init,vp_init,Tp_init,m_s,Os_dinit,mult_init,radius_dinit,ngidx,procidx)
+      call create_particle(xp_init,vp_init,Tp_init,m_s,kappas_dinit,mult_init,radius_dinit,ngidx,procidx)
 
 
 
@@ -2190,22 +2177,22 @@ CONTAINS
       if (ran2(iseed) .gt. pdf_prob) then   !It's accumulation mode
          S = 0.5
          M = -1.95
-         Os = 0.5
+         kappa_s = 0.6
          mult = mult_a
 
          !With these parameters, get m_s and rad_init from distribution
-         call lognormal_dist(rad_init,m_s,Os,M,S)
+         call lognormal_dist(rad_init,m_s,kappa_s,M,S)
          num_a = num_a + 1
 
       else  !It's coarse mode
 
          S = 0.45
          M = 0.0
-         Os = 1.0
+         kappa_s = 1.2
          mult = mult_c
 
          !With these parameters, get m_s and rad_init from distribution
-         call lognormal_dist(rad_init,m_s,Os,M,S)
+         call lognormal_dist(rad_init,m_s,kappa_s,M,S)
          num_c = num_c + 1
 
       end if      
@@ -2215,16 +2202,16 @@ CONTAINS
          !Force particle log output to be a coarse mode in fog layer -- "giant mode"
          S = 0.45
          M = 0.0
-         Os = 1.0
+         kappa_s = 1.2
          mult = mult_c
 
          !With these parameters, get m_s and rad_init from distribution
-         call lognormal_dist(rad_init,m_s,Os,M,S)
+         call lognormal_dist(rad_init,m_s,kappa_s,M,S)
          xp_init(3) = 10.0
       end if
 
 
-      call create_particle(xp_init,vp_init,Tp_init,m_s,Os,mult,rad_init,idx,procidx)
+      call create_particle(xp_init,vp_init,Tp_init,m_s,kappa_s,mult,rad_init,idx,procidx)
 
 
 
@@ -2245,20 +2232,20 @@ CONTAINS
 
          vp_init(3) = ran2(iseed)*4.0
 
-         call create_particle(xp_init,vp_init,Tp_init,m_s,Os_init,mult_init,rad_init,ngidx,procidx) 
+         call create_particle(xp_init,vp_init,Tp_init,m_s,kappas_init,mult_init,rad_init,ngidx,procidx) 
       
 
    end if
 
   end subroutine new_particle
 
-  subroutine lognormal_dist(rad_init,m_s,Os,M,S)
+  subroutine lognormal_dist(rad_init,m_s,kappa_s,M,S)
   use pars
   use con_data
   implicit none
   include 'mpif.h'
 
-  real, intent(inout) :: rad_init,m_s,Os
+  real, intent(inout) :: rad_init,m_s,kappa_s
   real :: ran2,cdf_func_single
   real :: M,S
   real :: d1,d2,err,dhalf,ftest,CDF
@@ -2307,7 +2294,7 @@ CONTAINS
   a = log(0.95)  !RH = 95%
   b = -2.0*Mw*Gam/Ru/rhow/Tp_init
   c = 0.0
-  d = Ion*Os*m_s*(Mw/Ms)/(2.0/3.0*pi2*rhow)
+  d = kappa_s*m_s/(2.0/3.0*pi2*rhos)
 
   p = -b/3.0/a
   q = p**3 - 3.0*a*d/6.0/a**2
@@ -2688,7 +2675,7 @@ CONTAINS
          !Mass Transfer calculations
          einf = mod_Magnus(part%Tf)
          Eff_C = 2.0*Mw*Gam/(Ru*rhow*part%radius*part%Tp)
-         Eff_S = Ion*part%Os*part%m_s*Mw/Ms/(Volp*rhop-part%m_s)
+         Eff_S = part%kappa_s*part%m_s*rhow/rhos/(Volp*rhop-part%m_s)
          estar = einf*exp(Mw*Lv/Ru*(1.0/part%Tf-1.0/part%Tp)+Eff_C-Eff_S)
          part%qstar = Mw/Ru*estar/part%Tp/rhoa
 
@@ -3139,13 +3126,13 @@ CONTAINS
 
                 write(*,'(a30,14e15.6)') 'WARNING: CONVERGENCE',  &
                part%radius,part%qinf,part%Tp,part%Tf,part%xp(3), &
-               part%Os,part%m_s,part%vp(1),part%vp(2),part%vp(3), &
+               part%kappa_s,part%m_s,part%vp(1),part%vp(2),part%vp(3), &
                part%res,part%sigm_s,rt_zeroes(1),rt_zeroes(2)
 
                end if
 
                !Get the critical radius based on old temp
-               part%rc = crit_radius(part%m_s,part%Os,part%Tp) 
+               part%rc = crit_radius(part%m_s,part%kappa_s,part%Tp) 
 
                !Count if activated/deactivated
                if (part%radius > part%rc .AND. part%radius*rt_zeroes(1) < part%rc) then
@@ -3172,14 +3159,14 @@ CONTAINS
          if (part%radius .gt. 1.0e-2) then
          write(*,'(a30,12e15.6)') 'WARNING: BIG DROPLET',  &
          part%radius,part%qinf,part%Tp,part%Tf,part%xp(3), &
-         part%Os,part%m_s,part%vp(1),part%vp(2),part%vp(3), &
+         part%kappa_s,part%m_s,part%vp(1),part%vp(2),part%vp(3), &
          part%res,part%sigm_s
          end if
 
          if (part%qinf .lt. 0.0) then
          write(*,'(a30,12e15.6)') 'WARNING: NEG QINF',  &
          part%radius,part%qinf,part%Tp,part%Tf,part%xp(3), &
-         part%Os,part%m_s,part%vp(1),part%vp(2),part%vp(3), &
+         part%kappa_s,part%m_s,part%vp(1),part%vp(2),part%vp(3), &
          part%res,part%sigm_s
          end if
 
@@ -3204,7 +3191,7 @@ CONTAINS
          einf = mod_Magnus(part%Tf)
 
          Eff_C = 2.0*Mw*Gam/(Ru*rhow*part%radius*part%Tp)
-         Eff_S = Ion*part%Os*part%m_s*Mw/Ms/(Volp*rhop-part%m_s)
+         Eff_S = part%kappa_s*part%m_s*rhow/rhos/(Volp*rhop-part%m_s)
          estar = einf*exp(Mw*Lv/Ru*(1.0/part%Tf-1.0/part%Tp)+Eff_C-Eff_S)
          part%qstar = Mw/Ru*estar/part%Tp/rhoa
 
@@ -4075,7 +4062,7 @@ CONTAINS
         !!!!!!!!!!!!!!!!
 
         !!! Humidity !!!
-        qstr = (Mw/(Ru*Tnext*rhoa)) * esa * exp(((Lv*Mw/Ru)*((1./part%Tf) - (1./Tnext))) + ((2.*Mw*Gam)/(Ru*rhow*rnext*Tnext)) - ((Ion*part%Os*part%m_s*(Mw/Ms))/(Volp*rhop-part%m_s)))
+        qstr = (Mw/(Ru*Tnext*rhoa)) * esa * exp(((Lv*Mw/Ru)*((1./part%Tf) - (1./Tnext))) + ((2.*Mw*Gam)/(Ru*rhow*rnext*Tnext)) - ((part%kappa_s*part%m_s*rhow/rhos)/(Volp*rhop-part%m_s)))
         !!!!!!!!!!!!!!!!!!
 
         !!! Radius !!!
@@ -4114,7 +4101,7 @@ CONTAINS
       esa = mod_Magnus(part%Tf)
 
       a = -(2*Mw*Gam)/(Ru*rhow*part%Tf)/LOG((Ru*part%Tf*rhoa*part%qinf)/(Mw*esa))
-      c = (Ion*part%Os*part%m_s*(Mw/Ms))/((2.0/3.0)*pi2*rhow)/LOG((Ru*part%Tf*rhoa*part%qinf)/(Mw*esa))
+      c = (part%kappa_s*part%m_s)/((2.0/3.0)*pi2*rhos)/LOG((Ru*part%Tf*rhoa*part%qinf)/(Mw*esa))
 
       Q = (a**2.0)/9.0
       R = (2.0*a**3.0+27.0*c)/54.0
@@ -4772,14 +4759,14 @@ CONTAINS
   end subroutine radius_histogram
 
 
-  function crit_radius(m_s,Os,Tf)
+  function crit_radius(m_s,kappa_s,Tf)
     use pars
     use con_data
     implicit none
 
     integer :: i,maxidx(1)
     integer, parameter :: N=1000
-    real :: m_s,Os,Tf
+    real :: m_s,kappa_s,Tf
     real :: radval(N),SS(N)
     real :: radstart,radend,dr
     real :: crit_radius
@@ -4794,9 +4781,9 @@ CONTAINS
       radval(i) = 10**(radstart - (i-1)*dr)
 
       firstterm = 2*Mw*Gam/Ru/rhow/radval(i)/Tf
-      secterm =Ion*Os*m_s*(Mw/Ms)/(rhow*pi2*2.0/3.0*radval(i)**3)
+      secterm =kappa_s*m_s/(rhos*pi2*2.0/3.0*radval(i)**3)
 
-      SS(i) = exp( 2*Mw*Gam/Ru/rhow/radval(i)/Tf - Ion*Os*m_s*(Mw/Ms)/(rhow*pi2*2.0/3.0*radval(i)**3))
+      SS(i) = exp( 2*Mw*Gam/Ru/rhow/radval(i)/Tf - kappa_s*m_s/(rhos*pi2*2.0/3.0*radval(i)**3))
 
     end do
 

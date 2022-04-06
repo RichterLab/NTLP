@@ -30,7 +30,7 @@ ineighbor=0
 icoalesce=0
 ipart_method=2   !1 = same RK3 as flow, 2 = backward Euler
 ipartdiff = 0
-inewpart = 2  !1 = new particles have initial conditions defined below, random location in domain; 2 = same, but normal distributions of radius and Os, given by radius_std and Os_std; 3 = special setup for C-FOG and double lognormal of different type; 4 = crude sea spray setup
+inewpart = 2  !1 = new particles have initial conditions defined below, random location in domain; 2 = same, but normal distributions of radius and kappa_s, given by radius_std and kappas_std; 3 = special setup for C-FOG and double lognormal of different type; 4 = crude sea spray setup
 icase = 3  !Special additions for certain cases. 3 = setup for C-FOG, 4 = steady state LES sea spray setup
 isfs = 2   !isfs=1 is simple random walk, isfs=2 is Weil et al. (2004) particle subgrid
 iexner = 0  !iexner = 1 applies a correction to part%Tf to account for conversion b/w potential temp and temp. (need in PBL)
@@ -132,8 +132,8 @@ nprime = 0.01  !particles/cm^3/min, real rate is nprime*multiplicity
 !Particle initial conditions:
 radius_init=2.5e-6
 radius_std=0.0
-Os_init=1.0
-Os_std=0.00
+kappas_init=1.2
+kappas_std=0.00
 Tp_init = 286.0
 vp_init = 0.0, 0.0, 0.0
 /
