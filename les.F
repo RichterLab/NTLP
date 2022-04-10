@@ -10387,7 +10387,7 @@ c
      +         ineighbor,icoalesce,ipart_method,inewpart,icase,
      +         ipartdiff,isfs,iexner,ilongwave,ihurr,
      +         inetcdf,iviznetcdf,ihumiditycontrol,ireintro,
-     +         itrajout
+     +         itrajout, ikernel
 
 
       namelist /constants/ rhoa, nuf, Cpa, Pra, Sc,
