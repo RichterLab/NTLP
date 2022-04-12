@@ -1,0 +1,25 @@
+#!/bin/bash
+
+#PBS -A ARONC42715271
+#PBS -q standard
+#PBS -l select=16:ncpus=44:mpiprocs=44
+#PBS -l walltime=24:00:00
+#PBS -N survivalvis1
+#PBS -j oe
+
+case=survivalvis1
+time=0000000
+runout=$case.out.$time
+
+datadir=/p/work/hpark6/ntlp/survivalvis1
+homedir=/p/home/hpark6/ntlp/survivalvis1
+
+cd $homedir
+
+imachine=0
+echo $imachine > ./mach.file
+echo $datadir >> ./mach.file
+
+module swap PrgEnv-cray PrgEnv-intel
+
+aprun -n 704 /p/home/hpark6/ntlp/build/lesmpi.a $homedir/params.in > $datadir/$runout

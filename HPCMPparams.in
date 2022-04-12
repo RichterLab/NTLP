@@ -1,0 +1,135 @@
+
+!Time step information
+&step_params
+iti    = 0	 ! Starting timestep
+itmax  = 20000	 ! Maximum timestep 
+imean  = 5000	 ! originally 100 change to see the q (shows means in the output files)
+ihst   = 100	 ! number of timesteps after to take a history reading (for hist files)
+itape  = 10	 ! Number of timesteps after to write files
+iphist = 1000	 ! Output step for particle histogram
+itstr  = 7200	 ! At what time to start writing files
+it_his = 1	 ! time step where history files start, incremented by itape
+it_viz = 1	 ! time step where viz files start, incremented by itape
+i_viz  = 5000	 ! I have no idea or desire to know what this is atm 
+itn    = 0	 ! Index for "u.le.cou001" files
+dt_con = 0.5	 ! fixed timestep amount of time (does not use CFL condition)
+it_probe = 1	 ! Time step in which to write probe data
+/
+
+!Flags for various features
+&flags
+ismlt=0, ifree=0, iradup=1, iupwnd=1
+ibuoy=1, ifilt=0, itcut=1, isubs=0, ibrcl=0, iocean=0
+method=3, idebug=0, iz_space=0, ivis0=1, ifix_dt=1, new_vis=-1
+isfc = 0, 0, 0  ! isfc = 0 sets surface flux (qstar), isfc = 1 sets surface condition (Dirichlet through tsfcc)
+iDNS         = 0! DNS or LES (subgrid computation or molecular visc and diffusivity)
+ispray       = 1! particles?
+icouple      = 0! particle momentum coupling
+iTcouple     = 0! particle thermal coupling
+iHcouple     = 0! iHcouple also controls TE couple (humidity coupling??)
+ievap        = 0! Hygroscopicity
+istbl        = 1! istbl =0 for neutral, istbl = 1 for unstable/stable
+isfs         = 0! isfs = 1 for Weil et al. Lagrangian stochastic model, isfs = 0 for stochastic xp based on vis_s
+iUprod       = 1! iUprod =1 for uniform particle generation, = 0 for heterogeneous generation
+ipolydisp    = 0! ipolydisp=1 enables polydisperse particles, otherwise sets to rad_max
+ishift       = 0! ishift=1 enables shift in wind-speed & heat flux after some time
+ifields      = 0! if set to 1, reads the initial condition from path_ran below; otherwise calls subroutine random
+iPprod       = 0! if set to 1, will be an inital point source (Thomas's project)
+iSSGF        = 0! 0=Monahans, 1=Smith, 2= etc.. (Only works for polydispersity == 1)
+inonperiodic = 1! 0=particles bouncing from surface, 1 for death at surface
+iaircraft    = 0! if set to 1, initializes an aircraft probe reader (apr) 
+/
+
+!Grid and domain parameters
+&grid_params
+ncpu_s=22
+
+!Use for DNS:
+Uo      = 1.59  !Used when top and bottom are equal and opposite in DNS of Couette flow
+Ttop(1) = 300.15, 95.0  !Currently this should be (temperature, relative humidity) (used in DNS)
+Tbot(1) = 300.15, 100.0  !Currently this should be (temperature, relative humidity) (used in DNS)
+
+!Use for LES:
+qstar = 0.02, 2.0e-7, 2.0e-7 !Surface fluxes of (temperature, humidity) (used for LES and DNS)
+tsfcc = 305.15, 1.0, 1.0   !Surface conditions of (temp, humidity) (used for LES) -- make sure tsfcc is gt than t00 for both isfc=0 or 1
+
+zi = 570.0  !This has to do with grid stretching; make equal to total z for Couette/channel
+zl = 800.0
+xl = 10000.0
+yl = 5000.0
+
+zw1  = 3.12 !The edge of the first grid point (zw, as compared to zu which is center)
+zwpi = 1.56  !particle relese domain height 
+/
+
+!Set the paths for code I/O. Must be on the scratch directory, not AFS!
+&path_names
+path_seed   = "/p/work/hpark6/ntlp/survivalvis1/"
+path_part   = "/p/work/hpark6/ntlp/survivalvis1/part.le.cou000"
+path_res    = "/p/work/hpark6/ntlp/survivalvis1/u.le.cou000"
+path_sav    = "/p/work/hpark6/ntlp/survivalvis1/"
+path_his    = "/p/work/hpark6/ntlp/survivalvis1/"
+path_viz_xy = "/p/work/hpark6/ntlp/survivalvis1/"
+path_viz_xz = "/p/work/hpark6/ntlp/survivalvis1/"
+path_viz_yz = "/p/work/hpark6/ntlp/survivalvis1/"
+path_stuf   = "/p/work/hpark6/ntlp/survivalvis1/"
+path_ran    = "/p/work/hpark6/ntlp/survivalvis1/u.le.cou000"
+part_hist   = "/p/work/hpark6/ntlp/survivalvis1/"
+path_probe  = "/p/work/hpark6/ntlp/survivalvis1/"
+/
+
+
+!Material and particle properties and other constants
+&constants
+grav = 9.81
+t00  = 273.0 !Reference temp for buoyancy
+fcor = 1.0e-4  !Coriolis parameter
+
+dtdzf(1) = 0.50,0.0,0.0
+zo       = 0.001
+ugcont   = 4.0
+vgcont   = 0.0
+
+!shifting condition parameters (only for neumann currently)
+cond_shift_init = 10800.0
+ugcont_new      = 0.0
+vgcont_new      = 0.0
+qstar_new       = 0.02, 2.0e-7, 2.0e-7
+
+!Air phase:
+rhoa   = 1.1
+nuf    = 1.537e-5  !m^2/s
+Cpa    = 1006.0  !J/kg-K
+Pra    = 0.715
+Sc     = 0.615
+
+!Particles:
+tnumpart      = 0	 ! Total no of particle initially
+tnumpart_max  = 1e1	 ! maximum allowable particle count
+Nrp           = 9	 ! number of classes
+numpart_dt    = 3e4  	 ! particles per dt
+part_init     = 7200	 ! time step for particle emmision start
+rhow          = 1000.0   !kg/m^3
+part_grav     = 9.81
+Cpp           = 4179.0   !J/kg-K
+Mw            = 0.018015 !kg/mol
+Ru            = 8.3144   
+Ms            = 0.05844  !kg/mol: molecular weight of salt
+delta_vis     = 0.000163 !Bounce-back distance from wall
+Sal           = 34.0     !Salinity content
+Gam           = 7.28e-2
+Ion           = 2.0
+Os            = 1.093
+
+!Particle initial conditions:
+radius_max = 5.0e-6     !If not polydisperse, then size is rad_max
+radius_min = 2.5e-6
+Tp_init    = 300.15
+vp_init    = 0.0, 0.0, 0.0
+qf_init    = 0.01
+
+apr_v      = 0.0,50.0,0		!Aircraft speed in m/s
+apr_rad    = 7.5		!Radial range of particle count in m
+apr_init   = 2.0,300.5,300	!Height of aircraft in m (currently the code doesn't like 0 in x direction)
+
+/
