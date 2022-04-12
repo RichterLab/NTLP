@@ -1,2 +1,5 @@
 build
 case1
+*.suo
+*.json
+*.sqlite

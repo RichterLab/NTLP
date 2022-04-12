@@ -28,6 +28,7 @@ iHcouple=1  !iHcouple also controls TE couple
 ievap=1
 ineighbor=0
 icoalesce=0
+ikernel = 1 ! kernel for coalescence; 0 = Golovin; 1 = Geometric kernel with collection efficiencies E=1; 2 = Long kernel; 3 = Geometric kernel with modified Hall collection efficiencies (as in Bott 1998); 4 = Geometric kernel with turbulence-enhanced Hall efficiencies (Wang and Grabowski 2009) (NOT YET)
 ipart_method=2   !1 = same RK3 as flow, 2 = backward Euler
 ipartdiff = 0
 inewpart = 2  !1 = new particles have initial conditions defined below, random location in domain; 2 = same, but normal distributions of radius and kappa_s, given by radius_std and kappas_std; 3 = special setup for C-FOG and double lognormal of different type; 4 = crude sea spray setup

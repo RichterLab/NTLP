@@ -3627,6 +3627,7 @@ CONTAINS
       type(tree_master_record), pointer :: tree
 
       real, allocatable :: xp_data(:,:),distances(:),rad_data(:)
+      real, allocatable :: kappa_s_data(:), ms_data(:)
       real, allocatable :: vel_data(:,:)
       integer, allocatable :: index_data(:,:),indexes(:)
       integer*8, allocatable :: mult_data(:)
@@ -3639,6 +3640,7 @@ CONTAINS
       real :: qv(3),dist_tmp,xdist,ydist,zdist,ran2
       real :: phi,K,Pjk,veldiff,E,dV,p_alpha,pvol_j,pvol_k,golovin_b
       real :: rad_j_tmp,rad_k_tmp
+      real ::   kappa_s_j_temp, kappa_s_k_temp,  ms_j_temp,  ms_k_temp
 
       !For whatever reason, the kd-search sometimes misses edge cases,
       !and you should do nq+1 if you actually want nq
@@ -3649,6 +3651,7 @@ CONTAINS
       allocate(distances(nq),indexes(nq),ran_nq(2:nq-1))
       allocate(rad_data(numpart),mult_data(numpart),coal_data(numpart))
       allocate(destroy_data(numpart))
+      allocate(kappa_s_data(numpart), ms_data(numpart))
 
       !Loop over particles and fill arrays
       i = 1
@@ -3662,6 +3665,9 @@ CONTAINS
          rad_data(i) = part_tmp%radius
          mult_data(i) = part_tmp%mult
          coal_data(i) = 0
+
+         kappa_s_data(i) = part_tmp%kappa_s
+         ms_data(i) = part_tmp%m_s
 
          vel_data(i,1:3) = part_tmp%vp(1:3)
 
@@ -3726,7 +3732,6 @@ CONTAINS
 
          phi = ran2(iseed) 
          dV = 2*pi2/3.0*(sqrt(distances(nq-1)))**3  !The volume will be the sphere formed by outermost droplet considered
-         E = 1.0  !Collision efficiency -- obviously this needs to be updated from 1.0
          
          veldiff = sqrt( (vel_data(i,1)-vel_data(coal_idx,1))**2 +  &
                          (vel_data(i,2)-vel_data(coal_idx,2))**2 +  &
@@ -3745,13 +3750,26 @@ CONTAINS
          end if
 
          !Choose the kernel:
-         K = pi2/2.0*E*veldiff*(rad_data(i) + rad_data(coal_idx))**2
+!         K = pi2/2.0*E*veldiff*(rad_data(i) + rad_data(coal_idx))**2
 
-         !Golovin (1963) kernel:
-         !pvol_j = pi2*2.0/3.0*rad_data(j_idx)**3.0
-         !pvol_k = pi2*2.0/3.0*rad_data(k_idx)**3.0
-         !golovin_b = 1.5e3
-         !K = golovin_b*(pvol_j + pvol_k)
+         if (ikernel.eq.0) then ! Golovin (1963) kernel
+            pvol_j = pi2*2.0/3.0*rad_data(j_idx)**3.0
+            pvol_k = pi2*2.0/3.0*rad_data(k_idx)**3.0
+            golovin_b = 1.5e3
+            K = golovin_b*(pvol_j + pvol_k)
+         elseif (ikernel.eq.1) then ! Geometric kernel with collection efficiencies E=1
+            E = 1.
+            K = pi2/2.0*E*veldiff*(rad_data(i) + rad_data(coal_idx))**2
+         elseif (ikernel.eq.2) then ! Long (1974) polynomial kernel (as in Bott (1998))
+            E = long_effic(rad_data(j_idx)*1e6,rad_data(j_idx)*1e6)
+            K = pi2/2.0*E*veldiff*(rad_data(i) + rad_data(coal_idx))**2
+         elseif (ikernel.eq.3) then ! Geometric kernel with modified Hall collection efficiencies (as in Bott 1998)
+            E = hall_effic(rad_data(i) * 1e6, rad_data(coal_idx)*1e6) ! input needs to be in [um]
+            K = pi2/2.0*E*veldiff*(rad_data(i) + rad_data(coal_idx))**2
+         elseif (ikernel.eq.4) then ! Geometric kernel with turbulence-enhanced Hall efficiencies (Wang and Grabowski 2009)
+            !!! TO BE IMPLEMENTED SOON
+         endif
+
 
          Pjk = K*dt/dV*xi_j
 
@@ -3779,39 +3797,59 @@ CONTAINS
 
             if (xi_j - gam_til*xi_k .gt. 0) then
 
-            !Update particle j's multiplicity
-            mult_data(j_idx) = mult_data(j_idx)-gam_til*mult_data(k_idx)
+               !Update particle j's multiplicity
+               mult_data(j_idx) = mult_data(j_idx)-gam_til*mult_data(k_idx)
                
-            !Update particle k's radius
-            rad_data(k_idx) = (gam_til*rad_data(j_idx)**3 + rad_data(k_idx)**3)**(1.0/3.0)
+               !Update particle k's radius
+               rad_data(k_idx) = (gam_til*rad_data(j_idx)**3 + rad_data(k_idx)**3)**(1.0/3.0)
 
+               !Update particle k's kappa coefficient
+			      !We can use the mass mixing rule for now (will be updated to volume mixing rule)
+			      kappa_s_data(k_idx) = gam_til*ms_data(j_idx)*kappa_s_data(j_idx)/( gam_til*ms_data(j_idx) + ms_data(k_idx))  +   &
+                ms_data(k_idx)*kappa_s_data(k_idx) / ( gam_til*ms_data(j_idx) + ms_data(k_idx))
+ 
+               !Update particle k's solute mass
+               ms_data(k_idx) = gam_til*ms_data(j_idx) + ms_data(k_idx)
 
             elseif (xi_j - gam_til*xi_k .eq. 0) then
 
-            mult_tmp_j = floor(real(mult_data(k_idx))/2.0)
-            mult_tmp_k = mult_data(k_idx) - floor(real(mult_data(k_idx))/2.0)
+               mult_tmp_j = floor(real(mult_data(k_idx))/2.0)
+               mult_tmp_k = mult_data(k_idx) - floor(real(mult_data(k_idx))/2.0)
        
-            mult_data(j_idx) = mult_tmp_j
-            mult_data(k_idx) = mult_tmp_k
+               mult_data(j_idx) = mult_tmp_j
+               mult_data(k_idx) = mult_tmp_k
 
-            rad_j_tmp = (gam_til*rad_data(j_idx)**3 + rad_data(k_idx)**3)**(1.0/3.0)
-            rad_k_tmp = (gam_til*rad_data(j_idx)**3 + rad_data(k_idx)**3)**(1.0/3.0)
+               rad_j_tmp = (gam_til*rad_data(j_idx)**3 + rad_data(k_idx)**3)**(1.0/3.0)
+               rad_k_tmp = (gam_til*rad_data(j_idx)**3 + rad_data(k_idx)**3)**(1.0/3.0)
 
-            rad_data(j_idx) = rad_j_tmp
-            rad_data(k_idx) = rad_k_tmp
+               rad_data(j_idx) = rad_j_tmp
+               rad_data(k_idx) = rad_k_tmp
+
+               !Update kappa coefficients
+               kappa_s_j_temp = gam_til*ms_data(j_idx)*kappa_s_data(j_idx)/(gam_til*ms_data(j_idx) + ms_data(k_idx)) +  &
+                ms_data(k_idx)*kappa_s_data(k_idx) / ( gam_til*ms_data(j_idx) + ms_data(k_idx))
+   
+               kappa_s_k_temp = gam_til*ms_data(j_idx)*kappa_s_data(j_idx)/(gam_til*ms_data(j_idx) + ms_data(k_idx)) +  &
+                ms_data(k_idx)*kappa_s_data(k_idx) / ( gam_til*ms_data(j_idx) + ms_data(k_idx))
+   
+               kappa_s_data(j_idx) = kappa_s_j_temp
+               kappa_s_data(k_idx) = kappa_s_k_temp
+   
+               !Update particle's solute masses
+               ms_j_temp = gam_til*ms_data(j_idx) + ms_data(k_idx)
+               ms_k_temp = gam_til*ms_data(j_idx) + ms_data(k_idx)
+   
+               ms_data(j_idx) = ms_j_temp
+               ms_data(k_idx) = ms_k_temp
 
             end if
-
-
           end if !gm .gt. 0
 
        !Now exclude both of these from checking again
        coal_data(coal_idx) = 1
        coal_data(i) = 1
       end if  !coal_idx .gt. 1
-         
-         
-
+ 
       part_tmp => part_tmp%next
       end do
 
@@ -3823,6 +3861,10 @@ CONTAINS
          !Only things which should change are radius and multiplicity
          part_tmp%radius = rad_data(i)
          part_tmp%mult = mult_data(i)
+
+         !Now we also change solute mass and kappa coefficient
+         part_tmp%kappa_s = kappa_s_data(i)
+         part_tmp%m_s = ms_data(i)
 
       i = i+1   
       part_tmp => part_tmp%next
@@ -3843,13 +3885,11 @@ CONTAINS
       i = i+1
       end do
 
-
-
       call destroy_tree(tree)
       deallocate(xp_data,index_data)
       deallocate(vel_data,distances,indexes,ran_nq)
       deallocate(rad_data,mult_data,coal_data,destroy_data)
-
+      deallocate(kappa_s_data, ms_data)
 
   end subroutine particle_coalesce
 
@@ -4820,6 +4860,135 @@ CONTAINS
 
   end function smithssgf
 
+! Long (1974) collection efficiencies (as in Bott 1998)
+   real function long_effic(r1,r2)
+      implicit none
+      real :: r1, r2, effic, rbig, rsmall
 
+      if (r1.le.r2) then
+         rbig = r2
+         rsmall = r1
+      else
+         rbig = r1
+         rsmall = r2
+      end if
+
+      ! r units in [um]
+      if (rbig.le.50.) then
+         effic = 4.5d-4*rbig**2*(1.d0-3.d0/(max(3.d0,dble(rsmall))+1.d-2))
+      else
+         effic = 1.
+      end if
+
+      long_effic = effic
+
+   end function long_effic
+
+   ! modified Hall (1980) collection efficiencies (as in Bott 1998)
+	real function hall_effic(r1,r2)
+      implicit none
+      dimension rat(21),r0(15), ecoll(15,21)
+      integer :: k, ir, kk, iq
+      real :: drop_ratio, p, q, r1, r2, rbig, rsmall
+      real :: effic, r0, rat, ecoll, ek, ec
+
+      ! selecting collector (rbig) and collected droplet (rsmall)
+      ! radii in um
+      if (r1 .le. r2) then
+         rbig = r2
+         rsmall = r1
+      else
+         rbig = r1
+         rsmall = r2
+      endif
+
+      drop_ratio = rsmall / rbig
+
+      !r0: collector droplet array
+      !rat: droplet ratio array
+      !ecoll: collection efficiencies
+
+      data r0 /6.,8.,10.,15.,20.,25.,30.,40.,50., &
+               60.,70.,100.,150.,200.,300./
+
+      data rat /0.,0.05,0.1,0.15,0.2,0.25,0.3,0.35,0.4,0.45,0.5, &
+                0.55,0.6,0.65,0.7,0.75,0.8,0.85,0.9,0.95,1.0/
+
+      data ecoll / &
+         0.001,0.001,0.001,0.001,0.001,0.001,0.001,0.001,0.001,0.001, &
+         0.001,0.001,0.001,0.001,0.001,0.003,0.003,0.003,0.004,0.005, &
+         0.005,0.005,0.010,0.100,0.050,0.200,0.500,0.770,0.870,0.970, &
+         0.007,0.007,0.007,0.008,0.009,0.010,0.010,0.070,0.400,0.430, &
+         0.580,0.790,0.930,0.960,1.000,0.009,0.009,0.009,0.012,0.015, &
+         0.010,0.020,0.280,0.600,0.640,0.750,0.910,0.970,0.980,1.000, &
+         0.014,0.014,0.014,0.015,0.016,0.030,0.060,0.500,0.700,0.770, &
+         0.840,0.950,0.970,1.000,1.000,0.017,0.017,0.017,0.020,0.022, &
+         0.060,0.100,0.620,0.780,0.840,0.880,0.950,1.000,1.000,1.000, &
+         0.030,0.030,0.024,0.022,0.032,0.062,0.200,0.680,0.830,0.870, &
+         0.900,0.950,1.000,1.000,1.000,0.025,0.025,0.025,0.036,0.043, &
+         0.130,0.270,0.740,0.860,0.890,0.920,1.000,1.000,1.000,1.000, &
+         0.027,0.027,0.027,0.040,0.052,0.200,0.400,0.780,0.880,0.900, &
+         0.940,1.000,1.000,1.000,1.000,0.030,0.030,0.030,0.047,0.064, &
+         0.250,0.500,0.800,0.900,0.910,0.950,1.000,1.000,1.000,1.000, &
+         0.040,0.040,0.033,0.037,0.068,0.240,0.550,0.800,0.900,0.910, &
+         0.950,1.000,1.000,1.000,1.000,0.035,0.035,0.035,0.055,0.079, &
+         0.290,0.580,0.800,0.900,0.910,0.950,1.000,1.000,1.000,1.000, &
+         0.037,0.037,0.037,0.062,0.082,0.290,0.590,0.780,0.900,0.910, &
+         0.950,1.000,1.000,1.000,1.000,0.037,0.037,0.037,0.060,0.080, &
+         0.290,0.580,0.770,0.890,0.910,0.950,1.000,1.000,1.000,1.000, &
+         0.037,0.037,0.037,0.041,0.075,0.250,0.540,0.760,0.880,0.920, &
+         0.950,1.000,1.000,1.000,1.000,0.037,0.037,0.037,0.052,0.067, &
+         0.250,0.510,0.770,0.880,0.930,0.970,1.000,1.000,1.000,1.000, &
+         0.037,0.037,0.037,0.047,0.057,0.250,0.490,0.770,0.890,0.950, &
+         1.000,1.000,1.000,1.000,1.000,0.036,0.036,0.036,0.042,0.048, &
+         0.230,0.470,0.780,0.920,1.000,1.020,1.020,1.020,1.020,1.020, &
+         0.040,0.040,0.035,0.033,0.040,0.112,0.450,0.790,1.010,1.030, &
+         1.040,1.040,1.040,1.040,1.040,0.033,0.033,0.033,0.033,0.033, &
+         0.119,0.470,0.950,1.300,1.700,2.300,2.300,2.300,2.300,2.300, &
+         0.027,0.027,0.027,0.027,0.027,0.125,0.520,1.400,2.300,3.000, &
+         4.000,4.000,4.000,4.000,4.000/
+
+      ! two-dimensional linear interpolation of the collision efficiency
+      ! query points for interpolation are drop_ratio and rbig
+
+      ! selecting intervals
+      do k=2,15
+         if (rbig.le.r0(k).and.rbig.ge.r0(k-1)) then
+            ir=k
+         elseif (rbig.gt.r0(15)) then
+            ir=16
+         elseif (rbig.lt.r0(1)) then
+            ir=1
+         endif
+      enddo
+
+      do kk=2,21
+         if (drop_ratio.le.rat(kk).and.drop_ratio.gt.rat(kk-1)) then
+            iq=kk
+         endif
+      enddo
+
+      ! interpolating
+      if (ir.lt.16) then
+         if (ir.ge.2) then
+            p=(rbig-r0(ir-1))/(r0(ir)-r0(ir-1))
+            q=(drop_ratio-rat(iq-1))/(rat(iq)-rat(iq-1))
+            ec=(1.-p)*(1.-q)*ecoll(ir-1,iq-1)+  &
+					p*(1.-q)*ecoll(ir,iq-1)+  &
+    				q*(1.-p)*ecoll(ir-1,iq)+  &
+    				(p*q*ecoll(ir,iq))
+         else
+            q=(drop_ratio-rat(iq-1))/(rat(iq)-rat(iq-1))
+            ec=(1.-q)*ecoll(1,iq-1)+q*ecoll(1,iq)
+         endif
+      else
+         q=(drop_ratio-rat(iq-1))/(rat(iq)-rat(iq-1))
+         ek=(1.-q)*ecoll(15,iq-1)+q*ecoll(15,iq)
+         ec=min(ek,1.d0)
+      endif
+
+      hall_effic = ec
+
+   end function hall_effic
 
 end module particles
