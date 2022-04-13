@@ -6,6 +6,7 @@ c
       use con_data
       use con_stats
       use netcdf_io
+      use tec_io
       include 'mpif.h'
 c
 c ------------- definition of internal flags
@@ -278,6 +279,7 @@ c
             call open_viz_netcdf
             call write_viz_netcdf
             call close_viz_netcdf
+            call plt_fields
          else
             call save_viz(it)
          end if

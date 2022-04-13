@@ -3113,7 +3113,7 @@ CONTAINS
                   .OR. (rt_zeroes(1)*part%radius<0) &
                   .OR. isnan(rt_zeroes(2)) &
                   .OR. (rt_zeroes(2)<0) &
-                  .OR. (rt_zeroes(1)*part%radius>1.0e-2)) & !These last 3 are very specific to pi chamber
+                  .OR. (rt_zeroes(1)*part%radius>1.0e-2)) & !These last 2 are very specific to pi chamber
                   !.OR. (rt_zeroes(2)*part%Tp > Tbot(1)*1.1)  &
                   !.OR. (rt_zeroes(2)*part%Tp < Ttop(1)*0.9)) &
                then
@@ -4974,9 +4974,9 @@ CONTAINS
             p=(rbig-r0(ir-1))/(r0(ir)-r0(ir-1))
             q=(drop_ratio-rat(iq-1))/(rat(iq)-rat(iq-1))
             ec=(1.-p)*(1.-q)*ecoll(ir-1,iq-1)+  &
-					p*(1.-q)*ecoll(ir,iq-1)+  &
-    				q*(1.-p)*ecoll(ir-1,iq)+  &
-    				(p*q*ecoll(ir,iq))
+            p*(1.-q)*ecoll(ir,iq-1)+  &
+            q*(1.-p)*ecoll(ir-1,iq)+  &
+            (p*q*ecoll(ir,iq))
          else
             q=(drop_ratio-rat(iq-1))/(rat(iq)-rat(iq-1))
             ec=(1.-q)*ecoll(1,iq-1)+q*ecoll(1,iq)
