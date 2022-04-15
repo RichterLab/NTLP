@@ -17,7 +17,7 @@ subroutine plt_fields
   implicit none
   include 'mpif.h'
 
-  integer :: i,j,k
+  integer :: i,j,k,kmin,kmax,jmin,jmax
   integer :: myny,mynz
   integer :: rankarray(numprocs)
   integer :: teci,isdouble,filetype,debug,fileformat
@@ -27,13 +27,24 @@ subroutine plt_fields
   character*1 :: nullchr
   integer :: sharevar(8),null(8),nodeloc(8),passive(8)
 
-  real :: wplt(1:nnx,iys:iye,izs:ize),x(1:nnx,iys:iye,izs:ize),y(1:nnx,iys:iye,izs:ize),zplt(1:nnx,iys:iye,izs:ize)
-  real*4 :: toplt(1:nnx,iys:iye,izs:ize)
+  !real :: wplt(1:nnx,iys-1:iye+1,izs-1:ize+1),x(1:nnx,iys-1:iye+1,izs-1:ize+1),y(1:nnx,iys-1:iye+1,izs-1:ize+1),zplt(1:nnx,iys-1:iye+1,izs-1:ize+1)
+  !real*4 :: toplt(1:nnx,iys-1:iye+1,izs-1:ize+1)
+  real,allocatable :: wplt(:,:,:),x(:,:,:),y(:,:,:),zplt(:,:,:)
+  real*4,allocatable :: toplt(:,:,:)
 
-  path_plt = trim(adjustl(trim(adjustl(path_seed))//"dummy.plt"))
+  path_plt = trim(trim(path_seed)//"dummy.plt")
 
-  do k=izs,ize
-  do j=iys,iye
+  kmin = max(izs-1,1)
+  kmax = ize
+  jmin = max(iys-1,1)
+  jmax = iye
+
+  write(*,'(a8,5i)') 'DHR:',myid,jmin,jmax,kmin,kmax
+
+  allocate(wplt(1:nnx,jmin:jmax,kmin:kmax),x(1:nnx,jmin:jmax,kmin:kmax),y(1:nnx,jmin:jmax,kmin:kmax),zplt(1:nnx,jmin:jmax,kmin:kmax),toplt(1:nnx,jmin:jmax,kmin:kmax))
+
+  do k=kmin,kmax
+  do j=jmin,jmax
   do i=1,nnx
 
      if (k==1) then
@@ -46,16 +57,16 @@ subroutine plt_fields
   end do
   end do
 
-  myny = iye-iys+1
-  mynz = ize-izs+1
+  myny = jmax-jmin+1
+  mynz = kmax-kmin+1
 
   do i=0,numprocs-1
      rankarray(i+1) = i
   end do
 
   !Fill x,y,z:
-  do k=izs,ize
-     do j=iys,iye
+  do k=kmin,kmax
+     do j=jmin,jmax
         do i=1,nnx
            x(i,j,k) = dx*(i-1)
            y(i,j,k) = dy*(j-1)
@@ -65,7 +76,6 @@ subroutine plt_fields
   end do
 
 
-  output_name = 'dummy.plt'
   data_names = 'x y z u v w th q'
 
   nullchr = char(0)
@@ -82,7 +92,7 @@ subroutine plt_fields
        data_names//nullchr,&
        !output_name//nullchr,&
        path_plt//nullchr,&
-       trim((path_seed)//nullchr,&
+       trim(path_seed)//nullchr,&
        fileformat,&
        filetype,&
        debug,&
@@ -117,35 +127,35 @@ subroutine plt_fields
 
   teci = tecijkptn142(myid+1,&
        1,&
-       iys,&
-       izs,&
+       jmin,&
+       kmin,&
        nnx,&
-       iye,&
-       ize)
+       jmax,&
+       kmax)
 
-  toplt = x(1:nnx,iys:iye,izs:ize)
-  teci = tecdat142(nnx*myny*mynz,toplt(1:nnx,iys:iye,izs:ize),isdouble)
+  toplt = x(1:nnx,jmin:jmax,kmin:kmax)
+  teci = tecdat142(nnx*myny*mynz,toplt(1:nnx,jmin:jmax,kmin:kmax),isdouble)
 
-  toplt = y(1:nnx,iys:iye,izs:ize)
-  teci = tecdat142(nnx*myny*mynz,toplt(1:nnx,iys:iye,izs:ize),isdouble)
+  toplt = y(1:nnx,jmin:jmax,kmin:kmax)
+  teci = tecdat142(nnx*myny*mynz,toplt(1:nnx,jmin:jmax,kmin:kmax),isdouble)
 
-  toplt = zplt(1:nnx,iys:iye,izs:ize)
-  teci = tecdat142(nnx*myny*mynz,toplt(1:nnx,iys:iye,izs:ize),isdouble)
+  toplt = zplt(1:nnx,jmin:jmax,kmin:kmax)
+  teci = tecdat142(nnx*myny*mynz,toplt(1:nnx,jmin:jmax,kmin:kmax),isdouble)
 
-  toplt = u(1:nnx,iys:iye,izs:ize)
-  teci = tecdat142(nnx*myny*mynz,toplt(1:nnx,iys:iye,izs:ize),isdouble)
+  toplt = u(1:nnx,jmin:jmax,kmin:kmax)
+  teci = tecdat142(nnx*myny*mynz,toplt(1:nnx,jmin:jmax,kmin:kmax),isdouble)
 
-  toplt = v(1:nnx,iys:iye,izs:ize)
-  teci = tecdat142(nnx*myny*mynz,toplt(1:nnx,iys:iye,izs:ize),isdouble)
+  toplt = v(1:nnx,jmin:jmax,kmin:kmax)
+  teci = tecdat142(nnx*myny*mynz,toplt(1:nnx,jmin:jmax,kmin:kmax),isdouble)
 
-  toplt = wplt(1:nnx,iys:iye,izs:ize)
-  teci = tecdat142(nnx*myny*mynz,toplt(1:nnx,iys:iye,izs:ize),isdouble)
+  toplt = wplt(1:nnx,jmin:jmax,kmin:kmax)
+  teci = tecdat142(nnx*myny*mynz,toplt(1:nnx,jmin:jmax,kmin:kmax),isdouble)
 
-  toplt = t(1:nnx,iys:iye,1,izs:ize)
-  teci = tecdat142(nnx*myny*mynz,toplt(1:nnx,iys:iye,izs:ize),isdouble)
+  toplt = t(1:nnx,jmin:jmax,1,kmin:kmax)
+  teci = tecdat142(nnx*myny*mynz,toplt(1:nnx,jmin:jmax,kmin:kmax),isdouble)
 
-  toplt = t(1:nnx,iys:iye,2,izs:ize)
-  teci = tecdat142(nnx*myny*mynz,toplt(1:nnx,iys:iye,izs:ize),isdouble)
+  toplt = t(1:nnx,jmin:jmax,2,kmin:kmax)
+  teci = tecdat142(nnx*myny*mynz,toplt(1:nnx,jmin:jmax,kmin:kmax),isdouble)
 
 
   !Now get the particle locations to put into the *.plt file:
@@ -185,6 +195,7 @@ subroutine plt_fields
 
   teci = tecend142()  
 
+  deallocate(wplt,x,y,zplt,toplt)
 
 end subroutine plt_fields
 
