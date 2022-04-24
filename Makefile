@@ -4,7 +4,7 @@ F90=ifort
 FLAGS=-i4 -r8 -O2 -assume byterecl -xHost
 
 ## UNCOMMENT TO RUN IN DEBUG MODE
-DEBUG_FLAGS=-g -traceback 
+#DEBUG_FLAGS=-g -traceback -check bounds
 
 OUTPUTINC = -I$(NETCDFBASE)/include
 OUTPUTLIB = -L$(NETCDFBASE)/lib

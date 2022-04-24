@@ -3,7 +3,7 @@ implicit none
 
 
 integer :: plt_counter
-character(len=80) :: path_plt
+character(len=:),allocatable :: path_plt
 
 CONTAINS
 
@@ -27,30 +27,28 @@ subroutine plt_fields
   character*1 :: nullchr
   integer :: sharevar(8),null(8),nodeloc(8),passive(8)
 
-  !real :: wplt(1:nnx,iys-1:iye+1,izs-1:ize+1),x(1:nnx,iys-1:iye+1,izs-1:ize+1),y(1:nnx,iys-1:iye+1,izs-1:ize+1),zplt(1:nnx,iys-1:iye+1,izs-1:ize+1)
-  !real*4 :: toplt(1:nnx,iys-1:iye+1,izs-1:ize+1)
-  real,allocatable :: wplt(:,:,:),x(:,:,:),y(:,:,:),zplt(:,:,:)
+  real,allocatable :: uplt(:,:,:),vplt(:,:,:),wplt(:,:,:),wtmp(:,:,:),tplt(:,:,:),qplt(:,:,:),xplt(:,:,:),yplt(:,:,:),zplt(:,:,:)
   real*4,allocatable :: toplt(:,:,:)
 
-  path_plt = trim(trim(path_seed)//"dummy.plt")
+  path_plt = trim(trim(path_seed)//"tec_viz.szplt")
 
   kmin = max(izs-1,1)
   kmax = ize
   jmin = max(iys-1,1)
   jmax = iye
 
-  write(*,'(a8,5i)') 'DHR:',myid,jmin,jmax,kmin,kmax
+  allocate(uplt(1:nnx,jmin:jmax,kmin:kmax),vplt(1:nnx,jmin:jmax,kmin:kmax),wplt(1:nnx,jmin:jmax,kmin:kmax),wtmp(1:nnx,jmin:jmax,kmin:kmax),tplt(1:nnx,jmin:jmax,kmin:kmax),qplt(1:nnx,jmin:jmax,kmin:kmax),xplt(1:nnx,jmin:jmax,kmin:kmax),yplt(1:nnx,jmin:jmax,kmin:kmax),zplt(1:nnx,jmin:jmax,kmin:kmax),toplt(1:nnx,jmin:jmax,kmin:kmax))
 
-  allocate(wplt(1:nnx,jmin:jmax,kmin:kmax),x(1:nnx,jmin:jmax,kmin:kmax),y(1:nnx,jmin:jmax,kmin:kmax),zplt(1:nnx,jmin:jmax,kmin:kmax),toplt(1:nnx,jmin:jmax,kmin:kmax))
+  call fill_plt_fields(jmin,jmax,kmin,kmax,uplt,vplt,wtmp,tplt,qplt)
 
   do k=kmin,kmax
   do j=jmin,jmax
   do i=1,nnx
 
-     if (k==1) then
-        wplt(i,j,k) = 0.5*w(i,j,k)
+     if (k==kmin) then
+        wplt(i,j,k) = 0.5*wtmp(i,j,k)
      else
-        wplt(i,j,k) = 0.5*(w(i,j,k)+w(i,j,k-1))
+        wplt(i,j,k) = 0.5*(wtmp(i,j,k)+wtmp(i,j,k-1))
      end if
 
   end do
@@ -68,8 +66,8 @@ subroutine plt_fields
   do k=kmin,kmax
      do j=jmin,jmax
         do i=1,nnx
-           x(i,j,k) = dx*(i-1)
-           y(i,j,k) = dy*(j-1)
+           xplt(i,j,k) = dx*(i-1)
+           yplt(i,j,k) = dy*(j-1)
            zplt(i,j,k) = zz(k)
         end do
      end do
@@ -90,7 +88,6 @@ subroutine plt_fields
 
   teci = tecini142('veldata'//nullchr,&
        data_names//nullchr,&
-       !output_name//nullchr,&
        path_plt//nullchr,&
        trim(path_seed)//nullchr,&
        fileformat,&
@@ -133,28 +130,28 @@ subroutine plt_fields
        jmax,&
        kmax)
 
-  toplt = x(1:nnx,jmin:jmax,kmin:kmax)
+  toplt = xplt(1:nnx,jmin:jmax,kmin:kmax)
   teci = tecdat142(nnx*myny*mynz,toplt(1:nnx,jmin:jmax,kmin:kmax),isdouble)
 
-  toplt = y(1:nnx,jmin:jmax,kmin:kmax)
+  toplt = yplt(1:nnx,jmin:jmax,kmin:kmax)
   teci = tecdat142(nnx*myny*mynz,toplt(1:nnx,jmin:jmax,kmin:kmax),isdouble)
 
   toplt = zplt(1:nnx,jmin:jmax,kmin:kmax)
   teci = tecdat142(nnx*myny*mynz,toplt(1:nnx,jmin:jmax,kmin:kmax),isdouble)
 
-  toplt = u(1:nnx,jmin:jmax,kmin:kmax)
+  toplt = uplt(1:nnx,jmin:jmax,kmin:kmax)
   teci = tecdat142(nnx*myny*mynz,toplt(1:nnx,jmin:jmax,kmin:kmax),isdouble)
 
-  toplt = v(1:nnx,jmin:jmax,kmin:kmax)
+  toplt = vplt(1:nnx,jmin:jmax,kmin:kmax)
   teci = tecdat142(nnx*myny*mynz,toplt(1:nnx,jmin:jmax,kmin:kmax),isdouble)
 
   toplt = wplt(1:nnx,jmin:jmax,kmin:kmax)
   teci = tecdat142(nnx*myny*mynz,toplt(1:nnx,jmin:jmax,kmin:kmax),isdouble)
 
-  toplt = t(1:nnx,jmin:jmax,1,kmin:kmax)
+  toplt = tplt(1:nnx,jmin:jmax,kmin:kmax)
   teci = tecdat142(nnx*myny*mynz,toplt(1:nnx,jmin:jmax,kmin:kmax),isdouble)
 
-  toplt = t(1:nnx,jmin:jmax,2,kmin:kmax)
+  toplt = qplt(1:nnx,jmin:jmax,kmin:kmax)
   teci = tecdat142(nnx*myny*mynz,toplt(1:nnx,jmin:jmax,kmin:kmax),isdouble)
 
 
@@ -195,8 +192,120 @@ subroutine plt_fields
 
   teci = tecend142()  
 
-  deallocate(wplt,x,y,zplt,toplt)
+  deallocate(uplt,vplt,wplt,wtmp,tplt,qplt,xplt,yplt,zplt,toplt)
 
 end subroutine plt_fields
+subroutine fill_plt_fields(jmin,jmax,kmin,kmax,uplt,vplt,wtmp,tplt,qplt)
+use pars
+use fields
+implicit none
+include 'mpif.h'
+
+real, intent(inout) :: uplt(1:nnx,jmin:jmax,kmin:kmax),vplt(1:nnx,jmin:jmax,kmin:kmax),wtmp(1:nnx,jmin:jmax,kmin:kmax),tplt(1:nnx,jmin:jmax,kmin:kmax),qplt(1:nnx,jmin:jmax,kmin:kmax)
+integer, intent(in) :: jmin,jmax,kmin,kmax
+integer :: yfore,yback,nsend,nrecv
+integer :: ix,iy,iz,jloc,iscl
+integer :: ierr,istatus(mpi_status_size)
+real :: sendbuf(1:nnx,kmin:kmax,6),recvbuf(1:nnx,kmin:kmax,6)
+
+  !First fill everything except y-halo
+  do iz=kmin,kmax
+  do iy=iys,iye
+  do ix=1,nnx
+     uplt(ix,iy,iz) = u(ix,iy,iz)
+     vplt(ix,iy,iz) = v(ix,iy,iz)
+     wtmp(ix,iy,iz) = w(ix,iy,iz)
+     tplt(ix,iy,iz) = t(ix,iy,1,iz)
+     qplt(ix,iy,iz) = t(ix,iy,2,iz)
+  end do
+  end do
+  end do
+
+  !To fill the halos in the y direction, need to figure out the proc numbers ahead and behind myid
+
+  if ( mod(myid+1,ncpu_s) == 0 ) then  !At max y
+     !yfore = myid-ncpu_s+1
+     yfore = mpi_proc_null
+     yback = myid-1
+  elseif (mod(myid,ncpu_s) == 0) then  !At min y
+     yfore = myid+1
+     !yback = myid+ncpu_s-1
+     yback = mpi_proc_null
+  else
+     yfore = myid+1
+     yback = myid-1
+  endif
+
+  nsend = nnx*(kmax-kmin+1)*6
+  nrecv = nsend
+
+  !Send to right, receive from left -- that's all that tecplot needs
+  do iz=kmin,kmax
+  do ix=1,nnx
+     sendbuf(ix,iz,1) = u(ix,iye,iz)
+     sendbuf(ix,iz,2) = v(ix,iye,iz)
+     sendbuf(ix,iz,3) = w(ix,iye,iz)
+     sendbuf(ix,iz,4) = e(ix,iye,iz)
+     sendbuf(ix,iz,5) = t(ix,iye,1,iz)
+     sendbuf(ix,iz,6) = t(ix,iye,2,iz)
+  end do
+  end do
+
+    
+  call mpi_sendrecv(sendbuf(1,kmin,1),nsend,mpi_real8,yfore,0, &
+                    recvbuf(1,kmin,1),nrecv,mpi_real8,yback,0, &
+                    mpi_comm_world,istatus,ierr)
+
+  if (yback .ne. mpi_proc_null) then
+
+  do iz=kmin,kmax
+  do ix=1,nnx
+     uplt(ix,iys-1,iz) = recvbuf(ix,iz,1)
+     vplt(ix,iys-1,iz) = recvbuf(ix,iz,2)
+     wtmp(ix,iys-1,iz) = recvbuf(ix,iz,3)
+     tplt(ix,iys-1,iz) = recvbuf(ix,iz,5)
+     qplt(ix,iys-1,iz) = recvbuf(ix,iz,6)
+  end do
+  end do
+
+  end if
+  
+
+!  !Send to left, receive from right
+!  do iz=izs,ize
+!  do ix=1,nnx
+!     sendbuf(ix,iz,1) = u(ix,iys,iz)
+!     sendbuf(ix,iz,2) = v(ix,iys,iz)
+!     sendbuf(ix,iz,3) = w(ix,iys,iz)
+!     sendbuf(ix,iz,4) = e(ix,iys,iz)
+!  end do
+!  end do
+!
+!  do iscl=1,nscl
+!     jloc = 4+iscl
+!     do iz=izs,ize
+!     do ix=1,nnx
+!        sendbuf(ix,iz,jloc) = t(ix,iys,iscl,iz)
+!     end do
+!     end do
+!  end do
+!    
+!  call mpi_sendrecv(sendbuf(1,izs,1),nsend,mpi_real8,yback,0, &
+!                    recvbuf(1,izs,1),nrecv,mpi_real8,yfore,0, &
+!                    mpi_comm_world,istatus,ierr)
+!
+!  do iz=izs,ize
+!  do ix=1,nnx
+!     uplt(ix,iye+1,iz) = recvbuf(ix,iz,1)
+!     vplt(ix,iye+1,iz) = recvbuf(ix,iz,2)
+!     wtmp(ix,iye+1,iz) = recvbuf(ix,iz,3)
+!     tplt(ix,iye+1,iz) = recvbuf(ix,iz,5)
+!     qplt(ix,iye+1,iz) = recvbuf(ix,iz,6)
+!  end do
+!  end do
+  
+
+
+end subroutine fill_plt_fields
 
 end module tec_io
