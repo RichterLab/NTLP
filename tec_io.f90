@@ -32,8 +32,8 @@ subroutine plt_fields
 
   path_plt = trim(trim(path_seed)//"tec_viz.szplt")
 
-  kmin = max(izs-1,1)
-  kmax = ize
+  kmin = izs
+  kmax = min(ize+1,nnz)
   jmin = max(iys-1,1)
   jmax = iye
 
@@ -45,11 +45,11 @@ subroutine plt_fields
   do j=jmin,jmax
   do i=1,nnx
 
-     if (k==kmin) then
-        wplt(i,j,k) = 0.5*wtmp(i,j,k)
-     else
+     !if (k==1) then
+     !   wplt(i,j,k) = 0.5*wtmp(i,j,k)
+     !else
         wplt(i,j,k) = 0.5*(wtmp(i,j,k)+wtmp(i,j,k-1))
-     end if
+     !end if
 
   end do
   end do
