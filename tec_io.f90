@@ -3,10 +3,53 @@ implicit none
 
 
 integer :: plt_counter
-character(len=:),allocatable :: path_plt
+character(len=:),allocatable :: path_plt,data_names
+character*1 :: nullchr
+integer :: sharevar(10),null(10),nodeloc(10),passive(10)
+integer :: teci,filetype,debug,fileformat,isdouble
 
 CONTAINS
 
+subroutine init_tecio
+  use pars
+  implicit none
+  include 'mpif.h'
+
+  integer ::  tecini142,tecmpiinit142
+
+  data_names = 'x y z u v w th q tp rp'
+
+  path_plt = trim(trim(path_seed)//"tec_viz.szplt")
+
+  nullchr = char(0)
+  null = 0
+  isdouble = 0
+  fileformat = 1
+  filetype = 0
+  debug = 0
+
+  plt_counter = 1
+
+  teci = tecini142('veldata'//nullchr,&
+       data_names//nullchr,&
+       path_plt//nullchr,&
+       trim(path_seed)//nullchr,&
+       fileformat,&
+       filetype,&
+       debug,&
+       isdouble)
+
+  teci = tecmpiinit142(mpi_comm_world,0)
+
+end subroutine init_tecio
+subroutine finalize_tecio
+  implicit none
+
+  integer :: tecend142
+
+  teci = tecend142()  
+
+end subroutine finalize_tecio
 
 subroutine plt_fields
   use particles
@@ -21,17 +64,13 @@ subroutine plt_fields
   integer :: myny,mynz,mynp,npsize,nps,npe
   integer :: rankarray(numprocs),nparray(numprocs)
   integer :: ierr
-  integer :: teci,isdouble,filetype,debug,fileformat
-  integer :: tecini142,teczne142,tecdat142,tecend142,tecmpiinit142,tecznemap142,tecijkptn142
-  character*9 :: output_name
-  character*160 :: data_names
-  character*1 :: nullchr
-  integer :: sharevar(10),null(10),nodeloc(10),passive(10)
+  integer :: teczne142,tecdat142,tecend142,tecznemap142,tecijkptn142
+  real :: plt_time
 
   real,allocatable :: uplt(:,:,:),vplt(:,:,:),wplt(:,:,:),wtmp(:,:,:),tplt(:,:,:),qplt(:,:,:),xplt(:,:,:),yplt(:,:,:),zplt(:,:,:)
   real*4,allocatable :: toplt(:,:,:),xpart(:),ypart(:),zpart(:),upart(:),vpart(:),wpart(:),tpart(:),rpart(:)
 
-  path_plt = trim(trim(path_seed)//"tec_viz.szplt")
+  plt_time = time
 
   kmin = izs
   kmax = min(ize+1,nnz)
@@ -46,11 +85,11 @@ subroutine plt_fields
   do j=jmin,jmax
   do i=1,nnx
 
-     !if (k==1) then
-     !   wplt(i,j,k) = 0.5*wtmp(i,j,k)
-     !else
+     if (k==1) then
+        wplt(i,j,k) = 0.5*wtmp(i,j,k)
+     else
         wplt(i,j,k) = 0.5*(wtmp(i,j,k)+wtmp(i,j,k-1))
-     !end if
+     end if
 
   end do
   end do
@@ -74,30 +113,15 @@ subroutine plt_fields
      end do
   end do
 
-
-  data_names = 'x y z u v w th q tp rp'
-
-  nullchr = char(0)
-  null = 0
-  sharevar = 0
   passive = 1
   passive(1:8) = 0
+  if (plt_counter == 1) then
+    sharevar = 0
+  else
+    sharevar = 0
+    sharevar(1:3) = 1
+  end if
   nodeloc = 1
-  isdouble = 0
-  fileformat = 1
-  filetype = 0
-  debug = 1
-
-  teci = tecini142('veldata'//nullchr,&
-       data_names//nullchr,&
-       path_plt//nullchr,&
-       trim(path_seed)//nullchr,&
-       fileformat,&
-       filetype,&
-       debug,&
-       isdouble)
-
-  teci = tecmpiinit142(mpi_comm_world,0)
 
   teci = teczne142('FLOW'//nullchr,&
        0,&              !0 = ordered data
@@ -107,8 +131,8 @@ subroutine plt_fields
        0,&              !ICellMax (don't use)
        0,&              !JCellMax (don't use)
        0,&              !KCellMax (don't use)
-       null,&           !time stamp
-       0,&              !strandid
+       plt_time,&       !time stamp
+       1,&              !strandid
        0,&              !parent zone
        1,&              !0=point, 1=block
        0,&              !numfaceconnections
@@ -132,6 +156,8 @@ subroutine plt_fields
        jmax,&
        kmax)
 
+  if (plt_counter == 1) then
+
   toplt = xplt(1:nnx,jmin:jmax,kmin:kmax)
   teci = tecdat142(nnx*myny*mynz,toplt(1:nnx,jmin:jmax,kmin:kmax),isdouble)
 
@@ -140,6 +166,8 @@ subroutine plt_fields
 
   toplt = zplt(1:nnx,jmin:jmax,kmin:kmax)
   teci = tecdat142(nnx*myny*mynz,toplt(1:nnx,jmin:jmax,kmin:kmax),isdouble)
+
+  end if
 
   toplt = uplt(1:nnx,jmin:jmax,kmin:kmax)
   teci = tecdat142(nnx*myny*mynz,toplt(1:nnx,jmin:jmax,kmin:kmax),isdouble)
@@ -161,6 +189,7 @@ subroutine plt_fields
 
   passive = 0
   passive(7:8) = 1
+  sharevar = 0
 
   mynp = numpart  !From the last time particle number was calculated
 
@@ -203,8 +232,8 @@ subroutine plt_fields
        0,&              !ICellMax (don't use)
        0,&              !JCellMax (don't use)
        0,&              !KCellMax (don't use)
-       null,&           !time stamp
-       0,&              !strandid
+       plt_time,&       !time stamp
+       1,&              !strandid
        0,&              !parent zone
        1,&              !0=point, 1=block
        0,&              !numfaceconnections
@@ -238,7 +267,8 @@ subroutine plt_fields
 
   end if
 
-  teci = tecend142()  
+  plt_counter = plt_counter + 1
+
 
   deallocate(uplt,vplt,wplt,wtmp,tplt,qplt,xplt,yplt,zplt,toplt)
   deallocate(xpart,ypart,zpart,upart,vpart,wpart,tpart,rpart)

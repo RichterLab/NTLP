@@ -106,6 +106,8 @@ c
          call particle_init 
          !call read_part_res !comment out usually 
 
+         call init_tecio
+
 c
 c ---------- choose routine for getting initial guess
 c
@@ -135,6 +137,8 @@ c
  
          call particle_setup
          call read_part_res
+
+         call init_tecio
 
          if (inetcdf .eq. 1) then
          call netcdf_res
@@ -279,11 +283,11 @@ c
             call open_viz_netcdf
             call write_viz_netcdf
             call close_viz_netcdf
-            call plt_fields
          else
             call save_viz(it)
          end if
       endif
+
 c
 c ------------ save pressure field
 c
@@ -428,6 +432,10 @@ c
          end if
       end if
 
+      if (mod(it,300) .eq. 0) then
+      call plt_fields
+      end if
+
       call get_max
       call get_dt
       if (it.ge.itmax) go to 99000
@@ -436,9 +444,13 @@ c
          itmax = floor(real(it)/real(itape))*itape + itape  !Stop at next itape
       end if
 
+
       go to 9000
 c
 99000 continue
+
+      call finalize_tecio
+
       te_mpi = mpi_wtime()
       write(6,9997) (te_mpi - ts_mpi)
  9997 format(' Job Execution Time = ',e15.6)
@@ -3538,7 +3550,7 @@ c
         enddo
         do iscl=1,nscl
 c
-c ---------- first get average scalar gradient
+c ---------- get average scalar gradient
 c
            dtdzf(iscl) = 0.0
            do iy=iys,iye
@@ -3582,6 +3594,7 @@ c
       enddo
       enddo
       call mpi_sum_xy(xmeanp,myid,iss,ise,1)
+
       do iscl=1,nscl
          do iy=iys,iye
          do ix=1,nnx
