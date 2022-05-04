@@ -6,7 +6,9 @@ c
       use con_data
       use con_stats
       use netcdf_io
+#ifdef TECIO
       use tec_io
+#endif
       include 'mpif.h'
 c
 c ------------- definition of internal flags
@@ -106,7 +108,9 @@ c
          call particle_init 
          !call read_part_res !comment out usually 
 
+#ifdef TECIO
          call init_tecio
+#endif
 
 c
 c ---------- choose routine for getting initial guess
@@ -138,7 +142,9 @@ c
          call particle_setup
          call read_part_res
 
+#ifdef TECIO
          call init_tecio
+#endif
 
          if (inetcdf .eq. 1) then
          call netcdf_res
@@ -432,9 +438,11 @@ c
          end if
       end if
 
+#ifdef TECIO
       if (mod(it,300) .eq. 0) then
       call plt_fields
       end if
+#endif
 
       call get_max
       call get_dt
@@ -449,7 +457,9 @@ c
 c
 99000 continue
 
+#ifdef TECIO
       call finalize_tecio
+#endif
 
       te_mpi = mpi_wtime()
       write(6,9997) (te_mpi - ts_mpi)

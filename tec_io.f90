@@ -30,6 +30,8 @@ subroutine init_tecio
 
   plt_counter = 1
 
+#ifdef TECIO
+
   teci = tecini142('veldata'//nullchr,&
        data_names//nullchr,&
        path_plt//nullchr,&
@@ -41,13 +43,17 @@ subroutine init_tecio
 
   teci = tecmpiinit142(mpi_comm_world,0)
 
+#endif
+
 end subroutine init_tecio
 subroutine finalize_tecio
   implicit none
 
   integer :: tecend142
 
+#ifdef TECIO
   teci = tecend142()  
+#endif
 
 end subroutine finalize_tecio
 
@@ -76,6 +82,8 @@ subroutine plt_fields
   kmax = min(ize+1,nnz)
   jmin = max(iys-1,1)
   jmax = iye
+
+#ifdef TECIO
 
   allocate(uplt(1:nnx,jmin:jmax,kmin:kmax),vplt(1:nnx,jmin:jmax,kmin:kmax),wplt(1:nnx,jmin:jmax,kmin:kmax),wtmp(1:nnx,jmin:jmax,kmin:kmax),tplt(1:nnx,jmin:jmax,kmin:kmax),qplt(1:nnx,jmin:jmax,kmin:kmax),xplt(1:nnx,jmin:jmax,kmin:kmax),yplt(1:nnx,jmin:jmax,kmin:kmax),zplt(1:nnx,jmin:jmax,kmin:kmax),toplt(1:nnx,jmin:jmax,kmin:kmax))
 
@@ -272,6 +280,8 @@ subroutine plt_fields
 
   deallocate(uplt,vplt,wplt,wtmp,tplt,qplt,xplt,yplt,zplt,toplt)
   deallocate(xpart,ypart,zpart,upart,vpart,wpart,tpart,rpart)
+
+#ENDIF
 
 end subroutine plt_fields
 subroutine fill_plt_fields(jmin,jmax,kmin,kmax,uplt,vplt,wtmp,tplt,qplt)
