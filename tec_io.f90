@@ -89,6 +89,7 @@ subroutine plt_fields
 
   call fill_plt_fields(jmin,jmax,kmin,kmax,uplt,vplt,wtmp,tplt,qplt)
 
+
   do k=kmin,kmax
   do j=jmin,jmax
   do i=1,nnx
@@ -191,7 +192,6 @@ subroutine plt_fields
 
   toplt = qplt(1:nnx,jmin:jmax,kmin:kmax)
   teci = tecdat142(nnx*myny*mynz,toplt(1:nnx,jmin:jmax,kmin:kmax),isdouble)
-
 
   !Now get the particle locations to put into the *.plt file:
 

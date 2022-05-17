@@ -2058,6 +2058,16 @@ CONTAINS
       end do
       end if
 
+      !Now update the total number of particles
+      numpart = 0
+      part => first_particle
+      do while (associated(part))
+      numpart = numpart + 1
+      part => part%next
+      end do
+
+      call mpi_allreduce(numpart,tnumpart,1,mpi_integer,mpi_sum,mpi_comm_world,ierr)
+
 
   end subroutine particle_reintro
 

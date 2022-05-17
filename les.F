@@ -439,7 +439,7 @@ c
       end if
 
 #ifdef TECIO
-      if (mod(it,300) .eq. 0) then
+      if (mod(it,100) .eq. 0) then
       call plt_fields
       end if
 #endif
