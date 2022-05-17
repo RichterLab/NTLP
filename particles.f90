@@ -3212,7 +3212,7 @@ CONTAINS
             part%radrhs = 0.0
 
             !Also update the temperature directly using BE:
-            tmp_coeff = -Nup/3.0/Pra*CpaCpp*rhop/rhow*taup_i
+            tmp_coeff = Nup/3.0/Pra*CpaCpp*rhop/rhow*taup_i
             part%Tp = (part%Tp + tmp_coeff*dt*part%Tf)/(1+dt*tmp_coeff)
         end if
 
