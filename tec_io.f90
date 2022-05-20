@@ -5,7 +5,7 @@ implicit none
 integer :: plt_counter
 character(len=:),allocatable :: path_plt,data_names
 character*1 :: nullchr
-integer :: sharevar(10),null(10),nodeloc(10),passive(10)
+integer :: sharevar(11),null(11),nodeloc(11),passive(11)
 integer :: teci,filetype,debug,fileformat,isdouble
 
 CONTAINS
@@ -17,7 +17,7 @@ subroutine init_tecio
 
   integer ::  tecini142,tecmpiinit142
 
-  data_names = 'x y z u v w th q tp rp'
+  data_names = 'x y z u v w th q rh tp rp'
 
   path_plt = trim(trim(path_seed)//"tec_viz.szplt")
 
@@ -73,7 +73,7 @@ subroutine plt_fields
   integer :: teczne142,tecdat142,tecend142,tecznemap142,tecijkptn142
   real :: plt_time
 
-  real,allocatable :: uplt(:,:,:),vplt(:,:,:),wplt(:,:,:),wtmp(:,:,:),tplt(:,:,:),qplt(:,:,:),xplt(:,:,:),yplt(:,:,:),zplt(:,:,:)
+  real,allocatable :: uplt(:,:,:),vplt(:,:,:),wplt(:,:,:),wtmp(:,:,:),tplt(:,:,:),qplt(:,:,:),rhplt(:,:,:),xplt(:,:,:),yplt(:,:,:),zplt(:,:,:)
   real*4,allocatable :: toplt(:,:,:),xpart(:),ypart(:),zpart(:),upart(:),vpart(:),wpart(:),tpart(:),rpart(:)
 
   plt_time = time
@@ -85,9 +85,9 @@ subroutine plt_fields
 
 #ifdef TECIO
 
-  allocate(uplt(1:nnx,jmin:jmax,kmin:kmax),vplt(1:nnx,jmin:jmax,kmin:kmax),wplt(1:nnx,jmin:jmax,kmin:kmax),wtmp(1:nnx,jmin:jmax,kmin:kmax),tplt(1:nnx,jmin:jmax,kmin:kmax),qplt(1:nnx,jmin:jmax,kmin:kmax),xplt(1:nnx,jmin:jmax,kmin:kmax),yplt(1:nnx,jmin:jmax,kmin:kmax),zplt(1:nnx,jmin:jmax,kmin:kmax),toplt(1:nnx,jmin:jmax,kmin:kmax))
+  allocate(uplt(1:nnx,jmin:jmax,kmin:kmax),vplt(1:nnx,jmin:jmax,kmin:kmax),wplt(1:nnx,jmin:jmax,kmin:kmax),wtmp(1:nnx,jmin:jmax,kmin:kmax),tplt(1:nnx,jmin:jmax,kmin:kmax),qplt(1:nnx,jmin:jmax,kmin:kmax),rhplt(1:nnx,jmin:jmax,kmin:kmax),xplt(1:nnx,jmin:jmax,kmin:kmax),yplt(1:nnx,jmin:jmax,kmin:kmax),zplt(1:nnx,jmin:jmax,kmin:kmax),toplt(1:nnx,jmin:jmax,kmin:kmax))
 
-  call fill_plt_fields(jmin,jmax,kmin,kmax,uplt,vplt,wtmp,tplt,qplt)
+  call fill_plt_fields(jmin,jmax,kmin,kmax,uplt,vplt,wtmp,tplt,qplt,rhplt)
 
 
   do k=kmin,kmax
@@ -123,7 +123,7 @@ subroutine plt_fields
   end do
 
   passive = 1
-  passive(1:8) = 0
+  passive(1:9) = 0
   if (plt_counter == 1) then
     sharevar = 0
   else
@@ -193,10 +193,13 @@ subroutine plt_fields
   toplt = qplt(1:nnx,jmin:jmax,kmin:kmax)
   teci = tecdat142(nnx*myny*mynz,toplt(1:nnx,jmin:jmax,kmin:kmax),isdouble)
 
+  toplt = rhplt(1:nnx,jmin:jmax,kmin:kmax)
+  teci = tecdat142(nnx*myny*mynz,toplt(1:nnx,jmin:jmax,kmin:kmax),isdouble)
+
   !Now get the particle locations to put into the *.plt file:
 
   passive = 0
-  passive(7:8) = 1
+  passive(7:9) = 1
   sharevar = 0
 
   mynp = numpart  !From the last time particle number was calculated
@@ -209,6 +212,7 @@ subroutine plt_fields
 
   !allocate(xpart(npsize),ypart(npsize),zpart(npsize),upart(npsize),vpart(npsize),wpart(npsize),tpart(npsize),rpart(npsize))
   allocate(xpart(tnumpart),ypart(tnumpart),zpart(tnumpart),upart(tnumpart),vpart(tnumpart),wpart(tnumpart),tpart(tnumpart),rpart(tnumpart))
+  
 
 
   !Need the beginning and end index of particle number for each proc
@@ -278,24 +282,26 @@ subroutine plt_fields
   plt_counter = plt_counter + 1
 
 
-  deallocate(uplt,vplt,wplt,wtmp,tplt,qplt,xplt,yplt,zplt,toplt)
+  deallocate(uplt,vplt,wplt,wtmp,tplt,qplt,rhplt,xplt,yplt,zplt,toplt)
   deallocate(xpart,ypart,zpart,upart,vpart,wpart,tpart,rpart)
 
 #ENDIF
 
 end subroutine plt_fields
-subroutine fill_plt_fields(jmin,jmax,kmin,kmax,uplt,vplt,wtmp,tplt,qplt)
+subroutine fill_plt_fields(jmin,jmax,kmin,kmax,uplt,vplt,wtmp,tplt,qplt,rhplt)
 use pars
 use fields
+use con_stats
 implicit none
 include 'mpif.h'
 
-real, intent(inout) :: uplt(1:nnx,jmin:jmax,kmin:kmax),vplt(1:nnx,jmin:jmax,kmin:kmax),wtmp(1:nnx,jmin:jmax,kmin:kmax),tplt(1:nnx,jmin:jmax,kmin:kmax),qplt(1:nnx,jmin:jmax,kmin:kmax)
+real, intent(inout) :: uplt(1:nnx,jmin:jmax,kmin:kmax),vplt(1:nnx,jmin:jmax,kmin:kmax),wtmp(1:nnx,jmin:jmax,kmin:kmax),tplt(1:nnx,jmin:jmax,kmin:kmax),qplt(1:nnx,jmin:jmax,kmin:kmax),rhplt(1:nnx,jmin:jmax,kmin:kmax)
 integer, intent(in) :: jmin,jmax,kmin,kmax
 integer :: yfore,yback,nsend,nrecv
 integer :: ix,iy,iz,jloc,iscl
 integer :: ierr,istatus(mpi_status_size)
 real :: sendbuf(1:nnx,kmin:kmax,6),recvbuf(1:nnx,kmin:kmax,6)
+real :: Ttmp,mod_magnus
 
   !First fill everything except y-halo
   do iz=kmin,kmax
@@ -313,12 +319,10 @@ real :: sendbuf(1:nnx,kmin:kmax,6),recvbuf(1:nnx,kmin:kmax,6)
   !To fill the halos in the y direction, need to figure out the proc numbers ahead and behind myid
 
   if ( mod(myid+1,ncpu_s) == 0 ) then  !At max y
-     !yfore = myid-ncpu_s+1
      yfore = mpi_proc_null
      yback = myid-1
   elseif (mod(myid,ncpu_s) == 0) then  !At min y
      yfore = myid+1
-     !yback = myid+ncpu_s-1
      yback = mpi_proc_null
   else
      yfore = myid+1
@@ -354,6 +358,35 @@ real :: sendbuf(1:nnx,kmin:kmax,6),recvbuf(1:nnx,kmin:kmax,6)
      wtmp(ix,iys-1,iz) = recvbuf(ix,iz,3)
      tplt(ix,iys-1,iz) = recvbuf(ix,iz,5)
      qplt(ix,iys-1,iz) = recvbuf(ix,iz,6)
+  end do
+  end do
+
+  end if
+
+  !Now fill RH:
+  if (iexner .eq. 1) then
+
+  do iz=kmin,kmax
+  do iy=jmin,jmax
+  do ix=1,nnx
+
+     Ttmp = tplt(ix,iy,iz)*(psurf/(psurf-zz(iz)*rhoa*grav))**(-Rd/Cpa)
+     rhplt(ix,iy,iz) = Ttmp*qplt(ix,iy,iz)*Ru/Mw/mod_magnus(Ttmp)*rhoa*100.0
+
+  end do
+  end do
+  end do
+
+  else
+
+  do iz=kmin,kmax
+  do iy=jmin,jmax
+  do ix=1,nnx
+
+     Ttmp = tplt(ix,iy,iz)
+     rhplt(ix,iy,iz) = Ttmp*qplt(ix,iy,iz)*Ru/Mw/mod_magnus(Ttmp)*rhoa*100.0
+
+  end do
   end do
   end do
 
