@@ -26,7 +26,7 @@ subroutine init_tecio
   isdouble = 0
   fileformat = 1
   filetype = 0
-  debug = 0
+  debug = 1
 
   plt_counter = 1
 
@@ -67,7 +67,7 @@ subroutine plt_fields
   include 'mpif.h'
 
   integer :: i,j,k,kmin,kmax,jmin,jmax,ip
-  integer :: myny,mynz,mynp,npsize,nps,npe
+  integer :: myny,mynz,mynp,npsize,nps,npe,tnumpart_tec
   integer :: rankarray(numprocs),nparray(numprocs)
   integer :: ierr
   integer :: teczne142,tecdat142,tecend142,tecznemap142,tecijkptn142
@@ -210,10 +210,15 @@ subroutine plt_fields
      npsize=mynp+1
   end if
 
-  !allocate(xpart(npsize),ypart(npsize),zpart(npsize),upart(npsize),vpart(npsize),wpart(npsize),tpart(npsize),rpart(npsize))
-  allocate(xpart(tnumpart),ypart(tnumpart),zpart(tnumpart),upart(tnumpart),vpart(tnumpart),wpart(tnumpart),tpart(tnumpart),rpart(tnumpart))
-  
+  if (tnumpart .eq. 0) then
+     tnumpart_tec = 1
+  else
+     tnumpart_tec = tnumpart
+  end if
 
+  !allocate(xpart(npsize),ypart(npsize),zpart(npsize),upart(npsize),vpart(npsize),wpart(npsize),tpart(npsize),rpart(npsize))
+  allocate(xpart(tnumpart_tec),ypart(tnumpart_tec),zpart(tnumpart_tec),upart(tnumpart_tec),vpart(tnumpart_tec),wpart(tnumpart_tec),tpart(tnumpart_tec),rpart(tnumpart_tec))
+  
 
   !Need the beginning and end index of particle number for each proc
   call mpi_allgather(mynp,1,mpi_integer,nparray,1,mpi_integer,mpi_comm_world,ierr)
@@ -231,14 +236,25 @@ subroutine plt_fields
 
   !call fill_plt_part(npsize,xpart,ypart,zpart,upart,vpart,wpart,tpart,rpart)
 
-  call fill_plt_part_ROOT(nparray,xpart,ypart,zpart,upart,vpart,wpart,tpart,rpart)
+  if (tnumpart .eq. 0) then
+     xpart(1) = 0.0
+     ypart(1) = 0.0
+     zpart(1) = 0.0
+     upart(1) = 0.0
+     vpart(1) = 0.0
+     wpart(1) = 0.0
+     tpart(1) = 0.0
+     rpart(1) = 0.0
+  else
+     call fill_plt_part_ROOT(nparray,xpart,ypart,zpart,upart,vpart,wpart,tpart,rpart)
+  end if
 
   if (myid .eq. 0) then
 
 
   teci = teczne142('PART'//nullchr,&
        0,&              !0 = ordered data
-       tnumpart,&       !num elements in first direction
+       tnumpart_tec,&       !num elements in first direction
        1,&              !num elements in second direction
        1,&              !num elements in third direction
        0,&              !ICellMax (don't use)
@@ -268,14 +284,14 @@ subroutine plt_fields
   !     1,&
   !     1)
 
-  teci = tecdat142(tnumpart,xpart,isdouble)
-  teci = tecdat142(tnumpart,ypart,isdouble)
-  teci = tecdat142(tnumpart,zpart,isdouble)
-  teci = tecdat142(tnumpart,upart,isdouble)
-  teci = tecdat142(tnumpart,vpart,isdouble)
-  teci = tecdat142(tnumpart,wpart,isdouble)
-  teci = tecdat142(tnumpart,tpart,isdouble)
-  teci = tecdat142(tnumpart,rpart,isdouble)
+  teci = tecdat142(tnumpart_tec,xpart,isdouble)
+  teci = tecdat142(tnumpart_tec,ypart,isdouble)
+  teci = tecdat142(tnumpart_tec,zpart,isdouble)
+  teci = tecdat142(tnumpart_tec,upart,isdouble)
+  teci = tecdat142(tnumpart_tec,vpart,isdouble)
+  teci = tecdat142(tnumpart_tec,wpart,isdouble)
+  teci = tecdat142(tnumpart_tec,tpart,isdouble)
+  teci = tecdat142(tnumpart_tec,rpart,isdouble)
 
   end if
 

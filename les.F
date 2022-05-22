@@ -439,7 +439,7 @@ c
       end if
 
 #ifdef TECIO
-      if (mod(it,5000) .eq. 0) then
+      if (mod(it,50) .eq. 0) then
       !if (time .gt. 200.0 .and. time .lt. 205.0) then
       call plt_fields
       end if
