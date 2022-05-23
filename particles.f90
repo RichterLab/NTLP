@@ -2250,8 +2250,8 @@ CONTAINS
   real :: M,S
   real :: d1,d2,err,dhalf,ftest,CDF
   real :: daerosol
-  real :: a,b,c,d,p,q
-  integer :: iter
+  real :: a(4), rtr(3), rti(3)
+  integer :: iter, k
 
   !Use bisection to get the radius based on the CDF contained in
   !function cdf_func
@@ -2290,16 +2290,25 @@ CONTAINS
   !theory to get the proper initial condition
   !Rehydrate to 95% RH
 
-  !The equation for the equilibrium radius is a cubic -- take positive root:
-  a = log(0.95)  !RH = 95%
-  b = -2.0*Mw*Gam/Ru/rhow/Tp_init
-  c = 0.0
-  d = kappa_s*m_s/(2.0/3.0*pi2*rhos)
-
-  p = -b/3.0/a
-  q = p**3 - 3.0*a*d/6.0/a**2
-
-  rad_init = (q + (q**2 - p**6)**(0.5))**(1./3.) + (q - (q**2-p**6)**(0.5))**(1./3.) + p
+  !The equation for the equilibrium radius is a cubic:
+   a(4) = log(0.95)  !RH = 95%
+   a(3) = -2.0*Mw*Gam/Ru/rhow/Tp_init
+   a(2) = 0.0
+   a(1) = kappa_s*m_s / (2.0/3.0*pi2*rhos)
+   ! calculate all roots of the cubic equation (real and complex)
+   !The method is to construct an upper Hessenberg matrix
+   !whose eigenvalues are the desired roots, and then use the
+   !routines balanc and hqr . The real and imaginary parts of the
+   !roots are returned in rtr(1:m) and rti(1:m) , respectively.
+   call eigen_roots(a,3,rtr,rti)
+   !now select the real and positive one
+   do k=1,3
+     if(rti(k).eq.0.) then
+        if(rtr(k).gt.0.)then
+           rad_init = rtr(k)
+        endif
+     endif
+   enddo
 
   end subroutine lognormal_dist
 
@@ -4797,6 +4806,277 @@ CONTAINS
   end do
 
   end subroutine radius_histogram
+
+   subroutine eigen_roots(a,m,rtr,rti)
+   ! USES balanc,hqr
+   !Find all the roots of a polynomial with real coeﬃcients. The method is to construct an upper Hessenberg matrix
+   !whose eigenvalues are the desired roots, and then use the routines balanc and hqr . The real and imaginary parts of the roots are returned in rtr(1:m) and rti(1:m) , respectively.
+   
+      INTEGER :: m,MAXM
+      real :: a(m+1),rtr(m),rti(m)
+      PARAMETER (MAXM=50)
+      INTEGER :: j,k
+      real :: hess(MAXM,MAXM),xr,xi
+   
+      if (m.gt.MAXM.or.a(m+1).eq.0.) then
+         write(*,*)'bad args in zrhqr'
+         stop
+      end if
+   
+      do k=1,m
+         hess(1,k)=-a(m+1-k)/a(m+1)
+         do j=2,m
+            hess(j,k)=0.
+         enddo
+         if (k.ne.m) hess(k+1,k)=1.
+      enddo
+   
+      call balanc(hess,m,MAXM)
+   
+      call hqr(hess,m,MAXM,rtr,rti)
+   
+      do j=2,m
+         xr=rtr(j)
+         xi=rti(j)
+         do k=j-1,1,-1
+            if(rtr(k).le.xr) goto 1
+            rtr(k+1)=rtr(k)
+            rti(k+1)=rti(k)
+         enddo
+   
+         k=0
+1   		rtr(k+1)=xr
+         rti(k+1)=xi
+      enddo
+      return
+   end subroutine
+   
+   
+   SUBROUTINE balanc(a,n,np)
+   !Given an n by n matrix a stored in an array of physical dimensions np by np , this routine
+   !replaces it by a balanced matrix with identical eigenvalues. A symmetric matrix is already
+   !balanced and is unaﬀected by this procedure. The parameter RADIX should be the machine’s
+   !ﬂoating-point radix.
+      INTEGER n,np
+      real a(np,np),RADIX,SQRDX
+      PARAMETER (RADIX=2.,SQRDX=RADIX**2)
+      INTEGER i,j,last
+      real c,f,g,r,s
+   
+2   	continue
+   
+      last=1
+      do i=1,n
+         c=0.
+         r=0.
+         do j=1,n
+            if(j.ne.i)then
+               c=c+abs(a(j,i))
+               r=r+abs(a(i,j))
+            endif
+         enddo
+   
+         if(c.ne.0..and.r.ne.0.)then
+            g=r/RADIX
+            f=1.
+            s=c+r
+3   			if(c.lt.g)then
+               f=f*RADIX
+               c=c*SQRDX
+               goto 3
+            endif
+   
+            g=r*RADIX
+4   			if(c.gt.g)then
+               f=f/RADIX
+               c=c/SQRDX
+               goto 4
+            endif
+   
+            if((c+r)/f.lt.0.95*s)then
+               last=0
+               g=1./f
+               do j=1,n
+                  a(i,j)=a(i,j)*g
+               enddo
+   
+               do j=1,n
+                  a(j,i)=a(j,i)*f
+               enddo
+            endif
+         endif
+      enddo
+   
+      if(last.eq.0) goto 2
+      return
+   END subroutine
+   
+   SUBROUTINE hqr(a,n,np,wr,wi)
+   !Finds all eigenvalues of an n by n upper Hessenberg matrix a that is stored in an np by np
+   !array. On input a can be exactly as output from elmhes; on output it is destroyed.
+   !The real and imaginary parts of the eigenvalues are returned in wr and wi , respectively.
+      INTEGER n,np
+      double precision a(np,np),wi(np),wr(np)
+      INTEGER i,its,j,k,l,m,nn
+      double precision anorm,p,q,r,s,t,u,v,w,x,y,z
+   
+      anorm=0.
+   
+      do i=1,n
+         do j=max(i-1,1),n
+            anorm=anorm+abs(a(i,j))
+         enddo
+      enddo
+   
+      nn=n
+      t=0.
+   
+5   	if(nn.ge.1)then
+         its=0
+6   		do l=nn,2,-1
+            s=abs(a(l-1,l-1))+abs(a(l,l))
+            if(s.eq.0.)s=anorm
+            if(abs(a(l,l-1))+s.eq.s)goto 7
+         enddo
+   
+         l=1
+   
+7   		x=a(nn,nn)
+   
+         if(l.eq.nn)then
+            wr(nn)=x+t
+            wi(nn)=0.
+            nn=nn-1
+         else
+            y=a(nn-1,nn-1)
+            w=a(nn,nn-1)*a(nn-1,nn)
+   
+            if(l.eq.nn-1)then
+               p=0.5*(y-x)
+               q=p**2+w
+               z=sqrt(abs(q))
+               x=x+t
+   
+               if(q.ge.0.)then
+                  z=p+sign(z,p)
+                  wr(nn)=x+z
+                  wr(nn-1)=wr(nn)
+   
+                  if(z.ne.0.)wr(nn)=x-w/z
+                     wi(nn)=0.
+                     wi(nn-1)=0.
+                  else
+                     wr(nn)=x+p
+                     wr(nn-1)=wr(nn)
+                     wi(nn)=z
+                     wi(nn-1)=-z
+                  endif
+   
+                  nn=nn-2
+   
+               else
+                  if(its.eq.30) then
+                     write(*,*) 'too many iterations in hqr'
+                     stop
+                  endif
+   
+                  if(its.eq.10.or.its.eq.20)then
+                     t=t+x
+   
+                     do i=1,nn
+                        a(i,i)=a(i,i)-x
+                     enddo
+   
+                     s=abs(a(nn,nn-1))+abs(a(nn-1,nn-2))
+                     x=0.75*s
+                     y=x
+                     w=-0.4375*s**2
+                  endif
+   
+                  its=its+1
+   
+                  do m=nn-2,l,-1
+                     z=a(m,m)
+                     r=x-z
+                     s=y-z
+                     p=(r*s-w)/a(m+1,m)+a(m,m+1)
+                     q=a(m+1,m+1)-z-r-s
+                     r=a(m+2,m+1)
+                     s=abs(p)+abs(q)+abs(r)
+                     p=p/s
+                     q=q/s
+                     r=r/s
+                     if(m.eq.l)goto 8
+                     u=abs(a(m,m-1))*(abs(q)+abs(r))
+                     v=abs(p)*(abs(a(m-1,m-1))+abs(z)+abs(a(m+1,m+1)))
+                     if(u+v.eq.v)goto 8
+                  enddo
+   
+8   					do i=m+2,nn
+                     a(i,i-2)=0.
+                     if (i.ne.m+2) a(i,i-3)=0.
+                  enddo
+   
+                  do k=m,nn-1
+                     if(k.ne.m)then
+                        p=a(k,k-1)
+                        q=a(k+1,k-1)
+                        r=0.
+   
+                        if(k.ne.nn-1)r=a(k+2,k-1)
+                        x=abs(p)+abs(q)+abs(r)
+                        if(x.ne.0.)then
+                           p=p/x
+                           q=q/x
+                           r=r/x
+                        endif
+                     endif
+   
+                     s=sign(sqrt(p**2+q**2+r**2),p)
+   
+                     if(s.ne.0.)then
+                        if(k.eq.m)then
+                           if(l.ne.m)a(k,k-1)=-a(k,k-1)
+                        else
+                           a(k,k-1)=-s*x
+                        endif
+   
+                        p=p+s
+                        x=p/s
+                        y=q/s
+                        z=r/s
+                        q=q/p
+                        r=r/p
+   
+                        do j=k,nn
+                           p=a(k,j)+q*a(k+1,j)
+                           if(k.ne.nn-1)then
+                              p=p+r*a(k+2,j)
+                              a(k+2,j)=a(k+2,j)-p*z
+                           endif
+                           a(k+1,j)=a(k+1,j)-p*y
+                           a(k,j)=a(k,j)-p*x
+                        enddo
+   
+                        do i=l,min(nn,k+3)
+                           p=x*a(i,k)+y*a(i,k+1)
+                           if(k.ne.nn-1)then
+                              p=p+z*a(i,k+2)
+                              a(i,k+2)=a(i,k+2)-p*r
+                           endif
+                           a(i,k+1)=a(i,k+1)-p*q
+                           a(i,k)=a(i,k)-p
+                        enddo
+                     endif
+                  enddo
+   
+                  goto 6
+               endif
+            endif
+            goto 5
+         endif
+      return
+   END subroutine
 
 
   function crit_radius(m_s,kappa_s,Tf)
