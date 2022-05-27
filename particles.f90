@@ -1196,7 +1196,7 @@ CONTAINS
 
 
       partTEsrc_t(iz,iy,ix) = &
-          partTEsrc_t(iz,iy,ix) - rhow/rhoa*pi2*2*part%radius**2*part%radrhs*Cpv/Cpa*part%Tp*wtt/dV*real(part%mult) - &
+          partTEsrc_t(iz,iy,ix) - rhow/rhoa*pi2*2*part%radius**2*part%radrhs*Cpv/Cpa*part%Tp*wtt/dV*real(part%mult) + &
               rhow/rhoa*pi2*2*part%radius**2*part%radrhs*Cpv/Cpa*part%Tf*wtt/dV*real(part%mult)
 
      endif
