@@ -439,7 +439,7 @@ c
       end if
 
 #ifdef TECIO
-      if (mod(it,50) .eq. 0) then
+      if (mod(it,20000) .eq. 0) then
       !if (time .gt. 200.0 .and. time .lt. 205.0) then
       call plt_fields
       end if
@@ -5978,6 +5978,8 @@ c
            do ix=1,nnx
               t(ix,iy,1,iz) = t_surf + slope_t*zz(iz)
               t(ix,iy,2,iz) = q_surf + slope_q*zz(iz)
+              !t(ix,iy,2,iz) = 0.0105 
+              !t(ix,iy,1,iz) = 285.0
            enddo
            enddo
          elseif(zz(iz) .ge. z_switch) then
@@ -10342,7 +10344,7 @@ c
 
 
       if (ihumiditycontrol) then
-          meanRH_target = 103.0
+          meanRH_target = 102.0
           Swall = Swall + (meanRH_target - meanRH_curr)*1.0e-9
       end if
 

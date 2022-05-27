@@ -2013,7 +2013,7 @@ CONTAINS
 
       integer :: it,it_delay
       integer :: ierr,randproc,np,my_reintro
-      real :: totdrops
+      real :: totdrops,t_reint
 
 
       if (inewpart .eq. 4) then
@@ -2021,10 +2021,17 @@ CONTAINS
       !!Sea spray, given by Andreas SSGF 98
       call andreas_dist_num(totdrops) ! drops per m^2 per s based on Andreas 98      
 
-      it_delay = 200
+      t_reint = 1800.0  !Time after which to start injecting
+      it_delay = 200    !Num of time steps between injection events (sometimes too few are produced and if it's < numprocs then it gets rounded to zero)
       
-      my_reintro = xl*yl*dt*real(it_delay)*totdrops/(numprocs*mult_init)
-      tot_reintro = 0
+      
+      if (time .gt. t_reint) then
+         my_reintro = xl*yl*dt*real(it_delay)*totdrops/(numprocs*mult_init)
+         tot_reintro = 0
+      else
+         my_reintro = 0
+         tot_reintro = 0
+      endif
       
       elseif (inewpart .eq. 2) then
 
@@ -2234,7 +2241,7 @@ CONTAINS
 
          xp_init(1) = ran2(iseed)*(xmax-xmin) + xmin
          xp_init(2) = ran2(iseed)*(ymax-ymin) + ymin
-         xp_init(3) = ran2(iseed)*zw1
+         xp_init(3) = ran2(iseed)*8.0  !Distributing between 0 and 8 meters (like a sig. wave height)
 
          call andreas_dist(rad_init)
 
@@ -3622,7 +3629,7 @@ CONTAINS
    part => first_particle
    do while (associated(part))
       
-      if (mod(part%pidx,400) .eq. 0) then
+      if (mod(part%pidx,4000) .eq. 0) then
           write(ntraj,'(2i,12e15.6)') part%pidx,part%procidx,time,part%xp(1),part%xp(2),part%xp(3),part%vp(1),part%vp(2),part%vp(3),part%radius,part%Tp,part%Tf,part%qinf,part%qstar
       end if
 
