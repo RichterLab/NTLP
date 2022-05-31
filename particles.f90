@@ -2982,7 +2982,6 @@ CONTAINS
       real :: denom,dtl,sigma
       integer :: ix,iy,iz,im,flag,mflag
       real :: Rep,diff(3),diffnorm,corrfac,myRep_avg
-      real :: xtmp(3),vtmp(3),Tptmp,radiustmp
       real :: Nup,Shp,rhop,taup_i,estar,einf
       real :: mylwc_sum,myphiw_sum,myphiv_sum,Volp
       real :: Eff_C,Eff_S
@@ -2993,6 +2992,7 @@ CONTAINS
       real :: tmp_coeff
       real :: xp3i
       real :: mod_Magnus
+      real :: rad_i,Tp_i,vp_i(3),mp_i
 
 
 
@@ -3066,6 +3066,12 @@ CONTAINS
         corrfac = 1.0
 
         xp3i = part%xp(3)   !Store this to do flux calculation
+
+        !Store these to compute the feedback terms
+        rad_i = part%radius
+        Tp_i = part%Tp
+        vp_i(1:3) = part%vp(1:3)
+        mp_i = Volp*rhop
 
         !implicitly calculates next velocity and position
         part%xp(1:3) = part%xp(1:3) + dt*part%vp(1:3)
@@ -3222,7 +3228,8 @@ CONTAINS
          part%qstar = Mw/Ru*estar/part%Tp/rhoa
 
         if (ievap .EQ. 1) then
-            part%radrhs = Shp/9.0/Sc*rhop/rhow*part%radius*taup_i*(part%qinf-part%qstar) !assumes qinf=rhov/rhoa rather than rhov/rhom
+            !part%radrhs = Shp/9.0/Sc*rhop/rhow*part%radius*taup_i*(part%qinf-part%qstar) !assumes qinf=rhov/rhoa rather than rhov/rhom
+            part%radrhs = (part%radius-rad_i)/dt
         else
 
             part%radrhs = 0.0
@@ -3232,11 +3239,13 @@ CONTAINS
             part%Tp = (part%Tp + tmp_coeff*dt*part%Tf)/(1+dt*tmp_coeff)
         end if
 
-        part%Tprhs_s = -Nup/3.0/Pra*CpaCpp*rhop/rhow*taup_i*(part%Tp-part%Tf)
+        !part%Tprhs_s = -Nup/3.0/Pra*CpaCpp*rhop/rhow*taup_i*(part%Tp-part%Tf)
+        part%Tprhs_s = (part%Tp-Tp_i)/dt
         part%Tprhs_L = 3.0*Lv/Cpp/part%radius*part%radrhs
 
         part%xrhs(1:3) = part%vp(1:3)
-        part%vrhs(1:3) = corrfac*taup_i*(part%uf(1:3)-part%vp(1:3)) + part_grav(1:3)
+        !part%vrhs(1:3) = corrfac*taup_i*(part%uf(1:3)-part%vp(1:3)) + part_grav(1:3)
+        part%vrhs(1:3) = (part%vp(1:3)-vp_i(1:3))/dt
 
         part%res = part%res + dt
         part%actres = part%actres + dt
