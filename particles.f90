@@ -3240,8 +3240,8 @@ CONTAINS
         end if
 
         !part%Tprhs_s = -Nup/3.0/Pra*CpaCpp*rhop/rhow*taup_i*(part%Tp-part%Tf)
-        part%Tprhs_s = (part%Tp-Tp_i)/dt
         part%Tprhs_L = 3.0*Lv/Cpp/part%radius*part%radrhs
+        part%Tprhs_s = (part%Tp-Tp_i)/dt - part%Tprhs_L
 
         part%xrhs(1:3) = part%vp(1:3)
         !part%vrhs(1:3) = corrfac*taup_i*(part%uf(1:3)-part%vp(1:3)) + part_grav(1:3)
