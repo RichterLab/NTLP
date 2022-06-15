@@ -81,7 +81,7 @@ module particles
     integer :: pidx,procidx,nbr_pidx,nbr_procidx
     real :: vp(3),xp(3),uf(3),xrhs(3),vrhs(3),Tp,Tprhs_s
     real :: Tprhs_L,Tf,radius,radrhs,qinf,qstar,dist
-    real :: res,m_s,kappa_s,rc,actres,numact
+    real :: res,m_s,kappa_s,rc,actres,numact, vol_s
     real :: u_sub(3),sigm_s
     integer*8 :: mult
     type(particle), pointer :: prev,next
@@ -1196,7 +1196,7 @@ CONTAINS
 
 
       partTEsrc_t(iz,iy,ix) = &
-          partTEsrc_t(iz,iy,ix) - rhow/rhoa*pi2*2*part%radius**2*part%radrhs*Cpv/Cpa*part%Tp*wtt/dV*real(part%mult) - &
+          partTEsrc_t(iz,iy,ix) - rhow/rhoa*pi2*2*part%radius**2*part%radrhs*Cpv/Cpa*part%Tp*wtt/dV*real(part%mult) + &
               rhow/rhoa*pi2*2*part%radius**2*part%radrhs*Cpv/Cpa*part%Tf*wtt/dV*real(part%mult)
 
      endif
@@ -2013,7 +2013,7 @@ CONTAINS
 
       integer :: it,it_delay
       integer :: ierr,randproc,np,my_reintro
-      real :: totdrops
+      real :: totdrops,t_reint
 
 
       if (inewpart .eq. 4) then
@@ -2021,10 +2021,17 @@ CONTAINS
       !!Sea spray, given by Andreas SSGF 98
       call andreas_dist_num(totdrops) ! drops per m^2 per s based on Andreas 98      
 
-      it_delay = 200
+      t_reint = 1800.0  !Time after which to start injecting
+      it_delay = 200    !Num of time steps between injection events (sometimes too few are produced and if it's < numprocs then it gets rounded to zero)
       
-      my_reintro = xl*yl*dt*real(it_delay)*totdrops/(numprocs*mult_init)
-      tot_reintro = 0
+      
+      if (time .gt. t_reint) then
+         my_reintro = xl*yl*dt*real(it_delay)*totdrops/(numprocs*mult_init)
+         tot_reintro = 0
+      else
+         my_reintro = 0
+         tot_reintro = 0
+      endif
       
       elseif (inewpart .eq. 2) then
 
@@ -2058,14 +2065,25 @@ CONTAINS
       end do
       end if
 
+      !Now update the total number of particles
+      numpart = 0
+      part => first_particle
+      do while (associated(part))
+      numpart = numpart + 1
+      part => part%next
+      end do
+
+      call mpi_allreduce(numpart,tnumpart,1,mpi_integer,mpi_sum,mpi_comm_world,ierr)
+
 
   end subroutine particle_reintro
 
-  subroutine create_particle(xp,vp,Tp,m_s,kappa_s,mult,rad_init,idx,procidx)
+  subroutine create_particle(xp,vp,Tp,m_s,kappa_s,mult,rad_init,rho_sol,idx,procidx)
       use pars
       implicit none
 
       real :: xp(3),vp(3),Tp,qinfp,rad_init,pi,m_s,kappa_s
+      real :: rho_sol
       integer :: idx,procidx
       integer*8 :: mult
 
@@ -2107,6 +2125,7 @@ CONTAINS
       part%actres = 0.0
       part%m_s = m_s
       part%kappa_s = kappa_s
+      part%vol_s = m_s / rho_sol
       part%dist = 0.0
       part%u_sub(1:3) = 0.0
       part%sigm_s = 0.0
@@ -2124,6 +2143,7 @@ CONTAINS
   real :: kappas_dinit,radius_dinit
   real :: xp_init(3)
   integer :: idx,procidx
+  real :: rho_sol
 
   !C-FOG parameters: lognormal of accumulation + lognormal of coarse, with extra "resolution" on the coarse mode
   real :: S,M,kappa_s,rad_init
@@ -2139,7 +2159,7 @@ CONTAINS
 
       m_s = radius_init**3*pi2*2.0/3.0*rhow*Sal  !Using the salinity specified in params.in
 
-      call create_particle(xp_init,vp_init,Tp_init,m_s,kappas_init,mult_init,radius_init,ngidx,procidx)
+      call create_particle(xp_init,vp_init,Tp_init,m_s,kappas_init,mult_init,radius_init,rhos,ngidx,procidx)
 
 
 
@@ -2160,7 +2180,7 @@ CONTAINS
 
       m_s = radius_dinit**3*pi2*2.0/3.0*rhow*Sal  !Using the salinity specified in params.in
 
-      call create_particle(xp_init,vp_init,Tp_init,m_s,kappas_dinit,mult_init,radius_dinit,ngidx,procidx)
+      call create_particle(xp_init,vp_init,Tp_init,m_s,kappas_dinit,mult_init,radius_dinit,rhos,ngidx,procidx)
 
 
 
@@ -2179,9 +2199,10 @@ CONTAINS
          M = -1.95
          kappa_s = 0.6
          mult = mult_a
+         rho_sol = 2000.0
 
          !With these parameters, get m_s and rad_init from distribution
-         call lognormal_dist(rad_init,m_s,kappa_s,M,S)
+         call lognormal_dist(rad_init,m_s,kappa_s,M,S,rho_sol)
          num_a = num_a + 1
 
       else  !It's coarse mode
@@ -2190,9 +2211,10 @@ CONTAINS
          M = 0.0
          kappa_s = 1.2
          mult = mult_c
+         rho_sol = 2000.0
 
          !With these parameters, get m_s and rad_init from distribution
-         call lognormal_dist(rad_init,m_s,kappa_s,M,S)
+         call lognormal_dist(rad_init,m_s,kappa_s,M,S,rho_sol)
          num_c = num_c + 1
 
       end if      
@@ -2204,14 +2226,15 @@ CONTAINS
          M = 0.0
          kappa_s = 1.2
          mult = mult_c
+         rho_sol = 2000.0
 
          !With these parameters, get m_s and rad_init from distribution
-         call lognormal_dist(rad_init,m_s,kappa_s,M,S)
+         call lognormal_dist(rad_init,m_s,kappa_s,M,S,rho_sol)
          xp_init(3) = 10.0
       end if
 
 
-      call create_particle(xp_init,vp_init,Tp_init,m_s,kappa_s,mult,rad_init,idx,procidx)
+      call create_particle(xp_init,vp_init,Tp_init,m_s,kappa_s,mult,rad_init,rho_sol,idx,procidx)
 
 
 
@@ -2224,7 +2247,7 @@ CONTAINS
 
          xp_init(1) = ran2(iseed)*(xmax-xmin) + xmin
          xp_init(2) = ran2(iseed)*(ymax-ymin) + ymin
-         xp_init(3) = ran2(iseed)*zw1
+         xp_init(3) = ran2(iseed)*8.0  !Distributing between 0 and 8 meters (like a sig. wave height)
 
          call andreas_dist(rad_init)
 
@@ -2232,14 +2255,14 @@ CONTAINS
 
          vp_init(3) = ran2(iseed)*4.0
 
-         call create_particle(xp_init,vp_init,Tp_init,m_s,kappas_init,mult_init,rad_init,ngidx,procidx) 
+         call create_particle(xp_init,vp_init,Tp_init,m_s,kappas_init,mult_init,rad_init,rhos,ngidx,procidx) 
       
 
    end if
 
   end subroutine new_particle
 
-  subroutine lognormal_dist(rad_init,m_s,kappa_s,M,S)
+  subroutine lognormal_dist(rad_init,m_s,kappa_s,M,S,rho_sol)
   use pars
   use con_data
   implicit none
@@ -2247,11 +2270,11 @@ CONTAINS
 
   real, intent(inout) :: rad_init,m_s,kappa_s
   real :: ran2,cdf_func_single
-  real :: M,S
+  real :: M,S,rho_sol
   real :: d1,d2,err,dhalf,ftest,CDF
   real :: daerosol
-  real :: a,b,c,d,p,q
-  integer :: iter
+  real :: a(4), rtr(3), rti(3)
+  integer :: iter, k
 
   !Use bisection to get the radius based on the CDF contained in
   !function cdf_func
@@ -2284,22 +2307,31 @@ CONTAINS
   end do
 
   daerosol = d1*1.0e-6  !Don't forget to convert micron to m
-  m_s = 2.0/3.0*pi2*(daerosol/2.0)**3*rhos
+  m_s = 2.0/3.0*pi2*(daerosol/2.0)**3*rho_sol
 
   !Now have the dry aerosol diameter and mass, must rehydrate it using Kohler
   !theory to get the proper initial condition
   !Rehydrate to 95% RH
 
-  !The equation for the equilibrium radius is a cubic -- take positive root:
-  a = log(0.95)  !RH = 95%
-  b = -2.0*Mw*Gam/Ru/rhow/Tp_init
-  c = 0.0
-  d = kappa_s*m_s/(2.0/3.0*pi2*rhos)
-
-  p = -b/3.0/a
-  q = p**3 - 3.0*a*d/6.0/a**2
-
-  rad_init = (q + (q**2 - p**6)**(0.5))**(1./3.) + (q - (q**2-p**6)**(0.5))**(1./3.) + p
+  !The equation for the equilibrium radius is a cubic:
+   a(4) = log(0.95)  !RH = 95%
+   a(3) = -2.0*Mw*Gam/Ru/rhow/Tp_init
+   a(2) = 0.0
+   a(1) = kappa_s*m_s / (2.0/3.0*pi2*rho_sol)
+   ! calculate all roots of the cubic equation (real and complex)
+   !The method is to construct an upper Hessenberg matrix
+   !whose eigenvalues are the desired roots, and then use the
+   !routines balanc and hqr . The real and imaginary parts of the
+   !roots are returned in rtr(1:m) and rti(1:m) , respectively.
+   call eigen_roots(a,3,rtr,rti)
+   !now select the real and positive one
+   do k=1,3
+     if(rti(k).eq.0.) then
+        if(rtr(k).gt.0.)then
+           rad_init = rtr(k)
+        endif
+     endif
+   enddo
 
   end subroutine lognormal_dist
 
@@ -2956,7 +2988,6 @@ CONTAINS
       real :: denom,dtl,sigma
       integer :: ix,iy,iz,im,flag,mflag
       real :: Rep,diff(3),diffnorm,corrfac,myRep_avg
-      real :: xtmp(3),vtmp(3),Tptmp,radiustmp
       real :: Nup,Shp,rhop,taup_i,estar,einf
       real :: mylwc_sum,myphiw_sum,myphiv_sum,Volp
       real :: Eff_C,Eff_S
@@ -2967,6 +2998,7 @@ CONTAINS
       real :: tmp_coeff
       real :: xp3i
       real :: mod_Magnus
+      real :: rad_i,Tp_i,vp_i(3),mp_i
 
 
 
@@ -3041,6 +3073,12 @@ CONTAINS
 
         xp3i = part%xp(3)   !Store this to do flux calculation
 
+        !Store these to compute the feedback terms
+        rad_i = part%radius
+        Tp_i = part%Tp
+        vp_i(1:3) = part%vp(1:3)
+        mp_i = Volp*rhop
+
         !implicitly calculates next velocity and position
         part%xp(1:3) = part%xp(1:3) + dt*part%vp(1:3)
         part%vp(1:3) = (part%vp(1:3)+taup_i*dt*corrfac*part%uf(1:3)+dt*part_grav(1:3))/(1+dt*corrfac*taup_i)
@@ -3113,7 +3151,7 @@ CONTAINS
                   .OR. (rt_zeroes(1)*part%radius<0) &
                   .OR. isnan(rt_zeroes(2)) &
                   .OR. (rt_zeroes(2)<0) &
-                  .OR. (rt_zeroes(1)*part%radius>1.0e-2)) & !These last 3 are very specific to pi chamber
+                  .OR. (rt_zeroes(1)*part%radius>1.0e-2)) & !These last 2 are very specific to pi chamber
                   !.OR. (rt_zeroes(2)*part%Tp > Tbot(1)*1.1)  &
                   !.OR. (rt_zeroes(2)*part%Tp < Ttop(1)*0.9)) &
                then
@@ -3196,21 +3234,24 @@ CONTAINS
          part%qstar = Mw/Ru*estar/part%Tp/rhoa
 
         if (ievap .EQ. 1) then
-            part%radrhs = Shp/9.0/Sc*rhop/rhow*part%radius*taup_i*(part%qinf-part%qstar) !assumes qinf=rhov/rhoa rather than rhov/rhom
+            !part%radrhs = Shp/9.0/Sc*rhop/rhow*part%radius*taup_i*(part%qinf-part%qstar) !assumes qinf=rhov/rhoa rather than rhov/rhom
+            part%radrhs = (part%radius-rad_i)/dt
         else
 
             part%radrhs = 0.0
 
             !Also update the temperature directly using BE:
-            tmp_coeff = -Nup/3.0/Pra*CpaCpp*rhop/rhow*taup_i
+            tmp_coeff = Nup/3.0/Pra*CpaCpp*rhop/rhow*taup_i
             part%Tp = (part%Tp + tmp_coeff*dt*part%Tf)/(1+dt*tmp_coeff)
         end if
 
-        part%Tprhs_s = -Nup/3.0/Pra*CpaCpp*rhop/rhow*taup_i*(part%Tp-part%Tf)
+        !part%Tprhs_s = -Nup/3.0/Pra*CpaCpp*rhop/rhow*taup_i*(part%Tp-part%Tf)
         part%Tprhs_L = 3.0*Lv/Cpp/part%radius*part%radrhs
+        part%Tprhs_s = (part%Tp-Tp_i)/dt - part%Tprhs_L
 
         part%xrhs(1:3) = part%vp(1:3)
-        part%vrhs(1:3) = corrfac*taup_i*(part%uf(1:3)-part%vp(1:3)) + part_grav(1:3)
+        !part%vrhs(1:3) = corrfac*taup_i*(part%uf(1:3)-part%vp(1:3)) + part_grav(1:3)
+        part%vrhs(1:3) = (part%vp(1:3)-vp_i(1:3))/dt
 
         part%res = part%res + dt
         part%actres = part%actres + dt
@@ -3603,7 +3644,7 @@ CONTAINS
    part => first_particle
    do while (associated(part))
       
-      if (mod(part%pidx,400) .eq. 0) then
+      if (mod(part%pidx,4000) .eq. 0) then
           write(ntraj,'(2i,12e15.6)') part%pidx,part%procidx,time,part%xp(1),part%xp(2),part%xp(3),part%vp(1),part%vp(2),part%vp(3),part%radius,part%Tp,part%Tf,part%qinf,part%qstar
       end if
 
@@ -3627,7 +3668,7 @@ CONTAINS
       type(tree_master_record), pointer :: tree
 
       real, allocatable :: xp_data(:,:),distances(:),rad_data(:)
-      real, allocatable :: kappa_s_data(:), ms_data(:)
+      real, allocatable :: kappa_s_data(:), ms_data(:), vol_s_data(:)
       real, allocatable :: vel_data(:,:)
       integer, allocatable :: index_data(:,:),indexes(:)
       integer*8, allocatable :: mult_data(:)
@@ -3641,6 +3682,7 @@ CONTAINS
       real :: phi,K,Pjk,veldiff,E,dV,p_alpha,pvol_j,pvol_k,golovin_b
       real :: rad_j_tmp,rad_k_tmp
       real ::   kappa_s_j_temp, kappa_s_k_temp,  ms_j_temp,  ms_k_temp
+      real :: vol_s_j_temp, vol_s_k_temp
 
       !For whatever reason, the kd-search sometimes misses edge cases,
       !and you should do nq+1 if you actually want nq
@@ -3652,6 +3694,7 @@ CONTAINS
       allocate(rad_data(numpart),mult_data(numpart),coal_data(numpart))
       allocate(destroy_data(numpart))
       allocate(kappa_s_data(numpart), ms_data(numpart))
+      allocate(vol_s_data(numpart))
 
       !Loop over particles and fill arrays
       i = 1
@@ -3668,6 +3711,7 @@ CONTAINS
 
          kappa_s_data(i) = part_tmp%kappa_s
          ms_data(i) = part_tmp%m_s
+         vol_s_data(i) = part%vol_s
 
          vel_data(i,1:3) = part_tmp%vp(1:3)
 
@@ -3803,13 +3847,19 @@ CONTAINS
                !Update particle k's radius
                rad_data(k_idx) = (gam_til*rad_data(j_idx)**3 + rad_data(k_idx)**3)**(1.0/3.0)
 
-               !Update particle k's kappa coefficient
-			      !We can use the mass mixing rule for now (will be updated to volume mixing rule)
-			      kappa_s_data(k_idx) = gam_til*ms_data(j_idx)*kappa_s_data(j_idx)/( gam_til*ms_data(j_idx) + ms_data(k_idx))  +   &
-                ms_data(k_idx)*kappa_s_data(k_idx) / ( gam_til*ms_data(j_idx) + ms_data(k_idx))
- 
                !Update particle k's solute mass
                ms_data(k_idx) = gam_til*ms_data(j_idx) + ms_data(k_idx)
+
+               !Update particle k's solute volume (Petter and Kreindenweis 2007, Vs = sum(Vs_i))
+               vol_s_data(k_idx) = gam_til*vol_s_data(j_idx) + vol_s_data(k_idx)
+
+
+               !Update particle k's kappa coefficient
+			      !Volume mixing rule (Petter and Kreindenweis 2007, kappa_s = sum(e_i*kappa_si))
+			      kappa_s_data(k_idx) = gam_til*vol_s_data(j_idx)*kappa_s_data(j_idx)/( gam_til*vol_s_data(j_idx) + vol_s_data(k_idx))  +   &
+                vol_s_data(k_idx)*kappa_s_data(k_idx) / ( gam_til*vol_s_data(j_idx) + vol_s_data(k_idx))
+ 
+               
 
             elseif (xi_j - gam_til*xi_k .eq. 0) then
 
@@ -3825,22 +3875,31 @@ CONTAINS
                rad_data(j_idx) = rad_j_tmp
                rad_data(k_idx) = rad_k_tmp
 
-               !Update kappa coefficients
-               kappa_s_j_temp = gam_til*ms_data(j_idx)*kappa_s_data(j_idx)/(gam_til*ms_data(j_idx) + ms_data(k_idx)) +  &
-                ms_data(k_idx)*kappa_s_data(k_idx) / ( gam_til*ms_data(j_idx) + ms_data(k_idx))
-   
-               kappa_s_k_temp = gam_til*ms_data(j_idx)*kappa_s_data(j_idx)/(gam_til*ms_data(j_idx) + ms_data(k_idx)) +  &
-                ms_data(k_idx)*kappa_s_data(k_idx) / ( gam_til*ms_data(j_idx) + ms_data(k_idx))
-   
-               kappa_s_data(j_idx) = kappa_s_j_temp
-               kappa_s_data(k_idx) = kappa_s_k_temp
-   
                !Update particle's solute masses
                ms_j_temp = gam_til*ms_data(j_idx) + ms_data(k_idx)
                ms_k_temp = gam_til*ms_data(j_idx) + ms_data(k_idx)
    
                ms_data(j_idx) = ms_j_temp
                ms_data(k_idx) = ms_k_temp
+
+               !Update particle's solute volumes
+               vol_s_j_temp = gam_til*vol_s_data(j_idx) + vol_s_data(k_idx)
+               vol_s_k_temp = gam_til*vol_s_data(j_idx) + vol_s_data(k_idx)
+   
+               vol_s_data(j_idx) = vol_s_j_temp
+               vol_s_data(k_idx) = vol_s_k_temp
+
+               !Update kappa coefficients
+               kappa_s_j_temp = gam_til*vol_s_data(j_idx)*kappa_s_data(j_idx)/(gam_til*vol_s_data(j_idx) + vol_s_data(k_idx)) +  &
+                vol_s_data(k_idx)*kappa_s_data(k_idx) / ( gam_til*vol_s_data(j_idx) + vol_s_data(k_idx))
+   
+               kappa_s_k_temp = gam_til*vol_s_data(j_idx)*kappa_s_data(j_idx)/(gam_til*vol_s_data(j_idx) + vol_s_data(k_idx)) +  &
+                vol_s_data(k_idx)*kappa_s_data(k_idx) / ( gam_til*vol_s_data(j_idx) + vol_s_data(k_idx))
+   
+               kappa_s_data(j_idx) = kappa_s_j_temp
+               kappa_s_data(k_idx) = kappa_s_k_temp
+   
+ 
 
             end if
           end if !gm .gt. 0
@@ -3866,6 +3925,9 @@ CONTAINS
          part_tmp%kappa_s = kappa_s_data(i)
          part_tmp%m_s = ms_data(i)
 
+         !Updating solute volume
+         part_tmp%vol_s = vol_s_data(i)
+
       i = i+1   
       part_tmp => part_tmp%next
       end do
@@ -3890,6 +3952,7 @@ CONTAINS
       deallocate(vel_data,distances,indexes,ran_nq)
       deallocate(rad_data,mult_data,coal_data,destroy_data)
       deallocate(kappa_s_data, ms_data)
+      deallocate(vol_s_data)
 
   end subroutine particle_coalesce
 
@@ -4798,6 +4861,277 @@ CONTAINS
 
   end subroutine radius_histogram
 
+   subroutine eigen_roots(a,m,rtr,rti)
+   ! USES balanc,hqr
+   !Find all the roots of a polynomial with real coeﬃcients. The method is to construct an upper Hessenberg matrix
+   !whose eigenvalues are the desired roots, and then use the routines balanc and hqr . The real and imaginary parts of the roots are returned in rtr(1:m) and rti(1:m) , respectively.
+   
+      INTEGER :: m,MAXM
+      real :: a(m+1),rtr(m),rti(m)
+      PARAMETER (MAXM=50)
+      INTEGER :: j,k
+      real :: hess(MAXM,MAXM),xr,xi
+   
+      if (m.gt.MAXM.or.a(m+1).eq.0.) then
+         write(*,*)'bad args in zrhqr'
+         stop
+      end if
+   
+      do k=1,m
+         hess(1,k)=-a(m+1-k)/a(m+1)
+         do j=2,m
+            hess(j,k)=0.
+         enddo
+         if (k.ne.m) hess(k+1,k)=1.
+      enddo
+   
+      call balanc(hess,m,MAXM)
+   
+      call hqr(hess,m,MAXM,rtr,rti)
+   
+      do j=2,m
+         xr=rtr(j)
+         xi=rti(j)
+         do k=j-1,1,-1
+            if(rtr(k).le.xr) goto 1
+            rtr(k+1)=rtr(k)
+            rti(k+1)=rti(k)
+         enddo
+   
+         k=0
+1   		rtr(k+1)=xr
+         rti(k+1)=xi
+      enddo
+      return
+   end subroutine
+   
+   
+   SUBROUTINE balanc(a,n,np)
+   !Given an n by n matrix a stored in an array of physical dimensions np by np , this routine
+   !replaces it by a balanced matrix with identical eigenvalues. A symmetric matrix is already
+   !balanced and is unaﬀected by this procedure. The parameter RADIX should be the machine’s
+   !ﬂoating-point radix.
+      INTEGER n,np
+      real a(np,np),RADIX,SQRDX
+      PARAMETER (RADIX=2.,SQRDX=RADIX**2)
+      INTEGER i,j,last
+      real c,f,g,r,s
+   
+2   	continue
+   
+      last=1
+      do i=1,n
+         c=0.
+         r=0.
+         do j=1,n
+            if(j.ne.i)then
+               c=c+abs(a(j,i))
+               r=r+abs(a(i,j))
+            endif
+         enddo
+   
+         if(c.ne.0..and.r.ne.0.)then
+            g=r/RADIX
+            f=1.
+            s=c+r
+3   			if(c.lt.g)then
+               f=f*RADIX
+               c=c*SQRDX
+               goto 3
+            endif
+   
+            g=r*RADIX
+4   			if(c.gt.g)then
+               f=f/RADIX
+               c=c/SQRDX
+               goto 4
+            endif
+   
+            if((c+r)/f.lt.0.95*s)then
+               last=0
+               g=1./f
+               do j=1,n
+                  a(i,j)=a(i,j)*g
+               enddo
+   
+               do j=1,n
+                  a(j,i)=a(j,i)*f
+               enddo
+            endif
+         endif
+      enddo
+   
+      if(last.eq.0) goto 2
+      return
+   END subroutine
+   
+   SUBROUTINE hqr(a,n,np,wr,wi)
+   !Finds all eigenvalues of an n by n upper Hessenberg matrix a that is stored in an np by np
+   !array. On input a can be exactly as output from elmhes; on output it is destroyed.
+   !The real and imaginary parts of the eigenvalues are returned in wr and wi , respectively.
+      INTEGER n,np
+      double precision a(np,np),wi(np),wr(np)
+      INTEGER i,its,j,k,l,m,nn
+      double precision anorm,p,q,r,s,t,u,v,w,x,y,z
+   
+      anorm=0.
+   
+      do i=1,n
+         do j=max(i-1,1),n
+            anorm=anorm+abs(a(i,j))
+         enddo
+      enddo
+   
+      nn=n
+      t=0.
+   
+5   	if(nn.ge.1)then
+         its=0
+6   		do l=nn,2,-1
+            s=abs(a(l-1,l-1))+abs(a(l,l))
+            if(s.eq.0.)s=anorm
+            if(abs(a(l,l-1))+s.eq.s)goto 7
+         enddo
+   
+         l=1
+   
+7   		x=a(nn,nn)
+   
+         if(l.eq.nn)then
+            wr(nn)=x+t
+            wi(nn)=0.
+            nn=nn-1
+         else
+            y=a(nn-1,nn-1)
+            w=a(nn,nn-1)*a(nn-1,nn)
+   
+            if(l.eq.nn-1)then
+               p=0.5*(y-x)
+               q=p**2+w
+               z=sqrt(abs(q))
+               x=x+t
+   
+               if(q.ge.0.)then
+                  z=p+sign(z,p)
+                  wr(nn)=x+z
+                  wr(nn-1)=wr(nn)
+   
+                  if(z.ne.0.)wr(nn)=x-w/z
+                     wi(nn)=0.
+                     wi(nn-1)=0.
+                  else
+                     wr(nn)=x+p
+                     wr(nn-1)=wr(nn)
+                     wi(nn)=z
+                     wi(nn-1)=-z
+                  endif
+   
+                  nn=nn-2
+   
+               else
+                  if(its.eq.30) then
+                     write(*,*) 'too many iterations in hqr'
+                     stop
+                  endif
+   
+                  if(its.eq.10.or.its.eq.20)then
+                     t=t+x
+   
+                     do i=1,nn
+                        a(i,i)=a(i,i)-x
+                     enddo
+   
+                     s=abs(a(nn,nn-1))+abs(a(nn-1,nn-2))
+                     x=0.75*s
+                     y=x
+                     w=-0.4375*s**2
+                  endif
+   
+                  its=its+1
+   
+                  do m=nn-2,l,-1
+                     z=a(m,m)
+                     r=x-z
+                     s=y-z
+                     p=(r*s-w)/a(m+1,m)+a(m,m+1)
+                     q=a(m+1,m+1)-z-r-s
+                     r=a(m+2,m+1)
+                     s=abs(p)+abs(q)+abs(r)
+                     p=p/s
+                     q=q/s
+                     r=r/s
+                     if(m.eq.l)goto 8
+                     u=abs(a(m,m-1))*(abs(q)+abs(r))
+                     v=abs(p)*(abs(a(m-1,m-1))+abs(z)+abs(a(m+1,m+1)))
+                     if(u+v.eq.v)goto 8
+                  enddo
+   
+8   					do i=m+2,nn
+                     a(i,i-2)=0.
+                     if (i.ne.m+2) a(i,i-3)=0.
+                  enddo
+   
+                  do k=m,nn-1
+                     if(k.ne.m)then
+                        p=a(k,k-1)
+                        q=a(k+1,k-1)
+                        r=0.
+   
+                        if(k.ne.nn-1)r=a(k+2,k-1)
+                        x=abs(p)+abs(q)+abs(r)
+                        if(x.ne.0.)then
+                           p=p/x
+                           q=q/x
+                           r=r/x
+                        endif
+                     endif
+   
+                     s=sign(sqrt(p**2+q**2+r**2),p)
+   
+                     if(s.ne.0.)then
+                        if(k.eq.m)then
+                           if(l.ne.m)a(k,k-1)=-a(k,k-1)
+                        else
+                           a(k,k-1)=-s*x
+                        endif
+   
+                        p=p+s
+                        x=p/s
+                        y=q/s
+                        z=r/s
+                        q=q/p
+                        r=r/p
+   
+                        do j=k,nn
+                           p=a(k,j)+q*a(k+1,j)
+                           if(k.ne.nn-1)then
+                              p=p+r*a(k+2,j)
+                              a(k+2,j)=a(k+2,j)-p*z
+                           endif
+                           a(k+1,j)=a(k+1,j)-p*y
+                           a(k,j)=a(k,j)-p*x
+                        enddo
+   
+                        do i=l,min(nn,k+3)
+                           p=x*a(i,k)+y*a(i,k+1)
+                           if(k.ne.nn-1)then
+                              p=p+z*a(i,k+2)
+                              a(i,k+2)=a(i,k+2)-p*r
+                           endif
+                           a(i,k+1)=a(i,k+1)-p*q
+                           a(i,k)=a(i,k)-p
+                        enddo
+                     endif
+                  enddo
+   
+                  goto 6
+               endif
+            endif
+            goto 5
+         endif
+      return
+   END subroutine
+
 
   function crit_radius(m_s,kappa_s,Tf)
     use pars
@@ -4974,9 +5308,9 @@ CONTAINS
             p=(rbig-r0(ir-1))/(r0(ir)-r0(ir-1))
             q=(drop_ratio-rat(iq-1))/(rat(iq)-rat(iq-1))
             ec=(1.-p)*(1.-q)*ecoll(ir-1,iq-1)+  &
-					p*(1.-q)*ecoll(ir,iq-1)+  &
-    				q*(1.-p)*ecoll(ir-1,iq)+  &
-    				(p*q*ecoll(ir,iq))
+            p*(1.-q)*ecoll(ir,iq-1)+  &
+            q*(1.-p)*ecoll(ir-1,iq)+  &
+            (p*q*ecoll(ir,iq))
          else
             q=(drop_ratio-rat(iq-1))/(rat(iq)-rat(iq-1))
             ec=(1.-q)*ecoll(1,iq-1)+q*ecoll(1,iq)

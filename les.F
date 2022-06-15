@@ -6,6 +6,9 @@ c
       use con_data
       use con_stats
       use netcdf_io
+#ifdef TECIO
+      use tec_io
+#endif
       include 'mpif.h'
 c
 c ------------- definition of internal flags
@@ -105,6 +108,10 @@ c
          call particle_init 
          !call read_part_res !comment out usually 
 
+#ifdef TECIO
+         call init_tecio
+#endif
+
 c
 c ---------- choose routine for getting initial guess
 c
@@ -134,6 +141,10 @@ c
  
          call particle_setup
          call read_part_res
+
+#ifdef TECIO
+         call init_tecio
+#endif
 
          if (inetcdf .eq. 1) then
          call netcdf_res
@@ -282,6 +293,7 @@ c
             call save_viz(it)
          end if
       endif
+
 c
 c ------------ save pressure field
 c
@@ -426,6 +438,13 @@ c
          end if
       end if
 
+#ifdef TECIO
+      if (mod(it,20000) .eq. 0) then
+      !if (time .gt. 200.0 .and. time .lt. 205.0) then
+      call plt_fields
+      end if
+#endif
+
       call get_max
       call get_dt
       if (it.ge.itmax) go to 99000
@@ -434,9 +453,15 @@ c
          itmax = floor(real(it)/real(itape))*itape + itape  !Stop at next itape
       end if
 
+
       go to 9000
 c
 99000 continue
+
+#ifdef TECIO
+      call finalize_tecio
+#endif
+
       te_mpi = mpi_wtime()
       write(6,9997) (te_mpi - ts_mpi)
  9997 format(' Job Execution Time = ',e15.6)
@@ -3536,7 +3561,7 @@ c
         enddo
         do iscl=1,nscl
 c
-c ---------- first get average scalar gradient
+c ---------- get average scalar gradient
 c
            dtdzf(iscl) = 0.0
            do iy=iys,iye
@@ -3580,6 +3605,7 @@ c
       enddo
       enddo
       call mpi_sum_xy(xmeanp,myid,iss,ise,1)
+
       do iscl=1,nscl
          do iy=iys,iye
          do ix=1,nnx
@@ -5952,6 +5978,8 @@ c
            do ix=1,nnx
               t(ix,iy,1,iz) = t_surf + slope_t*zz(iz)
               t(ix,iy,2,iz) = q_surf + slope_q*zz(iz)
+              !t(ix,iy,2,iz) = 0.0105 
+              !t(ix,iy,1,iz) = 285.0
            enddo
            enddo
          elseif(zz(iz) .ge. z_switch) then
@@ -7267,9 +7295,9 @@ c
       vp1msqr(iz) = stat(iz,15)/stat(iz,11)-vp1mean(iz)**2
       vp2msqr(iz) = stat(iz,16)/stat(iz,11)-vp2mean(iz)**2
       vp3msqr(iz) = stat(iz,17)/stat(iz,11)-vp3mean(iz)**2
-      m1src(iz) = -stat(iz,18)*fnxy
-      m2src(iz) = -stat(iz,19)*fnxy
-      m3src(iz) = -stat(iz,20)*fnxy
+      m1src(iz) = stat(iz,18)*fnxy
+      m2src(iz) = stat(iz,19)*fnxy
+      m3src(iz) = stat(iz,20)*fnxy
       uw_tot(iz) = uwle(iz) + uwsb(iz)
       vw_tot(iz) = vwle(iz) + vwsb(iz)
       upwpm(iz) = stat(iz,21)/stat(iz,11)-(vp1mean(iz)*vp3mean(iz))
@@ -7278,7 +7306,7 @@ c
       Tfmean(iz) = stat(iz,24)/stat(iz,11)
       qfmean(iz) = stat(iz,25)/stat(iz,11)
       wpTpm(iz) = stat(iz,26)/stat(iz,11)-(Tpmean(iz)*vp3mean(iz))
-      Tpsrc(iz) = -stat(iz,27)*fnxy
+      Tpsrc(iz) = stat(iz,27)*fnxy
       radmean(iz) = stat(iz,28)/stat(iz,11) 
       rad2mean(iz)= stat(iz,29)/stat(iz,11)
  
@@ -7287,8 +7315,8 @@ c
       Nc(iz) = stat(iz,30)/xl/yl/dzw(iz)
       ql(iz) = stat(iz,31)/xl/yl/dzw(iz)/rhoa
  
-      Hpsrc(iz) = -stat(iz,32)*fnxy
-      TEpsrc(iz) = -stat(iz,33)*fnxy
+      Hpsrc(iz) = stat(iz,32)*fnxy
+      TEpsrc(iz) = stat(iz,33)*fnxy
       qstarm(iz) = stat(iz,34)/stat(iz,11)
 
       RHxym(iz) = stat(iz,35)*fnxy
@@ -10316,7 +10344,7 @@ c
 
 
       if (ihumiditycontrol) then
-          meanRH_target = 103.0
+          meanRH_target = 102.0
           Swall = Swall + (meanRH_target - meanRH_curr)*1.0e-9
       end if
 
