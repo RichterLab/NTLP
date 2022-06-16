@@ -2,24 +2,24 @@
 !Time step information
 &step_params
 iti=0          !Time step to begin
-itmax=150000   !Max number of time steps
-imean=100    !Number of time steps between writing mean profiles to output log file
-ihst=20     !Number of time steps between writing profiles to history file
-itape=2000  !Number of time steps before opening new history file and writing full 3D volumes
-i_viz=500   !Time steps between writing to viz file
+itmax=100000   !Max number of time steps
+imean=10    !Number of time steps between writing mean profiles to output log file
+ihst=10     !Number of time steps between writing profiles to history file
+itape=100  !Number of time steps before opening new history file and writing full 3D volumes
+i_viz=10   !Time steps between writing to viz file
 itn = 0  !Index for "u.le.cou001" files
-max_time = 1.0  !Code will stop at the next itape after this time (in seconds) has been exceeded
+max_time = 10.0  !Code will stop at the next itape after this time (in seconds) has been exceeded
 /
 
 !Flags for various features
 &flags
 ismlt=0, ifree=0, iradup=0, iupwnd=1
 ibuoy=1, ifilt=0, itcut=1, isubs=0, ibrcl=0, iocean=0
-method=3, idebug=1, ivis0=1, ifix_dt=1, new_vis=-1
+method=3, idebug=1, ivis0=1, ifix_dt=0, new_vis=-1
 isfc = 1, 1  ! isfc = 0 sets surface flux (qstar), isfc = 1 sets surface condition (Dirichlet through tsfcc)
-iz_space=1, ! 0 = uniform dz, 1 = top/bottom mirror stretched ("channel"), 2 = "open channel", 3 = PBL with stretching at surface and at zi
-iDNS = 1
-ifields = 1  ! if set to 1, reads the initial condition from path_ran below; otherwise calls subroutine random
+iz_space=2, ! 0 = uniform dz, 1 = top/bottom mirror stretched ("channel"), 2 = "open channel", 3 = PBL with stretching at surface and at zi
+iDNS = 0
+ifields = 0  ! if set to 1, reads the initial condition from path_ran below; otherwise calls subroutine random
 ihurr = 0  !If set to 1, includes the hurricane forcings from Bryan et al. (2017) BLM and according to dvdr and hurr_rad below
 ilin = 1   !1 means linear interpolation for particle, 6th order otherwise
 icouple=1
@@ -27,15 +27,15 @@ iTcouple=1
 iHcouple=1  !iHcouple also controls TE couple
 ievap=1
 ineighbor=0
-icoalesce=0
-ikernel = 1 ! kernel for coalescence; 0 = Golovin; 1 = Geometric kernel with collection efficiencies E=1; 2 = Long kernel; 3 = Geometric kernel with modified Hall collection efficiencies (as in Bott 1998); 4 = Geometric kernel with turbulence-enhanced Hall efficiencies (Wang and Grabowski 2009) (NOT YET)
+icoalesce=1
+ikernel = 3 ! kernel for coalescence; 0 = Golovin; 1 = Geometric kernel with collection efficiencies E=1; 2 = Long kernel; 3 = Geometric kernel with modified Hall collection efficiencies (as in Bott 1998); 4 = Geometric kernel with turbulence-enhanced Hall efficiencies (Wang and Grabowski 2009) (NOT YET)
 ipart_method=2   !1 = same RK3 as flow, 2 = backward Euler
-ipartdiff = 0
-inewpart = 2  !1 = new particles have initial conditions defined below, random location in domain; 2 = same, but normal distributions of radius and kappa_s, given by radius_std and kappas_std; 3 = special setup for C-FOG and double lognormal of different type; 4 = crude sea spray setup
+ipartdiff = 1
+inewpart = 3  !1 = new particles have initial conditions defined below, random location in domain; 2 = same, but normal distributions of radius and kappa_s, given by radius_std and kappas_std; 3 = special setup for C-FOG and double lognormal of different type; 4 = crude sea spray setup
 icase = 3  !Special additions for certain cases. 3 = setup for C-FOG, 4 = steady state LES sea spray setup
 isfs = 2   !isfs=1 is simple random walk, isfs=2 is Weil et al. (2004) particle subgrid
-iexner = 0  !iexner = 1 applies a correction to part%Tf to account for conversion b/w potential temp and temp. (need in PBL)
-ilongwave = 0   !Use simple longwave radiation scheme when clouds/fog present
+iexner = 1  !iexner = 1 applies a correction to part%Tf to account for conversion b/w potential temp and temp. (need in PBL)
+ilongwave = 1   !Use simple longwave radiation scheme when clouds/fog present
 inetcdf = 1  !Set to 1 to output history and histogram data to netcdf format, otherwise original binary format
 iviznetcdf = 1  !Set to 1 to slice viz files to netcdf format (WARNING: it's been a long time since the original have been used)
 ihumiditycontrol = 0  !Adaptive humidity source/sink (used for Pi Chamber; subroutine humidity_control)
@@ -67,12 +67,12 @@ psurf = 101325  !Pa -- nominal surface pressure, for use in the definition of po
 
 ugcont = 4.0   !The initial u-velocity in the field
 vgcont = 0.0   !The initial v-velocity
-dvdr = -8.0e-04  !Change in v with hurricane radius
-hurr_rad = 40e3  ! Hurricane radius
+dvdr = 0.0  !Change in v with hurricane radius
+hurr_rad = 0.0  ! Hurricane radius
 
 dpdx = 0.0  !The pressure gradient for channel flow (gets put into u_geo for DNS)
 
-Swall = -2.15e-6  !Set the CONSTANT humidity sink to use if ihumiditycontrol = 0
+Swall = 0.0  !Set the CONSTANT humidity sink to use if ihumiditycontrol = 0
 
 zi = 80.0  !This has to do with grid stretching; make equal to zl for iz_space = 1,2; zi is inversion height for iz_space = 3
 zl = 80.0
@@ -90,10 +90,10 @@ rad_Fcb = 0.0    !Net radiative flux at cloud (or domain) base
 
 !Set the paths for code I/O. Must be on the scratch directory, not AFS!
 &path_names
-path_seed="/scratch365/drichte2/Theo_Pi/case1/"
-path_part="/scratch365/drichte2/Theo_Pi/case1/part.le.cou000"
-path_res="/scratch365/drichte2/Theo_Pi/case1/u.le.cou000"
-path_ran="/scratch365/drichte2/Theo_Pi/case1/u.le.cou000"
+path_seed="/scratch365/crodri25/development/CFOG/case0/"
+path_part="/scratch365/crodri25/development/CFOG/case0/part.le.cou000"
+path_res="/scratch365/crodri25/development/CFOG/case0/u.le.cou000"
+path_ran="/scratch365/crodri25/development/CFOG/case0/u.le.cou000"
 /
 
 

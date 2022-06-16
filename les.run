@@ -1,18 +1,18 @@
 #!/bin/bash
 
-#$ -M drichte2@nd.edu
+#$ -M crodri25@nd.edu
 #$ -m n
 #$ -pe mpi-16 64
 #$ -q *@@richter
-#$ -N Theo_Pi_1
+#$ -N CFOGtest
 #$ -j y
 
-case=case1
+case=case0
 time=0000000
 runout=$case.out.$time
 
-datadir=/scratch365/drichte2/Theo_Pi/$case
-homedir=~/Research/Theo_Pi/$case
+datadir=/scratch365/crodri25/development/CFOG/$case
+homedir=~/development/CFOG/$case
 
 cd $homedir
 
@@ -24,6 +24,6 @@ imachine=0
 echo $imachine > ./mach.file
 echo $datadir >> ./mach.file
 
-mpirun -n 64 $homedir/../lesmpi.a $homedir/params.in > $datadir/$runout
+mpirun -n 64 $homedir/lesmpi.a $homedir/params.in > $datadir/$runout
 
 

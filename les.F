@@ -633,8 +633,8 @@ c
 
       end do
 
-      if (tauc/10.0 .lt. dt_new) then
-            dt_new = tauc/10.0
+      if (tauc/15.0 .lt. dt_new) then
+            dt_new = tauc/15.0
             if (l_root) then
             write(6,6210) dt_new, dt_cfl, tauc
  6210       format(' 6210 cfl time step too large for droplets',/,

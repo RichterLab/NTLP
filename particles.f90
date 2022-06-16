@@ -76,7 +76,7 @@ module particles
   real :: hist_numact(histbins+2)
   real :: bins_numact(histbins+2)
 
-  !REMEMBER: IF ADDING ANYTHING, MUST UPDATE MPI DATATYPE!
+  !REMEMBER: IF ADDING ANYTHING, MUST UPDATE MPI DATATYPE (sr. particle_setup)!
   type :: particle
     integer :: pidx,procidx,nbr_pidx,nbr_procidx
     real :: vp(3),xp(3),uf(3),xrhs(3),vrhs(3),Tp,Tprhs_s
@@ -1787,7 +1787,7 @@ CONTAINS
       !Set up MPI datatypes for sending particle information
       !MUST UPDATE IF THINGS ARE ADDED/REMOVED FROM PARTICLE STRUCTURE
 
-      num_reals = 6*3+16
+      num_reals = 6*3+17
       num_integers = 4
       num_longs = 3
       
@@ -3711,7 +3711,7 @@ CONTAINS
 
          kappa_s_data(i) = part_tmp%kappa_s
          ms_data(i) = part_tmp%m_s
-         vol_s_data(i) = part%vol_s
+         vol_s_data(i) = part_tmp%vol_s
 
          vel_data(i,1:3) = part_tmp%vp(1:3)
 
@@ -3858,7 +3858,6 @@ CONTAINS
 			      !Volume mixing rule (Petter and Kreindenweis 2007, kappa_s = sum(e_i*kappa_si))
 			      kappa_s_data(k_idx) = gam_til*vol_s_data(j_idx)*kappa_s_data(j_idx)/( gam_til*vol_s_data(j_idx) + vol_s_data(k_idx))  +   &
                 vol_s_data(k_idx)*kappa_s_data(k_idx) / ( gam_til*vol_s_data(j_idx) + vol_s_data(k_idx))
- 
                
 
             elseif (xi_j - gam_til*xi_k .eq. 0) then
@@ -3898,9 +3897,7 @@ CONTAINS
    
                kappa_s_data(j_idx) = kappa_s_j_temp
                kappa_s_data(k_idx) = kappa_s_k_temp
-   
  
-
             end if
           end if !gm .gt. 0
 

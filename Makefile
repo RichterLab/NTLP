@@ -1,7 +1,11 @@
 FORTRAN=mpif90
 F90=ifort
 
-FLAGS=-i4 -r8 -O2 -assume byterecl -xHost -fpp
+## UNCOMMENT ONLY IF RUNNING IN HPC OR LONG QUEUE
+FLAGS=-i4 -r8 -O2 -assume byterecl -fpp
+
+## UNCOMMENT IF RUNNING IN RICHTER QUEUE
+#FLAGS=-i4 -r8 -O2 -assume byterecl -xHost -fpp
 
 ## UNCOMMENT TO RUN IN DEBUG MODE
 DEBUG_FLAGS=-g -traceback
