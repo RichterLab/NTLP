@@ -9,8 +9,8 @@ DEBUG_FLAGS=-g -traceback
 
 ##UNCOMMENT TO RUN WITH TECPLOT I/O
 #Provide location of the mpi-enabled tecio library
-#TECINCLUDE=~/Research/tecio/libteciompi.a
-#TECLINK=-lm -lstdc++ -lgcc_eh -DTECIO
+TECINCLUDE=~/Research/tecio/libteciompi.a
+TECLINK=-lm -lstdc++ -lgcc_eh -DTECIO
 
 OUTPUTINC = -I$(NETCDFBASE)/include
 OUTPUTLIB = -L$(NETCDFBASE)/lib

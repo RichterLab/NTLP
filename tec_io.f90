@@ -87,22 +87,22 @@ subroutine plt_fields
 
   allocate(uplt(1:nnx,jmin:jmax,kmin:kmax),vplt(1:nnx,jmin:jmax,kmin:kmax),wplt(1:nnx,jmin:jmax,kmin:kmax),wtmp(1:nnx,jmin:jmax,kmin:kmax),tplt(1:nnx,jmin:jmax,kmin:kmax),qplt(1:nnx,jmin:jmax,kmin:kmax),rhplt(1:nnx,jmin:jmax,kmin:kmax),xplt(1:nnx,jmin:jmax,kmin:kmax),yplt(1:nnx,jmin:jmax,kmin:kmax),zplt(1:nnx,jmin:jmax,kmin:kmax),toplt(1:nnx,jmin:jmax,kmin:kmax))
 
-  call fill_plt_fields(jmin,jmax,kmin,kmax,uplt,vplt,wtmp,tplt,qplt,rhplt)
+  call fill_plt_fields(jmin,jmax,kmin,kmax,uplt,vplt,wplt,tplt,qplt,rhplt)
 
 
-  do k=kmin,kmax
-  do j=jmin,jmax
-  do i=1,nnx
-
-     if (k==1) then
-        wplt(i,j,k) = 0.5*wtmp(i,j,k)
-     else
-        wplt(i,j,k) = 0.5*(wtmp(i,j,k)+wtmp(i,j,k-1))
-     end if
-
-  end do
-  end do
-  end do
+!  do k=kmin,kmax
+!  do j=jmin,jmax
+!  do i=1,nnx
+!
+!     if (k==1) then
+!        wplt(i,j,k) = 0.5*wtmp(i,j,k)
+!     else
+!        wplt(i,j,k) = 0.5*(wtmp(i,j,k)+wtmp(i,j,k-1))
+!     end if
+!
+!  end do
+!  end do
+!  end do
 
   myny = jmax-jmin+1
   mynz = kmax-kmin+1
@@ -304,14 +304,14 @@ subroutine plt_fields
 #ENDIF
 
 end subroutine plt_fields
-subroutine fill_plt_fields(jmin,jmax,kmin,kmax,uplt,vplt,wtmp,tplt,qplt,rhplt)
+subroutine fill_plt_fields(jmin,jmax,kmin,kmax,uplt,vplt,wplt,tplt,qplt,rhplt)
 use pars
 use fields
 use con_stats
 implicit none
 include 'mpif.h'
 
-real, intent(inout) :: uplt(1:nnx,jmin:jmax,kmin:kmax),vplt(1:nnx,jmin:jmax,kmin:kmax),wtmp(1:nnx,jmin:jmax,kmin:kmax),tplt(1:nnx,jmin:jmax,kmin:kmax),qplt(1:nnx,jmin:jmax,kmin:kmax),rhplt(1:nnx,jmin:jmax,kmin:kmax)
+real, intent(inout) :: uplt(1:nnx,jmin:jmax,kmin:kmax),vplt(1:nnx,jmin:jmax,kmin:kmax),wplt(1:nnx,jmin:jmax,kmin:kmax),tplt(1:nnx,jmin:jmax,kmin:kmax),qplt(1:nnx,jmin:jmax,kmin:kmax),rhplt(1:nnx,jmin:jmax,kmin:kmax)
 integer, intent(in) :: jmin,jmax,kmin,kmax
 integer :: yfore,yback,nsend,nrecv
 integer :: ix,iy,iz,jloc,iscl
@@ -325,7 +325,12 @@ real :: Ttmp,mod_magnus
   do ix=1,nnx
      uplt(ix,iy,iz) = u(ix,iy,iz)
      vplt(ix,iy,iz) = v(ix,iy,iz)
-     wtmp(ix,iy,iz) = w(ix,iy,iz)
+     if (iz==1) then
+        wplt(ix,iy,iz) = 0.5*w(ix,iy,iz)
+     else
+        wplt(ix,iy,iz) = 0.5*(w(ix,iy,iz)+w(ix,iy,iz-1))
+     end if
+     !wtmp(ix,iy,iz) = w(ix,iy,iz)
      tplt(ix,iy,iz) = t(ix,iy,1,iz)
      qplt(ix,iy,iz) = t(ix,iy,2,iz)
   end do
@@ -371,7 +376,7 @@ real :: Ttmp,mod_magnus
   do ix=1,nnx
      uplt(ix,iys-1,iz) = recvbuf(ix,iz,1)
      vplt(ix,iys-1,iz) = recvbuf(ix,iz,2)
-     wtmp(ix,iys-1,iz) = recvbuf(ix,iz,3)
+     wplt(ix,iys-1,iz) = recvbuf(ix,iz,3)
      tplt(ix,iys-1,iz) = recvbuf(ix,iz,5)
      qplt(ix,iys-1,iz) = recvbuf(ix,iz,6)
   end do

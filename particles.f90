@@ -797,7 +797,7 @@ CONTAINS
      wtzw = (1.0 - abs(part%xp(3)-zwv)/dzw(kwpt+1))
 
      ix = ipt+i
-     iy = jpt+i
+     iy = jpt+j
      izuv = kpt+k
      izw = kwpt+k
 
@@ -3020,10 +3020,10 @@ CONTAINS
       myphiv_sum = 0.0
       qstarsum_t = 0.0
 
-      partsrc_t = 0.0
-      partTsrc_t = 0.0
-      partHsrc_t = 0.0
-      partTEsrc_t = 0.0
+      !partsrc_t = 0.0
+      !partTsrc_t = 0.0
+      !partHsrc_t = 0.0
+      !partTEsrc_t = 0.0
 
       pflux = 0.0
 
@@ -3196,11 +3196,13 @@ CONTAINS
          end if
 
          if (part%qinf .lt. 0.0) then
-         write(*,'(a30,12e15.6)') 'WARNING: NEG QINF',  &
+         write(*,'(a30,2i,12e15.6)') 'WARNING: NEG QINF',  &
+         part%pidx,part%procidx, &
          part%radius,part%qinf,part%Tp,part%Tf,part%xp(3), &
          part%kappa_s,part%m_s,part%vp(1),part%vp(2),part%vp(3), &
          part%res,part%sigm_s
          end if
+
 
 
          !Intermediate Values
