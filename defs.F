@@ -257,7 +257,8 @@ c ----------------------------------------------------------------------
      +           trip(maxnz),TpSq(maxnz),Tpdqp(maxnz),
      +           radtend(maxnz),
      +           RHxym(maxnz),RHmsqr(maxnz),tempxym(maxnz),
-     +           pflux(0:maxnz),pfluxdiff(0:maxnz)
+     +           pflux(0:maxnz),pfluxdiff(0:maxnz),
+     +           pmassflux(0:maxnz),penegflux(0:maxnz)
         real ::  xkn(maxnx),ykn(maxny),
      +           xk(maxnx),yk(maxny),
      +           xks(maxnx2,maxny),wavexy(maxnx2,maxny)
@@ -303,7 +304,8 @@ c ----------------------------------------------------------------------
      +           trip(:),TpSq(:),Tpdqp(:),
      +           radtend(:),
      +           RHxym(:),RHmsqr(:),tempxym(:),
-     +           pflux(:),pfluxdiff(:)
+     +           pflux(:),pfluxdiff(:),
+     +           pmassflux(:),penegflux(:)
         real, pointer ::  
      +           xkn(:), ykn(:), xk(:), yk(:), xks(:,:), wavexy(:,:)
         real, pointer ::  
@@ -410,6 +412,8 @@ c
              tempxym => c_s%tempxym; isize = isize + size(tempxym)
              pflux => c_s%pflux; isize = isize + size(pflux)
              pfluxdiff => c_s%pfluxdiff; isize = isize + size(pfluxdiff)
+             pmassflux => c_s%pmassflux; isize = isize + size(pmassflux)
+             penegflux => c_s%penegflux; isize = isize + size(penegflux)
 
 
              xkn     => c_s%xkn

@@ -25,6 +25,7 @@ integer :: vwle_vid,vwsb_vid
 integer :: t_diss_vid,t_rprod_vid,t_sprod_vid,t_tran_vid,t_buoy_vid
 integer :: zconc_vid
 integer :: pflux_vid,pfluxdiff_vid
+integer :: pmassflux_vid,penegflux_vid
 integer :: vp1mean_vid,vp2mean_vid,vp3mean_vid
 integer :: vp1msqr_vid,vp2msqr_vid,vp3msqr_vid
 integer :: uf1mean_vid,uf2mean_vid,uf3mean_vid
@@ -247,6 +248,12 @@ subroutine netcdf_init
       call netcdf_check( nf90_def_var(ncid,"pfluxdiff",NF90_REAL, dimids_zw,pfluxdiff_vid) )
       call netcdf_check( nf90_put_att(ncid,pfluxdiff_vid,"title","Flux of particles through zw points due to SFS diffusion") )
 
+      call netcdf_check( nf90_def_var(ncid,"pmassflux",NF90_REAL, dimids_zw,pmassflux_vid) )
+      call netcdf_check( nf90_put_att(ncid,pmassflux_vid,"title","Flux of droplet mass gained/lost across zw points") )
+
+      call netcdf_check( nf90_def_var(ncid,"penegflux",NF90_REAL, dimids_zw,penegflux_vid) )
+      call netcdf_check( nf90_put_att(ncid,penegflux_vid,"title","Flux of droplet energy gained/lost across zw points") )
+
       call netcdf_check( nf90_def_var(ncid,"vp1mean",NF90_REAL, dimids_zu,vp1mean_vid) )
       call netcdf_check( nf90_put_att(ncid,vp1mean_vid,"title","Horiz. avg. particle velocity u") )
 
@@ -419,6 +426,8 @@ subroutine netcdf_res
       call netcdf_check( nf90_inq_varid(ncid,"zconc",zconc_vid) )
       call netcdf_check( nf90_inq_varid(ncid,"pflux",pflux_vid) )
       call netcdf_check( nf90_inq_varid(ncid,"pfluxdiff",pfluxdiff_vid) )
+      call netcdf_check( nf90_inq_varid(ncid,"pmassflux",pmassflux_vid) )
+      call netcdf_check( nf90_inq_varid(ncid,"penegflux",penegflux_vid) )
       call netcdf_check( nf90_inq_varid(ncid,"vp1mean",vp1mean_vid) )
       call netcdf_check( nf90_inq_varid(ncid,"vp2mean",vp2mean_vid) )
       call netcdf_check( nf90_inq_varid(ncid,"vp3mean",vp3mean_vid) )
@@ -545,6 +554,8 @@ subroutine write_his_netcdf
       call netcdf_check( nf90_put_var(ncid,zconc_vid,real(zconc(1:nnz)),start=(/1, his_counter/)) )
       call netcdf_check( nf90_put_var(ncid,pflux_vid,real(pflux(0:nnz)),start=(/1, his_counter/)) )
       call netcdf_check( nf90_put_var(ncid,pfluxdiff_vid,real(pfluxdiff(0:nnz)),start=(/1, his_counter/)) )
+      call netcdf_check( nf90_put_var(ncid,pmassflux_vid,real(pmassflux(0:nnz)),start=(/1, his_counter/)) )
+      call netcdf_check( nf90_put_var(ncid,penegflux_vid,real(penegflux(0:nnz)),start=(/1, his_counter/)) )
       call netcdf_check( nf90_put_var(ncid,vp1mean_vid,real(vp1mean(1:nnz)),start=(/1, his_counter/)) )
       call netcdf_check( nf90_put_var(ncid,vp2mean_vid,real(vp2mean(1:nnz)),start=(/1, his_counter/)) )
       call netcdf_check( nf90_put_var(ncid,vp3mean_vid,real(vp3mean(1:nnz)),start=(/1, his_counter/)) )

@@ -439,9 +439,9 @@ c
       end if
 
 #ifdef TECIO
-      !if (mod(it,20000) .eq. 0) then
-      if (time .gt. 1800.0 .and. time .lt. 1860.0 .and.
-     +   mod(it,10) .eq. 0) then
+      if (mod(it,20000) .eq. 0) then
+!      if (time .gt. 1800.0 .and. time .lt. 1860.0 .and.
+!     +   mod(it,10) .eq. 0) then
       call plt_fields
       end if
 #endif
@@ -7351,6 +7351,15 @@ c
       !Append this with summing pflux and pfluxdiff
       call mpi_sum_z(pflux(0),i_root,myid,nnz+1,1)
       call mpi_sum_z(pfluxdiff(0),i_root,myid,nnz+1,1)
+      call mpi_sum_z(pmassflux(0),i_root,myid,nnz+1,1)
+      call mpi_sum_z(penegflux(0),i_root,myid,nnz+1,1)
+
+      !Make these fluxes with units per area per time:
+      pflux = pflux/dt/yl/xl
+      pfluxdiff = pfluxdiff/dt/yl/xl
+      pmassflux = pmassflux/dt/yl/xl
+      penegflux = penegflux/dt/yl/xl
+      
 
 c
       return

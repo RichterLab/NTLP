@@ -2992,7 +2992,7 @@ CONTAINS
       real :: tmp_coeff
       real :: xp3i
       real :: mod_Magnus
-      real :: rad_i,Tp_i,vp_i(3),mp_i
+      real :: rad_i,Tp_i,vp_i(3),mp_i,rhop_i
 
 
 
@@ -3026,6 +3026,8 @@ CONTAINS
       !partTEsrc_t = 0.0
 
       pflux = 0.0
+      pmassflux = 0.0
+      penegflux = 0.0
 
       denum = 0
       actnum = 0
@@ -3072,40 +3074,11 @@ CONTAINS
         Tp_i = part%Tp
         vp_i(1:3) = part%vp(1:3)
         mp_i = Volp*rhop
+        rhop_i = rhop
 
         !implicitly calculates next velocity and position
         part%xp(1:3) = part%xp(1:3) + dt*part%vp(1:3)
         part%vp(1:3) = (part%vp(1:3)+taup_i*dt*corrfac*part%uf(1:3)+dt*part_grav(1:3))/(1+dt*corrfac*taup_i)
-
-
-
-        !Store the particle flux now that we have the new position
-        if (part%xp(3) .gt. zl) then   !This will get treated in particle_bcs_nonperiodic, but record here
-           fluxloc = nnz+1
-           fluxloci = minloc(z,1,mask=(z.gt.xp3i))-1
-        elseif (part%xp(3) .lt. 0.0) then !This will get treated in particle_bcs_nonperiodic, but record here
-           fluxloci = minloc(z,1,mask=(z.gt.xp3i))-1
-           fluxloc = 0
-        else
-
-        fluxloc = minloc(z,1,mask=(z.gt.part%xp(3)))-1
-        fluxloci = minloc(z,1,mask=(z.gt.xp3i))-1
-
-        end if  !Only apply flux calc to particles in domain
-
-        if (xp3i .lt. part%xp(3)) then !Particle moved up
-
-        do iz=fluxloci,fluxloc-1
-           pflux(iz) = pflux(iz) + part%mult
-        end do
-
-        elseif (xp3i .gt. part%xp(3)) then !Particle moved down
-
-        do iz=fluxloc,fluxloci-1
-           pflux(iz) = pflux(iz) - part%mult
-        end do
-
-        end if  !Up/down conditional statement
 
 
         ! non-dimensionalizes particle radius and temperature before
@@ -3204,6 +3177,9 @@ CONTAINS
          end if
 
 
+         !New volume and particle density
+         Volp = pi2*2.0/3.0*part%radius**3
+         rhop = (part%m_s+Volp*rhow)/Volp
 
          !Intermediate Values
          diff(1:3) = part%vp - part%uf
@@ -3251,6 +3227,39 @@ CONTAINS
 
         part%res = part%res + dt
         part%actres = part%actres + dt
+
+
+        !Store the particle flux now that everything has been updated
+        if (part%xp(3) .gt. zl) then   !This will get treated in particle_bcs_nonperiodic, but record here
+           fluxloc = nnz+1
+           fluxloci = minloc(z,1,mask=(z.gt.xp3i))-1
+        elseif (part%xp(3) .lt. 0.0) then !This will get treated in particle_bcs_nonperiodic, but record here
+           fluxloci = minloc(z,1,mask=(z.gt.xp3i))-1
+           fluxloc = 0
+        else
+
+        fluxloc = minloc(z,1,mask=(z.gt.part%xp(3)))-1
+        fluxloci = minloc(z,1,mask=(z.gt.xp3i))-1
+
+        end if  !Only apply flux calc to particles in domain
+
+        if (xp3i .lt. part%xp(3)) then !Particle moved up
+
+        do iz=fluxloci,fluxloc-1
+           pflux(iz) = pflux(iz) + part%mult
+           pmassflux(iz) = pmassflux(iz) + rhop*Volp*part%mult
+           penegflux(iz) = penegflux(iz) + rhop*Volp*Cpp*part%Tp*part%mult
+        end do
+
+        elseif (xp3i .gt. part%xp(3)) then !Particle moved down
+
+        do iz=fluxloc,fluxloci-1
+           pflux(iz) = pflux(iz) - part%mult
+           pmassflux(iz) = pmassflux(iz) - rhop*Volp*part%mult
+           penegflux(iz) = penegflux(iz) - rhop*Volp*Cpp*part%Tp*part%mult
+        end do
+
+        end if  !Up/down conditional statement
 
 
       part => part%next
@@ -4222,7 +4231,7 @@ CONTAINS
   real :: L_flt,epsn,fs,C0,a1,a2,a3,sigm_sprev,fs1
   real :: weit,weit1,weit3,weit4, T_lagr
   real :: us(3)
-  real :: xp3i
+  real :: xp3i,Volp,rhop
   integer :: ix,iy,iz,izp1,izm1,ind,iz_part,ierr
   integer :: fluxloc,fluxloci
 
@@ -4379,6 +4388,9 @@ CONTAINS
     end do
 !     ---------------------------------        
 
+    Volp = pi2*2.0/3.0*part%radius**3
+    rhop = (part%m_s+Volp*rhow)/Volp
+
     !Store the particle flux now that we have the new position
     if (part%xp(3) .gt. zl) then   !This will get treated in particle_bcs_nonperiodic, but record here
        fluxloc = nnz+1
@@ -4395,12 +4407,16 @@ CONTAINS
 
       do iz=fluxloci,fluxloc-1
          pfluxdiff(iz) = pfluxdiff(iz) + part%mult
+         pmassflux(iz) = pmassflux(iz) + rhop*Volp*part%mult
+         penegflux(iz) = penegflux(iz) + rhop*Volp*Cpp*part%Tp*part%mult
       end do
 
     elseif (xp3i .gt. part%xp(3)) then !Particle moved down
 
       do iz=fluxloc,fluxloci-1
          pfluxdiff(iz) = pfluxdiff(iz) - part%mult
+         pmassflux(iz) = pmassflux(iz) - rhop*Volp*part%mult
+         penegflux(iz) = penegflux(iz) - rhop*Volp*Cpp*part%Tp*part%mult
       end do
 
     end if  !Up/down conditional statement
