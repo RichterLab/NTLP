@@ -26,7 +26,7 @@ subroutine init_tecio
   isdouble = 0
   fileformat = 1
   filetype = 0
-  debug = 1
+  debug = 0
 
   plt_counter = 1
 
