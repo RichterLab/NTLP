@@ -440,10 +440,10 @@ c
 
 #ifdef TECIO
 !      if (mod(it,20000) .eq. 0) then
-      if (time .gt. 1800.0 .and. time .lt. 2000.0 .and.
-     +   mod(it,15) .eq. 0) then
-      call plt_fields
-      end if
+!      if (time .gt. 1800.0 .and. time .lt. 2000.0 .and.
+!     +   mod(it,15) .eq. 0) then
+!      call plt_fields
+!      end if
 #endif
 
       call get_max

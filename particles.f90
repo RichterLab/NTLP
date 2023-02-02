@@ -2021,7 +2021,8 @@ CONTAINS
       !!Sea spray, given by Andreas SSGF 98
       call andreas_dist_num(totdrops) ! drops per m^2 per s based on Andreas 98      
 
-      t_reint = 1800.0  !Time after which to start injecting
+      !t_reint = 1800.0  !Time after which to start injecting
+      t_reint = 0.0
       it_delay = 200    !Num of time steps between injection events (sometimes too few are produced and if it's < numprocs then it gets rounded to zero)
       
       
@@ -2162,6 +2163,7 @@ CONTAINS
 
 
    elseif (inewpart==2) then  !Same as above, but with NORMAL distribution of radius and kappa given by radius_std and kappas_std
+                              !Use for Pi Chamber
 
       xv = ran2(iseed)*(xmax-xmin) + xmin
       yv = ran2(iseed)*(ymax-ymin) + ymin
@@ -3945,62 +3947,70 @@ CONTAINS
         real, intent(in) :: vnext(3), h, vec1(2)
         real, intent(out) :: vec2(2)
         integer, intent(out) :: flag
-        real :: error = 1E-8, fv1(2), fv2(2), v1(2), v_output(3), rel
+        real :: error,fv1(2),fv2(2),v1(2),v_output(3),rel,det
         real :: diff, temp1(2), temp2(2), relax, coeff, correct(2)
         real, dimension(1:2, 1:2) :: J, fancy, inv, finalJ
-        integer :: iterations, neg, counts
+        integer :: iterations,neg,counts,iteration_max
 
         iterations = 0
         flag = 0
+        error = 1.0e-8
 
         v1 = vec1
-        fv2 = (/1., 1./)
+        fv2 = (/1., 1./) 
         coeff = 0.1
-        do while ((sqrt(dot_product(fv2, fv2)) > error) .AND. (iterations<1000))
+        correct = 0.0
+        iteration_max = 50
 
+        do while (iterations<iteration_max)
 
                 iterations = iterations + 1
 
-                call ie_vrt_nd(vnext, v1(1), v1(2), v_output, fv1, h)
-                call jacob_approx_2d(vnext, v1(1), v1(2), h, J)
+                call ie_vrt_nd(vnext,v1(1),v1(2),v_output,fv1,h)
+                call jacob_approx_2d(vnext,v1(1),v1(2),h,J)
 
-                fancy = matmul(transpose(J), J)
+                fancy = matmul(transpose(J),J)
 
-                call inverse_finder_2d(fancy, inv)
+                det = fancy(1,1)*fancy(2,2)-fancy(1,2)*fancy(2,1)
+                if (abs(det) .lt. 1.0e-10) then
+                   flag = 1
+                   EXIT
+                end if
 
-                finalJ = matmul(inv, transpose(J))
+                call inverse_finder_2d(fancy,det,inv)
+
+                finalJ = matmul(inv,transpose(J))
 
                 correct = matmul(finalJ,fv1)
                 vec2 = v1 - correct
 
-                call ie_vrt_nd(vnext, v1(1), v1(2),v_output,temp1,h)
-                call ie_vrt_nd(vnext, vec2(1), vec2(2),v_output,temp2,h)
+                do while ((vec2(1)<0) .OR. (vec2(2)<0) .OR. isnan(vec2(1)))
+                        counts = counts + 1
+                        coeff = 0.5
+                        relax = relax * coeff
+                        vec2 = v1-matmul(finalJ,fv1)*relax
+                        if (counts>10) EXIT
+                end do
 
-                diff = sqrt(dot_product(temp1,temp1))-sqrt(dot_product(temp2,temp2))
+                !Excessively low or negative values are a sign that iterations have failed
+                if (vec2(1)<0.01 .OR. vec2(2)<0.01 .OR. isnan(vec2(1)) .OR. isnan(vec2(2))) then
+                   flag = 1
+                   EXIT
+                end if
 
-                if (sqrt(dot_product(correct,correct))<1E-8) then
+                !Successful completion
+                if (sqrt(dot_product(correct,correct))<error) then
                         EXIT
                 end if
 
                 relax = 1.0
                 counts = 0
 
-               do while ((diff<0).OR.(vec2(1)<0) .OR. (vec2(2)<0) .OR. isnan(vec2(1)))
-                        counts = counts + 1
-                        coeff = 0.5
-                        relax = relax * coeff
-                        vec2 = v1-matmul(finalJ,fv1)*relax
-                call ie_vrt_nd(vnext, vec2(1), vec2(2),v_output,temp2,h)
-                        diff = sqrt(dot_product(temp1,temp1))-sqrt(dot_product(temp2,temp2))
-
-                        if (counts>10) EXIT
-                end do
-
                 v1 = vec2
 
-                call ie_vrt_nd(vnext, vec2(1), vec2(2), v_output, fv2,h)
         end do
-      if (iterations == 100) flag = 1
+      !A final check to make sure that problem droplets get flagged
+      if (iterations == iteration_max) flag = 1
       if (isnan(vec2(1)) .OR. vec2(1)<0 .OR. isnan(vec2(2)) .OR. vec2(2)<0) flag = 1
 
   end subroutine gauss_newton_2d
@@ -4010,41 +4020,61 @@ CONTAINS
         real, intent(in) :: vnext(3),h, vec1(2)
         real, intent(out) :: vec2(2)
         integer, intent(out) :: flag
-        real :: error = 1E-8, fv1(2), fv2(2), v1(2), v_output(3), rel
+        real :: error,fv1(2),fv2(2),v1(2),v_output(3),rel,det
         real :: diff, lambda,lup,ldown
         real :: C(2), newC(2), gradC(2), correct(2)
         real, dimension(1:2, 1:2) :: J,I,g,invg
-        integer :: iterations, neg
+        integer :: iterations,neg,iterations_max
 
         I = reshape((/1, 0, 0, 1/),shape(I))
         iterations = 0
         flag = 0
         v1 = vec1
         fv2 = (/1., 1./)
+        error = 1.0e-8
 
         lambda = 0.001
         lup = 2.0
         ldown = 2.0
 
-        do while ((sqrt(dot_product(fv2, fv2)) > error) .AND. (iterations<1000))
+        iterations_max = 1000
+
+        do while (iterations<iterations_max)
 
         iterations = iterations + 1
-        call jacob_approx_2d(vnext, v1(1), v1(2), h,J)
 
+        call jacob_approx_2d(vnext, v1(1), v1(2), h,J)
         call ie_vrt_nd(vnext, v1(1), v1(2),v_output,fv1,h)
+
         g = matmul(transpose(J),J)+lambda*I
         gradC = matmul(transpose(J),fv1)
         C = 0.5*fv1*fv1
 
-        call inverse_finder_2d(g, invg)
+        det = g(1,1)*g(2,2)-g(1,2)*g(2,1)
+        if (abs(det) .lt. 1.0e-10) then
+           flag = 1
+           EXIT
+        end if
+
+        call inverse_finder_2d(g,det,invg)
         correct = matmul(invg, gradC)
-        if (sqrt(dot_product(correct,correct)) < 1E-12) then
+
+
+        vec2 = v1 - correct
+
+        !Successful completion
+        if (sqrt(dot_product(correct,correct)) < error) then
                 EXIT
         end if
 
-        vec2 = v1 - correct
+        if (vec2(1) .lt. 0.0 .OR. vec2(2) .lt. 0.0 .OR. isnan(vec2(1)) .OR. isnan(vec2(2))) then
+           flag = 1
+           EXIT
+        end if
+
         call ie_vrt_nd(vnext, vec2(1), vec2(2),v_output,fv2,h)
         newC = 0.5*fv2*fv2
+
 
         if (sqrt(dot_product(newC,newC))<sqrt(dot_product(C,C))) then
                 v1 = vec2
@@ -4055,7 +4085,7 @@ CONTAINS
 
         end do
 
-        if (iterations==1000) then
+        if (iterations==iterations_max) then
                 flag = 1
         end if
 
@@ -4094,13 +4124,11 @@ CONTAINS
         end do
 
   end subroutine jacob_approx_2d
-  subroutine inverse_finder_2d(C, invC)
+  subroutine inverse_finder_2d(C,det,invC)
         implicit none
-        real :: det
+        real, intent(in) :: det
         real, dimension(1:2, 1:2), intent(in) :: C
         real, dimension(1:2, 1:2), intent(out) :: invC
-
-        det = C(1, 1) * C(2, 2) - C(1, 2) * C(2, 1)
 
         invC = reshape((/C(2, 2), -C(2,1), -C(1, 2), C(1, 1)/),shape(invC))
         invC = (1./det)*invC
