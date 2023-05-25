@@ -2021,8 +2021,7 @@ CONTAINS
       !!Sea spray, given by Andreas SSGF 98
       call andreas_dist_num(totdrops) ! drops per m^2 per s based on Andreas 98      
 
-      !t_reint = 1800.0  !Time after which to start injecting
-      t_reint = 0.0
+      t_reint = 1800.0  !Time after which to start injecting
       it_delay = 200    !Num of time steps between injection events (sometimes too few are produced and if it's < numprocs then it gets rounded to zero)
       
       
@@ -2252,6 +2251,25 @@ CONTAINS
          vp_init(3) = ran2(iseed)*4.0
 
          call create_particle(xp_init,vp_init,Tp_init,m_s,kappas_init,mult_init,rad_init,ngidx,procidx) 
+
+   elseif (inewpart==5) then !Special for Sc: still working on it
+      
+      xv = ran2(iseed)*(xmax-xmin) + xmin
+      yv = ran2(iseed)*(ymax-ymin) + ymin
+      zv = ran2(iseed)*zl
+      xp_init = (/xv,yv,zv/)
+      
+      
+      !Generate
+      S = 0.45
+      M = 0.0
+      kappa_s = 1.2
+      mult = mult_init
+      
+      !With these parameters, get m_s and rad_init from distribution
+      call lognormal_dist(rad_init,m_s,kappa_s,M,S)
+       
+      call create_particle(xp_init,vp_init,Tp_init,m_s,kappa_s,mult,rad_init,idx,procidx)
       
 
    end if
@@ -2544,10 +2562,10 @@ CONTAINS
        num_destroy = num_destroy + 1
 
        
-       if (ireintro .eq. 1 .and. inewpart .eq. 3) then
+       if (icase .eq. 5 .or. icase .eq. 3) then
           call new_particle(idx_old,procidx_old)
        end if
-       
+
 
     else
        part => part%next
@@ -3652,7 +3670,7 @@ CONTAINS
    do while (associated(part))
       
       if (mod(part%pidx,4000) .eq. 0) then
-          write(ntraj,'(2i,12e15.6)') part%pidx,part%procidx,time,part%xp(1),part%xp(2),part%xp(3),part%vp(1),part%vp(2),part%vp(3),part%radius,part%Tp,part%Tf,part%qinf,part%qstar
+          write(ntraj,'(2i,14e15.6)') part%pidx,part%procidx,time,part%xp(1),part%xp(2),part%xp(3),part%vp(1),part%vp(2),part%vp(3),part%radius,part%Tp,part%Tf,part%qinf,part%qstar,part%rc,part%numact
       end if
 
    part => part%next

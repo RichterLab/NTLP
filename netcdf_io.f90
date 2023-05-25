@@ -36,7 +36,7 @@ integer :: Tpmean_vid,Tpmsqr_vid
 integer :: Tfmean_vid,qfmean_vid
 integer :: radmean_vid,rad2mean_vid
 integer :: qstarm_vid
-integer :: Nc_vid,ql_vid
+integer :: Nc_vid,ql_vid,radsrc_vid
 integer :: radbins_vid,resbins_vid
 integer :: radhist_vid,reshist_vid,radhistdeath_vid
 integer :: actresbins_vid,actreshist_vid
@@ -335,6 +335,9 @@ subroutine netcdf_init
       call netcdf_check( nf90_def_var(ncid,"ql",NF90_REAL, dimids_zu,ql_vid) )
       call netcdf_check( nf90_put_att(ncid,ql_vid,"title","Horiz. avg. liquid droplet mixing ratio") )
 
+      call netcdf_check( nf90_def_var(ncid,"radsrc",NF90_REAL, dimids_zu,radsrc_vid) )
+      call netcdf_check( nf90_put_att(ncid,radsrc_vid,"title","Radiation tendency from the longwave model") )
+
       call netcdf_check( nf90_enddef(ncid) )
 
       his_counter = 1
@@ -455,6 +458,7 @@ subroutine netcdf_res
       call netcdf_check( nf90_inq_varid(ncid,"qstarm",qstarm_vid) )
       call netcdf_check( nf90_inq_varid(ncid,"Nc",Nc_vid) )
       call netcdf_check( nf90_inq_varid(ncid,"ql",ql_vid) )
+      call netcdf_check( nf90_inq_varid(ncid,"radsrc",radsrc_vid) )
 
 
 end subroutine netcdf_res
@@ -586,6 +590,7 @@ subroutine write_his_netcdf
       call netcdf_check( nf90_put_var(ncid,qstarm_vid,real(qstarm(1:nnz)),start=(/1, his_counter/)) )
       call netcdf_check( nf90_put_var(ncid,Nc_vid,real(Nc(1:nnz)),start=(/1, his_counter/)) )
       call netcdf_check( nf90_put_var(ncid,ql_vid,real(ql(1:nnz)),start=(/1, his_counter/)) )
+      call netcdf_check( nf90_put_var(ncid,radsrc_vid,real(radsrc(1:nnz)),start=(/1, his_counter/)) )
 
       his_counter = his_counter + 1
 

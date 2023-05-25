@@ -87,6 +87,7 @@ c
       call get_units
       call gridd
       call setcon
+
       call change_RH_bcs_to_q
 c
 c -------------- scratch run
@@ -439,11 +440,9 @@ c
       end if
 
 #ifdef TECIO
-!      if (mod(it,20000) .eq. 0) then
-!      if (time .gt. 1800.0 .and. time .lt. 2000.0 .and.
-!     +   mod(it,15) .eq. 0) then
-!      call plt_fields
-!      end if
+      if (mod(it,200) .eq. 0) then
+      call plt_fields
+      end if
 #endif
 
       call get_max
@@ -5006,7 +5005,8 @@ c
             tsfcc(iscl)  = t1xy(iscl)-thstar(iscl)*dnom
             t10xy(iscl)  = thstar(iscl)*dnom
          else
-            !Humidity is always a Dirichlet condition at surf_RH
+
+            !Humidity is a Dirichlet condition at surf_RH
             !Based on temperature in tsfcc(1)
             tsfcc(2)=surf_RH/100.0*
      +      Mw/Ru/tsfcc(1)*mod_Magnus(tsfcc(1))/rhoa
@@ -5421,9 +5421,9 @@ c
 c
 c
          !Gradients of temperature and scalars above inversion (upper BC)
-         dtdzf(1)=(285.5-284.0)/(80.0-30.0)
-         dtdzf(2)=(0.006-0.00805)/(80.0-30.0)
-c
+         dtdzf(1)=(311.85-308.2)/(3000.0-2000.0)
+         dtdzf(2)=(3.0e-3-4.2e-3)/(3000.0-2000.0)
+
          dtjump  = 0.0
          divgls  = 0.0
 
@@ -5933,6 +5933,102 @@ c
          divz(iz) = 0.0
       enddo
 
+      if (icase .eq. 5) then
+      !!! BOMEX initial profile
+
+      do iz=1,nnz
+            ug(iz)   = -10.0+1.8e-3*zz(iz)
+            vg(iz)   = 0.0
+            divz(iz) = 0.0
+      enddo       
+
+      do iz=izs,ize
+c         profile for pot temp
+            if (zz(iz).le.520.0) then
+                  t_temp = 298.7
+            elseif (zz(iz).gt.520.0 .and. zz(iz).le.1480.0) then
+                  t_surf = 298.7
+                  t_switch = 302.4
+                  slope_t = (t_switch-t_surf)/(1480.0-520.0)
+                  t_temp = t_surf + slope_t*(zz(iz)-520.0)
+            elseif (zz(iz).gt.1480.0 .and. zz(iz).le.2000.0) then
+                  t_surf = 302.4
+                  t_switch = 308.2
+                  slope_t = (t_switch-t_surf)/(2000.0-1480.0)
+                  t_temp = t_surf + slope_t*(zz(iz)-1480.0)
+            elseif (zz(iz).gt.2000.0 .and. zz(iz).le.3000.0) then
+                  t_surf = 308.2
+                  t_switch = 311.85
+                  slope_t = (t_switch-t_surf)/(3000.0-2000.0)
+                  t_temp = t_surf + slope_t*(zz(iz)-2000.0)
+            elseif (zz(iz).ge.3000.0) then
+                  t_temp = 311.85
+            endif
+
+c         profile for qv
+             if (zz(iz).le.520.0) then
+                  q_surf = 17.0e-3
+                  q_switch = 16.3e-3
+                  slope_q = (q_switch-q_surf)/520.0
+                  q_temp = q_surf + slope_q*zz(iz)
+            elseif (zz(iz).gt.520.0 .and. zz(iz).le.1480.0) then
+                  q_surf = 16.3e-3
+                  q_switch = 10.7e-3
+                  slope_q = (q_switch-q_surf)/(1480.0-520.0)
+                  q_temp = q_surf + slope_q*(zz(iz)-520.0)
+            elseif (zz(iz).gt.1480.0 .and. zz(iz).le.2000.0) then
+                  q_surf = 10.7e-3
+                  q_switch = 4.2e-3
+                  slope_q = (q_switch-q_surf)/(2000.0-1480.0)
+                  q_temp = q_surf + slope_q*(zz(iz)-1480.0)
+            elseif (zz(iz).gt.2000.0 .and. zz(iz).le.3000.0) then
+                  q_surf = 4.2e-3
+                  q_switch = 3.0e-3
+                  slope_q = (q_switch-q_surf)/(3000.0-2000.0)
+                  q_temp = q_surf + slope_q*(zz(iz)-2000.0)
+            elseif (zz(iz).ge.3000.0) then
+                  q_temp = 3.0e-3
+            endif
+
+c         profile for u
+             if (zz(iz).le.700.0) then
+                  u_temp = -8.75
+            elseif (zz(iz).gt.700.0 .and. zz(iz).le.3000.0) then
+                  u_surf = -8.75
+                  u_switch = -4.61
+                  slope_u = (u_switch-u_surf)/(3000.0-700.0)
+                  u_temp = u_surf + slope_u*(zz(iz)-700.0)
+            elseif (zz(iz).ge.3000.0) then
+                  u_temp = -4.61
+            endif
+
+            do iy=iys,iye
+            do ix=1,nnx
+                  u(ix,iy,iz) = u_temp
+                  v(ix,iy,iz) = 0.0
+                  w(ix,iy,iz) = 0.0
+                  e(ix,iy,iz) = 1.0-zz(iz)/3000.0
+
+c                 pot temp
+                  t(ix,iy,1,iz) = t_temp
+
+c                 qv
+                  t(ix,iy,2,iz) = q_temp
+
+                  w(ix,iy,iz)   = 0.
+                  r1(ix,iy,iz)  = 0.
+                  r2(ix,iy,iz)  = 0.
+                  r3(ix,iy,iz)  = 0.
+                  r4(ix,iy,1,iz)= 0.
+                  r4(ix,iy,2,iz)= 0.
+                  r5(ix,iy,iz)  = 0.
+             enddo
+             enddo
+       enddo
+
+      else
+
+
       if (icase .eq. 3) then
       !!!! Use for the C-FOG fog LCM case:
       !Parameters from Charlotte's C-FOG profile
@@ -5957,8 +6053,11 @@ c
       slope_q = (q_switch-q_surf)/z_switch
 
       if (icase .eq. 0) then
+      t_surf = 285.0
+      q_surf = 0.0105
       slope_t = 0.0
       slope_q = 0.0
+      z_switch = 1000.0
       end if
 c
       do iz=izs,ize
@@ -5979,8 +6078,6 @@ c
            do ix=1,nnx
               t(ix,iy,1,iz) = t_surf + slope_t*zz(iz)
               t(ix,iy,2,iz) = q_surf + slope_q*zz(iz)
-              !t(ix,iy,2,iz) = 0.0105 
-              !t(ix,iy,1,iz) = 285.0
            enddo
            enddo
          elseif(zz(iz) .ge. z_switch) then
@@ -6019,6 +6116,8 @@ c
          enddo 
          enddo 
       enddo
+
+      end if
 c
 c ------------- set initial random field to be
 c               divergence free
