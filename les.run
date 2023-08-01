@@ -1,18 +1,18 @@
 #!/bin/bash
 
-#$ -M drichte2@nd.edu
+#$ -M YOUR_EMAIL@nd.edu
 #$ -m n
 #$ -pe mpi-16 64
 #$ -q *@@richter
-#$ -N Theo_Pi_1
+#$ -N tutorial
 #$ -j y
 
 case=case1
 time=0000000
 runout=$case.out.$time
 
-datadir=/scratch365/drichte2/Theo_Pi/$case
-homedir=~/Research/Theo_Pi/$case
+datadir=/scratch365/PATH_TO_SCRATCH/$case
+homedir=~/PATH_TO_RUN/$case
 
 cd $homedir
 
