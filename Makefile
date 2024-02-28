@@ -1,7 +1,8 @@
 FORTRAN=mpif90
 F90=ifort
 
-FLAGS=-i4 -r8 -O2 -assume byterecl -xHost -fpp
+#FLAGS=-i4 -r8 -O2 -assume byterecl -xHost -fpp
+FLAGS=-i4 -r8 -O2 -assume byterecl -march=core-avx2 -fpp
 
 ## UNCOMMENT TO RUN IN DEBUG MODE
 DEBUG_FLAGS=-g -traceback
@@ -9,8 +10,8 @@ DEBUG_FLAGS=-g -traceback
 
 ##UNCOMMENT TO RUN WITH TECPLOT I/O
 #Provide location of the mpi-enabled tecio library
-TECINCLUDE=~/Research/tecio/libteciompi.a
-TECLINK=-lm -lstdc++ -lgcc_eh -DTECIO
+#TECINCLUDE=~/Research/tecio/libteciompi.a
+#TECLINK=-lm -lstdc++ -lgcc_eh -DTECIO
 
 OUTPUTINC = -I$(NETCDFBASE)/include
 OUTPUTLIB = -L$(NETCDFBASE)/lib

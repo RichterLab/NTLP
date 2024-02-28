@@ -633,8 +633,8 @@ c
 
       end do
 
-      if (tauc/10.0 .lt. dt_new) then
-            dt_new = tauc/10.0
+      if (tauc/15.0 .lt. dt_new) then
+            dt_new = tauc/15.0
             if (l_root) then
             write(6,6210) dt_new, dt_cfl, tauc
  6210       format(' 6210 cfl time step too large for droplets',/,
@@ -2132,7 +2132,7 @@ c
 
 !A modification to set the upwards flux equal to the flux at bottom for
 !getting statistically steady humidity, temp fields in hurricane PBL
-      if (iz.eq.nnz .and. icase .eq. 4) then
+      if (iz.eq.nnz .and. icase.eq.4) then
 
       do iy=iys,iye
       do ix=1,nnx
@@ -3029,7 +3029,7 @@ c
 
           
       !This was for the C-FOG setup
-      if (icase .eq. 3) then
+      if (icase.eq.3) then
       !! To change the lower surface temperature at some specified time
       if (time .gt. 3600.0) then
          tsfcc(1) = surf_temp
@@ -3037,6 +3037,15 @@ c
          tsfcc(1)  = 284.0
       end if
       end if
+
+      ! FATIMA ADV. CASE SETUP
+      if (icase.eq.6) then
+      if (time .gt. 3600.0) then
+         tsfcc(1) = surf_temp
+      else
+         tsfcc(1) = 287.5
+      end if
+      end if 
 
 
       iz   = 1
@@ -5421,8 +5430,17 @@ c
 c
 c
          !Gradients of temperature and scalars above inversion (upper BC)
+         if (icase.eq.5) then  !Stratocumulus
+
          dtdzf(1)=(311.85-308.2)/(3000.0-2000.0)
          dtdzf(2)=(3.0e-3-4.2e-3)/(3000.0-2000.0)
+
+         elseif (icase.eq.3) then !CFOG
+
+         dtdzf(1)=(285.5-284.0)/(80.0-30.0)
+         dtdzf(2)=(0.006-0.00805)/(80.0-30.0)         
+
+         end if
 
          dtjump  = 0.0
          divgls  = 0.0
@@ -5933,7 +5951,7 @@ c
          divz(iz) = 0.0
       enddo
 
-      if (icase .eq. 5) then
+      if (icase.eq.5) then
       !!! BOMEX initial profile
 
       do iz=1,nnz
@@ -6026,10 +6044,77 @@ c                 qv
              enddo
        enddo
 
-      else
+      elseif (icase.eq.6) then 
+      !FATIMA fog setup
+
+            !qv setup
+            z_switch_q = 70.0
+            q_surf = 0.0099
+            q_switch = 0.0098
+            q_top = 0.0094
+            slope_q1 = (q_switch-q_surf)/z_switch_q
+            slope_q2 = (q_top-q_switch)/(128.0-z_switch_q)
+
+            !theta setup
+            z_switch_t = 70.0
+            t_surf = 287.5
+            t_switch = 287.51
+            t_top = 289.5
+            slope_t1 = (t_switch-t_surf)/z_switch_t
+            slope_t2 = (t_top-t_switch)/(128.0-z_switch_t)
 
 
-      if (icase .eq. 3) then
+            !u setup
+            z_switch_u = 128.0
+            u_surf = 3.8
+            u_switch = 4.1
+            u_top = 4.1
+            slope_u1 = (u_top-u_surf)/128.0
+
+            !v setup
+            z_switch_v = 128.0
+            v_surf = 1.4
+            v_switch = 0.4
+            v_top = 0.4
+            slope_v1 = (v_top-v_surf)/128.0
+
+            do iz=izs,ize
+            do iy=iys,iye
+            do ix=1,nnx
+
+                ! u
+                !u(ix,iy,iz) = u_surf + slope_u1*zz(iz)
+                u(ix,iy,iz) = 4.0
+                 ! v
+                !v(ix,iy,iz) = v_surf + slope_v1*zz(iz)
+                v(ix,iy,iz) = 0.0
+
+                ! q
+                if (zz(iz) .le. z_switch_q) then
+                    t(ix,iy,2,iz) = q_surf + slope_q1*zz(iz)
+                elseif (zz(iz) .gt. z_switch_q) then
+                    t(ix,iy,2,iz) = q_switch +
+     +                          slope_q2*(zz(iz)-z_switch_q)
+                end if
+
+                ! theta
+                if (zz(iz) .le. z_switch_t) then
+                    t(ix,iy,1,iz) = t_surf + slope_t1*zz(iz)
+                elseif (zz(iz) .ge. z_switch_t) then
+                    t(ix,iy,1,iz) = t_switch +
+     +                          slope_t2*(zz(iz)-z_switch_t)
+                end if
+
+                w(ix,iy,iz) = 0.0
+                e(ix,iy,iz) = 0.0
+            enddo
+            enddo
+            enddo
+     
+      else  !switch the case
+
+
+      if (icase.eq.3) then
       !!!! Use for the C-FOG fog LCM case:
       !Parameters from Charlotte's C-FOG profile
       z_switch = 30.0
@@ -6040,7 +6125,7 @@ c                 qv
       end if
 
    
-      if (icase .eq. 4) then
+      if (icase.eq.4) then
       z_switch = 600.0
       t_switch = 300.81
       t_surf = 300.81
@@ -6052,7 +6137,7 @@ c                 qv
       slope_t = (t_switch-t_surf)/z_switch
       slope_q = (q_switch-q_surf)/z_switch
 
-      if (icase .eq. 0) then
+      if (icase.eq.0) then
       t_surf = 285.0
       q_surf = 0.0105
       slope_t = 0.0

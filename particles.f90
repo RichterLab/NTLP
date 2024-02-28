@@ -1755,13 +1755,17 @@ CONTAINS
 
 
       !Lognormal distribution parameters  -- Must be called even on restart!
-      mult_factor = 200
-      pdf_factor = 0.02*real(mult_factor)
+      mult_factor = 25
+      pdf_factor = 4.8081e-04*real(mult_factor)
       pdf_prob = pdf_factor/(1 + pdf_factor)
 
       !Adjust the multiplicity so that the total number of particles isn't altered:
-      mult_c = mult_init/mult_factor
-      mult_a = mult_init/(1.0-pdf_prob)*(1 - pdf_prob/real(mult_factor))
+      !mult_c = mult_init/mult_factor
+      !mult_a = mult_init/(1.0-pdf_prob)*(1 - pdf_prob/real(mult_factor))
+
+      mult_a = mult_init*(1+4.8081e-04*mult_factor)/(1+4.8081e-04)
+
+      mult_c = mult_init*(1+4.8081e-04*mult_factor)/(mult_factor*(1+4.8081e-04))      
 
 
       !set_binsdata does logarithmic binning!
@@ -2016,7 +2020,7 @@ CONTAINS
       real :: totdrops,t_reint
 
 
-      if (inewpart .eq. 4) then
+      if (inewpart.eq.4) then
 
       !!Sea spray, given by Andreas SSGF 98
       call andreas_dist_num(totdrops) ! drops per m^2 per s based on Andreas 98      
@@ -2033,7 +2037,7 @@ CONTAINS
          tot_reintro = 0
       endif
       
-      elseif (inewpart .eq. 2) then
+      elseif (inewpart.eq.2) then
 
       !!Pi Chamber, given by constant injection rate (nprime)
       it_delay = 20
@@ -2142,12 +2146,12 @@ CONTAINS
   real :: xp_init(3)
   integer :: idx,procidx
 
-  !C-FOG parameters: lognormal of accumulation + lognormal of coarse, with extra "resolution" on the coarse mode
+  !C-FOG and FATIMA parameters: lognormal of accumulation + lognormal of coarse, with extra "resolution" on the coarse mode
   real :: S,M,kappa_s,rad_init
   real :: num_a,num_c,totnum_a,totnum_c
   integer*8 :: mult
 
-  if (inewpart==1) then  !Simple: properties as in params.in, randomly located in domain
+  if (inewpart.eq.1) then  !Simple: properties as in params.in, randomly located in domain
 
       xv = ran2(iseed)*(xmax-xmin) + xmin
       yv = ran2(iseed)*(ymax-ymin) + ymin
@@ -2161,7 +2165,7 @@ CONTAINS
 
 
 
-   elseif (inewpart==2) then  !Same as above, but with NORMAL distribution of radius and kappa given by radius_std and kappas_std
+   elseif (inewpart.eq.2) then  !Same as above, but with NORMAL distribution of radius and kappa given by radius_std and kappas_std
                               !Use for Pi Chamber
 
       xv = ran2(iseed)*(xmax-xmin) + xmin
@@ -2183,7 +2187,7 @@ CONTAINS
 
 
 
-    elseif (inewpart==3) then !Special for C-FOG: the scheme used in Richter et al., BLM, 2021
+    elseif (inewpart.eq.3) then !Special for C-FOG: the scheme used in Richter et al., BLM, 2021
 
       xv = ran2(iseed)*(xmax-xmin) + xmin
       yv = ran2(iseed)*(ymax-ymin) + ymin
@@ -2233,7 +2237,7 @@ CONTAINS
 
 
 
-   elseif (inewpart==4) then  !Sea spray, from Andreas 98
+   elseif (inewpart.eq.4) then  !Sea spray, from Andreas 98
 
       
          m_s = rad_init**3*pi2*2.0/3.0*rhow*Sal  !Using the salinity specified in params.in
@@ -2252,7 +2256,7 @@ CONTAINS
 
          call create_particle(xp_init,vp_init,Tp_init,m_s,kappas_init,mult_init,rad_init,ngidx,procidx) 
 
-   elseif (inewpart==5) then !Special for Sc: still working on it
+   elseif (inewpart.eq.5) then !Special for Sc: still working on it
       
       xv = ran2(iseed)*(xmax-xmin) + xmin
       yv = ran2(iseed)*(ymax-ymin) + ymin
@@ -2271,6 +2275,53 @@ CONTAINS
        
       call create_particle(xp_init,vp_init,Tp_init,m_s,kappa_s,mult,rad_init,idx,procidx)
       
+   elseif (inewpart.eq.6) then !FATIMA IOP-5
+      
+      xv = ran2(iseed)*(xmax-xmin) + xmin
+      yv = ran2(iseed)*(ymax-ymin) + ymin
+      zv = ran2(iseed)*(zi-zw1) + zw1
+      xp_init = (/xv,yv,zv/)
+
+
+      !Generate
+      if (ran2(iseed) .gt. pdf_prob) then   !It's accumulation mode
+         S = 0.2403
+         M = -1.7570
+         kappa_s = 0.6
+         mult = mult_a
+
+         !With these parameters, get m_s and rad_init from distribution
+         call lognormal_dist(rad_init,m_s,kappa_s,M,S)
+         num_a = num_a + 1
+
+      else  !It's coarse mode
+
+         S = 0.2997
+         M = -0.1930
+         kappa_s = 1.2
+         mult = mult_c
+
+         !With these parameters, get m_s and rad_init from distribution
+         call lognormal_dist(rad_init,m_s,kappa_s,M,S)
+         num_c = num_c + 1
+
+      end if
+
+      !Force the output particle to be a coarse mode particle
+      if (idx==1 .and. procidx==0) then
+         !Force particle log output to be a coarse mode in fog layer -- "giant mode"
+         S = 0.2997
+         M = -0.1930
+         kappa_s = 1.2
+         mult = mult_c
+
+         !With these parameters, get m_s and rad_init from distribution
+         call lognormal_dist(rad_init,m_s,kappa_s,M,S)
+         xp_init(3) = 10.0
+      end if
+
+
+      call create_particle(xp_init,vp_init,Tp_init,m_s,kappa_s,mult,rad_init,idx,procidx)
 
    end if
 
@@ -2516,6 +2567,15 @@ CONTAINS
   real :: top,bot
   integer :: idx,procidx,idx_old,procidx_old
 
+  real :: xv,yv,zv,ran2,m_s
+  real :: kappas_dinit,radius_dinit
+  real :: xp_init(3)
+
+  !C-FOG and FATIMA parameters: lognormal of accumulation + lognormal of coarse, with extra "resolution" on the coarse mode
+  real :: S,M,kappa_s,rad_init
+  real :: num_a,num_c,totnum_a,totnum_c
+  integer*8 :: mult
+
 
   !Assumes domain goes from [0,xl),[0,yl),[0,zl]
   !Also maintain the number of particles on each proc
@@ -2557,12 +2617,45 @@ CONTAINS
        !Also record the size of the dead droplet
        call add_histogram(bins_rad,hist_raddeath,histbins+2,part%radius,part%mult)
 
-       call destroy_particle
+       if (ireintro.eq.1 .and. inewpart.eq.6) then
+
+            xv = ran2(iseed)*(xmax-xmin) + xmin
+            yv = ran2(iseed)*(ymax-ymin) + ymin
+            zv = ran2(iseed)*(zi-zw1) + zw1
+            xp_init = (/xv,yv,zv/)
+
+            ! acummulation mode
+            if (part%mult .eq. mult_a) then
+
+                S = 0.2403
+                M = -1.7570
+                kappa_s = 0.6
+                mult = mult_a
+
+            ! coarse mode
+            elseif (part%mult .eq. mult_c) then
+
+                S = 0.2997
+                M = -0.1930
+                kappa_s = 1.2
+                mult = mult_c
+
+            end if
+
+            ! destroy old particle before creating new one
+            call destroy_particle
+
+            !With these parameters, get m_s and rad_init from distribution
+            call lognormal_dist(rad_init,m_s,kappa_s,M,S)
+
+            call create_particle(xp_init,vp_init,Tp_init,m_s,kappa_s,mult,rad_init,idx_old,procidx_old)
+
+       end if
 
        num_destroy = num_destroy + 1
 
        
-       if (icase .eq. 5 .or. icase .eq. 3) then
+       if (icase.eq.5 .or. icase.eq.3) then
           call new_particle(idx_old,procidx_old)
        end if
 
