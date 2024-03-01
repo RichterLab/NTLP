@@ -23,12 +23,13 @@ SRC = 	fft.f \
         defs.F \
         particles.f90\
         netcdf_io.f90\
-        tec_io.f90
+        tec_io.f90 \
+        les.F
 
 OBJS = $(addsuffix .o, $(basename $(SRC)))
 
 
-lesmpi.a: $(OBJS) les.F
+lesmpi.a: $(OBJS)
 	$(FORTRAN) $^ -o $@  $(FLAGS) $(DEBUG_FLAGS) $(OUTPUTINC) $(OUTPUTLIB) $(LINKOPTS) $(TECLINK) $(TECINCLUDE)
 
 %.o: %.f
