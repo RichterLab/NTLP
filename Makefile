@@ -1,8 +1,34 @@
 FORTRAN=mpif90
 F90=ifort
 
-#FLAGS=-i4 -r8 -O2 -assume byterecl -xHost -fpp
-FLAGS=-i4 -r8 -O2 -assume byterecl -march=core-avx2 -fpp
+# Specify the architecture to optimize for.  Should be one of the following:
+#
+#   host    Optimize for the current system's architecture.  This cannot
+#           be used when running on AMD processors as the resulting executable
+#           will crash with an illegal instruction error.
+#   avx     Optimize for Intel's AVX instruction set.  This is the most advanced
+#           optimization for Intel Ivy Bridge processors and AMD's Bulldozer
+#           processors.
+#   avx2    Optimize for Intel's AVX2 instruction set.  This is the most advanced
+#           optimization for Intel Haswell processors, or newer, and AMD's Epyc
+#           7001, 7002, and 7003 (Zen 1-3) processors.
+#
+# NOTE: Specifying this incorrectly will, at best, result in degraded execution
+#       times and, at worst, result in crashes due to illegal instructions.
+#
+ARCH ?= host
+
+ifeq ($(ARCH), host)
+ARCH_FLAGS = -xHost
+endif
+ifeq ($(ARCH), avx)
+ARCH_FLAGS = -march=corei7-avx
+endif
+ifeq ($(ARCH), avx2)
+ARCH_FLAGS = -march=core-avx2
+endif
+
+FLAGS=-i4 -r8 -O2 -assume byterecl $(ARCH_FLAGS) -fpp
 
 ## UNCOMMENT TO RUN IN DEBUG MODE
 DEBUG_FLAGS=-g -traceback
