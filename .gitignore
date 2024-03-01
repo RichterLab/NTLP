@@ -3,3 +3,7 @@ case1
 *.suo
 *.json
 *.sqlite
+*.mod
+*.o
+lesmpi.a
+mach.file
