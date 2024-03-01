@@ -18,13 +18,13 @@ OUTPUTLIB = -L$(NETCDFBASE)/lib
 LINKOPTS  = -lnetcdf -lnetcdff
 
 
-SRC = 	fft.f \
-	kdtree.f90 \
-        defs.F \
-        particles.f90\
-        netcdf_io.f90\
-        tec_io.f90 \
-        les.F
+SRC = defs.F \
+      fft.f \
+      kdtree.f90 \
+      les.F \
+      netcdf_io.f90 \
+      particles.f90 \
+      tec_io.f90
 
 OBJS = $(addsuffix .o, $(basename $(SRC)))
 
