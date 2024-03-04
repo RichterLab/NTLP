@@ -2617,7 +2617,7 @@ CONTAINS
        !Also record the size of the dead droplet
        call add_histogram(bins_rad,hist_raddeath,histbins+2,part%radius,part%mult)
 
-       if (ireintro.eq.1 .and. inewpart.eq.6) then
+       if (ireintro.eq.1 .and. inewpart.eq.6) then  !FATIMA can reintroduce particle of the same type
 
             xv = ran2(iseed)*(xmax-xmin) + xmin
             yv = ran2(iseed)*(ymax-ymin) + ymin
@@ -2644,16 +2644,19 @@ CONTAINS
 
             ! destroy old particle before creating new one
             call destroy_particle
+            num_destroy = num_destroy + 1
 
             !With these parameters, get m_s and rad_init from distribution
             call lognormal_dist(rad_init,m_s,kappa_s,M,S)
 
             call create_particle(xp_init,vp_init,Tp_init,m_s,kappa_s,mult,rad_init,idx_old,procidx_old)
 
+       else
+
+            call destroy_particle
+            num_destroy = num_destroy + 1
+
        end if
-
-       num_destroy = num_destroy + 1
-
        
        if (icase.eq.5 .or. icase.eq.3) then
           call new_particle(idx_old,procidx_old)
@@ -3236,16 +3239,17 @@ CONTAINS
                   !.OR. (rt_zeroes(2)*part%Tp < Ttop(1)*0.9)) &
                then
 
+                write(*,'(a30,14e15.6)') 'WARNING: CONVERGENCE',  &
+               part%radius,part%qinf,part%Tp,part%Tf,part%xp(3), &
+               part%kappa_s,part%m_s,part%vp(1),part%vp(2),part%vp(3), &
+               part%res,part%sigm_s,rt_zeroes(1),rt_zeroes(2)
+
                 numimpos = numimpos + 1  !How many have failed?
                 !If they failed (should be very small number), radius,
                 !temp remain unchanged
                 rt_zeroes(1) = 1.0
                 rt_zeroes(2) = part%Tf/part%Tp
 
-                write(*,'(a30,14e15.6)') 'WARNING: CONVERGENCE',  &
-               part%radius,part%qinf,part%Tp,part%Tf,part%xp(3), &
-               part%kappa_s,part%m_s,part%vp(1),part%vp(2),part%vp(3), &
-               part%res,part%sigm_s,rt_zeroes(1),rt_zeroes(2)
 
                end if
 
@@ -3560,19 +3564,18 @@ CONTAINS
       do while (associated(part))
       numpart = numpart + 1
 
-      !Radavg and radmsqr will be only of ACTIVATED droplets
+      myradavg = myradavg + part%radius
+      myradmsqr = myradmsqr + part%radius**2
+
+     !Want to get droplet statistics only in the interior
+     if (part%xp(3) .gt. 0.25*zl .AND. part%xp(3) .lt. 0.75*zl) then
+        myradavg_center = myradavg_center + part%radius
+        myradmsqr_center = myradmsqr_center + part%radius**2
+        numdrop_center = numdrop_center + 1
+     end if
+
       if (part%radius .gt. part%rc) then
-         myradavg = myradavg + part%radius
-         myradmsqr = myradmsqr + part%radius**2
          numdrop = numdrop + 1
-
-         !Want to get droplet statistics only in the interior
-         if (part%xp(3) .gt. 0.25*zl .AND. part%xp(3) .lt. 0.75*zl) then
-            myradavg_center = myradavg_center + part%radius
-            myradmsqr_center = myradmsqr_center + part%radius**2
-            numdrop_center = numdrop_center + 1
-         end if
-
       else
          numaerosol = numaerosol + 1
       end if
@@ -3643,8 +3646,8 @@ CONTAINS
       phiw = phiw/xl/yl/zl/rhoa
       phiv = phiv/xl/yl/zl
       Rep_avg = Rep_avg/tnumpart
-      radavg = radavg/tnumdrop
-      radmsqr = radmsqr/tnumdrop
+      radavg = radavg/tnumpart
+      radmsqr = radmsqr/tnumpart
       tavgres = tavgres/tnum_destroy
       radavg_center = radavg_center/tnumdrop_center
       radmsqr_center = radmsqr_center/tnumdrop_center
