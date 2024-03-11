@@ -119,6 +119,9 @@ CONTAINS
     integer :: rc_s,rc_r,trc_s,trc_r,tc_s,tc_r,tlc_s,tlc_r
     integer :: lc_s,lc_r,blc_s,blc_r,bc_s,bc_r,brc_s,brc_r
 
+    !Tmp array
+    real :: arg_tmp(1:nnx,iys:iye,izs-1:ize+1)
+
     !Debugging:
     real :: xv,yv,zv
 
@@ -134,19 +137,28 @@ CONTAINS
     !First fill the center, since this is just u,v,w on that proc:
 
     !In the column setup, need to tranpose u,v,w first into u_t,v_t,w_t:
-    call xtoz_trans(u(1:nnx,iys:iye,izs-1:ize+1),u_t,nnx,nnz, &
+    arg_tmp = u(1:nnx,iys:iye,izs-1:ize+1)
+    call xtoz_trans(arg_tmp,u_t,nnx,nnz, &
     mxs,mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e, &
     myid,ncpu_s,numprocs)
-    call xtoz_trans(v(1:nnx,iys:iye,izs-1:ize+1),v_t,nnx,nnz, &
+
+    arg_tmp = v(1:nnx,iys:iye,izs-1:ize+1)
+    call xtoz_trans(arg_tmp,v_t,nnx,nnz, &
     mxs,mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e, &
     myid,ncpu_s,numprocs)
-    call xtoz_trans(w(1:nnx,iys:iye,izs-1:ize+1),w_t,nnx,nnz, &
+
+    arg_tmp = w(1:nnx,iys:iye,izs-1:ize+1)
+    call xtoz_trans(arg_tmp,w_t,nnx,nnz, &
     mxs,mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e, &
     myid,ncpu_s,numprocs)
-    call xtoz_trans(t(1:nnx,iys:iye,1,izs-1:ize+1),T_t,nnx,nnz, &
+
+    arg_tmp = t(1:nnx,iys:iye,1,izs-1:ize+1)
+    call xtoz_trans(arg_tmp,T_t,nnx,nnz, &
     mxs,mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e, &
     myid,ncpu_s,numprocs)
-    call xtoz_trans(t(1:nnx,iys:iye,2,izs-1:ize+1),T2_t,nnx,nnz, &
+
+    arg_tmp = t(1:nnx,iys:iye,2,izs-1:ize+1)
+    call xtoz_trans(arg_tmp,T2_t,nnx,nnz, &
     mxs,mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e, &
     myid,ncpu_s,numprocs)
 
