@@ -645,13 +645,6 @@ c
       
 
       end if  !ifix_dt .eq. 0
-c
-c -------- for safety if restart set timestep = saved timestep in
-c          restart file
-c
-      if(it_step .eq. iti .and. iti .ne. 0) then
-        dt_new = dt
-      endif
 
 c
       return
