@@ -7809,6 +7809,7 @@ c          stat(.,3) = Dv*< T' dq'/dz >
          else
            qflucp1 = t(i,j,2,izp1)-txym(izp1,2)
            qflucm1 = t(i,j,2,izm1)-txym(izm1,2)
+           Sqp1 = partHsrc(i,j,izp1)
          end if
          qfluc = t(i,j,2,iz)-txym(iz,2)
          Sq = partHsrc(i,j,iz)
