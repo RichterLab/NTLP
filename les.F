@@ -7192,7 +7192,7 @@ c
      + 'SGS_WT',7X,'SHRZ',8X,'BUOY')
       do 19999 iz=iz_end,iz_strt,-1
          !write(lu,4300)iz,txym(iz,1)-t_ref,divz(iz),
-	 write(lu,4300)iz,txym(iz,1)-tref, txym(iz,2),divz(iz),
+	 write(lu,4300)iz,txym(iz,1)-t_ref, txym(iz,2),divz(iz),
      +              englez(iz),eavg(iz),wtle(iz,1),
      +              wtsb(iz,1),shrz(iz),buyz(iz)
  4300    format(1X,I3,e12.4,8e12.4)
