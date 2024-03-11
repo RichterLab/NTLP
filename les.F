@@ -1013,7 +1013,7 @@ c --------------------------- format statements
     1 format(10x,' NNX = ',i5,',  NNY = ',i5,
      + ',  NNZ = ',i5,/,10x,' SFC SMLT = ',i1,
      + ',  FILTER = ',i1,
-     + ',  ITI = ',i6,',  ITMAX = ',i6,/,10x,
+     + ',  ITI = ',i6,',  ITMAX = ',i8,/,10x,
      + ' IUPWIND = ',i1,',  BUYNCY = ',i1,
      + ',  ITCUT = ',i1,/,10x,
      + ' DT = ',e15.6,',  ZO = ',e15.6,',  TS = ',e15.6,
