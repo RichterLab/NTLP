@@ -3655,12 +3655,29 @@ CONTAINS
 
       phiw = phiw/xl/yl/zl/rhoa
       phiv = phiv/xl/yl/zl
-      Rep_avg = Rep_avg/tnumpart
-      radavg = radavg/tnumpart
-      radmsqr = radmsqr/tnumpart
-      tavgres = tavgres/tnum_destroy
-      radavg_center = radavg_center/tnumdrop_center
-      radmsqr_center = radmsqr_center/tnumdrop_center
+      if (tnumpart.eq.0) then
+         Rep_avg = 0.0
+         radavg = 0.0
+         radmsqr = 0.0
+      else
+         Rep_avg = Rep_avg/tnumpart
+         radavg = radavg/tnumpart
+         radmsqr = radmsqr/tnumpart
+      end if
+      
+      if (tnum_destroy.eq.0) then
+         tavgres = 0.0
+      else
+         tavgres = tavgres/tnum_destroy
+      end if
+ 
+      if (tnumdrop_center.eq.0) then
+         radavg_center = 0.0
+         radmsqr_center = 0.0
+      else
+         radavg_center = radavg_center/tnumdrop_center
+         radmsqr_center = radmsqr_center/tnumdrop_center
+      end if
 
       !Min and max radius
       call mpi_allreduce(myradmin,radmin,1,mpi_real8,mpi_min,mpi_comm_world,ierr)

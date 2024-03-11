@@ -623,7 +623,7 @@ c
       tauc = 5.0
       do iz=1,nnz
          
-         tauc_tmp = 1.0/(pi2*Dv*2.0*radmean(iz)*Nc(iz))
+         tauc_tmp = 1.0/(pi2*Dv*2.0*radmean(iz)*Nc(iz)+1.0e-12)
 
 
          if (.not. isnan(tauc_tmp)) then
@@ -7481,47 +7481,74 @@ c
       eavg(iz)   = stat(iz,8)*fnxy
       uwle(iz)   = stat(iz,9)*fnxy
       vwle(iz)   = stat(iz,10)*fnxy
-      zconc(iz)  = stat(iz,11)/xl/yl/dzw(iz)
-      vp1mean(iz) = stat(iz,12)/stat(iz,11)
-      vp2mean(iz) = stat(iz,13)/stat(iz,11)
-      vp3mean(iz) = stat(iz,14)/stat(iz,11)
-      vp1msqr(iz) = stat(iz,15)/stat(iz,11)-vp1mean(iz)**2
-      vp2msqr(iz) = stat(iz,16)/stat(iz,11)-vp2mean(iz)**2
-      vp3msqr(iz) = stat(iz,17)/stat(iz,11)-vp3mean(iz)**2
+
+      if (stat(iz,11).eq.0) then
+         zconc(iz) = 0.0
+         vp1mean(iz) = 0.0
+         vp2mean(iz) = 0.0
+         vp3mean(iz) = 0.0
+         vp1msqr(iz) = 0.0
+         vp2msqr(iz) = 0.0
+         vp3msqr(iz) = 0.0
+         upwpm(iz) = 0.0
+         Tpmean(iz) = 0.0
+         Tpmsqr(iz) = 0.0
+         Tfmean(iz) = 0.0
+         qfmean(iz) = 0.0
+         wpTpm(iz) = 0.0
+         radmean(iz) = 0.0
+         rad2mean(iz) = 0.0
+         multmean(iz) = 0.0
+         mwmean(iz) = 0.0
+         qstarm(iz) = 0.0
+         uf1mean(iz) = 0.0
+         uf2mean(iz) = 0.0
+         uf3mean(iz) = 0.0
+         uf1msqr(iz) = 0.0
+         uf2msqr(iz) = 0.0
+         uf3msqr(iz) = 0.0
+      else
+         zconc(iz)  = stat(iz,11)/xl/yl/dzw(iz)
+         vp1mean(iz) = stat(iz,12)/stat(iz,11)
+         vp2mean(iz) = stat(iz,13)/stat(iz,11)
+         vp3mean(iz) = stat(iz,14)/stat(iz,11)
+         vp1msqr(iz) = stat(iz,15)/stat(iz,11)-vp1mean(iz)**2
+         vp2msqr(iz) = stat(iz,16)/stat(iz,11)-vp2mean(iz)**2
+         vp3msqr(iz) = stat(iz,17)/stat(iz,11)-vp3mean(iz)**2
+         upwpm(iz) = stat(iz,21)/stat(iz,11)-(vp1mean(iz)*vp3mean(iz))
+         Tpmean(iz) = stat(iz,22)/stat(iz,11)
+         Tpmsqr(iz) = sqrt(stat(iz,23)/stat(iz,11)-Tpmean(iz)**2)
+         Tfmean(iz) = stat(iz,24)/stat(iz,11)
+         qfmean(iz) = stat(iz,25)/stat(iz,11)
+         wpTpm(iz) = stat(iz,26)/stat(iz,11)-(Tpmean(iz)*vp3mean(iz))
+         radmean(iz) = stat(iz,28)/stat(iz,11) 
+         rad2mean(iz)= stat(iz,29)/stat(iz,11)
+         multmean(iz) = stat(iz,30)/stat(iz,11)
+         mwmean(iz) = stat(iz,31)/stat(iz,11)
+         qstarm(iz) = stat(iz,34)/stat(iz,11)
+         uf1mean(iz) = stat(iz,38)/stat(iz,11)
+         uf2mean(iz) = stat(iz,39)/stat(iz,11)
+         uf3mean(iz) = stat(iz,40)/stat(iz,11)
+         uf1msqr(iz) = stat(iz,41)/stat(iz,11)-uf1mean(iz)**2
+         uf2msqr(iz) = stat(iz,42)/stat(iz,11)-uf2mean(iz)**2
+         uf3msqr(iz) = stat(iz,43)/stat(iz,11)-uf3mean(iz)**2
+      end if
+         
+         
       m1src(iz) = stat(iz,18)*fnxy
       m2src(iz) = stat(iz,19)*fnxy
       m3src(iz) = stat(iz,20)*fnxy
       uw_tot(iz) = uwle(iz) + uwsb(iz)
       vw_tot(iz) = vwle(iz) + vwsb(iz)
-      upwpm(iz) = stat(iz,21)/stat(iz,11)-(vp1mean(iz)*vp3mean(iz))
-      Tpmean(iz) = stat(iz,22)/stat(iz,11)
-      Tpmsqr(iz) = sqrt(stat(iz,23)/stat(iz,11)-Tpmean(iz)**2)
-      Tfmean(iz) = stat(iz,24)/stat(iz,11)
-      qfmean(iz) = stat(iz,25)/stat(iz,11)
-      wpTpm(iz) = stat(iz,26)/stat(iz,11)-(Tpmean(iz)*vp3mean(iz))
       Tpsrc(iz) = stat(iz,27)*fnxy
-      radmean(iz) = stat(iz,28)/stat(iz,11) 
-      rad2mean(iz)= stat(iz,29)/stat(iz,11)
- 
-      multmean(iz) = stat(iz,30)/stat(iz,11)
-      mwmean(iz) = stat(iz,31)/stat(iz,11)
       Nc(iz) = stat(iz,30)/xl/yl/dzw(iz)
       ql(iz) = stat(iz,31)/xl/yl/dzw(iz)/rhoa
- 
       Hpsrc(iz) = stat(iz,32)*fnxy
       TEpsrc(iz) = stat(iz,33)*fnxy
-      qstarm(iz) = stat(iz,34)/stat(iz,11)
-
       RHxym(iz) = stat(iz,35)*fnxy
       tempxym(iz) = stat(iz,36)*fnxy
       RHmsqr(iz) = stat(iz,37)*fnxy
 
-      uf1mean(iz) = stat(iz,38)/stat(iz,11)
-      uf2mean(iz) = stat(iz,39)/stat(iz,11)
-      uf3mean(iz) = stat(iz,40)/stat(iz,11)
-      uf1msqr(iz) = stat(iz,41)/stat(iz,11)-uf1mean(iz)**2
-      uf2msqr(iz) = stat(iz,42)/stat(iz,11)-uf2mean(iz)**2
-      uf3msqr(iz) = stat(iz,43)/stat(iz,11)-uf3mean(iz)**2
 
       !Doesn't need averaging if basing radiation source on average ql:
       radtend(iz) = radsrc(iz)
