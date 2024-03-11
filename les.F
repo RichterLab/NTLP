@@ -4883,9 +4883,11 @@ c
       do iscl=1,nscl
          t1xy(iscl) = buf(3+iscl)*fnxy
       enddo
+
       vsfc  = sqrt(u1xy*u1xy+v1xy*v1xy)
       windm = amax1(windm,ufree)
       vsfc  = amax1(vsfc,ufree)
+
 c
 c ---------- limits for zeta
 c
@@ -4969,13 +4971,15 @@ c
 c
 c ------- surface details, for debug
 c
-!      write(nprt,2000) windm, utau, qstar(1), tsfcc(1), amonin, zeta,
+!      if (myid.eq.0) then
+!      write(*,2000) windm, utau, qstar(1), tsfcc(1), amonin, zeta,
 !     +              z1, batag, vk, batagk, zo, zos
- 2000 format(' 2000 suft ',/,
-     +       '    windm = ',e15.6,' utau = ',e15.6,' qstar = ',e15.6,/,
-     +       '    tsfcc = ',e15.6,' MO L = ',e15.6,' z1/L = ',e15.6,/,
-     +       '    z1 = ',e15.6,' batag = ',e15.6,' vk = ',e15.6,/,
-     +       '    batagk = ',e15.6,' zo = ',e15.6,' zos = ',e15.6)
+! 2000 format(' 2000 suft ',/,
+!     +       '    windm = ',e15.6,' utau = ',e15.6,' qstar = ',e15.6,/,
+!     +       '    tsfcc = ',e15.6,' MO L = ',e15.6,' z1/L = ',e15.6,/,
+!     +       '    z1 = ',e15.6,' batag = ',e15.6,' vk = ',e15.6,/,
+!     +       '    batagk = ',e15.6,' zo = ',e15.6,' zos = ',e15.6)
+!      end if
 c
       if (utau.gt.10.0) then
          write(6,9000)
@@ -5881,13 +5885,24 @@ c
       use con_data
       use con_stats
       use particles
-      real psi(nnx,iys:iye), psix(nnx,iys:iye),
+      implicit none
+ 
+      real ::  psi(nnx,iys:iye), psix(nnx,iys:iye),
      +     psiy(nnx,iys:iye,izs:izs), uxx(nnx,iys:iye),
      +     vyy(nnx,iys:iye,izs:izs),Ttmp
 
-      real :: slope_q,slope_t
-      real :: z_switch,t_switch,q_switch
-      real :: t_surf,q_surf
+      real :: ampv,ampt,sum_psi,vmaxx,vmag,facv,ran1
+
+      real :: slope_q,slope_t,slope_u
+      real :: slope_t1,slope_t2,slope_u1,slope_v1
+      real :: z_switch,t_switch,q_switch,u_switch,v_switch
+      real :: z_switch_q,z_switch_t,z_switch_v,z_switch_u
+      real :: t_surf,q_surf,u_surf,v_surf
+      real :: t_temp,q_temp,u_temp
+      real :: q_top,t_top,u_top,v_top,slope_q1,slope_q2
+
+      integer :: ix,iy,iz
+      integer :: idum
 
       !Initialize partcount to 0:
       partcount = 0.0

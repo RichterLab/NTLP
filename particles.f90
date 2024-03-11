@@ -1765,7 +1765,7 @@ CONTAINS
 
       mult_a = mult_init*(1+4.8081e-04*mult_factor)/(1+4.8081e-04)
 
-      mult_c = mult_init*(1+4.8081e-04*mult_factor)/(mult_factor*(1+4.8081e-04))      
+      mult_c = mult_init*(1+4.8081e-04*mult_factor)/(mult_factor*(1+4.8081e-04))
 
 
       !set_binsdata does logarithmic binning!
@@ -2049,6 +2049,7 @@ CONTAINS
 
       my_reintro = 0
       tot_reintro = 0
+      it_delay=1
 
       end if
 
@@ -2280,6 +2281,7 @@ CONTAINS
       xv = ran2(iseed)*(xmax-xmin) + xmin
       yv = ran2(iseed)*(ymax-ymin) + ymin
       zv = ran2(iseed)*(zi-zw1) + zw1
+      
       xp_init = (/xv,yv,zv/)
 
 
@@ -2650,6 +2652,8 @@ CONTAINS
             call lognormal_dist(rad_init,m_s,kappa_s,M,S)
 
             call create_particle(xp_init,vp_init,Tp_init,m_s,kappa_s,mult,rad_init,idx_old,procidx_old)
+
+            write(*,'(a8,10e15.6,3i)') 'DHR7:',xp_init,vp_init,Tp_init,m_s,kappa_s,rad_init,idx_old,procidx_old,mult
 
        else
 
@@ -4098,6 +4102,8 @@ CONTAINS
                 correct = matmul(finalJ,fv1)
                 vec2 = v1 - correct
 
+                counts = 0
+                relax = 1.0
                 do while ((vec2(1)<0) .OR. (vec2(2)<0) .OR. isnan(vec2(1)))
                         counts = counts + 1
                         coeff = 0.5
@@ -4116,9 +4122,6 @@ CONTAINS
                 if (sqrt(dot_product(correct,correct))<error) then
                         EXIT
                 end if
-
-                relax = 1.0
-                counts = 0
 
                 v1 = vec2
 
@@ -4461,12 +4464,25 @@ CONTAINS
      ! TKE : resolved + Subgrid at grid center
       !---------------------------------
 !      tot_eng = (engsbz(iz_part+1) + engz(iz_part+1))
-     englez_bar = 0.5*(englez(iz_part)+englez(iz_part+1))
+     if (iz_part.eq.0) then
+        englez_bar = 0.5*englez(iz_part+1)
+     elseif (iz_part.eq.nnz) then
+        englez_bar = 0.5*englez(iz_part)
+     else
+        englez_bar = 0.5*(englez(iz_part)+englez(iz_part+1))
+     endif
      engsbz_bar = 0.5*(engsbz(iz_part)+engsbz(iz_part+1))
      tengz = englez_bar + engsbz_bar
     !---------------------------------
     ! Calculate fs basd on w-componet of velocity
-     sigm_w = 0.5*(wps(iz_part)+wps(iz_part+1))
+     if (iz_part.eq.0) then
+        sigm_w = 0.5*(wps(iz_part+1))
+     elseif (iz_part.eq.nnz) then
+        sigm_w = 0.5*(wps(iz_part))
+     else
+        sigm_w = 0.5*(wps(iz_part)+wps(iz_part+1))
+     endif
+
      sigm_ws = 0.5*(engsbz(iz_part)+engsbz(iz_part+1))/3.0
 
 !     ---------write for single droplet ---------
