@@ -32,7 +32,7 @@ FLAGS=-i4 -r8 -O2 -assume byterecl $(ARCH_FLAGS) -fpp
 
 ## UNCOMMENT TO RUN IN DEBUG MODE
 DEBUG_FLAGS=-g -traceback
-DEBUG_FLAGS+=-check bounds,pointers
+DEBUG_FLAGS+=-check all
 
 # NetCDF output is always enabled.
 OUTPUTINC = -I$(NETCDFBASE)/include

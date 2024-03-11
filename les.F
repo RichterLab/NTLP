@@ -1022,7 +1022,7 @@ c --------------------------- format statements
      + ',  FILTER = ',i1,
      + ',  ITI = ',i6,',  ITMAX = ',i6,/,10x,
      + ' IUPWIND = ',i1,',  BUYNCY = ',i1,
-     + ',  NO ALISNG = ',i1,',  ITCUT = ',i1,/,10x,
+     + ',  ITCUT = ',i1,/,10x,
      + ' DT = ',e15.6,',  ZO = ',e15.6,',  TS = ',e15.6,
      + ',  SUBSD = ',i1,/,
      + 10x,' BRCLICITY = ',i1,',  METHOD = ',i1,',  IOCEAN = ',i1,

@@ -2149,7 +2149,6 @@ CONTAINS
 
   !C-FOG and FATIMA parameters: lognormal of accumulation + lognormal of coarse, with extra "resolution" on the coarse mode
   real :: S,M,kappa_s,rad_init
-  real :: num_a,num_c,totnum_a,totnum_c
   integer*8 :: mult
 
   if (inewpart.eq.1) then  !Simple: properties as in params.in, randomly located in domain
@@ -2205,7 +2204,6 @@ CONTAINS
 
          !With these parameters, get m_s and rad_init from distribution
          call lognormal_dist(rad_init,m_s,kappa_s,M,S)
-         num_a = num_a + 1
 
       else  !It's coarse mode
 
@@ -2216,7 +2214,6 @@ CONTAINS
 
          !With these parameters, get m_s and rad_init from distribution
          call lognormal_dist(rad_init,m_s,kappa_s,M,S)
-         num_c = num_c + 1
 
       end if      
 
@@ -2294,7 +2291,6 @@ CONTAINS
 
          !With these parameters, get m_s and rad_init from distribution
          call lognormal_dist(rad_init,m_s,kappa_s,M,S)
-         num_a = num_a + 1
 
       else  !It's coarse mode
 
@@ -2305,7 +2301,6 @@ CONTAINS
 
          !With these parameters, get m_s and rad_init from distribution
          call lognormal_dist(rad_init,m_s,kappa_s,M,S)
-         num_c = num_c + 1
 
       end if
 
@@ -2575,7 +2570,6 @@ CONTAINS
 
   !C-FOG and FATIMA parameters: lognormal of accumulation + lognormal of coarse, with extra "resolution" on the coarse mode
   real :: S,M,kappa_s,rad_init
-  real :: num_a,num_c,totnum_a,totnum_c
   integer*8 :: mult
 
 
