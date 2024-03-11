@@ -8435,12 +8435,23 @@ c
      +         wext(0:nnz+1,iys-2:iye+3,mxs-2:mxe+3),
      +         Text(0:nnz+1,iys-2:iye+3,mxs-2:mxe+3),
      +         T2ext(0:nnz+1,iys-2:iye+3,mxs-2:mxe+3)) 
+      uext = 0.0
+      vext = 0.0
+      wext = 0.0
+      Text = 0.0
+      T2ext = 0.0
+
       !Transposed velocities to do the uf interpolation:
       allocate(u_t(0:nnz+1,iys:iye,mxs:mxe),
      +         v_t(0:nnz+1,iys:iye,mxs:mxe),
      +         w_t(0:nnz+1,iys:iye,mxs:mxe), 
      +         T_t(0:nnz+1,iys:iye,mxs:mxe),
      +         T2_t(0:nnz+1,iys:iye,mxs:mxe))
+      u_t = 0.0
+      v_t = 0.0
+      w_t = 0.0
+      T_t = 0.0
+      T2_t = 0.0
 
       allocate(partcount(nnx,iys:iye,izs-1:ize+1))
       allocate(partcount_t(0:nnz+1,iys:iye,mxs:mxe))
@@ -8516,6 +8527,8 @@ c ------------- allocate space for pressure, pressure bcs
 c
       allocate(p(nnxp2,iys:iye,izs-1:ize+1),
      +         ptop(nnxp2,iys:iye,2))
+      p = 0.0
+      ptop = 0.0
 c
 c ------------- allocate space for viscosity and diffusivity
 c

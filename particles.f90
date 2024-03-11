@@ -776,7 +776,7 @@ CONTAINS
    
   integer :: ix,iy,izuv,izw,iz,i,k,j
   integer :: ipt,jpt,kpt,kwpt
-  real :: wtx,wty,wtz,wtzw,wtt,wttw
+  real :: wtx,wty,wtz,wtzw,wtt
   real :: xv,yv,zv,zwv
   
 
@@ -790,8 +790,13 @@ CONTAINS
   kpt = minloc(zz,1,mask=(zz.gt.part%xp(3))) - 2
   kwpt = minloc(z,1,mask=(z.gt.part%xp(3))) - 2
 
+  wtx=0.0
+  wty=0.0
+  wtz=0.0
+  wtzw=0.0
+  wtt=0.0
 
-  part%uf(1:3) = 0.0
+  part%uf = 0.0
   part%Tf = 0.0
   part%qinf = 0.0
   do i=0,1
@@ -1780,6 +1785,20 @@ CONTAINS
       mult_c = mult_init*(1+4.8081e-04*mult_factor)/(mult_factor*(1+4.8081e-04))
 
 
+      !Set up the histograms
+      hist_rad = 0.0
+      hist_raddeath = 0.0
+      bins_rad = 0.0
+      hist_res = 0.0
+      bins_res = 0.0
+      hist_actres = 0.0
+      bins_actres = 0.0
+      hist_acttodeath = 0.0
+      bins_acttodeath = 0.0
+      hist_numact = 0.0
+      bins_numact = 0.0
+
+
       !set_binsdata does logarithmic binning!
       !Radius histogram
       call set_binsdata(bins_rad,histbins+2,1.0e-8,1.0e-3)
@@ -1795,7 +1814,6 @@ CONTAINS
 
       !Num activations histogram
       call set_binsdata_integer(bins_numact,histbins+2,0.0)
-
 
       !Initialize the linked list of particles:
       nullify(part,first_particle)

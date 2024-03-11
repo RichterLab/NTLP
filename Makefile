@@ -34,7 +34,8 @@ FLAGS=-i4 -r8 -O2 -assume byterecl $(ARCH_FLAGS) -fpp
 DEBUG_FLAGS=-g -traceback
 DEBUG_FLAGS+=-check all,noarg_temp_created
 DEBUG_FLAGS+=-fpe0
-DEBUG_FLAGS+=-init=arrays -init=snan
+#DEBUG_FLAGS+=-init=arrays -init=snan
+DEBUG_FLAGS+=-init=arrays
 
 # NetCDF output is always enabled.
 OUTPUTINC = -I$(NETCDFBASE)/include
