@@ -623,7 +623,7 @@ c
       tauc = 5.0
       do iz=1,nnz
          
-         tauc_tmp = 1.0/(pi2*Dv*2.0*radmean(iz)*Nc(iz)+1.0e-12)
+         tauc_tmp = 1.0/(pi2*Dv*2.0*radmean(iz)*Nc(iz)+1.0e-10)
 
 
          if (.not. isnan(tauc_tmp)) then
@@ -7517,7 +7517,7 @@ c
          vp3msqr(iz) = stat(iz,17)/stat(iz,11)-vp3mean(iz)**2
          upwpm(iz) = stat(iz,21)/stat(iz,11)-(vp1mean(iz)*vp3mean(iz))
          Tpmean(iz) = stat(iz,22)/stat(iz,11)
-         Tpmsqr(iz) = sqrt(stat(iz,23)/stat(iz,11)-Tpmean(iz)**2)
+         Tpmsqr(iz) = stat(iz,23)/stat(iz,11)-Tpmean(iz)**2
          Tfmean(iz) = stat(iz,24)/stat(iz,11)
          qfmean(iz) = stat(iz,25)/stat(iz,11)
          wpTpm(iz) = stat(iz,26)/stat(iz,11)-(Tpmean(iz)*vp3mean(iz))

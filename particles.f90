@@ -3185,21 +3185,30 @@ CONTAINS
       do while (associated(part))
 
 
-         !First, interpolate to get the fluid velocity part%uf(1:3):
-         if (ilin .eq. 1) then
-            call uf_interp_lin   !Use trilinear interpolation
-         else
-            call uf_interp       !Use 6th order Lagrange interpolation
-         end if
+        !First, interpolate to get the fluid velocity part%uf(1:3):
+        if (ilin .eq. 1) then
+           call uf_interp_lin   !Use trilinear interpolation
+        else
+           call uf_interp       !Use 6th order Lagrange interpolation
+        end if
 
 
         if (it .LE. 1) then
            part%vp(1:3) = part%uf
         end if
 
-         if (iexner .eq. 1) then
-             part%Tf = part%Tf*(psurf/(psurf-part%xp(3)*rhoa*grav))**(-Rd/Cpa)
-         end if
+        if (iexner .eq. 1) then
+           part%Tf = part%Tf*(psurf/(psurf-part%xp(3)*rhoa*grav))**(-Rd/Cpa)
+        end if
+
+        if (part%qinf .lt. 0.0) then
+          !write(*,'(a30,2i,12e15.6)') 'WARNING: NEG QINF',  &
+          !part%pidx,part%procidx, &
+          !part%radius,part%qinf,part%Tp,part%Tf,part%xp(3), &
+          !part%kappa_s,part%m_s,part%vp(1),part%vp(2),part%vp(3), &
+          !part%res,part%sigm_s
+        end if
+
 
         diff(1:3) = part%vp - part%uf
         diffnorm = sqrt(diff(1)**2 + diff(2)**2 + diff(3)**2)
@@ -3232,7 +3241,7 @@ CONTAINS
 
         dt_taup0 = dt/taup0
 
-        if (ievap .EQ. 1) then
+        if (ievap .EQ. 1 .and. part%qinf .gt. 0.0) then
 
                !Gives initial guess into nonlinear solver
                !mflag = 0, has equilibrium radius; mflag = 1, no
@@ -3308,14 +3317,6 @@ CONTAINS
 
          if (part%radius .gt. 1.0e-2) then
          write(*,'(a30,12e15.6)') 'WARNING: BIG DROPLET',  &
-         part%radius,part%qinf,part%Tp,part%Tf,part%xp(3), &
-         part%kappa_s,part%m_s,part%vp(1),part%vp(2),part%vp(3), &
-         part%res,part%sigm_s
-         end if
-
-         if (part%qinf .lt. 0.0) then
-         write(*,'(a30,2i,12e15.6)') 'WARNING: NEG QINF',  &
-         part%pidx,part%procidx, &
          part%radius,part%qinf,part%Tp,part%Tf,part%xp(3), &
          part%kappa_s,part%m_s,part%vp(1),part%vp(2),part%vp(3), &
          part%res,part%sigm_s
@@ -4371,6 +4372,12 @@ CONTAINS
 
       mflag = 0
       esa = mod_Magnus(part%Tf)
+
+      !write(*,'(a8,5e15.6)') 'DHR3:',2*Mw*Gam,Ru*rhow*part%Tf,(Ru*part%Tf*rhoa*part%qinf),Mw*esa,(Ru*part%Tf*rhoa*part%qinf)/(Mw*esa)
+
+      if ((Ru*part%Tf*rhoa*part%qinf)/(Mw*esa) .lt. 0.0) then
+      write(*,*) 'DHR3:',Ru,part%Tf,rhoa,part%qinf,Mw,esa
+      endif
 
       a = -(2*Mw*Gam)/(Ru*rhow*part%Tf)/LOG((Ru*part%Tf*rhoa*part%qinf)/(Mw*esa))
       c = (part%kappa_s*part%m_s)/((2.0/3.0)*pi2*rhos)/LOG((Ru*part%Tf*rhoa*part%qinf)/(Mw*esa))
