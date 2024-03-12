@@ -4826,9 +4826,20 @@ c
       use con_data
       use con_stats
       use particles
-      real buf(3+nscl)
-c
-      parameter (iter_mo = 30, zeta_min = -6.0, zeta_max = 3.0)
+      implicit none
+
+      real, parameter :: zeta_min=-6.0, zeta_max=3.0
+      integer, parameter :: iter_mo = 30
+ 
+      integer :: iz,izp1,izm1,ix,iy,iscl,iter,ierr
+      integer, intent(in) :: it
+      real ::  buf(3+nscl)
+      real :: ufree,tol,vsfc,utau2
+      real :: zeta,zeta_mn,zeta_mx,zeta_a
+      real :: f_con,f_new,d_theta,u_fac
+      real :: phim,phis,psim,psis,t_fac
+      real :: dnom,tep,thta
+      real :: mod_magnus
 
 
 c
@@ -5000,7 +5011,7 @@ c
 
           dnom = zosdy*vk74in
           tsfcc(2)=surf_RH/100.0*
-     +    Mw/Ru/tsfcc(1)*mod_Magnus(tsfcc(1))/rhoa
+     +    Mw/Ru/tsfcc(1)*mod_magnus(tsfcc(1))/rhoa
             thstar(iscl) = (t1xy(iscl) - tsfcc(iscl))/dnom
             t10xy(iscl)  = thstar(iscl)*dnom
             qstar(iscl)  = -utau*thstar(iscl)
@@ -5015,7 +5026,7 @@ c
             !Humidity is a Dirichlet condition at surf_RH
             !Based on temperature in tsfcc(1)
             tsfcc(2)=surf_RH/100.0*
-     +      Mw/Ru/tsfcc(1)*mod_Magnus(tsfcc(1))/rhoa
+     +      Mw/Ru/tsfcc(1)*mod_magnus(tsfcc(1))/rhoa
 
             thstar(iscl) = (t1xy(iscl) - tsfcc(iscl))/dnom
             t10xy(iscl)  = thstar(iscl)*dnom
@@ -5432,10 +5443,15 @@ c
          dtdzf(1)=(311.85-308.2)/(3000.0-2000.0)
          dtdzf(2)=(3.0e-3-4.2e-3)/(3000.0-2000.0)
 
-         elseif (icase.eq.3) then !CFOG
+         elseif (icase.eq.3) then !C-FOG
 
          dtdzf(1)=(285.5-284.0)/(80.0-30.0)
          dtdzf(2)=(0.006-0.00805)/(80.0-30.0)         
+
+         elseif (icase.eq.6) then !FATIMA
+
+         dtdzf(1)=(289.5-287.51)/(128.0-70.0)
+         dtdzf(2)=(0.0094-0.0098)/(128.0-70.0)
 
          end if
 
@@ -6187,7 +6203,7 @@ c
 
          !Make a constant q profile at RH based on surface temp:
 !            t(ix,iy,2,iz) = surf_RH/100.0*
-!     +      Mw/Ru/t_lower*mod_Magnus(t_lower)/rhoa
+!     +      Mw/Ru/t_lower*mod_magnus(t_lower)/rhoa
 
          !Make a desired profile of RH:
 !            !Convert theta to temperature:
@@ -6196,7 +6212,7 @@ c
 !
 !            !Get temperature based on desired RH
 !            t(ix,iy,2,iz) = surf_RH/100.0*
-!     +      Mw/Ru/Ttmp*mod_Magnus(Ttmp)/rhoa
+!     +      Mw/Ru/Ttmp*mod_magnus(Ttmp)/rhoa
 
 
             w(ix,iy,iz)   = 0.
@@ -7249,14 +7265,20 @@ c
       use con_data
       use con_stats
       use particles
+      implicit none
 c
 c ------- indices for indexing array stat(.,.)
 c         js = number of non-scalar stats
 c         ns = number of scalar stats
 c
-      parameter(js = 43, ns = 5, nstat = js + ns*nscl)
-      real stat(1:nnz,nstat)
-      real RHtmp, Ttmp
+      integer, parameter :: js = 43, ns = 5, nstat = js + ns*nscl
+      real :: stat(1:nnz,nstat)
+
+      integer :: ix,iy,iz,izm1,izp1,izp2,m1,m2,m3,m4,m5,i,l
+
+      real :: sgn
+      real :: rlim
+      real ::  RHtmp, Ttmp, mod_magnus
 c
 c -------- stat(.,1) = u*u = ups
 c          stat(.,2) = v*v = vps
@@ -7389,6 +7411,7 @@ c
 
          RHtmp = Ttmp*
      +   t(ix,iy,2,iz)*Ru/Mw/mod_magnus(Ttmp)*rhoa*100.0
+
          stat(iz,35) = stat(iz,35) + RHtmp
          stat(iz,36) = stat(iz,36) + Ttmp
          stat(iz,37) = stat(iz,37) + RHtmp**2
@@ -10599,7 +10622,7 @@ c
       use pars
       use con_data
       implicit none
-      real :: RHB,RHT,mod_Magnus
+      real :: RHB,RHT,mod_magnus
 
       !Assuming tsfcc(2),Ttop(2),Tbot(2) in params.in are giving RH:
       if (iDNS .eq. 1) then
@@ -10608,8 +10631,8 @@ c
          RHB = Tbot(2)
 
          !Convert RH given in input file into specific humidity
-         Ttop(2) = RHT/100.0*Mw/Ru/Ttop(1)*mod_Magnus(Ttop(1))/rhoa
-         Tbot(2) = RHB/100.0*Mw/Ru/Tbot(1)*mod_Magnus(Tbot(1))/rhoa
+         Ttop(2) = RHT/100.0*Mw/Ru/Ttop(1)*mod_magnus(Ttop(1))/rhoa
+         Tbot(2) = RHB/100.0*Mw/Ru/Tbot(1)*mod_magnus(Tbot(1))/rhoa
 
          if (myid==0) then
            write(*,*) 'SURFACE HUMIDITY: %RH, q = ',RHB,Tbot(2)
@@ -10619,7 +10642,7 @@ c
 
          RHB = tsfcc(2)
 
-         tsfcc(2) = RHB/100.0*Mw/Ru/tsfcc(1)*mod_Magnus(tsfcc(1))/rhoa
+         tsfcc(2) = RHB/100.0*Mw/Ru/tsfcc(1)*mod_magnus(tsfcc(1))/rhoa
 
          if (myid==0) then
            write(*,*) 'SURFACE HUMIDITY: %RH, q = ',RHB,tsfcc(2)
@@ -10693,17 +10716,17 @@ c
 
 
       end subroutine read_input_file
-      function mod_Magnus(T)
+      function mod_magnus(T)
       implicit none
 
       !Take in T in Kelvin and return saturation vapor pressure using function of Alduchov and Eskridge, 1996
       real,intent(in) :: T
-      real :: mod_Magnus
+      real :: mod_magnus
 
-      mod_Magnus = 610.94 *exp((17.6257*(T-273.15))/(243.04+(T-273.15)))
+      mod_magnus = 610.94 *exp((17.6257*(T-273.15))/(243.04+(T-273.15)))
 
 
-      end function mod_Magnus
+      end function mod_magnus
  
       function ran2(idum)
       integer :: idum,IM1,IM2,IMM1,IA1,IA2,IQ1,IQ2,IR1,IR2,NTAB,NDIV
