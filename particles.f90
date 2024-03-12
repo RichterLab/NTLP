@@ -1184,8 +1184,7 @@ CONTAINS
      if (iy .lt. iys) write(*,*) 'proc',myid,'has iy = ',iy
      if (iz .gt. nnz+1) write(*,*) 'proc',myid,'has iz = ',iz
      if (iz .lt. 0) then
-         write(*,*) 'proc',myid,'has iz = ',iz
-         write(*,*) 'DHR:',part%radius,part%xp(3),part%mult,part%vp(3)
+         write(*,*) 'proc',myid,'has iz = ',iz,part%radius,part%xp(3),part%mult,part%vp(3)
      end if
 
      !Recall to subtract g since momentum is extracted form
@@ -3202,11 +3201,11 @@ CONTAINS
         end if
 
         if (part%qinf .lt. 0.0) then
-          !write(*,'(a30,2i,12e15.6)') 'WARNING: NEG QINF',  &
-          !part%pidx,part%procidx, &
-          !part%radius,part%qinf,part%Tp,part%Tf,part%xp(3), &
-          !part%kappa_s,part%m_s,part%vp(1),part%vp(2),part%vp(3), &
-          !part%res,part%sigm_s
+          write(*,'(a30,2i,12e15.6)') 'WARNING: NEG QINF',  &
+          part%pidx,part%procidx, &
+          part%radius,part%qinf,part%Tp,part%Tf,part%xp(3), &
+          part%kappa_s,part%m_s,part%vp(1),part%vp(2),part%vp(3), &
+          part%res,part%sigm_s
         end if
 
 
@@ -4372,12 +4371,6 @@ CONTAINS
 
       mflag = 0
       esa = mod_Magnus(part%Tf)
-
-      !write(*,'(a8,5e15.6)') 'DHR3:',2*Mw*Gam,Ru*rhow*part%Tf,(Ru*part%Tf*rhoa*part%qinf),Mw*esa,(Ru*part%Tf*rhoa*part%qinf)/(Mw*esa)
-
-      if ((Ru*part%Tf*rhoa*part%qinf)/(Mw*esa) .lt. 0.0) then
-      write(*,*) 'DHR3:',Ru,part%Tf,rhoa,part%qinf,Mw,esa
-      endif
 
       a = -(2*Mw*Gam)/(Ru*rhow*part%Tf)/LOG((Ru*part%Tf*rhoa*part%qinf)/(Mw*esa))
       c = (part%kappa_s*part%m_s)/((2.0/3.0)*pi2*rhos)/LOG((Ru*part%Tf*rhoa*part%qinf)/(Mw*esa))

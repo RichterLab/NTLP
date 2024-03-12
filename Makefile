@@ -31,7 +31,7 @@ endif
 FLAGS=-i4 -r8 -O2 -assume byterecl $(ARCH_FLAGS) -fpp
 
 ## UNCOMMENT TO RUN IN DEBUG MODE
-#DEBUG_FLAGS=-g -traceback
+DEBUG_FLAGS=-g -traceback
 #DEBUG_FLAGS+=-check all,noarg_temp_created
 #DEBUG_FLAGS+=-fpe0
 #DEBUG_FLAGS+=-init=arrays -init=snan
