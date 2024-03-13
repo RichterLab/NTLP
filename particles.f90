@@ -1770,18 +1770,35 @@ CONTAINS
       end if
 
 
-      !Lognormal distribution parameters  -- Must be called even on restart!
-      mult_factor = 25
-      pdf_factor = 4.8081e-04*real(mult_factor)
-      pdf_prob = pdf_factor/(1 + pdf_factor)
+      if (icase.eq.6) then !FATIMA
 
-      !Adjust the multiplicity so that the total number of particles isn't altered:
-      !mult_c = mult_init/mult_factor
-      !mult_a = mult_init/(1.0-pdf_prob)*(1 - pdf_prob/real(mult_factor))
+          !Lognormal distribution parameters  -- Must be called even on restart!
+          !Make sure that the total aerosol number must be the same within each classification
+          !(e.g., # of accumulation particles must be the same no matter mult_factor)
+          mult_factor = 25
+          pdf_factor = 4.8081e-04*real(mult_factor)
+          pdf_prob = pdf_factor/(1 + pdf_factor)
 
-      mult_a = mult_init*(1+4.8081e-04*mult_factor)/(1+4.8081e-04)
+          mult_a = mult_init*(1+4.8081e-04*mult_factor)/(1+4.8081e-04)
+          mult_c = mult_init*(1+4.8081e-04*mult_factor)/(mult_factor*(1+4.8081e-04))
 
-      mult_c = mult_init*(1+4.8081e-04*mult_factor)/(mult_factor*(1+4.8081e-04))
+      elseif (icase.eq.3) then  !CFOG
+
+          mult_factor = 200
+          pdf_factor = 0.02*real(mult_factor)
+          pdf_prob = pdf_factor/(1 + pdf_factor)
+
+          !Adjust the multiplicity so that the total number of particles isn't altered:
+          !Original formulation -- be careful since the number of aerosols in each class different for different mult_factor
+          mult_c = mult_init/mult_factor
+          mult_a = mult_init/(1.0-pdf_prob)*(1 - pdf_prob/real(mult_factor))
+
+      else
+
+          mult_factor = 1.0
+          pdf_prob = 0.0
+
+      end if
 
 
       !Set up the histograms
