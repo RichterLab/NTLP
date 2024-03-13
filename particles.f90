@@ -2676,8 +2676,6 @@ CONTAINS
 
             call create_particle(xp_init,vp_init,Tp_init,m_s,kappa_s,mult,rad_init,idx_old,procidx_old)
 
-            write(*,'(a8,10e15.6,3i)') 'DHR7:',xp_init,vp_init,Tp_init,m_s,kappa_s,rad_init,idx_old,procidx_old,mult
-
        else
 
             call destroy_particle
