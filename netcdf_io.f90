@@ -1099,7 +1099,7 @@ subroutine fill_yz_slice(yzslice,dat,tmp)
       integer :: yzslice
       real,intent(in) :: dat(1:nnx,iys:iye,izs:ize)
       real,intent(out) :: tmp(nny,nnz)
-      integer :: ierr,ip,mynx,myny,mynz,iystmp,iyetmp,izstmp,izetmp,istatus
+      integer :: ierr,ip,mynx,myny,mynz,iystmp,iyetmp,izstmp,izetmp,istatus(MPI_STATUS_SIZE)
       integer :: sbuf_limits(4),rbuf_limits(4)
       real,allocatable :: sbuf_data(:,:),rbuf_data(:,:)
 
@@ -1167,7 +1167,7 @@ subroutine fill_xy_slice(xyslice,dat,tmp)
       integer :: xyslice
       real,intent(in) :: dat(1:nnx,iys:iye,izs:ize)
       real,intent(out) :: tmp(nnx,nny)
-      integer :: ierr,ip,mynx,myny,mynz,iystmp,iyetmp,izstmp,izetmp,istatus
+      integer :: ierr,ip,mynx,myny,mynz,iystmp,iyetmp,izstmp,izetmp,istatus(MPI_STATUS_SIZE)
       integer :: sbuf_limits(4),rbuf_limits(4)
       real,allocatable :: sbuf_data(:,:),rbuf_data(:,:)
 
@@ -1249,7 +1249,7 @@ subroutine fill_xz_slice(xzslice,dat,tmp)
       integer :: xzslice
       real,intent(in) :: dat(1:nnx,iys:iye,izs:ize)
       real,intent(out) :: tmp(nnx,nnz)
-      integer :: ierr,ip,mynx,myny,mynz,iystmp,iyetmp,izstmp,izetmp,istatus
+      integer :: ierr,ip,mynx,myny,mynz,iystmp,iyetmp,izstmp,izetmp,istatus(MPI_STATUS_SIZE)
       integer :: sbuf_limits(4),rbuf_limits(4)
       real,allocatable :: sbuf_data(:,:),rbuf_data(:,:)
 
