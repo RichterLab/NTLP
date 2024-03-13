@@ -2369,7 +2369,6 @@ c
            end do
          end do
 
-
       end if
       end if
 
@@ -5913,58 +5912,6 @@ c
       integer :: ix,iy,iz
       integer :: idum
 
-      !Initialize partcount to 0:
-      partcount = 0.0
-      partcount_t = 0.0
-      vpsum = 0.0
-      vpsum_t = 0.0
-      vpsqrsum = 0.0
-      vpsqrsum_t = 0.0
-      ufsum = 0.0
-      ufsum_t = 0.0
-      ufsqrsum = 0.0
-      ufsqrsum_t = 0.0
-      upwp_t = 0.0
-      upwp_t = 0.0
-      upwp = 0.0
-      Tpsum = 0.0
-      Tpsum_t = 0.0
-      Tpsqrsum = 0.0
-      Tpsqrsum_t = 0.0
-      Tfsum = 0.0
-      Tfsum_t = 0.0
-      qfsum = 0.0
-      qfsum_t = 0.0
-      wpTpsum = 0.0
-      wpTpsum_t = 0.0
-      partsrc = 0.0
-      partsrc_t = 0.0
-      partTsrc = 0.0
-      partTsrc_t = 0.0
-      partHsrc = 0.0
-      partHsrc_t = 0.0
-      partTEsrc = 0.0
-      partTEsrc_t = 0.0
-      radsum = 0.0 
-      radsum_t = 0.0 
-      rad2sum = 0.0 
-      rad2sum_t = 0.0 
-      multcount = 0.0
-      multcount_t = 0.0
-      mwsum = 0.0
-      mwsum_t = 0.0
-      qstarsum = 0.0
-      qstarsum_t = 0.0 
-      u = 0.0
-      v = 0.0
-      w = 0.0
-      e = 0.0
-      t = 0.0
-      r1 = 0.0
-      r2 = 0.0
-      r3 = 0.0
-      r4 = 0.0
-      r5 = 0.0
 
 c ------------ note set nmatch in sr. iso so that
 c              it is compatible with conditions here
@@ -8435,6 +8382,16 @@ c
      +         r3(nnx,iys:iye,izs-1:ize+1),
      +         r4(nnx,iys:iye,nscl,izs-1:ize+1),
      +         r5(nnx,iys:iye,izs-1:ize+1))
+      u = 0.0
+      v = 0.0
+      w = 0.0
+      t = 0.0
+      e = 0.0
+      r1 = 0.0
+      r2 = 0.0
+      r3 = 0.0
+      r4 = 0.0
+      r5 = 0.0
 
 c   ------Allocate arrays for SFS stress and its derivatives
       allocate(sigm_s(nnxp2,iys:iye,izs-1:ize+1),
@@ -8477,46 +8434,87 @@ c
       T2_t = 0.0
 
       allocate(partcount(nnx,iys:iye,izs-1:ize+1))
+      partcount = 0.0
       allocate(partcount_t(0:nnz+1,iys:iye,mxs:mxe))
+      partcount_t = 0.0
       allocate(upwp_t(0:nnz+1,iys:iye,mxs:mxe))
+      upwp_t = 0.0
       allocate(upwp(nnx,iys:iye,izs-1:ize+1))
+      upwp = 0.0
       allocate(vpsum(nnx,iys:iye,izs-1:ize+1,1:3))
+      vpsum = 0.0
       allocate(vpsum_t(0:nnz+1,iys:iye,mxs:mxe,1:3))
+      vpsum_t = 0.0
       allocate(vpsqrsum(nnx,iys:iye,izs-1:ize+1,1:3))
+      vpsqrsum = 0.0
       allocate(vpsqrsum_t(0:nnz+1,iys:iye,mxs:mxe,1:3))
+      vpsqrsum_t = 0.0
       allocate(ufsum(nnx,iys:iye,izs-1:ize+1,1:3))
+      ufsum = 0.0
       allocate(ufsum_t(0:nnz+1,iys:iye,mxs:mxe,1:3))
+      ufsum_t = 0.0
       allocate(ufsqrsum(nnx,iys:iye,izs-1:ize+1,1:3))
+      ufsqrsum = 0.0
       allocate(ufsqrsum_t(0:nnz+1,iys:iye,mxs:mxe,1:3))
+      ufsqrsum_t = 0.0
       allocate(Tpsum(nnx,iys:iye,izs-1:ize+1))
+      Tpsum = 0.0
       allocate(Tpsum_t(0:nnz+1,iys:iye,mxs:mxe))
+      Tpsum_t = 0.0
       allocate(Tpsqrsum(nnx,iys:iye,izs-1:ize+1))
+      Tpsqrsum = 0.0
       allocate(Tpsqrsum_t(0:nnz+1,iys:iye,mxs:mxe))
+      Tpsqrsum_t = 0.0
       allocate(Tfsum(nnx,iys:iye,izs-1:ize+1))
+      Tfsum = 0.0
       allocate(Tfsum_t(0:nnz+1,iys:iye,mxs:mxe))
+      Tfsum_t = 0.0
       allocate(qfsum(nnx,iys:iye,izs-1:ize+1))
+      qfsum = 0.0
       allocate(qfsum_t(0:nnz+1,iys:iye,mxs:mxe))
+      qfsum_t = 0.0
       allocate(wpTpsum(nnx,iys:iye,izs-1:ize+1))
+      wpTpsum = 0.0
       allocate(wpTpsum_t(0:nnz+1,iys:iye,mxs:mxe))
+      wpTpsum_t = 0.0
       allocate(partsrc(nnx,iys:iye,izs-1:ize+1,1:3))
+      partsrc = 0.0
       allocate(partsrc_t(0:nnz+1,iys:iye+1,mxs:mxe+1,1:3))
+      partsrc_t = 0.0
       allocate(partTsrc(nnx,iys:iye,izs-1:ize+1))
+      partTsrc = 0.0
       allocate(partTsrc_t(0:nnz+1,iys:iye+1,mxs:mxe+1))
+      partTsrc_t = 0.0
       allocate(radsum(nnx,iys:iye,izs-1:ize+1))
+      radsum = 0.0
       allocate(radsum_t(0:nnz+1,iys:iye,mxs:mxe)) 
+      radsum_t = 0.0
       allocate(rad2sum(nnx,iys:iye,izs-1:ize+1)) 
+      rad2sum = 0.0
       allocate(rad2sum_t(0:nnz+1,iys:iye,mxs:mxe))
+      rad2sum_t = 0.0
       allocate(multcount(nnx,iys:iye,izs-1:ize+1)) 
+      multcount = 0.0
       allocate(multcount_t(0:nnz+1,iys:iye,mxs:mxe)) 
+      multcount_t = 0.0
       allocate(mwsum(nnx,iys:iye,izs-1:ize+1)) 
+      mwsum = 0.0
       allocate(mwsum_t(0:nnz+1,iys:iye,mxs:mxe)) 
+      mwsum_t = 0.0
       allocate(partHsrc(nnx,iys:iye,izs-1:ize+1))
+      partHsrc = 0.0
       allocate(partHsrc_t(0:nnz+1,iys:iye+1,mxs:mxe+1))
+      partHsrc_t = 0.0
       allocate(partTEsrc(nnx,iys:iye,izs-1:ize+1))
+      partTEsrc = 0.0
       allocate(partTEsrc_t(0:nnz+1,iys:iye+1,mxs:mxe+1))
+      partTEsrc_t = 0.0
       allocate(qstarsum(nnx,iys:iye,izs-1:ize+1)) 
+      qstarsum = 0.0
       allocate(qstarsum_t(0:nnz+1,iys:iye,mxs:mxe)) 
+      qstarsum_t = 0.0
 
+      radsrc = 0.0
 
 c ------------- allocate space for boundary condition arrays
 c               on top and bottom of domain
