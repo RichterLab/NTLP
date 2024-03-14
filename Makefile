@@ -77,7 +77,19 @@ FLAGS += -O2
 
 endif
 
-# NetCDF output is always enabled.
+# NetCDF output is always enabled.  Make sure we can find its headers and
+# libraries.
+ifeq ($(strip $(NETCDFBASE)),)
+
+# Don't enforce the variable being set if we just want to clean the directory.
+ifneq ($(strip $(MAKECMDGOALS)), clean)
+$(info NETCDFBASE is not set!  Did you forget to load a module (e.g. mvapich2)? )
+$(info )
+$(error "Please set NETCDFBASE to the location of the netCDF install." )
+endif
+
+endif
+
 OUTPUTINC = -I$(NETCDFBASE)/include
 OUTPUTLIB = -L$(NETCDFBASE)/lib
 LINKOPTS  = -lnetcdf -lnetcdff
