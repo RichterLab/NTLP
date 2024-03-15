@@ -11,8 +11,8 @@ case=case1
 time=0000000
 runout=$case.out.$time
 
-datadir=/scratch365/PATH_TO_SCRATCH/$case
-homedir=~/PATH_TO_RUN/$case
+datadir=PATH_TO_SCRATCH/$case
+homedir=PATH_TO_CODE/$case
 
 cd $homedir
 
@@ -25,5 +25,3 @@ echo $imachine > ./mach.file
 echo $datadir >> ./mach.file
 
 mpirun -n 64 $homedir/../lesmpi.a $homedir/params.in > $datadir/$runout
-
-
