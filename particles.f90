@@ -2607,7 +2607,7 @@ CONTAINS
           part%vp(3) = -part%vp(3)
           part => part%next
 
-       else  !All cases other than icase=0
+       else  !All cases other than icase=0 kill particle
 
           idx_old = part%pidx
           procidx_old = part%procidx
@@ -2671,12 +2671,12 @@ CONTAINS
              call new_particle(idx_old,procidx_old)
           end if
 
+       end if ! icase to decide whether to reflect
 
-       else
-          part => part%next
-       end if
+    else
+       part => part%next
+    end if
 
-    end if ! icase to decide whether to reflect
 
   end do
 
@@ -3340,6 +3340,7 @@ CONTAINS
         else
 
             part%radrhs = 0.0
+            part%rc = 0.0
 
             !Also update the temperature directly using BE:
             tmp_coeff = Nup/3.0/Pra*CpaCpp*rhop/rhow*taup_i
