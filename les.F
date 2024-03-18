@@ -6104,17 +6104,20 @@ c                 qv
       q_surf = 0.0215
       end if
 
-      !Slopes below the inversion
-      slope_t = (t_switch-t_surf)/z_switch
-      slope_q = (q_switch-q_surf)/z_switch
-
       if (icase.eq.0) then
       t_surf = 285.0
+      t_switch = 285.0
       q_surf = 0.0105
+      q_switch = 0.0105
       slope_t = 0.0
       slope_q = 0.0
       z_switch = 1000.0
       end if
+
+      !Slopes below the inversion
+      slope_t = (t_switch-t_surf)/z_switch
+      slope_q = (q_switch-q_surf)/z_switch
+
 c
       do iz=izs,ize
 
