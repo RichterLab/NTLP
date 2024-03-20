@@ -1,18 +1,23 @@
 #!/bin/bash
 
+group_storage=/afs/crc.nd.edu/group/RichterLab
+
 #$ -M YOUR_EMAIL@nd.edu
 #$ -m n
 #$ -pe mpi-16 64
 #$ -q *@@richter
-#$ -N tutorial
+#$ -N test_case_channel
 #$ -j y
 
-case=case1
+case=channel
 time=0000000
 runout=$case.out.$time
 
 datadir=PATH_TO_SCRATCH/$case
-homedir=PATH_TO_CODE/$case
+homedir=PATH_TO_CODE/test_cases/$case
+
+# create the directory for the output.
+mkdir -p $datadir
 
 cd $homedir
 
@@ -24,4 +29,4 @@ imachine=0
 echo $imachine > ./mach.file
 echo $datadir >> ./mach.file
 
-mpirun -n 64 $homedir/../lesmpi.a $homedir/params.in > $datadir/$runout
+mpirun -n 64 $homedir/../../lesmpi.a $homedir/params.in > $datadir/$runout

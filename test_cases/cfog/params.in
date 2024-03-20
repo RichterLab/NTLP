@@ -1,0 +1,138 @@
+
+!Time step information
+&step_params
+iti=0          !Time step to begin
+itmax=500000   !Max number of time steps
+imean=100    !Number of time steps between writing mean profiles to output log file
+ihst=100     !Number of time steps between writing profiles to history file
+itape=5000  !Number of time steps before opening new history file and writing full 3D volumes
+i_viz=100   !Time steps between writing to viz file
+itn = 0  !Index for "u.le.cou001" files
+max_time = 28800  !Code will stop at the next itape after this time (in seconds) has been exceeded
+/
+
+!Flags for various features
+&flags
+ismlt=0, ifree=0, iradup=0, iupwnd=1
+ibuoy=1, ifilt=0, itcut=1, isubs=0, ibrcl=0, iocean=0
+method=3, idebug=1, ivis0=1, ifix_dt=0, new_vis=-1
+isfc = 1, 1  ! isfc = 0 sets surface flux (qstar), isfc = 1 sets surface condition (Dirichlet through tsfcc)
+iz_space=2, ! 0 = uniform dz, 1 = top/bottom mirror stretched ("channel"), 2 = "open channel", 3 = PBL with stretching at surface and at zi
+iDNS = 0
+ifields = 0  ! if set to 1, reads the initial condition from path_ran below; otherwise calls subroutine random
+ihurr = 0  !If set to 1, includes the hurricane forcings from Bryan et al. (2017) BLM and according to dvdr and hurr_rad below
+ilin = 1   !1 means linear interpolation for particle, 6th order otherwise
+icouple=1
+iTcouple=1
+iHcouple=1  !iHcouple also controls TE couple
+ievap=1
+ineighbor=0
+icoalesce=0
+ipart_method=2   !1 = same RK3 as flow, 2 = backward Euler
+ipartdiff = 1
+inewpart = 3  !1 = new particles have initial conditions defined below, random location in domain; 2 = same, but normal distributions of radius and kappa_s, given by radius_std and kappas_std; 3 = special setup for C-FOG and double lognormal of different type; 4 = crude sea spray setup
+icase = 3  !Special additions for certain cases. 3 = setup for C-FOG, 4 = steady state LES sea spray setup
+isfs = 2   !isfs=1 is simple random walk, isfs=2 is Weil et al. (2004) particle subgrid
+iexner = 1  !iexner = 1 applies a correction to part%Tf to account for conversion b/w potential temp and temp. (need in PBL)
+ilongwave = 1   !Use simple longwave radiation scheme when clouds/fog present
+inetcdf = 1  !Set to 1 to output history and histogram data to netcdf format, otherwise original binary format
+iviznetcdf = 1  !Set to 1 to slice viz files to netcdf format (WARNING: it's been a long time since the original have been used)
+ihumiditycontrol = 0  !Adaptive humidity source/sink (used for Pi Chamber; subroutine humidity_control)
+ireintro=1   !Aerosol injection
+itrajout=1   !Write the particle trajectory files. Needs a directory within the scratch space, and each processor writes a file (requires postprocessing to stitch together)
+/
+
+!Grid and domain parameters
+&grid_params
+ncpu_s=8
+
+!Time step
+cfl = 0.9
+dt_new = 1.0
+
+!Use for DNS:
+Uo = 0.0  !Sets the magnitude of the top and bottom plate velocities (Couette flow -- assumes equal and opposite)
+Ttop(1) = 280.0, 100.0  !Currently this should be (temperature, relative humidity) (used in DNS)
+Tbot(1) = 299.0, 100.0  !Currently this should be (temperature, relative humidity) (used in DNS)
+
+!Use for LES:
+qstar = 0.2, 0.2  !Surface fluxes of (temperature, humidity) (used for LES and DNS)
+tsfcc = 283.9, 100.0    !Surface conditions of (temp, humidity) (used for LES) -- make sure tsfcc is gt than t00 for both isfc=0 or 1
+
+surf_RH = 100.0
+surf_temp = 282.0  !Only use this when changing the surface temperature in time! Otherwise set tsfcc
+
+psurf = 101325  !Pa -- nominal surface pressure, for use in the definition of potential temp
+
+ugcont = 4.0   !The initial u-velocity in the field
+vgcont = 0.0   !The initial v-velocity
+dvdr = -4.0e-04  !Change in v with hurricane radius
+hurr_rad = 40e3  ! Hurricane radius
+
+dpdx = 0.0  !The pressure gradient for channel flow (gets put into u_geo for DNS)
+
+Swall = 0  !Set the CONSTANT humidity sink to use if ihumiditycontrol = 0
+
+zi = 80.0  !This has to do with grid stretching; make equal to zl for iz_space = 1,2; zi is inversion height for iz_space = 3
+zl = 80.0
+xl = 128.0
+yl = 128.0
+
+zw1 = 0.1  !The first grid point; only used if stretched grid
+
+!Radiation parameters
+rad_kappa = 120.0  !The absorptivity in the radiation expression (see Larson et al. 2007)
+rad_Fct = 60.0    !Net radiative flux at cloud (or domain) top
+rad_Fcb = 0.0    !Net radiative flux at cloud (or domain) base
+
+/
+
+!Set the paths for code I/O. Must be on the scratch directory, not AFS!
+&path_names
+path_seed="PATH_TO_SCRATCH/cfog/"
+path_part="PATH_TO_SCRATCH/cfog/part.le.cou005"
+path_res="PATH_TO_SCRATCH/cfog/u.le.cou005"
+path_ran="PATH_TO_SCRATCH/cfog/u.le.cou000"
+/
+
+
+!Material and particle properties and other constants
+&constants
+grav = 9.81
+t00 = 273.0 !Reference temp for buoyancy
+fcor = 1.0e-4  !Coriolis parameter
+zo = 3.2e-5       !Roughness height (for LES)
+zos = 3.2e-5       !Scalar roughness height (for LES)
+
+!Air phase:
+rhoa=1.2
+nuf=1.57e-5  !m^2/s
+Cpa=1006.0  !J/kg-K
+Pra = 0.715
+Sc = 0.615
+Rd = 286.9     !J/kg-K  dry air gas constant
+
+!Particles:
+tnumpart = 1e6
+mult_init = 1.75e9
+rhow=1000.0  !kg/m^3
+rhos = 2000.0 !Density of salt, kg/m^3
+part_grav = 0,0,-9.81
+Cpp = 4179.0  !J/kg-K
+Mw = 0.018015  !kg/mol
+Ru = 8.3144    !J/mol-K Universal gas constant
+Ms = 0.05844  !kg/mol: molecular weight of salt
+Sal = 0.034  !INITIAL salinity in kg/kg
+Gam = 7.28e-2
+Ion = 2.0
+
+nprime = 0.01  !particles/cm^3/min, real rate is nprime*multiplicity
+
+!Particle initial conditions:
+radius_init=2.5e-6
+radius_std=0.0
+kappas_init=1.2
+kappas_std=0.00
+Tp_init = 282.0
+vp_init = 0.0, 0.0, 0.0
+/

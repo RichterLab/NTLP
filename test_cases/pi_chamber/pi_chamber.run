@@ -1,0 +1,35 @@
+#!/bin/bash
+
+group_storage=/afs/crc.nd.edu/group/RichterLab
+
+#$ -M YOUR_EMAIL@nd.edu
+#$ -m n
+#$ -pe mpi-16 64
+#$ -q *@@richter
+#$ -N test_case_pi_chamber
+#$ -j y
+
+case=pi_chamber
+time=0000000
+runout=$case.out.$time
+
+datadir=PATH_TO_SCRATCH/$case
+homedir=PATH_TO_CODE/test_cases/$case
+
+# create the directory for the particle tracking output.
+mkdir -p $datadir/particle_traj
+
+# copy the pi chamber's restart file into the data directory.
+cp -f $group_storage/test_cases/$case/u.le.cou000 $datadir/u.le.cou000
+
+cd $homedir
+
+module load mvapich2
+module load intel
+module load netcdf
+
+imachine=0
+echo $imachine > ./mach.file
+echo $datadir >> ./mach.file
+
+mpirun -n 64 $homedir/../../lesmpi.a $homedir/params.in > $datadir/$runout
