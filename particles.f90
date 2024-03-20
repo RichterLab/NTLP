@@ -2067,54 +2067,40 @@ CONTAINS
 
 
       if (inewpart.eq.4) then
+      !!Sea spray, given by Andreas SSGF 98, augmented by Ortiz-Suslow 2016
 
-      !!Sea spray, given by Andreas SSGF 98
-      call andreas_dist_num(totdrops) ! drops per m^2 per s based on Andreas 98      
+         call inject_spray(it)
+      
 
-      t_reint = 1800.0  !Time after which to start injecting
-      it_delay = 200    !Num of time steps between injection events (sometimes too few are produced and if it's < numprocs then it gets rounded to zero)
-      
-      
-      if (time .gt. t_reint) then
-         my_reintro = xl*yl*dt*real(it_delay)*totdrops/(numprocs*mult_init)
-         tot_reintro = 0
-      else
-         my_reintro = 0
-         tot_reintro = 0
-      endif
-      
       elseif (inewpart.eq.2) then
-
       !!Pi Chamber, given by constant injection rate (nprime)
-      it_delay = 20
 
-      my_reintro = nprime*(1./60.)*(10.**6.)*dt*4/numprocs*real(it_delay) !4m^3 (vol chamber)
-      tot_reintro = 0
+         it_delay = 20
 
-      else
+         if (mod(it,it_delay)==0) then
 
-      my_reintro = 0
-      tot_reintro = 0
-      it_delay=1
+            my_reintro = nprime*(1./60.)*(10.**6.)*dt*4/numprocs*real(it_delay) !4m^3 (vol chamber)
+            tot_reintro = my_reintro*numprocs
 
-      end if
+            if (myid==0) write(*,*) 'time,tot_reintro:',time,tot_reintro
 
-      if (mod(it, it_delay)==0) then
+            do np=1,my_reintro
 
-      tot_reintro = my_reintro*numprocs
+               call new_particle(np,myid)
+
+               !Update this processor's global ID for each one created:
+               ngidx = ngidx + 1
+   
+            end do
+
+         else !No injection this time step
+            my_reintro = 0
+            tot_reintro = 0
+         end if
 
 
-      if (myid==0) write(*,*) 'time,tot_reintro:',time,tot_reintro
+      end if  !Different cases
 
-      do np=1,my_reintro
-
-         call new_particle(np,myid)
-
-         !Update this processor's global ID for each one created:
-         ngidx = ngidx + 1
-
-      end do
-      end if
 
       !Now update the total number of particles
       numpart = 0
@@ -2265,6 +2251,7 @@ CONTAINS
 
       !Force the output particle to be a coarse mode particle
       if (idx==1 .and. procidx==0) then
+
          !Force particle log output to be a coarse mode in fog layer -- "giant mode"
          S = 0.45
          M = 0.0
@@ -2279,26 +2266,6 @@ CONTAINS
 
       call create_particle(xp_init,vp_init,Tp_init,m_s,kappa_s,mult,rad_init,idx,procidx)
 
-
-
-   elseif (inewpart.eq.4) then  !Sea spray, from Andreas 98
-
-      
-         m_s = rad_init**3*pi2*2.0/3.0*rhow*Sal  !Using the salinity specified in params.in
-         
-         Tp_init = tsfcc(1)
-
-         xp_init(1) = ran2(iseed)*(xmax-xmin) + xmin
-         xp_init(2) = ran2(iseed)*(ymax-ymin) + ymin
-         xp_init(3) = ran2(iseed)*8.0  !Distributing between 0 and 8 meters (like a sig. wave height)
-
-         call andreas_dist(rad_init)
-
-         m_s = rad_init**3*pi2*2.0/3.0*rhow*Sal  !Using the salinity specified in params.in
-
-         vp_init(3) = ran2(iseed)*4.0
-
-         call create_particle(xp_init,vp_init,Tp_init,m_s,kappas_init,mult_init,rad_init,ngidx,procidx) 
 
    elseif (inewpart.eq.5) then !Special for Sc: still working on it
       
@@ -2443,165 +2410,162 @@ CONTAINS
 
   end subroutine lognormal_dist
 
-  subroutine andreas_dist(rad_init)
+  subroutine inject_spray(it)
   use pars
   use fields
   use con_data
   implicit none
   include 'mpif.h'
 
-  real, intent(inout) :: rad_init
+  real :: rad_init
   real :: ran2,cdf_func,prob
   real :: M_a,S_a,M_c,S_c,totarea
   real :: daerosol,totdrops
   real :: c1,c2,c3,u14,cdn10,a
-  real :: a1,a2,r80,r0,dh,binsdata(100)
+  real :: a1,a2,r80,r0,dh,binsdata(100),binsdata10(100)
+  real :: m,c4,r_interval,rand
   real :: dFssum(101)
   real :: dFsdr80(100),dFmsdr0(100),dr80_dr0
-  integer :: iter,i,nbin,num_create,j
+  real :: t_reint,xp_init(3),m_s
+  integer :: iter,i,nbin,num_create,j,np
+  integer :: ssgf_type,it_delay,my_reintro
+  integer, intent(in) :: it
 
   ! implementing the Andreas 1998 sea spray generation function
   !Set the parameters of the two lognormals:
   real :: rmin,rmax,rmin10,rmax10
 
+    !ssgf_type = 1 is Andreas 1998, ssgf_type = 2 augments with Ortiz-Suslow 2016 for spume
+    ssgf_type = 1
+
     rmin10 = log10(2e-06)
     rmax10 = log10(500e-06)
-    ! Testing to see if u10 is the problem
-    !u10 = 15.0
-!   Calculate size of interval
-    dh = 0.0242
+    dh = (rmax10-rmin10)/100.0
 
 !   ===== update x-axis for each bin =====
-    binsdata(1) = rmin10
+    binsdata10(1) = rmin10
+    binsdata(1) = 1.0d6*(10**binsdata10(1))
     do i = 1,99
-      binsdata(i+1)= dh+binsdata(i)
+      binsdata10(i+1)= dh+binsdata10(i)
+      binsdata(i+1) = 1.0e6*(10**binsdata10(i))
     end do
-
-    binsdata = 1e6*(10**binsdata)
 
     ! Now figure out how many particles are produced in each of
     ! those bins. This is a function of u10
 
-    c1 = 10*smithssgf(u10,10.0,0.4)
+    c1 = 10.0*smithssgf(u10,10.0,0.4)
     c2 = c1*(37.5**1.8)
     c3 = c2*(100**5.2)
+
+    !For modfying with Ortiz-Suslow 2016
+    m = 0.0434*u10 - 5.83
+    c4 = c2*100**-2.8*(10**6*1.963*(100**1.025))**-m
+
     dFssum(1) = 0
     do i = 1,100
        r0 = binsdata(i)
        !calculate radius at 80%RH
        r80 = 0.518*r0**0.976;
 
-      !now apply these to Eqs. 3.5 in Andreas 1998
-       if (r80 .lt. 10) then
-         dFsdr80(i) =  smithssgf(u10,r80,0.4)
-       elseif ((r80 .ge. 10) .and. (r80 .lt. 37.5)) then
-         dFsdr80(i) = c1/r80
-       elseif ((r80 .ge. 37.5) .and. (r80 .lt. 100)) then
-         dFSdr80(i) = c2*r80**-2.8
-       elseif ((r80 .ge. 100) .and. (r80 .lt. 250)) then
-         dFsdr80(i) = c3*r80**-8
+       if (ssgf_type.eq.1) then
+
+           ! now apply these to Eqs. 3.5 in Andreas 1998
+           if (r80 .lt. 10.0) then
+             dFsdr80(i) =  smithssgf(u10,r80,dble(0.4))
+           elseif ((r80 .ge. 10.0) .and. (r80 .lt. 37.5)) then
+             dFsdr80(i) = c1/r80
+           elseif ((r80 .ge. 37.5) .and. (r80 .lt. 100.0)) then
+             dFSdr80(i) = c2*r80**-2.8
+           elseif (r80 .ge. 100.0) then
+             dFsdr80(i) = c3*r80**-8.0
+           endif
+
+       elseif (ssgf_type.eq.2) then
+
+           ! Almost the same, except change the spume for > 100 for Ortiz-Suslow
+           if (r80 .lt. 10.0) then
+             dFsdr80(i) =  smithssgf(u10,r80,dble(0.4))
+           elseif ((r80 .ge. 10.0) .and. (r80 .lt. 37.5)) then
+             dFsdr80(i) = c1/r80
+           elseif ((r80 .ge. 37.5) .and. (r80 .lt. 100.0)) then
+             dFSdr80(i) = c2*r80**-2.8
+           elseif (r80 .ge. 100.0) then
+             dFsdr80(i) = c4*(10**6*1.963*r80**1.025)**m
+           endif
+
+       end if
+
+       ! apply eq. 3.8 from Andreas 1998
+       dFmsdr0(i) = 3.5*dFsdr80(i)*0.506*r0**-0.024
+
+       if (i==1) then
+         dFssum(i+1) = dFmsdr0(i)
+       elseif (i .gt. 1) then
+         dFssum(i+1) = dFssum(i) + dFmsdr0(i)
        endif
-
-      !apply eq. 3.8 from Andreas 1998
-      dFmsdr0(i) = 3.5*dFsdr80(i)*0.506*r0**-0.024
-
-      if (i==1) then
-        dFssum(i+1) = dFmsdr0(i)
-      elseif (i .gt. 1) then
-        dFssum(i+1) = dFssum(i) + dFmsdr0(i)
-      endif
-
     end do
 
-
+    !Total number of new droplets to make
     totdrops = dFssum(101)
-    a = totdrops*ran2(iseed)
 
-    do i = 1,100
-       if ((a .gt. dFssum(i)) .and. (a .le. dFssum(i+1))) then
-          rad_init = binsdata(i) + ran2(iseed)*(binsdata(i+1)-binsdata(i))
-       endif
-    enddo
 
-    rad_init = 1e-6*rad_init
+    !Now each process figures out how many to create
 
-  end subroutine andreas_dist
-
-  subroutine andreas_dist_num(totdrops)
-  use pars
-  use fields
-  use con_data
-  implicit none
-  include 'mpif.h'
-
-  real, intent(inout) :: totdrops
-  real :: ran2,cdf_func,prob
-  real :: M_a,S_a,M_c,S_c,totarea
-  real :: daerosol
-  real :: c1,c2,c3,u14,cdn10,a
-  real :: a1,a2,r80,r0,dh,binsdata(100)
-  real :: dFssum(101)
-  real :: dFsdr80(100),dFmsdr0(100),dr80_dr0
-  integer :: iter,i,nbin,num_create,j
-
-  !implementing the Andreas 1998 sea spray generation function
-  !Set the parameters of the two lognormals:
-  real :: rmin,rmax,rmin10,rmax10
-
-    rmin10 = log10(2e-06)
-    rmax10 = log10(500e-06)
-    ! Testing to see if u10 is the problem
-    !u10 = 15.0
-!   Calculate size of interval
-    dh = 0.0242
-
-!   ===== update x-axis for each bin =====
-    binsdata(1) = rmin10
-    do i = 1,99
-      binsdata(i+1)= dh+binsdata(i)
-    end do
-
-    binsdata = 1e6*(10**binsdata)
-
-    ! Now figure out how many particles are produced in each of
-    ! those bins. This is a function of u10
-
-    c1 = 10*smithssgf(u10,10.0,0.4)
-    c2 = c1*(37.5**1.8)
-    c3 = c2*(100**5.2)
-    dFssum(1) = 0
-    do i = 1,100
-     r0 = binsdata(i)
-     ! calculate radius at 80%RH
-     r80 = 0.518*r0**0.976;
-
-  ! now apply these to Eqs. 3.5 in Andreas 1998
-     if (r80 .lt. 10) then
-       dFsdr80(i) =  smithssgf(u10,r80,0.4)
-     elseif ((r80 .ge. 10) .and. (r80 .lt. 37.5)) then
-       dFsdr80(i) = c1/r80
-     elseif ((r80 .ge. 37.5) .and. (r80 .lt. 100)) then
-       dFSdr80(i) = c2*r80**-2.8
-     elseif ((r80 .ge. 100) .and. (r80 .lt. 250)) then
-       dFsdr80(i) = c3*r80**-8
-     endif
-
-    ! apply eq. 3.8 from Andreas 1998
-    dFmsdr0(i) = 3.5*dFsdr80(i)*0.506*r0**-0.024
-
-    if (i==1) then
-      dFssum(i+1) = dFmsdr0(i)
-    elseif (i .gt. 1) then
-      dFssum(i+1) = dFssum(i) + dFmsdr0(i)
+    !t_reint = 1800.0  !Time after which to start injecting
+    t_reint = 20.0  !Time after which to start injecting
+    it_delay = 200    !Num of time steps between injection events (sometimes too few are produced and if it's < numprocs then it gets rounded to zero)
+    
+    
+    if (time .gt. t_reint) then
+       my_reintro = xl*yl*dt*real(it_delay)*totdrops/(numprocs*mult_init)
+       tot_reintro = 0
+    else
+       my_reintro = 0
+       tot_reintro = 0
     endif
 
-  end do
+    !Now loop through and inject the particles, only after it_delay
+    if (mod(it, it_delay)==0) then
+
+       !Total number of droplets actually being introduced (potentially diff. from totdrops due to roundoff)
+       tot_reintro = my_reintro*numprocs
+       if (myid==0) write(*,*) 'time,tot_reintro:',time,tot_reintro
 
 
-  totdrops = dFssum(101)
+       do np=1,my_reintro
 
-  end subroutine andreas_dist_num
+         rand = ran2(iseed)
+         a = totdrops*rand
 
+         do i = 1,100
+            if ((a .gt. dFssum(i)) .and. (a .le. dFssum(i+1))) then
+               r_interval = 10**(binsdata10(i)+dh/2.0) - 10**(binsdata10(i)-dh/2.0)
+               rad_init = binsdata(i) + 2.0*(rand-0.5)*r_interval
+            end if
+         end do
+         rad_init = rad_init*1.0e-6
+
+
+         Tp_init = tsfcc(1)
+
+         xp_init(1) = ran2(iseed)*(xmax-xmin) + xmin
+         xp_init(2) = ran2(iseed)*(ymax-ymin) + ymin
+         xp_init(3) = ran2(iseed)*8.0  !Distributing between 0 and 8 meters (like a sig. wave height)
+
+         m_s = rad_init**3*pi2*2.0/3.0*rhow*Sal  !Using the salinity specified in params.in
+
+         vp_init(3) = ran2(iseed)*4.0
+
+         call create_particle(xp_init,vp_init,Tp_init,m_s,kappas_init,mult_init,rad_init,ngidx,myid)
+
+         !Update this processor's global ID for each one created:
+         ngidx = ngidx + 1
+
+       end do
+    end if
+
+
+  end subroutine inject_spray
 
   subroutine particle_bcs_nonperiodic
   use con_stats
@@ -2628,86 +2592,91 @@ CONTAINS
     !perfectly elastic collisions on top, bottom walls
     !i.e. location is reflected, w-velocity is negated
 
-    top = z(nnz)
-    !bot = 0.0 + part%radius
-    !bot = zw1
-    bot = 0.0
+    top = z(nnz)-part%radius
+    bot = 0.0 + part%radius
 
     if (part%xp(3) .GT. top) then
        part%xp(3) = top - (part%xp(3)-top)
        part%vp(3) = -part%vp(3)
        part => part%next
     elseif (part%xp(3) .LT. bot) then
-       !part%xp(3) = bot + (bot-part%xp(3))
-       !part%vp(3) = -part%vp(3)
-       !part => part%next
 
-       idx_old = part%pidx
-       procidx_old = part%procidx
+       if (icase.eq.0) then  !Reflect
 
-       !Before destroying it, put its residence time in histogram
-       call add_histogram(bins_res,hist_res,histbins+2,part%res,part%mult)
+          part%xp(3) = bot + (bot-part%xp(3))
+          part%vp(3) = -part%vp(3)
+          part => part%next
 
-       !Also record this in the "activation till death" residence time
-       if (part%radius .gt. part%rc) then
-         call add_histogram(bins_acttodeath,hist_acttodeath,histbins+2,part%actres,part%mult)
-       end if
+       else  !All cases other than icase=0 kill particle
 
-       !Also record the number of activations
-       call add_histogram_integer(bins_numact,hist_numact,histbins+2,part%numact)
+          idx_old = part%pidx
+          procidx_old = part%procidx
 
-       !Also record the size of the dead droplet
-       call add_histogram(bins_rad,hist_raddeath,histbins+2,part%radius,part%mult)
+          !Before destroying it, put its residence time in histogram
+          call add_histogram(bins_res,hist_res,histbins+2,part%res,part%mult)
 
-       if (ireintro.eq.1 .and. inewpart.eq.6) then  !FATIMA can reintroduce particle of the same type
+          !Also record this in the "activation till death" residence time
+          if (part%radius .gt. part%rc) then
+            call add_histogram(bins_acttodeath,hist_acttodeath,histbins+2,part%actres,part%mult)
+          end if
 
-            xv = ran2(iseed)*(xmax-xmin) + xmin
-            yv = ran2(iseed)*(ymax-ymin) + ymin
-            zv = ran2(iseed)*(zi-zw1) + zw1
-            xp_init = (/xv,yv,zv/)
+          !Also record the number of activations
+          call add_histogram_integer(bins_numact,hist_numact,histbins+2,part%numact)
 
-            ! acummulation mode
-            if (part%mult .eq. mult_a) then
+          !Also record the size of the dead droplet
+          call add_histogram(bins_rad,hist_raddeath,histbins+2,part%radius,part%mult)
 
-                S = 0.2403
-                M = -1.7570
-                kappa_s = 0.6
-                mult = mult_a
+          if (ireintro.eq.1 .and. inewpart.eq.6) then  !FATIMA can reintroduce particle of the same type
 
-            ! coarse mode
-            elseif (part%mult .eq. mult_c) then
+               xv = ran2(iseed)*(xmax-xmin) + xmin
+               yv = ran2(iseed)*(ymax-ymin) + ymin
+               zv = ran2(iseed)*(zi-zw1) + zw1
+               xp_init = (/xv,yv,zv/)
 
-                S = 0.2997
-                M = -0.1930
-                kappa_s = 1.2
-                mult = mult_c
+               ! acummulation mode
+               if (part%mult .eq. mult_a) then
+   
+                   S = 0.2403
+                   M = -1.7570
+                   kappa_s = 0.6
+                   mult = mult_a
 
-            end if
+               ! coarse mode
+               elseif (part%mult .eq. mult_c) then
 
-            ! destroy old particle before creating new one
-            call destroy_particle
-            num_destroy = num_destroy + 1
+                   S = 0.2997
+                   M = -0.1930
+                   kappa_s = 1.2
+                   mult = mult_c
 
-            !With these parameters, get m_s and rad_init from distribution
-            call lognormal_dist(rad_init,m_s,kappa_s,M,S)
+               end if
 
-            call create_particle(xp_init,vp_init,Tp_init,m_s,kappa_s,mult,rad_init,idx_old,procidx_old)
+               ! destroy old particle before creating new one
+               call destroy_particle
+               num_destroy = num_destroy + 1
+   
+               !With these parameters, get m_s and rad_init from distribution
+               call lognormal_dist(rad_init,m_s,kappa_s,M,S)
 
-       else
+               call create_particle(xp_init,vp_init,Tp_init,m_s,kappa_s,mult,rad_init,idx_old,procidx_old)
 
-            call destroy_particle
-            num_destroy = num_destroy + 1
+          else
 
-       end if
+               call destroy_particle
+               num_destroy = num_destroy + 1
+
+          end if
        
-       if (icase.eq.5 .or. icase.eq.3) then
-          call new_particle(idx_old,procidx_old)
-       end if
+          if (icase.eq.5 .or. icase.eq.3) then
+             call new_particle(idx_old,procidx_old)
+          end if
 
+       end if ! icase to decide whether to reflect
 
     else
        part => part%next
     end if
+
 
   end do
 
@@ -3371,6 +3340,7 @@ CONTAINS
         else
 
             part%radrhs = 0.0
+            part%rc = 0.0
 
             !Also update the temperature directly using BE:
             tmp_coeff = Nup/3.0/Pra*CpaCpp*rhop/rhow*taup_i
@@ -5379,7 +5349,7 @@ CONTAINS
 
 
   ! added SEA93 function
-  if (u10 .ge. 4 .and. u10 .lt. 11) then
+  if (u10 .lt. 11) then
      cdn10 = 1.2e-3
   elseif (u10 .ge. 11) then
      cdn10 = 1e-3*(0.49 + 0.065*u10)

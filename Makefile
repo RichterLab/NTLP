@@ -88,6 +88,7 @@ $(info )
 $(error "Please set NETCDFBASE to the location of the netCDF install." )
 endif
 
+
 endif
 
 OUTPUTINC = -I$(NETCDFBASE)/include
