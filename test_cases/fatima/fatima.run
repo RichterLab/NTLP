@@ -19,6 +19,9 @@ homedir=PATH_TO_CODE/test_cases/$case
 # create the directory for the output.
 mkdir -p $datadir
 
+# create the directory for the particle tracking output.
+mkdir -p $datadir/particle_traj
+
 cd $homedir
 
 module load mvapich2

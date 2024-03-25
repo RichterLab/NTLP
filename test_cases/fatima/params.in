@@ -5,10 +5,10 @@ iti=0          !Time step to begin
 itmax=1000000   !Max number of time steps
 imean=100    !Number of time steps between writing mean profiles to output log file
 ihst=100     !Number of time steps between writing profiles to history file
-itape=1000  !Number of time steps before opening new history file and writing full 3D volumes
+itape=10000  !Number of time steps before opening new history file and writing full 3D volumes
 i_viz=100   !Time steps between writing to viz file
 itn = 0  !Index for "u.le.cou001" files
-max_time = 43200.0  !Code will stop at the next itape after this time (in seconds) has been exceeded
+max_time = 36000.0  !Code will stop at the next itape after this time (in seconds) has been exceeded
 /
 
 !Flags for various features
