@@ -2730,7 +2730,7 @@ CONTAINS
       real :: mylwc_sum,myphiw_sum,myphiv_sum,Volp      
       real :: Eff_C,Eff_S
       real :: t_s,t_f,t_s1,t_f1
-      real :: mod_Magnus
+      real :: mod_magnus,exner
 
 
       !First fill extended velocity field for interpolation
@@ -2790,7 +2790,7 @@ CONTAINS
          end if
 
          if (iexner .eq. 1) then
-             part%Tf = part%Tf*(psurf/(psurf-part%xp(3)*rhoa*grav))**(-Rd/Cpa)
+             part%Tf = part%Tf*exner(psurf,psurf-part%xp(3)*rhoa*grav)
          end if
 
 
@@ -2826,7 +2826,7 @@ CONTAINS
 
 
          !Mass Transfer calculations
-         einf = mod_Magnus(part%Tf)
+         einf = mod_magnus(part%Tf)
          Eff_C = 2.0*Mw*Gam/(Ru*rhow*part%radius*part%Tp)
          Eff_S = part%kappa_s*part%m_s*rhow/rhos/(Volp*rhop-part%m_s)
          estar = einf*exp(Mw*Lv/Ru*(1.0/part%Tf-1.0/part%Tp)+Eff_C-Eff_S)
@@ -3118,7 +3118,7 @@ CONTAINS
       real :: taup0, dt_taup0, temp_r, temp_t, guess
       real :: tmp_coeff
       real :: xp3i
-      real :: mod_Magnus
+      real :: mod_magnus,exner
       real :: rad_i,Tp_i,vp_i(3),mp_i,rhop_i
 
 
@@ -3181,7 +3181,7 @@ CONTAINS
         end if
 
         if (iexner .eq. 1) then
-           part%Tf = part%Tf*(psurf/(psurf-part%xp(3)*rhoa*grav))**(-Rd/Cpa)
+           part%Tf = part%Tf*exner(psurf,psurf-part%xp(3)*rhoa*grav)
         end if
 
         if (part%qinf .lt. 0.0) then
@@ -3327,7 +3327,7 @@ CONTAINS
          Shp = 2.0 + 0.6*Rep**(1.0/2.0)*Sc**(1.0/3.0)
 
          !Mass Transfer calculations
-         einf = mod_Magnus(part%Tf)
+         einf = mod_magnus(part%Tf)
 
          Eff_C = 2.0*Mw*Gam/(Ru*rhow*part%radius*part%Tp)
          Eff_S = part%kappa_s*part%m_s*rhow/rhos/(Volp*rhop-part%m_s)
@@ -4290,7 +4290,7 @@ CONTAINS
       real :: esa, dnext,  m_w, rhop, Rep, taup,vprime(3), rprime, Tprime, qstr, Shp, Nup, dp, VolP
       real :: diff(3), diffnorm, Tnext, rnext, T
       real :: taup0, g(3)
-      real :: mod_Magnus
+      real :: mod_magnus
 
 
         taup0 = (((part%m_s)/((2./3.)*pi2*radius_init**3) + rhow)*(radius_init*2)**2)/(18*rhoa*nuf)
@@ -4303,7 +4303,7 @@ CONTAINS
         Tnext = tempt * part%Tp
         dnext = rnext * 2.
 
-        esa = mod_Magnus(part%Tf)
+        esa = mod_magnus(part%Tf)
         VolP = (2./3.)*pi2*rnext**3
         rhop = (part%m_s + VolP*rhow) / VolP
 
@@ -4352,10 +4352,10 @@ CONTAINS
       real, intent(OUT) :: guess
       integer, intent(OUT) :: mflag
       real :: a, c, esa, Q, R, M, val, theta, S, T
-      real :: mod_Magnus
+      real :: mod_magnus
 
       mflag = 0
-      esa = mod_Magnus(part%Tf)
+      esa = mod_magnus(part%Tf)
 
       a = -(2*Mw*Gam)/(Ru*rhow*part%Tf)/LOG((Ru*part%Tf*rhoa*part%qinf)/(Mw*esa))
       c = (part%kappa_s*part%m_s)/((2.0/3.0)*pi2*rhos)/LOG((Ru*part%Tf*rhoa*part%qinf)/(Mw*esa))

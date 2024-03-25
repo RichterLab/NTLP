@@ -2331,7 +2331,12 @@ c
       do iz=izs,ize
          do iy=iys,iye
          do ix=1,nnx
-          r4(ix,iy,1,iz) = r4(ix,iy,1,iz) + partTsrc(ix,iy,iz)
+          if (iexner) then
+             r4(ix,iy,1,iz) = r4(ix,iy,1,iz) + partTsrc(ix,iy,iz)/
+     +                        exner(psurf,psurf-zz(iz)*rhoa*grav)
+          else
+             r4(ix,iy,1,iz) = r4(ix,iy,1,iz) + partTsrc(ix,iy,iz)
+          end if    
          end do
          end do
       end do
@@ -7228,7 +7233,7 @@ c
 
       real :: sgn
       real :: rlim
-      real ::  RHtmp, Ttmp, mod_magnus
+      real ::  RHtmp, Ttmp, mod_magnus, exner
 c
 c -------- stat(.,1) = u*u = ups
 c          stat(.,2) = v*v = vps
@@ -7353,8 +7358,7 @@ c
          stat(iz,34) = stat(iz,34) + qstarsum(ix,iy,iz)
 
          if (iexner .eq. 1) then
-         Ttmp = t(ix,iy,1,iz)*
-     +  (psurf/(psurf-zz(iz)*rhoa*grav))**(-Rd/Cpa)
+         Ttmp = t(ix,iy,1,iz)*exner(psurf,psurf-zz(iz)*rhoa*grav)
          else
          Ttmp = t(ix,iy,1,iz)
          end if
@@ -10728,6 +10732,16 @@ c
 
 
       end function mod_magnus
+      function exner(p0,p)
+      use pars
+      implicit none
+      real, intent(in) :: p0,p
+      real :: exner
+
+      !Take in the reference pressure p0 and p(z), and compute exner = T/theta
+      exner = (p0/p)**(-Rd/Cpa)
+
+      end function exner
  
       function ran2(idum)
       integer :: idum,IM1,IM2,IMM1,IA1,IA2,IQ1,IQ2,IR1,IR2,NTAB,NDIV
