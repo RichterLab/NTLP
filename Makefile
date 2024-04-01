@@ -135,7 +135,7 @@ clean:
 	rm -f *.o *.mod lesmpi.a mach.file
 
 # Dependencies between the individual objects.
-les.o: defs.o netcdf_io.o particles.o tec_io.o
+les.o: defs.o measurement.o netcdf_io.o particles.o tec_io.o
 measurement.o: data_structures.o
 particles.o: defs.o
 netcdf_io.o: particles.o

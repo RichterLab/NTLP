@@ -9,6 +9,7 @@ c
 #ifdef TECIO
       use tec_io
 #endif
+      use profiling
       include 'mpif.h'
 c
 c ------------- definition of internal flags
@@ -74,7 +75,12 @@ c
 c
       ts_mpi = mpi_wtime()
 
+c ---------- initialize the profiling modules
+      call initialize_profiling
+      call start_phase(measurement_id_solver)
+
 !----- Read the input file for all necessary parameters
+      call start_phase(measurement_id_setup)
       call read_input_file
 
 c
@@ -157,7 +163,7 @@ c
          endif
 
       endif
-
+      call end_phase(measurement_id_setup)
 
 c
 c --------------- time loop ------------
@@ -165,6 +171,7 @@ c
       tzero = time
       call get_dt
  9000 continue
+      call start_phase( measurement_id_timestepping_loop)
       call set_sav(it,iti)
       if (myid==0) then
       write(*,*) 'Starting time loop'
@@ -232,14 +239,15 @@ c
 c ---------- compute derivatives of (u,v,w)
 c
 
+      call start_phase(measurement_id_derivatives)
       call exchange
-c
-
       call get_derv
+      call end_phase(measurement_id_derivatives)
 
 c
 c --------- new eddy viscosity, and bcs
 c
+      call start_phase(measurement_id_eddy_viscosity_and_bcs)
       if(iss .eq. 0 .and. ifree .eq. 0) then
          if (iDNS .eq. 1) then
             call lower_dns(it)
@@ -276,16 +284,19 @@ c
         call extra_flux_terms
         call pbltop(itop)
       endif
-
+      call end_phase(measurement_id_eddy_viscosity_and_bcs)
 
 c
 c ------------ save velocity field
 c
       if(msave .and. istage .eq. 1) then
+         call start_phase(measurement_id_io_particles)
          call save_v(it)
          call save_particles
+         call end_phase(measurement_id_io_particles)
       endif
       if(msave_v .and. istage .eq. 1) then
+         call start_phase(measurement_id_io_viz)
          if (iviznetcdf) then
             call open_viz_netcdf
             call write_viz_netcdf
@@ -293,29 +304,31 @@ c
          else
             call save_viz(it)
          end if
+         call end_phase(measurement_id_io_viz)
       endif
 
 c
 c ------------ save pressure field
 c
       if(msave .and. istage .eq. 1) then
+         call start_phase(measurement_id_io_pressure)
          call save_p
+         call end_phase(measurement_id_io_pressure)
       endif
 
 
       if(mhis  .and. istage .eq. 1) then
+          call start_phase(measurement_id_io_histograms)
           call write_histograms
+          call end_phase(measurement_id_io_histograms)
       end if
 
 c
 c --------- get rhs for all equations
 c
-      !t_s = mpi_wtime()
+      call start_phase(measurement_id_flow_solve_1)
       call comp1(istage,it)
-      !t_f = mpi_wtime()
-      !write(*,*) 'proc, comp1: ',myid,t_f-t_s
-      !call mpi_barrier(mpi_comm_world,ierr)
-      !if (myid==5) write(*,*) 'time comp1: ',t_f-t_s
+      call end_phase(measurement_id_flow_solve_1)
       if(istage .eq. 1) then
          if(msave .and. l_root) call save_c(it)
       endif
@@ -324,26 +337,18 @@ c
 c
 c --------- solve for pressure
 c
-      !t_s = mpi_wtime()
+      call start_phase(measurement_id_flow_solve_p)
       call comp_p
-      !t_f = mpi_wtime()
-      !write(*,*) 'proc, comp_p: ',myid,t_f-t_s
-      !call mpi_barrier(mpi_comm_world,ierr)
-      !if (myid==5) write(*,*) 'time comp_p: ',t_f-t_s
+      call end_phase(measurement_id_flow_solve_p)
 c
 c --------- add pressure gradient and dealias
 c
-      !t_s = mpi_wtime()
+      call start_phase(measurement_id_flow_solve_2)
       call comp2
-      !t_f = mpi_wtime()
-      !!write(*,*) 'proc, comp2: ',myid,t_f-t_s
-      !call mpi_barrier(mpi_comm_world,ierr)
-      !if (myid==5) write(*,*) 'time comp2: ',t_f-t_s
       if(micut) then
          call dealias
       endif
-
-
+      call end_phase(measurement_id_flow_solve_2)
 
 
 c      
@@ -351,8 +356,10 @@ c -------- update particles
 c
          if (ipart_method .eq. 1) then
          t_s = mpi_wtime()
-         !call particle_update_cn(it,istage) 
-         call particle_update_rk3(it,istage) 
+         !call particle_update_cn(it,istage)
+         call start_phase(measurement_id_particles)
+         call particle_update_rk3(it,istage)
+         call end_phase(measurement_id_particles)
 
          t_f = mpi_wtime()
          call mpi_barrier(mpi_comm_world,ierr)
@@ -368,53 +375,59 @@ c
       endif
       if(l_root) then
          if (inetcdf .eq. 1) then
+           call start_phase(measurement_id_io_history)
            if(mhis  .and. istage .eq. 1)  call write_his_netcdf
            if(mhis  .and. istage .eq. 1 .and. mtape) then
               call close_his_netcdf
            endif
+           call end_phase(measurement_id_io_history)
+
+           call start_phase(measurement_id_io_histograms)
            if(mhis  .and. istage .eq. 1 .and. mtape)  then
               call close_histog_netcdf
            endif
+           call end_phase(measurement_id_io_histograms)
          else
+            call start_phase(measurement_id_io_history)
             if(mhis  .and. istage .eq. 1)  call write_his(itop)
             if(mhis  .and. istage .eq. 1 .and. mtape) call close_his
+            call end_phase(measurement_id_io_history)
+
+            call start_phase(measurement_id_io_histograms)
             if(mhis  .and. istage .eq. 1 .and. mtape) then
               call close_histograms
             end if
+            call end_phase(measurement_id_io_histograms)
          end if
       endif
 c
  8999 continue
-      t_stage_f = mpi_wtime()
-      !if (myid==5) write(*,*) 'time stage: ',t_stage_f - t_stage_s
 
+      call start_phase(measurement_id_humidity)
       call humidity_control
+      call end_phase(measurement_id_humidity)
 
       if (ipart_method .eq. 2) then
-         t_s = mpi_wtime()
 
+         call start_phase(measurement_id_particles)
          call particle_update_BE(it)
+         call end_phase(measurement_id_particles)
 
-!         t_f = mpi_wtime()
-!         call mpi_barrier(mpi_comm_world,ierr)
-!         if (myid==5) write(*,*) 'time part: ',t_f-t_s
       end if
 
       !Call coalescence outside of RK loop since it's not appropriate as
       !part of RK scheme
       if (icoalesce) then
-      t_s = mpi_wtime()
 
-      call particle_coalesce
+         call start_phase(measurement_id_particles)
+         call particle_coalesce
+         call end_phase(measurement_id_particles)
 
-!      call mpi_barrier(mpi_comm_world,ierr)
-!      t_f = mpi_wtime()
-!      if (myid==5) write(*,*) 'time coalescence:', t_f - t_s
       end if
 
       if (ipartdiff) then
-      t_s = mpi_wtime()
 
+        call start_phase(measurement_id_particles)
         if (isfs == 2) then
            !Call Weil et al. (2004) Lagrangian stochastic model
            call SFS_velocity
@@ -422,37 +435,43 @@ c
            !Call stochastic model for the position based on vis_s
            call SFS_position
         end if
+        call end_phase(measurement_id_particles)
 
-!      call mpi_barrier(mpi_comm_world,ierr)
-!      t_f = mpi_wtime()
-!      if (myid==5) write(*,*) 'time partdiff:', t_f - t_s
       end if
 
       if (ireintro) then
+         call start_phase(measurement_id_particles)
          call particle_reintro(it)
+         call end_phase(measurement_id_particles)
       end if
 
       if (mhis) then
+         call start_phase(measurement_id_particles)
          call radius_histogram
          if (itrajout) then
          call particle_write_traj(it)
          end if
+         call end_phase(measurement_id_particles)
       end if
 
 #ifdef TECIO
       if (mod(it,200) .eq. 0) then
+      call start_phase(measurement_id_io_tecio)
       call plt_fields
+      call end_phase(measurement_id_io_tecio)
       end if
 #endif
 
       call get_max
       call get_dt
+
+      call end_phase(measurement_id_timestepping_loop)
+
       if (it.ge.itmax) go to 99000
 
       if (time .gt. max_time) then  !Adjust itmax if max_time has been exceeded
          itmax = floor(real(it)/real(itape))*itape + itape  !Stop at next itape
       end if
-
 
       go to 9000
 c
@@ -462,11 +481,21 @@ c
       call finalize_tecio
 #endif
 
+      call end_phase(measurement_id_solver)
+
       te_mpi = mpi_wtime()
       write(6,9997) (te_mpi - ts_mpi)
  9997 format(' Job Execution Time = ',e15.6)
 c
  9998 continue
+
+c --------- report the final measurements and shutdown the profiling.  take care
+c           that we only report timings from a single rank and don't have its
+c           output jumbled with every other ranks'.
+      call mpi_barrier(mpi_comm_world,ierr)
+      if(l_root) call report_profile(6)
+      call shutdown_profiling
+
       call mpi_finalize(ierr)
 c
       stop
