@@ -101,10 +101,12 @@ TECFLAGS = -DTECIO
 TECLIB   = ~/Research/tecio/libteciompi.a
 TECLINK  = -lm -lstdc++ -lgcc_eh
 
-SRC = defs.F \
+SRC = data_structures.f90 \
+      defs.F \
       fft.f \
       kdtree.f90 \
       les.F \
+      measurement.f90 \
       netcdf_io.f90 \
       particles.f90 \
       tec_io.f90
@@ -134,6 +136,7 @@ clean:
 
 # Dependencies between the individual objects.
 les.o: defs.o netcdf_io.o particles.o tec_io.o
+measurement.o: data_structures.o
 particles.o: defs.o
 netcdf_io.o: particles.o
 tec_io.o: particles.o
