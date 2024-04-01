@@ -976,3 +976,282 @@ contains
     end subroutine validate_phase_id
 
 end module measure
+
+module profiling
+
+    ! Specialized set of phases to measure NTLP's execution.  This extends
+    ! the measure interface and provides NTLP-specific phase identifiers
+    ! corresponding to its major components.  Additionally, a report method is
+    ! provided that acquires the elapsed durations for said phases and pretty
+    ! prints their timings in a hierarchical manner.
+    !
+    ! See the measure module for details on starting and ending phases, as well
+    ! as other lower-level routines to interact with/control the measurements.
+
+    ! Bring all of the measurement module's public interface
+    ! (e.g. start_phase()/end_phase()) into scope.  We don't use this directly,
+    ! but provide it to this module's users as a convenience.
+    use measure
+
+    ! Named identifiers, one per phase we measure during execution.  These are
+    ! public so they're accessible to users of this module.  The purpose and
+    ! descriptions for each phase are next to the identifier, below.
+    integer, public :: &
+         ! Time spent computing flow derivatives.
+         measurement_id_derivatives, &
+
+         ! Time spent computing the eddy viscosity and boundary conditions.
+         measurement_id_eddy_viscosity_and_bcs, &
+
+         ! Time spent in each of the three steps of the flow solve (comp_1(),
+         ! comp_p(), and comp_2(), respectively).
+         measurement_id_flow_solve_1, &
+         measurement_id_flow_solve_p, &
+         measurement_id_flow_solve_2, &
+
+         ! Time spent performing humidity control.
+         measurement_id_humidity, &
+
+         ! Time spent writing outputs.
+         measurement_id_io_histograms, &
+         measurement_id_io_history, &
+         measurement_id_io_particles, &
+         measurement_id_io_pressure, &
+         measurement_id_io_tecio, &
+         measurement_id_io_viz, &
+
+         ! Time spent advecting particles with the computed flow.
+         measurement_id_particles, &
+
+         ! Time spent setting the simulation up.
+         measurement_id_setup, &
+
+         ! Time spent in the simulation.  This captures everything while MPI is
+         ! initialized and available.
+         measurement_id_solver, &
+
+         ! Time spent in the main timestepping loop.
+         measurement_id_timestepping_loop
+
+    public :: &
+         initialize_profiling, &
+         report_profile, &
+         shutdown_profiling
+
+contains
+
+    ! Initializes the base measure module and registers each of the phases known
+    ! to NTLP's execution.
+    !
+    ! NOTE: This must be called before any of the other routines provided by
+    !       this module.  It also should only be called at most once before
+    !       shutdown_measurements() is called.  Once the module has been
+    !       shutdown, it may be initialized again.
+    !
+    subroutine initialize_profiling()
+
+        use measure, only:    create_phase, &
+                              initialize_base_measurements => initialize_measurements
+
+        implicit none
+
+        call initialize_base_measurements()
+
+        measurement_id_derivatives            = create_phase( "calculating derivatives" )
+        measurement_id_eddy_viscosity_and_bcs = create_phase( "eddy viscosity and BCs" )
+        measurement_id_flow_solve_1           = create_phase( "flow solve - 1" )
+        measurement_id_flow_solve_2           = create_phase( "flow solve - 2" )
+        measurement_id_flow_solve_p           = create_phase( "flow solve - p" )
+        measurement_id_humidity               = create_phase( "humidity" )
+        measurement_id_io_histograms          = create_phase( "I/O - histograms" )
+        measurement_id_io_history             = create_phase( "I/O - history" )
+        measurement_id_io_particles           = create_phase( "I/O - particles" )
+        measurement_id_io_pressure            = create_phase( "I/O - pressure field" )
+        measurement_id_io_tecio               = create_phase( "I/O - TecIO" )
+        measurement_id_io_viz                 = create_phase( "I/O - viz" )
+        measurement_id_particles              = create_phase( "particles" )
+        measurement_id_setup                  = create_phase( "setup" )
+        measurement_id_solver                 = create_phase( "solver" )
+        measurement_id_timestepping_loop      = create_phase( "solver time stepping loop" )
+
+    end subroutine initialize_profiling
+
+    subroutine report_profile( file_unit )
+
+        use measure, only:    is_initialized, &
+                              get_duration, &
+                              print_duration
+
+        integer, intent(in)  :: file_unit
+
+        ! Measured durations.
+        real                 :: duration_derivatives, &
+                                duration_eddy_viscosity_and_bcs, &
+                                duration_flow_solve_1, &
+                                duration_flow_solve_2, &
+                                duration_flow_solve_p, &
+                                duration_humidity, &
+                                duration_io_histograms, &
+                                duration_io_history, &
+                                duration_io_particles, &
+                                duration_io_pressure, &
+                                duration_io_tecio, &
+                                duration_io_viz, &
+                                duration_particles, &
+                                duration_setup, &
+                                duration_solver, &
+                                duration_timestepping_loop
+
+        ! Computed durations.
+        real                 :: total_duration, &
+                                io_duration, &
+                                particles_duration
+
+        character, parameter :: newline = new_line( "a" )
+
+        ! We can't report anything if we're not initialized.
+        if( .not. is_initialized() ) then
+            write( file_unit, "(A)" ) "The measurements module is not initialized.  Cannot report measurements!"
+
+            return
+        end if
+
+        ! Get each phase's duration so we can report it and its percentage
+        ! relative to the total duration.
+        duration_derivatives            = get_duration( measurement_id_derivatives )
+        duration_eddy_viscosity_and_bcs = get_duration( measurement_id_eddy_viscosity_and_bcs )
+        duration_flow_solve_1           = get_duration( measurement_id_flow_solve_1 )
+        duration_flow_solve_2           = get_duration( measurement_id_flow_solve_2 )
+        duration_flow_solve_p           = get_duration( measurement_id_flow_solve_p )
+        duration_humidity               = get_duration( measurement_id_humidity )
+        duration_io_histograms          = get_duration( measurement_id_io_histograms )
+        duration_io_history             = get_duration( measurement_id_io_history )
+        duration_io_particles           = get_duration( measurement_id_io_particles )
+        duration_io_pressure            = get_duration( measurement_id_io_pressure )
+        duration_io_tecio               = get_duration( measurement_id_io_tecio )
+        duration_io_viz                 = get_duration( measurement_id_io_viz )
+        duration_particles              = get_duration( measurement_id_particles )
+        duration_setup                  = get_duration( measurement_id_setup )
+        duration_solver                 = get_duration( measurement_id_solver )
+        duration_timestepping_loop      = get_duration( measurement_id_timestepping_loop )
+
+        ! Sum the measured durations into higher-level phases.
+
+        !
+        ! NOTE: This is intended to capture any setup, pre-processing, the main
+        !       solve and any post-processing.  If NTLP is only the main solve
+        !       then there is no need to compute total_duration.
+        !
+        total_duration = ( &
+             duration_solver &
+             )
+
+        ! Compute the aggregate time spent performing I/O, regardless of the
+        ! file type or format.
+        io_duration = ( &
+             duration_io_histograms + &
+             duration_io_history + &
+             duration_io_particles + &
+             duration_io_pressure + &
+             duration_io_tecio + &
+             duration_io_viz &
+             )
+
+        !
+        ! NOTE: It is assumed that the granularity of measurements for particle
+        !       advection will increase and this provides an aggregate time
+        !       for all related routines.
+        !
+        particles_duration = ( &
+             duration_particles &
+             )
+
+        write( file_unit, "(A,2A)" ) "Measurements report:", newline
+
+        write( file_unit, "(A,2A)" )    "  Program run-time:", newline
+        call print_duration( file_unit, "      Total:                         ", &
+             duration_solver, total_duration )
+        write( file_unit, "(A)" ) ""
+
+        call print_duration( file_unit, "      Solver:                        ", &
+             duration_solver, total_duration )
+        call print_duration( file_unit, "          Setup:                         ", &
+             duration_setup, duration_solver )
+
+        write( file_unit, "(A)" ) ""
+
+        call print_duration( file_unit, "          Time stepping:                 ", &
+             duration_timestepping_loop, duration_solver )
+        call print_duration( file_unit, "              Derivatives:                   ", &
+             duration_derivatives, duration_timestepping_loop )
+        call print_duration( file_unit, "              Flow solve #1:                 ", &
+             duration_flow_solve_1, duration_timestepping_loop )
+        call print_duration( file_unit, "              Flow solve #2:                 ", &
+             duration_flow_solve_p, duration_timestepping_loop )
+        call print_duration( file_unit, "              Flow solve #3:                 ", &
+             duration_flow_solve_2, duration_timestepping_loop )
+        call print_duration( file_unit, "              Eddy viscosity/BCs:            ", &
+             duration_eddy_viscosity_and_bcs, duration_timestepping_loop )
+        call print_duration( file_unit, "              Humidity control:              ", &
+             duration_humidity, duration_timestepping_loop )
+        call print_duration( file_unit, "              Particles:                     ", &
+             duration_particles, duration_timestepping_loop )
+        call print_duration( file_unit, "              Writing outputs:               ", &
+             io_duration, duration_timestepping_loop )
+
+        write( file_unit, "(A)" ) ""
+
+        call print_duration( file_unit, "      I/O:                           ", &
+             io_duration, duration_solver )
+        call print_duration( file_unit, "          Histograms:                    ", &
+             duration_io_histograms, io_duration )
+        call print_duration( file_unit, "          History:                       ", &
+             duration_io_history, io_duration )
+        call print_duration( file_unit, "          Particles:                     ", &
+             duration_io_particles, io_duration )
+        call print_duration( file_unit, "          Pressure field:                ", &
+             duration_io_pressure, io_duration )
+        call print_duration( file_unit, "          TecIO:                         ", &
+             duration_io_tecio, io_duration )
+        call print_duration( file_unit, "          Viz:                           ", &
+             duration_io_viz, io_duration )
+
+        write( file_unit, "(A)" ) ""
+
+    end subroutine report_profile
+
+    ! Shuts down the module and releases the measurement resources allocated
+    ! when it was initialized.  Additional calls to the module's routines,
+    ! except another call to initialize_measurements() to re-initialize the
+    ! module, are forbidden.  Each of the phase identifiers exposed by the
+    ! module are set to zero to mark them as invalid.
+    subroutine shutdown_profiling()
+
+        use measure, only:    shutdown_base_measurements => shutdown_measurements
+
+        implicit none
+
+        call shutdown_base_measurements()
+
+        ! Clear each of the phase identifiers so they can't accidentally be used
+        ! after shutdown.
+        measurement_id_derivatives            = 0
+        measurement_id_eddy_viscosity_and_bcs = 0
+        measurement_id_flow_solve_1           = 0
+        measurement_id_flow_solve_2           = 0
+        measurement_id_flow_solve_p           = 0
+        measurement_id_humidity               = 0
+        measurement_id_io_histograms          = 0
+        measurement_id_io_history             = 0
+        measurement_id_io_particles           = 0
+        measurement_id_io_pressure            = 0
+        measurement_id_io_tecio               = 0
+        measurement_id_io_viz                 = 0
+        measurement_id_particles              = 0
+        measurement_id_setup                  = 0
+        measurement_id_solver                 = 0
+        measurement_id_timestepping_loop      = 0
+
+    end subroutine shutdown_profiling
+
+end module profiling
