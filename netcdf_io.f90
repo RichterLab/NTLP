@@ -74,6 +74,7 @@ subroutine netcdf_init
       implicit none
 
       integer :: dimids(1),dimids_zu(2),dimids_zw(2),dimids_zu_s(3),dimids_zw_s(3)
+      integer :: dimids_zu_only(1),dimids_zw_only(1)
 
       path_netcdf_his = trim(adjustl(path_seed))//"history.nc"
 
@@ -89,6 +90,8 @@ subroutine netcdf_init
       dimids = (/ time_dimid /)
       dimids_zu = (/ zu_dimid, time_dimid/)
       dimids_zw = (/ zw_dimid, time_dimid/)
+      dimids_zu_only = (/ zu_dimid/)
+      dimids_zw_only = (/ zw_dimid/)
       dimids_zu_s = (/ zu_dimid, s_dimid, time_dimid/)
       dimids_zw_s = (/ zw_dimid, s_dimid, time_dimid/)
 
@@ -164,10 +167,10 @@ subroutine netcdf_init
 
 
 !!! Profiles
-      call netcdf_check( nf90_def_var(ncid, "zu", NF90_REAL, dimids_zu,zu_vid) )
+      call netcdf_check( nf90_def_var(ncid, "zu", NF90_REAL, dimids_zu_only,zu_vid) )
       call netcdf_check( nf90_put_att(ncid,zu_vid,"title","z levels at u-points") )
 
-      call netcdf_check( nf90_def_var(ncid, "zw", NF90_REAL, dimids_zw,zw_vid) )
+      call netcdf_check( nf90_def_var(ncid, "zw", NF90_REAL, dimids_zw_only,zw_vid) )
       call netcdf_check( nf90_put_att(ncid,zw_vid,"title","z levels at w-points") )
 
       call netcdf_check( nf90_def_var(ncid,"uxym",NF90_REAL, dimids_zu,uxym_vid) )
@@ -351,6 +354,7 @@ subroutine netcdf_res
       implicit none
 
       integer :: dimids(1),dimids_zu(2),dimids_zw(2),dimids_zu_s(3),dimids_zw_s(3)
+      integer :: dimids_zu_only(1),dimids_zw_only(1)
       integer :: Ntime
 
       path_netcdf_his = trim(adjustl(path_seed))//"history.nc"
@@ -365,6 +369,8 @@ subroutine netcdf_res
       dimids = (/ time_dimid /)
       dimids_zu = (/ zu_dimid, time_dimid/)
       dimids_zw = (/ zw_dimid, time_dimid/)
+      dimids_zu_only = (/ zu_dimid/)
+      dimids_zw_only = (/ zw_dimid/)
       dimids_zu_s = (/ zu_dimid, s_dimid, time_dimid/)
       dimids_zw_s = (/ zw_dimid, s_dimid, time_dimid/)
 
@@ -477,6 +483,12 @@ subroutine write_his_netcdf
       call netcdf_check( nf90_put_var(ncid, time_vid, real(time),start=(/his_counter/)) )
       call netcdf_check( nf90_put_var(ncid, dt_vid, real(dt),start=(/his_counter/)) )
 
+      !Only write the grid on the first call
+      if (his_counter.eq.1) then
+      call netcdf_check( nf90_put_var(ncid, zu_vid, real(zz(1:nnz)),start=(/1/)) )
+      call netcdf_check( nf90_put_var(ncid, zw_vid, real(z(0:nnz)),start=(/1/)) )
+      end if
+
       call netcdf_check( nf90_put_var(ncid, utau_vid, real(utau),start=(/his_counter/)) )
       call netcdf_check( nf90_put_var(ncid, uwsfc_vid, real(uwsfc),start=(/his_counter/)) )
       call netcdf_check( nf90_put_var(ncid, tnumpart_vid, real(tnumpart),start=(/his_counter/)) )
@@ -498,9 +510,6 @@ subroutine write_his_netcdf
       call netcdf_check( nf90_put_var(ncid, radmsqr_vid, real(radmsqr),start=(/his_counter/)) )
       call netcdf_check( nf90_put_var(ncid, radavg_center_vid, real(radavg_center),start=(/his_counter/)) )
       call netcdf_check( nf90_put_var(ncid, radmsqr_center_vid, real(radmsqr_center),start=(/his_counter/)) )
-
-      call netcdf_check( nf90_put_var(ncid, zu_vid, real(zz(1:nnz)),start=(/1, his_counter/)) )
-      call netcdf_check( nf90_put_var(ncid, zw_vid, real(z(0:nnz)),start=(/1, his_counter/)) )
 
       call netcdf_check( nf90_put_var(ncid,uxym_vid,real(uxym(1:nnz)),start=(/1, his_counter/)) )
       call netcdf_check( nf90_put_var(ncid,vxym_vid,real(vxym(1:nnz)),start=(/1, his_counter/)) )
