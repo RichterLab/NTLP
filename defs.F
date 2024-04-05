@@ -159,6 +159,18 @@ c     ----------------------------------------------------------------------
      +     utau, wtsfc(:), 
      +     uwsfc, vwsfc, amonin,
      +     zol, hol, smal_e, sml_eg, u10
+
+      !Integers
+      type con_i
+      sequence
+      integer :: his_counter,histog_counter,viz_counter
+      end type con_i
+
+      type(con_i), target :: c_i
+      integer, pointer :: 
+     + his_counter,histog_counter,viz_counter
+       
+   
       contains
       subroutine fill_cc
 c     
@@ -207,6 +219,13 @@ c
       u10   => c_c%u10
       return
       end subroutine fill_cc
+      subroutine fill_ci
+
+      his_counter => c_i%his_counter
+      histog_counter => c_i%histog_counter
+      viz_counter => c_i%viz_counter
+
+      end subroutine fill_ci
       end module con_data
 c ----------------------------------------------------------------------
       module con_stats

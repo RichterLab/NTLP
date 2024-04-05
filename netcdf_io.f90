@@ -51,7 +51,6 @@ integer :: u_xy_vid,t_xy_vid,q_xy_vid,w_xy_vid,v_xy_vid
 integer :: u_xz_vid,t_xz_vid,q_xz_vid,w_xz_vid,v_xz_vid
 integer :: xgrid_vid,ygrid_vid,zugrid_vid,zwgrid_vid
 
-integer :: his_counter,histog_counter,viz_counter
 character(len=80) :: path_netcdf_his,path_netcdf_histog,path_netcdf_viz
 
 CONTAINS
@@ -71,6 +70,7 @@ end subroutine netcdf_check
 subroutine netcdf_init
       use netcdf
       use pars
+      use con_data
       implicit none
 
       integer :: dimids(1),dimids_zu(2),dimids_zw(2),dimids_zu_s(3),dimids_zw_s(3)
@@ -350,6 +350,7 @@ end subroutine netcdf_init
 subroutine netcdf_res
 !https://www.unidata.ucar.edu/software/netcdf/docs-fortran/f90-use-of-the-netcdf-library.html#f90-writing-data-in-an-existing-netcdf-dataset
       use netcdf
+      use con_data
       use pars
       implicit none
 
@@ -373,10 +374,6 @@ subroutine netcdf_res
       dimids_zw_only = (/ zw_dimid/)
       dimids_zu_s = (/ zu_dimid, s_dimid, time_dimid/)
       dimids_zw_s = (/ zw_dimid, s_dimid, time_dimid/)
-
-      !Get the length of the unlimited time dimension
-      call netcdf_check( nf90_inquire_dimension(ncid=ncid,dimid=time_dimid,len=Ntime) )
-      his_counter = Ntime + 1
 
       if (myid==0) write(*,*) 'Restart his_counter for netCDF = ',his_counter
 
@@ -608,6 +605,7 @@ end subroutine write_his_netcdf
 subroutine netcdf_init_histog
       use netcdf
       use pars
+      use con_data
       use particles
       implicit none
 
@@ -675,6 +673,7 @@ end subroutine netcdf_init_histog
 subroutine netcdf_res_histog
       use netcdf
       use pars
+      use con_data
       use particles
       implicit none
 
@@ -688,9 +687,6 @@ subroutine netcdf_res_histog
 
       call netcdf_check (nf90_inq_dimid(ncid_histog,'time',time_histog_dimid) )
       call netcdf_check (nf90_inq_dimid(ncid_histog,'histbins',histbins_dimid) )
-
-      call netcdf_check( nf90_inquire_dimension(ncid=ncid_histog,dimid=time_histog_dimid,len=Ntime) )
-      histog_counter = Ntime + 1
 
       if (myid==0) write(*,*) 'Restart histog_counter for netCDF = ',histog_counter
 
@@ -756,6 +752,7 @@ end subroutine write_histog_netcdf
 subroutine netcdf_init_viz
       use netcdf
       use pars
+      use con_data
       use particles
       implicit none
       include 'mpif.h'
@@ -864,6 +861,7 @@ end subroutine netcdf_init_viz
 subroutine netcdf_res_viz
       use netcdf
       use pars
+      use con_data
       use particles
       implicit none
       include 'mpif.h'
@@ -883,8 +881,6 @@ subroutine netcdf_res_viz
       call netcdf_check (nf90_inq_dimid(ncid_viz,'nzu',viz_nzu_dimid) )
       call netcdf_check (nf90_inq_dimid(ncid_viz,'nzw',viz_nzw_dimid) )
 
-      call netcdf_check( nf90_inquire_dimension(ncid=ncid_viz,dimid=time_viz_dimid,len=Ntime) )
-      viz_counter = Ntime + 1
 
       if (myid==0) write(*,*) 'Restart viz_counter for netCDF = ',viz_counter
 

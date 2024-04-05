@@ -8333,6 +8333,7 @@ c               and data structures
 c
       call fill_cc
       call fill_cs
+      call fill_ci
 
       if (myid==0) write(6,5001) isize
  5001 format(' size of stats array = ',i8)
@@ -8741,7 +8742,7 @@ c
 c ------------ every mpi process reads constant file
 c
       rewind(nvelc)
-      read(nvelc,err=9993) c_c, c_s, case
+      read(nvelc,err=9993) c_c, c_s, c_i, case
       close(nvelc)
 c
       if(l_root) write(6,4001) case
@@ -9308,7 +9309,7 @@ c ---- open file
 c
       open(nvelc,err=9992,file=path_sav_c,form='unformatted',
      +                status='unknown')
-      write(nvelc,err=9992) c_c, c_s, case
+      write(nvelc,err=9992) c_c, c_s, c_i, case
       close(nvelc)
 c
         inquire(file=path_sav_c,exist=there)
