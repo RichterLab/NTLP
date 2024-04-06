@@ -29,7 +29,7 @@ c
       real :: grav,t00,fcor,zi,zl,xl,yl,zw1,dpdx
       real :: ugcont,vgcont,zo,zos,surf_RH,psurf,surf_temp
       real :: meanRH,varRH
-      real :: Swall,nprime
+      real :: nprime
       real :: dvdr,hurr_rad
       integer :: isfc(nscl)
 
@@ -145,7 +145,7 @@ c     ----------------------------------------------------------------------
      +     time, zody, zody74, zosdy,
      +     utau, wtsfc(nscl),
      +     uwsfc, vwsfc, amonin,
-     +     zol, hol, smal_e, sml_eg, u10
+     +     zol, hol, smal_e, sml_eg, u10, Swall
       end type con_d
       type(con_d), target :: c_c
       real, pointer ::
@@ -158,7 +158,7 @@ c     ----------------------------------------------------------------------
      +     time, zody, zody74, zosdy,
      +     utau, wtsfc(:), 
      +     uwsfc, vwsfc, amonin,
-     +     zol, hol, smal_e, sml_eg, u10
+     +     zol, hol, smal_e, sml_eg, u10, Swall
 
       !Integers
       type con_i
@@ -216,7 +216,8 @@ c
       hol    => c_c%hol
       smal_e => c_c%smal_e
       sml_eg => c_c%sml_eg
-      u10   => c_c%u10
+      u10    => c_c%u10
+      Swall  => c_c%Swall
       return
       end subroutine fill_cc
       subroutine fill_ci
