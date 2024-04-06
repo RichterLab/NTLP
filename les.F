@@ -81,6 +81,15 @@ c ---------- initialize the profiling modules
 
 !----- Read the input file for all necessary parameters
       call start_phase(measurement_id_setup)
+
+c
+c ------------- establish association between pointers
+c               and data structures
+c
+      call fill_cc
+      call fill_cs
+      call fill_ci
+
       call read_input_file
 
 c
@@ -8327,13 +8336,6 @@ c
       use fftwk
       use con_data
       use con_stats
-c
-c ------------- establish association between pointers
-c               and data structures
-c
-      call fill_cc
-      call fill_cs
-      call fill_ci
 
       if (myid==0) write(6,5001) isize
  5001 format(' size of stats array = ',i8)
