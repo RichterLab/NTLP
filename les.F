@@ -295,6 +295,34 @@ c
       endif
       call end_phase(measurement_id_eddy_viscosity_and_bcs)
 
+
+c
+c ------------ save history files
+c
+      if(mnout .and. istage .eq. 1)  then
+          if(l_debug) then
+             call print(nprt,it,izs,ize)
+          endif
+          if(l_root) call print(6,it,1,nnz)
+      endif
+      if(l_root) then
+         if (inetcdf .eq. 1) then
+           call start_phase(measurement_id_io_history)
+           if(mhis  .and. istage .eq. 1)  call write_his_netcdf
+           if(mhis  .and. istage .eq. 1 .and. mtape) then
+              call close_his_netcdf
+           endif
+           call end_phase(measurement_id_io_history)
+
+         else
+            call start_phase(measurement_id_io_history)
+            if(mhis  .and. istage .eq. 1)  call write_his(itop)
+            if(mhis  .and. istage .eq. 1 .and. mtape) call close_his
+            call end_phase(measurement_id_io_history)
+
+         end if
+      endif
+
 c
 c ------------ save velocity field
 c
@@ -304,6 +332,10 @@ c
          call save_particles
          call end_phase(measurement_id_io_particles)
       endif
+
+c
+c ------------ save viz files
+c
       if(msave_v .and. istage .eq. 1) then
          call start_phase(measurement_id_io_viz)
          if (iviznetcdf) then
@@ -364,44 +396,20 @@ c
 c -------- update particles
 c
          if (ipart_method .eq. 1) then
-         t_s = mpi_wtime()
-         !call particle_update_cn(it,istage)
          call start_phase(measurement_id_particles)
          call particle_update_rk3(it,istage)
          call end_phase(measurement_id_particles)
-
-         t_f = mpi_wtime()
-         call mpi_barrier(mpi_comm_world,ierr)
-         if (myid==5) write(*,*) 'time part: ',t_f-t_s
          end if
 
 
-      if(mnout .and. istage .eq. 1)  then
-          if(l_debug) then
-             call print(nprt,it,izs,ize)
-          endif
-          if(l_root) call print(6,it,1,nnz)
-      endif
       if(l_root) then
          if (inetcdf .eq. 1) then
-           call start_phase(measurement_id_io_history)
-           if(mhis  .and. istage .eq. 1)  call write_his_netcdf
-           if(mhis  .and. istage .eq. 1 .and. mtape) then
-              call close_his_netcdf
-           endif
-           call end_phase(measurement_id_io_history)
-
            call start_phase(measurement_id_io_histograms)
            if(mhis  .and. istage .eq. 1 .and. mtape)  then
               call close_histog_netcdf
            endif
            call end_phase(measurement_id_io_histograms)
          else
-            call start_phase(measurement_id_io_history)
-            if(mhis  .and. istage .eq. 1)  call write_his(itop)
-            if(mhis  .and. istage .eq. 1 .and. mtape) call close_his
-            call end_phase(measurement_id_io_history)
-
             call start_phase(measurement_id_io_histograms)
             if(mhis  .and. istage .eq. 1 .and. mtape) then
               call close_histograms
