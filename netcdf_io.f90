@@ -477,6 +477,8 @@ subroutine write_his_netcdf
       implicit none
       real :: tmp(0:nnz),tmp_s(0:nnz,nscl)
 
+      write(*,'(a35,i)') 'WRITE HISTORY FILE, HIS_COUNTER = ',his_counter
+
       call netcdf_check( nf90_put_var(ncid, time_vid, real(time),start=(/his_counter/)) )
       call netcdf_check( nf90_put_var(ncid, dt_vid, real(dt),start=(/his_counter/)) )
 
