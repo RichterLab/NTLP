@@ -6948,7 +6948,7 @@ c
       if(ihst .lt. 0) then
          mhis = .false.
       else
-         mhis = (mod(it,ihst).eq.0 .and. it .ge. it_his)
+         mhis = (mod(it,ihst).eq.0 .and. it.ge.it_his .or. it.eq.1)
       endif
        mtrans = (mod(it+1,ihst).eq.0)
 
