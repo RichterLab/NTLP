@@ -402,21 +402,19 @@ c
          end if
 
 
+      call start_phase(measurement_id_io_histograms)
       if(l_root) then
          if (inetcdf .eq. 1) then
-           call start_phase(measurement_id_io_histograms)
            if(mhis  .and. istage .eq. 1 .and. mtape)  then
               call close_histog_netcdf
            endif
-           call end_phase(measurement_id_io_histograms)
          else
-            call start_phase(measurement_id_io_histograms)
             if(mhis  .and. istage .eq. 1 .and. mtape) then
               call close_histograms
             end if
-            call end_phase(measurement_id_io_histograms)
          end if
       endif
+      call end_phase(measurement_id_io_histograms)
 c
  8999 continue
 
@@ -436,15 +434,15 @@ c
       !part of RK scheme
       if (icoalesce) then
 
-         call start_phase(measurement_id_particles)
+         call start_phase(measurement_id_particle_coalesce)
          call particle_coalesce
-         call end_phase(measurement_id_particles)
+         call end_phase(measurement_id_particle_coalesce)
 
       end if
 
       if (ipartdiff) then
 
-        call start_phase(measurement_id_particles)
+        call start_phase(measurement_id_particle_diff)
         if (isfs == 2) then
            !Call Weil et al. (2004) Lagrangian stochastic model
            call SFS_velocity
@@ -452,23 +450,26 @@ c
            !Call stochastic model for the position based on vis_s
            call SFS_position
         end if
-        call end_phase(measurement_id_particles)
+        call end_phase(measurement_id_particle_diff)
 
       end if
 
       if (ireintro) then
-         call start_phase(measurement_id_particles)
+         call start_phase(measurement_id_particle_reintro)
          call particle_reintro(it)
-         call end_phase(measurement_id_particles)
+         call end_phase(measurement_id_particle_reintro)
       end if
 
       if (mhis) then
-         call start_phase(measurement_id_particles)
+         call start_phase(measurement_id_io_histograms)
          call radius_histogram
+         call end_phase(measurement_id_io_histograms)
+
+         call start_phase(measurement_id_io_traj)
          if (itrajout) then
          call particle_write_traj(it)
          end if
-         call end_phase(measurement_id_particles)
+         call end_phase(measurement_id_io_traj)
       end if
 
 #ifdef TECIO
