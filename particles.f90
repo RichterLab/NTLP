@@ -3095,6 +3095,7 @@ CONTAINS
       use pars
       use con_data
       use con_stats
+      use profiling
       implicit none
       include 'mpif.h'
 

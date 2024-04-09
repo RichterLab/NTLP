@@ -1016,12 +1016,16 @@ module profiling
          measurement_id_io_histograms, &
          measurement_id_io_history, &
          measurement_id_io_particles, &
+         measurement_id_io_traj, &
          measurement_id_io_pressure, &
          measurement_id_io_tecio, &
          measurement_id_io_viz, &
 
          ! Time spent advecting particles with the computed flow.
          measurement_id_particles, &
+         measurement_id_particle_reintro, &
+         measurement_id_particle_diff, &
+         measurement_id_particle_coalesce, &
 
          ! Time spent setting the simulation up.
          measurement_id_setup, &
@@ -1059,17 +1063,21 @@ contains
 
         measurement_id_derivatives            = create_phase( "calculating derivatives" )
         measurement_id_eddy_viscosity_and_bcs = create_phase( "eddy viscosity and BCs" )
-        measurement_id_flow_solve_1           = create_phase( "flow solve - 1" )
-        measurement_id_flow_solve_2           = create_phase( "flow solve - 2" )
-        measurement_id_flow_solve_p           = create_phase( "flow solve - p" )
+        measurement_id_flow_solve_1           = create_phase( "flow solve comp1" )
+        measurement_id_flow_solve_2           = create_phase( "flow solve comp2" )
+        measurement_id_flow_solve_p           = create_phase( "flow solve comp_p" )
         measurement_id_humidity               = create_phase( "humidity" )
         measurement_id_io_histograms          = create_phase( "I/O - histograms" )
         measurement_id_io_history             = create_phase( "I/O - history" )
         measurement_id_io_particles           = create_phase( "I/O - particles" )
+        measurement_id_io_traj                = create_phase( "I/O - trajectories" )
         measurement_id_io_pressure            = create_phase( "I/O - pressure field" )
         measurement_id_io_tecio               = create_phase( "I/O - TecIO" )
         measurement_id_io_viz                 = create_phase( "I/O - viz" )
         measurement_id_particles              = create_phase( "particles" )
+        measurement_id_particle_reintro       = create_phase( "particle_reintro" )
+        measurement_id_particle_diff          = create_phase( "particle_diff" )
+        measurement_id_particle_coalesce      = create_phase( "particle_coalesce" )
         measurement_id_setup                  = create_phase( "setup" )
         measurement_id_solver                 = create_phase( "solver" )
         measurement_id_timestepping_loop      = create_phase( "solver time stepping loop" )
@@ -1081,6 +1089,8 @@ contains
         use measure, only:    is_initialized, &
                               get_duration, &
                               print_duration
+
+        implicit none
 
         integer, intent(in)  :: file_unit
 
@@ -1094,10 +1104,14 @@ contains
                                 duration_io_histograms, &
                                 duration_io_history, &
                                 duration_io_particles, &
+                                duration_io_traj, &
                                 duration_io_pressure, &
                                 duration_io_tecio, &
                                 duration_io_viz, &
                                 duration_particles, &
+                                duration_particle_reintro, &
+                                duration_particle_diff, &
+                                duration_particle_coalesce, &
                                 duration_setup, &
                                 duration_solver, &
                                 duration_timestepping_loop
@@ -1127,10 +1141,14 @@ contains
         duration_io_histograms          = get_duration( measurement_id_io_histograms )
         duration_io_history             = get_duration( measurement_id_io_history )
         duration_io_particles           = get_duration( measurement_id_io_particles )
+        duration_io_traj                = get_duration( measurement_id_io_traj )
         duration_io_pressure            = get_duration( measurement_id_io_pressure )
         duration_io_tecio               = get_duration( measurement_id_io_tecio )
         duration_io_viz                 = get_duration( measurement_id_io_viz )
         duration_particles              = get_duration( measurement_id_particles )
+        duration_particle_reintro       = get_duration( measurement_id_particle_reintro )
+        duration_particle_diff          = get_duration( measurement_id_particle_diff )
+        duration_particle_coalesce      = get_duration( measurement_id_particle_coalesce )
         duration_setup                  = get_duration( measurement_id_setup )
         duration_solver                 = get_duration( measurement_id_solver )
         duration_timestepping_loop      = get_duration( measurement_id_timestepping_loop )
@@ -1152,6 +1170,7 @@ contains
              duration_io_histograms + &
              duration_io_history + &
              duration_io_particles + &
+             duration_io_traj + &
              duration_io_pressure + &
              duration_io_tecio + &
              duration_io_viz &
@@ -1163,7 +1182,10 @@ contains
         !       for all related routines.
         !
         particles_duration = ( &
-             duration_particles &
+             duration_particles + &
+             duration_particle_reintro + &
+             duration_particle_diff + &
+             duration_particle_coalesce &
              )
 
         write( file_unit, "(A,2A)" ) "Measurements report:", newline
@@ -1184,11 +1206,11 @@ contains
              duration_timestepping_loop, duration_solver )
         call print_duration( file_unit, "              Derivatives:                   ", &
              duration_derivatives, duration_timestepping_loop )
-        call print_duration( file_unit, "              Flow solve #1:                 ", &
+        call print_duration( file_unit, "              Flow comp1:                    ", &
              duration_flow_solve_1, duration_timestepping_loop )
-        call print_duration( file_unit, "              Flow solve #2:                 ", &
+        call print_duration( file_unit, "              Flow comp_p:                   ", &
              duration_flow_solve_p, duration_timestepping_loop )
-        call print_duration( file_unit, "              Flow solve #3:                 ", &
+        call print_duration( file_unit, "              Flow comp2:                    ", &
              duration_flow_solve_2, duration_timestepping_loop )
         call print_duration( file_unit, "              Eddy viscosity/BCs:            ", &
              duration_eddy_viscosity_and_bcs, duration_timestepping_loop )
@@ -1201,6 +1223,17 @@ contains
 
         write( file_unit, "(A)" ) ""
 
+        call print_duration( file_unit, "      Particles:                           ", &
+             particles_duration, duration_solver )
+        call print_duration( file_unit, "          particle_reintro:                    ", &
+             duration_particle_reintro, particles_duration )
+        call print_duration( file_unit, "          particle_diff:                       ", &
+             duration_particle_diff, particles_duration )
+        call print_duration( file_unit, "          particle_coalesce:                   ", &
+             duration_particle_coalesce, particles_duration )
+
+        write( file_unit, "(A)" ) ""
+
         call print_duration( file_unit, "      I/O:                           ", &
              io_duration, duration_solver )
         call print_duration( file_unit, "          Histograms:                    ", &
@@ -1209,6 +1242,8 @@ contains
              duration_io_history, io_duration )
         call print_duration( file_unit, "          Particles:                     ", &
              duration_io_particles, io_duration )
+        call print_duration( file_unit, "          Trajectories:                  ", &
+             duration_io_traj, io_duration )
         call print_duration( file_unit, "          Pressure field:                ", &
              duration_io_pressure, io_duration )
         call print_duration( file_unit, "          TecIO:                         ", &
@@ -1244,10 +1279,14 @@ contains
         measurement_id_io_histograms          = 0
         measurement_id_io_history             = 0
         measurement_id_io_particles           = 0
+        measurement_id_io_traj                = 0
         measurement_id_io_pressure            = 0
         measurement_id_io_tecio               = 0
         measurement_id_io_viz                 = 0
         measurement_id_particles              = 0
+        measurement_id_particle_reintro       = 0
+        measurement_id_particle_diff          = 0
+        measurement_id_particle_coalesce      = 0
         measurement_id_setup                  = 0
         measurement_id_solver                 = 0
         measurement_id_timestepping_loop      = 0
