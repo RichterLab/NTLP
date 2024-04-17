@@ -1140,7 +1140,8 @@ contains
         ! Computed durations.
         real                 :: total_duration, &
                                 io_duration, &
-                                particles_duration
+                                particles_duration, &
+                                flow_duration
 
         character, parameter :: newline = new_line( "a" )
 
@@ -1204,11 +1205,6 @@ contains
              duration_io_viz &
              )
 
-        !
-        ! NOTE: It is assumed that the granularity of measurements for particle
-        !       advection will increase and this provides an aggregate time
-        !       for all related routines.
-        !
         particles_duration = ( &
              duration_particle_solver + &
              duration_particle_reintro + &
@@ -1216,64 +1212,68 @@ contains
              duration_particle_coalesce &
              )
 
+        flow_duration = ( &
+             duration_flow_solve_1 + &
+             duration_flow_solve_p + &
+             duration_flow_solve_2 + &
+             duration_eddy_viscosity_and_bcs + &
+             duration_humidity &
+             )
+
         write( file_unit, "(A,2A)" ) "Measurements report:", newline
 
         write( file_unit, "(A,2A)" )    "  Program run-time:", newline
         call print_duration( file_unit, "      Total:                         ", &
              duration_solver, total_duration )
+
         write( file_unit, "(A)" ) ""
 
-        call print_duration( file_unit, "      Solver:                        ", &
-             duration_solver, total_duration )
-        call print_duration( file_unit, "          Setup:                         ", &
+        call print_duration( file_unit, "      Setup:                         ", &
              duration_setup, duration_solver )
 
         write( file_unit, "(A)" ) ""
 
-        call print_duration( file_unit, "          Time stepping:                 ", &
-             duration_timestepping_loop, duration_solver )
-        call print_duration( file_unit, "              Derivatives:                   ", &
-             duration_derivatives, duration_timestepping_loop )
-        call print_duration( file_unit, "              Flow comp1:                    ", &
-             duration_flow_solve_1, duration_timestepping_loop )
-        call print_duration( file_unit, "              Flow comp_p:                   ", &
-             duration_flow_solve_p, duration_timestepping_loop )
-        call print_duration( file_unit, "              Flow comp2:                    ", &
-             duration_flow_solve_2, duration_timestepping_loop )
-        call print_duration( file_unit, "              Eddy viscosity/BCs:            ", &
-             duration_eddy_viscosity_and_bcs, duration_timestepping_loop )
-        call print_duration( file_unit, "              Humidity control:              ", &
-             duration_humidity, duration_timestepping_loop )
-        call print_duration( file_unit, "              Particle solver:               ", &
-             particles_duration, duration_timestepping_loop )
-        call print_duration( file_unit, "              Writing outputs:               ", &
-             io_duration, duration_timestepping_loop )
+        call print_duration( file_unit, "      Flow solver:                   ", &
+             flow_duration, total_duration )
+
+        call print_duration( file_unit, "          get_derv:                      ", &
+             duration_derivatives, flow_duration )
+        call print_duration( file_unit, "          comp1:                         ", &
+             duration_flow_solve_1, flow_duration )
+        call print_duration( file_unit, "          comp_p:                        ", &
+             duration_flow_solve_p, flow_duration )
+        call print_duration( file_unit, "          comp2:                         ", &
+             duration_flow_solve_2, flow_duration )
+        call print_duration( file_unit, "          Eddy viscosity/BCs:            ", &
+             duration_eddy_viscosity_and_bcs, flow_duration )
+        call print_duration( file_unit, "          Humidity control:              ", &
+             duration_humidity, flow_duration )
 
         write( file_unit, "(A)" ) ""
 
-        call print_duration( file_unit, "      Particles:                           ", &
+        call print_duration( file_unit, "      Particles:                     ", &
              particles_duration, duration_solver )
-        call print_duration( file_unit, "          particle_reintro:                    ", &
+        call print_duration( file_unit, "          particle_reintro:              ", &
              duration_particle_reintro, particles_duration )
-        call print_duration( file_unit, "          particle_diff:                       ", &
+        call print_duration( file_unit, "          particle_diff:                 ", &
              duration_particle_diff, particles_duration )
-        call print_duration( file_unit, "          particle_coalesce:                   ", &
+        call print_duration( file_unit, "          particle_coalesce:             ", &
              duration_particle_coalesce, particles_duration )
-        call print_duration( file_unit, "          particle_solver:                     ", &
+        call print_duration( file_unit, "          particle_solver:               ", &
              duration_particle_solver, particles_duration )
-        call print_duration( file_unit, "               particle_fill_ext:                   ", &
+        call print_duration( file_unit, "               particle_fill_ext:              ", &
              duration_particle_fill_ext, duration_particle_solver )
-        call print_duration( file_unit, "               particle_loop:                       ", &
+        call print_duration( file_unit, "               particle_loop:                  ", &
              duration_particle_loop, duration_particle_solver )
-        call print_duration( file_unit, "               particle_bcs:                        ", &
+        call print_duration( file_unit, "               particle_bcs:                   ", &
              duration_particle_bcs, duration_particle_solver )
-        call print_duration( file_unit, "               particle_exchange:                   ", &
+        call print_duration( file_unit, "               particle_exchange:              ", &
              duration_particle_exchange, duration_particle_solver )
-        call print_duration( file_unit, "               particle_coupling:                   ", &
+        call print_duration( file_unit, "               particle_coupling:              ", &
              duration_particle_coupling, duration_particle_solver )
-        call print_duration( file_unit, "               particle_ztox:                       ", &
+        call print_duration( file_unit, "               particle_ztox:                  ", &
              duration_particle_ztox, duration_particle_solver )
-        call print_duration( file_unit, "               particle_stats:                      ", &
+        call print_duration( file_unit, "               particle_stats:                 ", &
              duration_particle_stats, duration_particle_solver )
 
         write( file_unit, "(A)" ) ""
