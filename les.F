@@ -396,9 +396,9 @@ c
 c -------- update particles
 c
          if (ipart_method .eq. 1) then
-         call start_phase(measurement_id_particles)
+         call start_phase(measurement_id_particle_solver)
          call particle_update_rk3(it,istage)
-         call end_phase(measurement_id_particles)
+         call end_phase(measurement_id_particle_solver)
          end if
 
 
@@ -424,9 +424,9 @@ c
 
       if (ipart_method .eq. 2) then
 
-         call start_phase(measurement_id_particles)
+         call start_phase(measurement_id_particle_solver)
          call particle_update_BE(it)
-         call end_phase(measurement_id_particles)
+         call end_phase(measurement_id_particle_solver)
 
       end if
 
