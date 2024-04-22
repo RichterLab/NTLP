@@ -2388,8 +2388,8 @@ c
          do iy=iys,iye
          do ix=1,nnx
           if (iexner) then
-             r4(ix,iy,1,iz) = r4(ix,iy,1,iz) + partTsrc(ix,iy,iz)/
-     +                        exner(psurf,psurf-zz(iz)*rhoa*grav)
+          r4(ix,iy,1,iz) = r4(ix,iy,1,iz) + partTsrc(ix,iy,iz)/
+     +    exner(psurf,func_p_base(psurf,grav,Cpa,tsfcc(1),Rd,zz(iz)))
           else
              r4(ix,iy,1,iz) = r4(ix,iy,1,iz) + partTsrc(ix,iy,iz)
           end if    
@@ -7417,7 +7417,7 @@ c
 
       real :: sgn
       real :: rlim
-      real ::  RHtmp, Ttmp, mod_magnus, exner
+      real ::  RHtmp, Ttmp, mod_magnus, exner, func_p_base
 c
 c -------- stat(.,1) = u*u = ups
 c          stat(.,2) = v*v = vps
@@ -7542,7 +7542,8 @@ c
          stat(iz,34) = stat(iz,34) + qstarsum(ix,iy,iz)
 
          if (iexner .eq. 1) then
-         Ttmp = t(ix,iy,1,iz)*exner(psurf,psurf-zz(iz)*rhoa*grav)
+         Ttmp = t(ix,iy,1,iz)*
+     +   exner(psurf,func_p_base(psurf,grav,Cpa,tsfcc(1),Rd,zz(iz)))
          else
          Ttmp = t(ix,iy,1,iz)
          end if

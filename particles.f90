@@ -2742,7 +2742,7 @@ CONTAINS
       real :: mylwc_sum,myphiw_sum,myphiv_sum,Volp      
       real :: Eff_C,Eff_S
       real :: t_s,t_f,t_s1,t_f1
-      real :: mod_magnus,exner
+      real :: mod_magnus,exner,func_p_base
 
 
       !First fill extended velocity field for interpolation
@@ -2802,7 +2802,9 @@ CONTAINS
          end if
 
          if (iexner .eq. 1) then
-             part%Tf = part%Tf*exner(psurf,psurf-part%xp(3)*rhoa*grav)
+             !Compute using the base-state pressure at the particle height
+             !Neglects any turbulence or other fluctuating pressure sources
+             part%Tf = part%Tf*exner(psurf,func_p_base(psurf,grav,Cpa,tsfcc(1),Rd,part%xp(3)))
          end if
 
 
@@ -3131,7 +3133,7 @@ CONTAINS
       real :: taup0, dt_taup0, temp_r, temp_t, guess
       real :: tmp_coeff
       real :: xp3i
-      real :: mod_magnus,exner
+      real :: mod_magnus,exner,func_p_base
       real :: rad_i,Tp_i,vp_i(3),mp_i,rhop_i
 
 
@@ -3197,7 +3199,9 @@ CONTAINS
         end if
 
         if (iexner .eq. 1) then
-           part%Tf = part%Tf*exner(psurf,psurf-part%xp(3)*rhoa*grav)
+           !Compute using the base-state pressure at the particle height
+           !Neglects any turbulence or other fluctuating pressure sources
+           part%Tf = part%Tf*exner(psurf,func_p_base(psurf,grav,Cpa,tsfcc(1),Rd,part%xp(3)))
         end if
 
         if (part%qinf .lt. 0.0) then
