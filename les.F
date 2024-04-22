@@ -270,6 +270,10 @@ c
             call lower_free(it)
          end if
       endif
+
+      !Fill the base state based on the current surface temp
+      call fill_base(tsfcc(1),psurf)
+
       if(ise .eq. numprocs-1) then
          if (iDNS .eq. 1) then
             call upper_dns
@@ -1581,10 +1585,10 @@ c
 !         w_buy = batag*(t(ix,iy,1,iz)*weit1 +
 !     +                  t(ix,iy,1,izp1)*weit)
 
-         w_buy = batag*(t(ix,iy,1,iz)*weit1 +
-     +                  t(ix,iy,1,izp1)*weit)*
-     +   (1.0+0.61*(weit1*t(ix,iy,2,iz) + 
-     +    weit*t(ix,iy,2,izp1)))
+         w_buy = bfac*grav/theta_base(iz)*
+     +        ( (t(ix,iy,1,iz)*weit1 + t(ix,iy,1,izp1)*weit)*
+     +        (1.0+0.61*(weit1*t(ix,iy,2,iz) + weit*t(ix,iy,2,izp1))) - 
+     +        (theta_base(iz)*weit1 + theta_base(izp1)*weit) )
 
 
 c
@@ -1859,8 +1863,13 @@ c
 c
 c ------------ buoyancy (with hydrostatic part)
 c
-         w_buy = batag*(t(ix,iy,1,iz)*weit1 +
-     +                  t(ix,iy,1,izp1)*weit)
+!         w_buy = batag*(t(ix,iy,1,iz)*weit1 +
+!     +                  t(ix,iy,1,izp1)*weit)
+
+         w_buy = bfac*grav/theta_base(iz)*
+     +        ( (t(ix,iy,1,iz)*weit1 + t(ix,iy,1,izp1)*weit)*
+     +        (1.0+0.61*(weit1*t(ix,iy,2,iz) + weit*t(ix,iy,2,izp1))) - 
+     +        (theta_base(iz)*weit1 + theta_base(izp1)*weit) )
 c
 c ------------ geostrophic wind
 c
@@ -5953,12 +5962,12 @@ c
 
       real :: ampv,ampt,sum_psi,vmaxx,vmag,facv,ran1
 
-      real :: slope_q,slope_t,slope_u
+      real :: slope_q,slope_t,slope_u,slope_v
       real :: slope_t1,slope_t2,slope_u1,slope_v1
       real :: z_switch,t_switch,q_switch,u_switch,v_switch
       real :: z_switch_q,z_switch_t,z_switch_v,z_switch_u
       real :: t_surf,q_surf,u_surf,v_surf
-      real :: t_temp,q_temp,u_temp
+      real :: t_temp,q_temp,u_temp,v_temp
       real :: q_top,t_top,u_top,v_top,slope_q1,slope_q2
 
       integer :: ix,iy,iz
@@ -5975,73 +5984,201 @@ c
       enddo
 
       if (icase.eq.5) then
-      !!! BOMEX initial profile
-
-      do iz=1,nnz
-            ug(iz)   = -10.0+1.8e-3*zz(iz)
-            vg(iz)   = 0.0
-            divz(iz) = 0.0
-      enddo       
 
       do iz=izs,ize
-c         profile for pot temp
-            if (zz(iz).le.520.0) then
-                  t_temp = 298.7
-            elseif (zz(iz).gt.520.0 .and. zz(iz).le.1480.0) then
-                  t_surf = 298.7
-                  t_switch = 302.4
-                  slope_t = (t_switch-t_surf)/(1480.0-520.0)
-                  t_temp = t_surf + slope_t*(zz(iz)-520.0)
-            elseif (zz(iz).gt.1480.0 .and. zz(iz).le.2000.0) then
-                  t_surf = 302.4
-                  t_switch = 308.2
-                  slope_t = (t_switch-t_surf)/(2000.0-1480.0)
-                  t_temp = t_surf + slope_t*(zz(iz)-1480.0)
-            elseif (zz(iz).gt.2000.0 .and. zz(iz).le.3000.0) then
-                  t_surf = 308.2
-                  t_switch = 311.85
-                  slope_t = (t_switch-t_surf)/(3000.0-2000.0)
-                  t_temp = t_surf + slope_t*(zz(iz)-2000.0)
-            elseif (zz(iz).ge.3000.0) then
-                  t_temp = 311.85
+
+          ! MAGPIE
+c         profile for potential temperature
+            if (zz(iz) .le. 600.0) then
+
+                  t_temp = 302.5   !301.75   !300.0   !301.75(special)   !302.5(ori)
+
+            elseif (zz(iz) .gt. 600.0 .and. zz(iz) .le. 1900.0) then
+
+                  t_surf   = 302.5   !301.75   !300.0   !301.75(special)   !302.5(ori)
+                  t_switch = 308.0   !316.0   !315.5(special) !8   !313.0 !5   !308.0(ori)
+                  slope_t  = (t_switch - t_surf) / (1900.0 - 600.0)
+                  t_temp   = t_surf + (slope_t * (zz(iz) - 600.0))
+
+            elseif (zz(iz) .gt. 1900.0 .and. zz(iz) .le. 2400.0) then
+
+                  t_surf   = 308.0   !316.0   !315.5(special) !8   !313.0 !5   !308.0(ori)
+                  t_switch = 315.0   !324.0   !323.0(special) !9   !321.0 !6   !315.0(ori)
+                  slope_t  = (t_switch - t_surf) / (2400.0 - 1900.0)
+                  t_temp   = t_surf + (slope_t * (zz(iz) - 1900.0))
+
+            elseif (zz(iz) .gt. 2400.0 .and. zz(iz) .le. 3000.0) then
+
+                  t_surf   = 315.0   !324.0   !323.0(special) !9   !321.0 !6   !315.0(ori)
+                  t_switch = 317.25   !327.25   !326.25(special) !10   !324.25 !7  !317.25(ori)
+                  slope_t  = (t_switch - t_surf) / (3000.0 - 2400.0)
+                  t_temp   = t_surf + (slope_t * (zz(iz) - 2400.0))
+
+            elseif (zz(iz) .ge. 3000.0) then
+
+                  t_temp = 317.25   !327.25   !326.25(special) !10   !324.25 !7   !317.25(ori)
+
             endif
 
 c         profile for qv
-             if (zz(iz).le.520.0) then
-                  q_surf = 17.0e-3
-                  q_switch = 16.3e-3
-                  slope_q = (q_switch-q_surf)/520.0
-                  q_temp = q_surf + slope_q*zz(iz)
-            elseif (zz(iz).gt.520.0 .and. zz(iz).le.1480.0) then
-                  q_surf = 16.3e-3
-                  q_switch = 10.7e-3
-                  slope_q = (q_switch-q_surf)/(1480.0-520.0)
-                  q_temp = q_surf + slope_q*(zz(iz)-520.0)
-            elseif (zz(iz).gt.1480.0 .and. zz(iz).le.2000.0) then
-                  q_surf = 10.7e-3
-                  q_switch = 4.2e-3
-                  slope_q = (q_switch-q_surf)/(2000.0-1480.0)
-                  q_temp = q_surf + slope_q*(zz(iz)-1480.0)
-            elseif (zz(iz).gt.2000.0 .and. zz(iz).le.3000.0) then
-                  q_surf = 4.2e-3
-                  q_switch = 3.0e-3
-                  slope_q = (q_switch-q_surf)/(3000.0-2000.0)
-                  q_temp = q_surf + slope_q*(zz(iz)-2000.0)
-            elseif (zz(iz).ge.3000.0) then
-                  q_temp = 3.0e-3
+            if (zz(iz) .le. 600.0) then
+
+                  q_surf   = 22.5e-3   !19.5e-3
+                  q_switch = 19.75e-3   !17.05e-3
+                  slope_q  = (q_switch - q_surf) / 600.0
+                  q_temp   = q_surf + (slope_q * zz(iz))
+
+            elseif (zz(iz) .gt. 600.0 .and. zz(iz) .le. 2000.0) then
+
+                  q_surf   = 19.75e-3   !17.05e-3
+                  q_switch = 9.85e-3   !8.5e-3
+                  slope_q  = (q_switch - q_surf) / (2000.0 - 600.0)
+                  q_temp   = q_surf + (slope_q * (zz(iz) - 600.0))
+
+!            elseif (zz(iz) .gt. 1000.0 .and. zz(iz) .le. 2000.0) then
+
+!                  q_surf   = 14.0e-3
+!                  q_switch = 9.0e-3
+!                  slope_q  = (q_switch - q_surf) / (2000.0 - 1000.0)
+!                  q_temp   = q_surf + (slope_q * (zz(iz) - 1000.0))
+
+            elseif (zz(iz) .gt. 2000.0 .and. zz(iz) .le. 2400.0) then
+
+                  q_surf   = 9.85e-3   !8.5e-3
+                  q_switch = 4.75e-3
+                  slope_q  = (q_switch - q_surf) / (2400.0 - 2000.0)
+                  q_temp   = q_surf + (slope_q * (zz(iz) - 2000.0))
+
+            elseif (zz(iz) .gt. 2400.0 .and. zz(iz) .le. 3000.0) then
+
+                  q_surf   = 4.75e-3
+                  q_switch = 4.0e-3   !3.0e-3
+                  slope_q  = (q_switch - q_surf) / (3000.0 - 2400.0)
+                  q_temp   = q_surf + (slope_q * (zz(iz) - 2400.0))
+
+            elseif (zz(iz) .ge. 3000.0) then
+
+                  q_temp = 4.0e-3   !3.0e-3
+
             endif
 
 c         profile for u
-             if (zz(iz).le.700.0) then
-                  u_temp = -8.75
-            elseif (zz(iz).gt.700.0 .and. zz(iz).le.3000.0) then
-                  u_surf = -8.75
-                  u_switch = -4.61
-                  slope_u = (u_switch-u_surf)/(3000.0-700.0)
-                  u_temp = u_surf + slope_u*(zz(iz)-700.0)
-            elseif (zz(iz).ge.3000.0) then
-                  u_temp = -4.61
+            if (zz(iz) .le. 3000.0) then
+
+                  u_surf   = -5.0   !-4.0
+                  u_switch = -15.0   !-7.25
+                  slope_u  = (u_switch - u_surf) / 3000.0
+                  u_temp   = u_surf + (slope_u * zz(iz))
+
+!            elseif (zz(iz) .gt. 100.0 .and. zz(iz) .le. 700.0) then
+
+!                  u_surf = -7.25
+!                  u_switch = -8.0
+!                  slope_u = (u_switch - u_surf) / (700.0 - 100.0)
+!                  u_temp = u_surf + (slope_u * (zz(iz) - 100.0))
+
+!            elseif (zz(iz) .gt. 700.0 .and. zz(iz) .le. 3000.0) then
+
+!                  u_surf = -8.0
+!                  u_switch = -15.5
+!                  slope_u = (u_switch - u_surf) / (3000.0 - 700.0)
+!                  u_temp = u_surf + (slope_u * (zz(iz) - 700.0))
+
+            elseif (zz(iz) .ge. 3000.0) then
+
+                  u_temp = -15.0   !-15.5
+
             endif
+
+c         profile for v
+            if (zz(iz) .le. 3000.0) then
+
+                  v_surf   = -3.5   !-3.25
+                  v_switch = 0.0   !-6.5
+                  slope_v  = (v_switch - v_surf) / 3000.0
+                  v_temp   = v_surf + (slope_v * zz(iz))
+
+!            elseif (zz(iz) .gt. 250.0 .and. zz(iz) .le. 3000.0) then
+
+!                  u_surf = -6.5
+!                  u_switch = 0.0
+!                  slope_u = (u_switch - u_surf) / (3000.0 - 250.0)
+!                  u_temp = u_surf + (slope_u * (zz(iz) - 250.0))
+
+            elseif (zz(iz) .ge. 3000.0) then
+
+                  u_temp = 0.0
+
+            endif
+
+
+
+      !!! BOMEX initial profile
+!      do iz=1,nnz
+!            ug(iz)   = -10.0+1.8e-3*zz(iz)
+!            vg(iz)   = 0.0
+!            divz(iz) = 0.0
+!      enddo       
+!
+!      do iz=izs,ize
+!c         profile for pot temp
+!            if (zz(iz).le.520.0) then
+!                  t_temp = 298.7
+!            elseif (zz(iz).gt.520.0 .and. zz(iz).le.1480.0) then
+!                  t_surf = 298.7
+!                  t_switch = 302.4
+!                  slope_t = (t_switch-t_surf)/(1480.0-520.0)
+!                  t_temp = t_surf + slope_t*(zz(iz)-520.0)
+!            elseif (zz(iz).gt.1480.0 .and. zz(iz).le.2000.0) then
+!                  t_surf = 302.4
+!                  t_switch = 308.2
+!                  slope_t = (t_switch-t_surf)/(2000.0-1480.0)
+!                  t_temp = t_surf + slope_t*(zz(iz)-1480.0)
+!            elseif (zz(iz).gt.2000.0 .and. zz(iz).le.3000.0) then
+!                  t_surf = 308.2
+!                  t_switch = 311.85
+!                  slope_t = (t_switch-t_surf)/(3000.0-2000.0)
+!                  t_temp = t_surf + slope_t*(zz(iz)-2000.0)
+!            elseif (zz(iz).ge.3000.0) then
+!                  t_temp = 311.85
+!            endif
+!
+!c         profile for qv
+!             if (zz(iz).le.520.0) then
+!                  q_surf = 17.0e-3
+!                  q_switch = 16.3e-3
+!                  slope_q = (q_switch-q_surf)/520.0
+!                  q_temp = q_surf + slope_q*zz(iz)
+!            elseif (zz(iz).gt.520.0 .and. zz(iz).le.1480.0) then
+!                  q_surf = 16.3e-3
+!                  q_switch = 10.7e-3
+!                  slope_q = (q_switch-q_surf)/(1480.0-520.0)
+!                  q_temp = q_surf + slope_q*(zz(iz)-520.0)
+!            elseif (zz(iz).gt.1480.0 .and. zz(iz).le.2000.0) then
+!                  q_surf = 10.7e-3
+!                  q_switch = 4.2e-3
+!                  slope_q = (q_switch-q_surf)/(2000.0-1480.0)
+!                  q_temp = q_surf + slope_q*(zz(iz)-1480.0)
+!            elseif (zz(iz).gt.2000.0 .and. zz(iz).le.3000.0) then
+!                  q_surf = 4.2e-3
+!                  q_switch = 3.0e-3
+!                  slope_q = (q_switch-q_surf)/(3000.0-2000.0)
+!                  q_temp = q_surf + slope_q*(zz(iz)-2000.0)
+!            elseif (zz(iz).ge.3000.0) then
+!                  q_temp = 3.0e-3
+!            endif
+!
+!c         profile for u
+!             if (zz(iz).le.700.0) then
+!                  u_temp = -8.75
+!            elseif (zz(iz).gt.700.0 .and. zz(iz).le.3000.0) then
+!                  u_surf = -8.75
+!                  u_switch = -4.61
+!                  slope_u = (u_switch-u_surf)/(3000.0-700.0)
+!                  u_temp = u_surf + slope_u*(zz(iz)-700.0)
+!            elseif (zz(iz).ge.3000.0) then
+!                  u_temp = -4.61
+!            endif
 
             do iy=iys,iye
             do ix=1,nnx
@@ -8441,6 +8578,15 @@ c
       r4 = 0.0
       r5 = 0.0
 
+      allocate(p_base(nnz),
+     +         rho_base(nnz),
+     +         T_base(nnz),
+     +         theta_base(nnz))
+      p_base = 0.0
+      rho_base = 0.0
+      T_base = 0.0
+      theta_base = 0.0
+
 c   ------Allocate arrays for SFS stress and its derivatives
       allocate(sigm_s(nnxp2,iys:iye,izs-1:ize+1),
      +         sigm_sdx(nnxp2,iys:iye,izs-1:ize+1),
@@ -10700,6 +10846,38 @@ c
 
       end subroutine change_RH_bcs_to_q
 
+      subroutine fill_base(T_surf,p_surf)
+      !Fill the base state profiles p_base,rho_base,T_base,theta_base
+      !given the surface conditions T_surf and p_surf.
+      !theta_base is assumed equal to T_surf (not some other constant
+      !reference)
+      use fields
+      use pars
+      use con_stats
+      implicit none
+
+      integer :: iz
+      real, intent(in) :: T_surf, p_surf
+      real :: func_T_base,func_p_base,func_rho_base
+
+      if (iexner.eq.1) then
+         do iz=1,nnz 
+            theta_base(iz) = T_surf
+            T_base(iz) = func_T_base(T_surf,grav,Cpa,zz(iz))
+            p_base(iz) = func_p_base(p_surf,grav,Cpa,T_surf,Rd,zz(iz))
+            rho_base(iz)=func_rho_base(p_base(iz),T_base(iz),Rd,zz(iz))
+         end do
+      else
+         !Set entire arrays to constants
+         theta_base = t00
+         T_base = t00
+         p_base = p_surf
+         rho_base = rhoa
+      end if
+         
+
+      end subroutine fill_base
+
       subroutine read_input_file
       use pars
       use particles
@@ -10783,6 +10961,34 @@ c
       exner = (p0/p)**(-Rd/Cpa)
 
       end function exner
+
+      !!!!!The dry adiabatic functions:
+      function func_p_base(p_surf,grav,Cpa,T_surf,Rd,z)
+      implicit none
+      real, intent(in) :: p_surf,grav,Cpa,T_surf,Rd,z
+      real :: func_p_base
+
+      func_p_base = p_surf*(1 - z*grav/Cpa/T_surf)**(Cpa/Rd)
+
+      end function func_p_base
+      function func_T_base(T_surf,grav,Cpa,z)
+      implicit none
+      real, intent(in) :: T_surf,grav,Cpa,z
+      real :: func_T_base
+      
+      func_T_base = T_surf - grav/Cpa*z
+
+      end function func_T_base
+      function func_rho_base(p_base,T_base,Rd,z)
+      implicit none
+      real, intent(in) :: p_base,T_base,Rd,z
+      real :: func_rho_base
+      
+      func_rho_base = p_base/Rd/T_base
+
+      end function func_rho_base
+      !!!!!
+
  
       function ran2(idum)
       integer :: idum,IM1,IM2,IMM1,IA1,IA2,IQ1,IQ2,IR1,IR2,NTAB,NDIV

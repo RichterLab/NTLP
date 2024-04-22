@@ -2276,13 +2276,25 @@ CONTAINS
       
       
       !Generate
-      S = 0.45
-      M = 0.0
-      kappa_s = 1.2
-      mult = mult_init
+      if (zv.lt.zi) then
+         S = 0.45
+         M = 0.0
+         kappa_s = 1.2
+         mult = mult_init
       
-      !With these parameters, get m_s and rad_init from distribution
-      call lognormal_dist(rad_init,m_s,kappa_s,M,S)
+         !With these parameters, get m_s and rad_init from distribution
+         call lognormal_dist(rad_init,m_s,kappa_s,M,S)
+
+      else
+
+         S = 0.2403
+         M = -1.7570
+         kappa_s = 0.6
+         mult = mult_init
+
+         !With these parameters, get m_s and rad_init from distribution
+         call lognormal_dist(rad_init,m_s,kappa_s,M,S)
+      end if
        
       call create_particle(xp_init,vp_init,Tp_init,m_s,kappa_s,mult,rad_init,idx,procidx)
       
