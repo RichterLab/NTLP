@@ -125,6 +125,8 @@ c     ---------------------------------------------------------------------
       real, allocatable :: 
      +     ubc(:,:,:), vbc(:,:,:), wbc(:,:,:), tbc(:,:,:,:), 
      +     ebc(:,:,:), pbc(:,:,:), pbc2(:,:,:)
+      real, allocatable ::
+     +     p_base(:),rho_base(:),T_base(:),theta_base(:)
       end module fields
 c     ----------------------------------------------------------------------
       module fftwk
@@ -138,7 +140,7 @@ c     ----------------------------------------------------------------------
       sequence
       real ::  vk, vkin, vk74, vk74in, 
      +     gcp, fcor_h, pi2,
-     +     batagk, batag,
+     +     batagk, batag, bfac,
      +     cdbtm, dtdzf(nscl), dtjump, ugal, divgls,
      +     z1, utausv, dx, dy, dz, dt, 
      +     fnxy, dzdz, dsl, c23, dtgama, dtzeta, xkmax,
@@ -151,7 +153,7 @@ c     ----------------------------------------------------------------------
       real, pointer ::
      +     vk, vkin, vk74, vk74in, 
      +     gcp, fcor_h, pi2,
-     +     batagk, batag,
+     +     batagk, batag, bfac,
      +     cdbtm, dtdzf(:), dtjump, ugal, divgls,
      +     z1, utausv, dx, dy, dz, dt,
      +     fnxy, dzdz, dsl, c23, dtgama, dtzeta, xkmax, 
@@ -185,6 +187,7 @@ c
       pi2    => c_c%pi2
       batagk => c_c%batagk
       batag  => c_c%batag
+      bfac   => c_c%bfac
       cdbtm  => c_c%cdbtm
       dtdzf  => c_c%dtdzf
       dtjump => c_c%dtjump
