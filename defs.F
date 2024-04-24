@@ -27,7 +27,7 @@ c
       !Boundary conditions and other parameters
       real :: Uo, Ttop(nscl), Tbot(nscl),qstar(nscl),tsfcc(nscl)
       real :: grav,t00,fcor,zi,zl,xl,yl,zw1,dpdx
-      real :: ugcont,vgcont,zo,zos,surf_RH,psurf,surf_temp
+      real :: ugcont,vgcont,zo,zos,surf_RH,surf_p,surf_rho
       real :: meanRH,varRH
       real :: nprime
       real :: dvdr,hurr_rad
@@ -41,7 +41,7 @@ c
       real :: Lv = (25.0 - 0.02274*26.0)*10.0**5
       real :: Sal,Ms,Gam,Ion
       real :: rhow,nuf,rhos
-      real :: CpaCpp,Cpa,Cpp,Pra,Sc,Mw,Ru,rhoa,Rd
+      real :: CpaCpp,Cpa,Cpp,Pra,Sc,Mw,Ru,Rd
 
 c     
 c     ------------ leave following definitions as is

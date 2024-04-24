@@ -272,7 +272,7 @@ c
       endif
 
       !Fill the base state based on the current surface temp
-      call fill_base(tsfcc(1),psurf)
+      call fill_base(tsfcc(1))
 
       if(ise .eq. numprocs-1) then
          if (iDNS .eq. 1) then
@@ -2389,7 +2389,7 @@ c
          do ix=1,nnx
           if (iexner) then
           r4(ix,iy,1,iz) = r4(ix,iy,1,iz) + partTsrc(ix,iy,iz)/
-     +    exner(psurf,func_p_base(psurf,grav,Cpa,tsfcc(1),Rd,zz(iz)))
+     +    exner(surf_p,func_p_base(surf_p,tsfcc(1),zz(iz)))
           else
              r4(ix,iy,1,iz) = r4(ix,iy,1,iz) + partTsrc(ix,iy,iz)
           end if    
@@ -3085,7 +3085,7 @@ c
       if (icase.eq.3) then
       !! To change the lower surface temperature at some specified time
       if (time .gt. 3600.0) then
-         tsfcc(1) = surf_temp
+         tsfcc(1) = 282.0
       else
          tsfcc(1)  = 284.0
       end if
@@ -3094,7 +3094,7 @@ c
       ! FATIMA ADV. CASE SETUP
       if (icase.eq.6) then
       if (time .gt. 3600.0) then
-         tsfcc(1) = surf_temp
+         tsfcc(1) = 286.5
       else
          tsfcc(1) = 287.5
       end if
@@ -5071,7 +5071,7 @@ c
 
           dnom = zosdy*vk74in
           tsfcc(2)=surf_RH/100.0*
-     +    Mw/Ru/tsfcc(1)*mod_magnus(tsfcc(1))/rhoa
+     +    Mw/Ru/tsfcc(1)*mod_magnus(tsfcc(1))/surf_rho
             thstar(iscl) = (t1xy(iscl) - tsfcc(iscl))/dnom
             t10xy(iscl)  = thstar(iscl)*dnom
             qstar(iscl)  = -utau*thstar(iscl)
@@ -5086,7 +5086,7 @@ c
             !Humidity is a Dirichlet condition at surf_RH
             !Based on temperature in tsfcc(1)
             tsfcc(2)=surf_RH/100.0*
-     +      Mw/Ru/tsfcc(1)*mod_magnus(tsfcc(1))/rhoa
+     +      Mw/Ru/tsfcc(1)*mod_magnus(tsfcc(1))/surf_rho
 
             thstar(iscl) = (t1xy(iscl) - tsfcc(iscl))/dnom
             t10xy(iscl)  = thstar(iscl)*dnom
@@ -6339,21 +6339,6 @@ c
 
          do iy=iys,iye
          do ix=1,nnx
-
-         !Make a constant q profile at RH based on surface temp:
-!            t(ix,iy,2,iz) = surf_RH/100.0*
-!     +      Mw/Ru/t_lower*mod_magnus(t_lower)/rhoa
-
-         !Make a desired profile of RH:
-!            !Convert theta to temperature:
-!            Ttmp = 
-!     +      t(ix,iy,1,iz)*(psurf/(psurf - zz(iz)*rhoa*grav))**(-Rd/Cpa)
-!
-!            !Get temperature based on desired RH
-!            t(ix,iy,2,iz) = surf_RH/100.0*
-!     +      Mw/Ru/Ttmp*mod_magnus(Ttmp)/rhoa
-
-
             w(ix,iy,iz)   = 0.
             r1(ix,iy,iz)  = 0.
             r2(ix,iy,iz)  = 0.
@@ -7417,7 +7402,8 @@ c
 
       real :: sgn
       real :: rlim
-      real ::  RHtmp, Ttmp, mod_magnus, exner, func_p_base
+      real :: RHtmp,Ttmp,mod_magnus,exner,func_p_base,func_rho_base
+      real :: rhoa,msqrRH
 c
 c -------- stat(.,1) = u*u = ups
 c          stat(.,2) = v*v = vps
@@ -7493,7 +7479,15 @@ c
       izp2 = iz + 2
       izp1 = iz + 1
       izm1 = iz - 1
-c
+
+      !Set the density based on whether to take base state into account
+      if (iexner .eq. 1) then
+         rhoa = func_rho_base(surf_p,tsfcc(1),zz(iz))
+      else
+         rhoa = surf_rho
+      end if
+
+
       do iy=iys,iye
       do ix=1,nnx
          stat(iz,1) = stat(iz,1) + (u(ix,iy,iz) - uxym(iz))**2
@@ -7543,7 +7537,7 @@ c
 
          if (iexner .eq. 1) then
          Ttmp = t(ix,iy,1,iz)*
-     +   exner(psurf,func_p_base(psurf,grav,Cpa,tsfcc(1),Rd,zz(iz)))
+     +   exner(surf_p,func_p_base(surf_p,tsfcc(1),zz(iz)))
          else
          Ttmp = t(ix,iy,1,iz)
          end if
@@ -7740,6 +7734,23 @@ c
       pfluxdiff = pfluxdiff/dt/yl/xl
       pmassflux = pmassflux/dt/yl/xl
       penegflux = penegflux/dt/yl/xl
+
+      !Do the volume-average RH calculation
+      meanRH = 0.0
+      msqrRH = 0.0
+      do iz=1,nnz-1
+
+         meanRH = meanRH + 
+     +   0.5*(zz(iz+1)-zz(iz))*(RHxym(iz)+RHxym(iz+1))
+
+         msqrRH = msqrRH + 
+     +   0.5*(zz(iz+1)-zz(iz))*(RHmsqr(iz)+RHmsqr(iz+1))
+
+      end do 
+
+      meanRH = meanRH/(zz(nnz)-zz(1))  !Note: divide by the distance between the points, not the entire zl, to get the true average
+      msqrRH = msqrRH/(zz(nnz)-zz(1))
+      varRH = msqrRH - meanRH**2
       
 
 c
@@ -10702,6 +10713,7 @@ c
       include 'mpif.h'
 
       real :: LWP_tmp(nnz-1),LWP(nnz-1)  !Have to calulate the integral from top down, then reverse ordering
+      real :: rhoa,func_rho_base
       integer :: iz,lc
 
       !Do trapezoidal integration from the TOP down:
@@ -10712,6 +10724,11 @@ c
 
          if (lc .eq. 1) then
 
+         if (iexner.eq.1) then
+            rhoa = func_rho_base(surf_p,tsfcc(1),zz(iz))
+         else
+            rhoa = surf_rho
+         end if
          LWP_tmp(lc) = 0.5*rhoa*(ql(iz+1) + ql(iz))*(zz(iz+1)-zz(iz))
 
          else
@@ -10752,8 +10769,12 @@ c
 
       do iz=1,nnz
 
+         if (iexner.eq.1) then
+            rhoa = func_rho_base(surf_p,tsfcc(1),zz(iz))
+         else
+            rhoa = surf_rho
+         end if
          radsrc(iz) = -1/rhoa/Cpa*(radflux(iz)-radflux(iz-1))/dzw(iz)
-
 
       end do
 
@@ -10824,8 +10845,8 @@ c
          RHB = Tbot(2)
 
          !Convert RH given in input file into specific humidity
-         Ttop(2) = RHT/100.0*Mw/Ru/Ttop(1)*mod_magnus(Ttop(1))/rhoa
-         Tbot(2) = RHB/100.0*Mw/Ru/Tbot(1)*mod_magnus(Tbot(1))/rhoa
+         Ttop(2) = RHT/100.0*Mw/Ru/Ttop(1)*mod_magnus(Ttop(1))/surf_rho
+         Tbot(2) = RHB/100.0*Mw/Ru/Tbot(1)*mod_magnus(Tbot(1))/surf_rho
 
          if (myid==0) then
            write(*,*) 'SURFACE HUMIDITY: %RH, q = ',RHB,Tbot(2)
@@ -10835,7 +10856,7 @@ c
 
          RHB = tsfcc(2)
 
-         tsfcc(2) = RHB/100.0*Mw/Ru/tsfcc(1)*mod_magnus(tsfcc(1))/rhoa
+         tsfcc(2)=RHB/100.0*Mw/Ru/tsfcc(1)*mod_magnus(tsfcc(1))/surf_rho
 
          if (myid==0) then
            write(*,*) 'SURFACE HUMIDITY: %RH, q = ',RHB,tsfcc(2)
@@ -10847,7 +10868,7 @@ c
 
       end subroutine change_RH_bcs_to_q
 
-      subroutine fill_base(T_surf,p_surf)
+      subroutine fill_base(T_surf)
       !Fill the base state profiles p_base,rho_base,T_base,theta_base
       !given the surface conditions T_surf and p_surf.
       !theta_base is assumed equal to T_surf (not some other constant
@@ -10858,22 +10879,22 @@ c
       implicit none
 
       integer :: iz
-      real, intent(in) :: T_surf, p_surf
+      real, intent(in) :: T_surf
       real :: func_T_base,func_p_base,func_rho_base
 
       if (iexner.eq.1) then
          do iz=1,nnz 
             theta_base(iz) = T_surf
-            T_base(iz) = func_T_base(T_surf,grav,Cpa,zz(iz))
-            p_base(iz) = func_p_base(p_surf,grav,Cpa,T_surf,Rd,zz(iz))
-            rho_base(iz)=func_rho_base(p_base(iz),T_base(iz),Rd,zz(iz))
+            T_base(iz) = func_T_base(T_surf,zz(iz))
+            p_base(iz) = func_p_base(surf_p,T_surf,zz(iz))
+            rho_base(iz)=func_rho_base(surf_p,T_surf,zz(iz))
          end do
       else
          !Set entire arrays to constants
          theta_base = t00
          T_base = t00
-         p_base = p_surf
-         rho_base = rhoa
+         p_base = surf_p
+         rho_base = surf_rho
       end if
          
 
@@ -10893,7 +10914,7 @@ c
       namelist /grid_params/ ncpu_s, Uo, Ttop, Tbot,
      +         qstar, tsfcc, ugcont, vgcont, dvdr, hurr_rad,
      +         zi, zl, xl, yl, zw1, dpdx, Swall,
-     +         cfl,dt_new,surf_RH,psurf,surf_temp,
+     +         cfl,dt_new,surf_RH,surf_p,surf_rho,
      +         rad_kappa,rad_Fct,rad_Fcb
 
       namelist /path_names/ path_seed,path_part,path_res,
@@ -10909,7 +10930,7 @@ c
      +         itrajout, ikernel
 
 
-      namelist /constants/ rhoa, nuf, Cpa, Pra, Sc,
+      namelist /constants/ nuf, Cpa, Pra, Sc,
      +         tnumpart,mult_init,rhow,part_grav,rhos,
      +         Cpp,Mw,Ms,Ru,Gam,Ion,Sal,Rd,
      +         radius_init,radius_std,kappas_init,kappas_std,
@@ -10964,28 +10985,32 @@ c
       end function exner
 
       !!!!!The dry adiabatic functions:
-      function func_p_base(p_surf,grav,Cpa,T_surf,Rd,z)
+      function func_p_base(p_surf,T_surf,z)
+      use pars, only: grav,Cpa,Rd
       implicit none
-      real, intent(in) :: p_surf,grav,Cpa,T_surf,Rd,z
+      real, intent(in) :: p_surf,T_surf,z
       real :: func_p_base
 
       func_p_base = p_surf*(1 - z*grav/Cpa/T_surf)**(Cpa/Rd)
 
       end function func_p_base
-      function func_T_base(T_surf,grav,Cpa,z)
+      function func_T_base(T_surf,z)
+      use pars, only: grav,Cpa
       implicit none
-      real, intent(in) :: T_surf,grav,Cpa,z
+      real, intent(in) :: T_surf,z
       real :: func_T_base
       
       func_T_base = T_surf - grav/Cpa*z
 
       end function func_T_base
-      function func_rho_base(p_base,T_base,Rd,z)
+      function func_rho_base(p_surf,T_surf,z)
+      use pars, only: grav,Cpa,Rd
       implicit none
-      real, intent(in) :: p_base,T_base,Rd,z
+      real, intent(in) :: p_surf,T_surf,z
       real :: func_rho_base
       
-      func_rho_base = p_base/Rd/T_base
+      func_rho_base = p_surf*T_surf**(-Cpa/Rd)/Rd*
+     +         (T_surf - grav*z/Cpa)**(Cpa/Rd-1.0)
 
       end function func_rho_base
       !!!!!
