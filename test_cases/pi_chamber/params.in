@@ -31,7 +31,7 @@ icoalesce=0
 ipart_method=2   !1 = same RK3 as flow, 2 = backward Euler
 ipartdiff = 0
 inewpart = 2  !1 = new particles have initial conditions defined below, random location in domain; 2 = same, but normal distributions of radius and kappa_s, given by radius_std and kappas_std; 3 = special setup for C-FOG and double lognormal of different type; 4 = crude sea spray setup
-icase = 0  !Special additions for certain cases. 3 = setup for C-FOG, 4 = steady state LES sea spray setup
+icase = 1  !Special additions for certain cases. 0 = particles reflected at lower surface, 3 = setup for C-FOG, 4 = steady state LES sea spray setup
 isfs = 2   !isfs=1 is simple random walk, isfs=2 is Weil et al. (2004) particle subgrid
 iexner = 0  !iexner = 1 applies a correction to part%Tf to account for conversion b/w potential temp and temp. (need in PBL)
 ilongwave = 0   !Use simple longwave radiation scheme when clouds/fog present
