@@ -2058,7 +2058,7 @@ CONTAINS
 
   end subroutine read_part_res
 
-  subroutine particle_reintro(it)
+  subroutine particle_reintro
       use pars
       use con_data
       use con_stats
@@ -2066,7 +2066,7 @@ CONTAINS
       implicit none
       include 'mpif.h'
 
-      integer :: it,it_delay
+      integer :: it_delay
       integer :: ierr,randproc,np,my_reintro
       real :: totdrops,t_reint
 
@@ -2074,7 +2074,7 @@ CONTAINS
       if (inewpart.eq.4) then
       !!Sea spray, given by Andreas SSGF 98, augmented by Ortiz-Suslow 2016
 
-         call inject_spray(it)
+         call inject_spray
       
 
       elseif (inewpart.eq.2) then
@@ -2427,7 +2427,7 @@ CONTAINS
 
   end subroutine lognormal_dist
 
-  subroutine inject_spray(it)
+  subroutine inject_spray
   use pars
   use fields
   use con_data
@@ -2446,7 +2446,6 @@ CONTAINS
   real :: t_reint,xp_init(3),m_s
   integer :: iter,i,nbin,num_create,j,np
   integer :: ssgf_type,it_delay,my_reintro
-  integer, intent(in) :: it
 
   ! implementing the Andreas 1998 sea spray generation function
   !Set the parameters of the two lognormals:
@@ -2730,14 +2729,14 @@ CONTAINS
 
   end subroutine particle_bcs_periodic
 
-  subroutine particle_update_rk3(it,istage)
+  subroutine particle_update_rk3(istage)
       use pars
       use con_data
       use con_stats
       implicit none
       include 'mpif.h'
 
-      integer :: istage,ierr,it
+      integer :: istage,ierr
       real :: pi
       real :: denom,dtl,sigma
       integer :: ix,iy,iz
@@ -3114,7 +3113,7 @@ CONTAINS
 
   end subroutine particle_update_rk3
 
-  subroutine particle_update_BE(it)
+  subroutine particle_update_BE
       use pars
       use con_data
       use con_stats
@@ -3122,7 +3121,7 @@ CONTAINS
       implicit none
       include 'mpif.h'
 
-      integer :: ierr,it,fluxloc,fluxloci
+      integer :: ierr,fluxloc,fluxloci
       real :: tmpbuf(9),tmpbuf_rec(9)
       integer :: intbuf(10),intbuf_rec(10)
       integer :: numdrop_center,tnumdrop_center
@@ -3830,12 +3829,10 @@ CONTAINS
 
   end subroutine particle_stats
 
-  subroutine particle_write_traj(it)
+  subroutine particle_write_traj
    use con_data
    use pars
    implicit none
-
-   integer :: it
 
    
    part => first_particle

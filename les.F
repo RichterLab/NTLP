@@ -107,11 +107,13 @@ c
 c
 c -------------- scratch run
 c
-      if (iti.eq.0)  then
+      if (irestart.eq.0)  then
          igrdr = 2
+         itn = 0
+         it = iti
          case = case_inp
          call init
-         call setup(it)
+         call setup
          if (inetcdf .eq. 1) then
          call netcdf_init
          call netcdf_init_histog
@@ -147,7 +149,7 @@ c
 
          igrdr = 3
          call restart
-         call setup(it)
+         call setup
 
 
          !Call dns_vis even when doing LES since vis_m needs to be initialized with something
@@ -181,7 +183,7 @@ c
       call get_dt
  9000 continue
       call start_phase( measurement_id_timestepping_loop)
-      call set_sav(it,iti)
+      call set_sav(iti)
       if (myid==0) then
       write(*,*) 'Starting time loop'
       write(*,*) 'it,time = ',it,time
@@ -259,15 +261,15 @@ c
       call start_phase(measurement_id_eddy_viscosity_and_bcs)
       if(iss .eq. 0 .and. ifree .eq. 0) then
          if (iDNS .eq. 1) then
-            call lower_dns(it)
+            call lower_dns
          else
-            call lower(it)
+            call lower
          end if
       elseif(ifree .eq. 1) then
          if (iDNS .eq. 1) then
-            call lower_dns(it)
+            call lower_dns
          else
-            call lower_free(it)
+            call lower_free
          end if
       endif
 
@@ -285,8 +287,8 @@ c
       call bcast_lbc
       call get_means(istage)
       if(ivis .eq. 1) then
-         call iso(it)
-         call surfvis(it)
+         call iso
+         call surfvis
       endif
       if(istage .eq. 1)then
         call xy_stats
@@ -305,9 +307,9 @@ c ------------ save history files
 c
       if(mnout .and. istage .eq. 1)  then
           if(l_debug) then
-             call print(nprt,it,izs,ize)
+             call print(nprt,izs,ize)
           endif
-          if(l_root) call print(6,it,1,nnz)
+          if(l_root) call print(6,1,nnz)
       endif
       if(l_root) then
          if (inetcdf .eq. 1) then
@@ -332,7 +334,7 @@ c ------------ save velocity field
 c
       if(msave .and. istage .eq. 1) then
          call start_phase(measurement_id_io_particles)
-         call save_v(it)
+         call save_v
          call save_particles
          call end_phase(measurement_id_io_particles)
       endif
@@ -347,7 +349,7 @@ c
             call write_viz_netcdf
             call close_viz_netcdf
          else
-            call save_viz(it)
+            call save_viz
          end if
          call end_phase(measurement_id_io_viz)
       endif
@@ -375,7 +377,7 @@ c
       call comp1(istage,it)
       call end_phase(measurement_id_flow_solve_1)
       if(istage .eq. 1) then
-         if(msave .and. l_root) call save_c(it)
+         if(msave .and. l_root) call save_c
       endif
 
      
@@ -401,7 +403,7 @@ c -------- update particles
 c
          if (ipart_method .eq. 1) then
          call start_phase(measurement_id_particle_solver)
-         call particle_update_rk3(it,istage)
+         call particle_update_rk3(istage)
          call end_phase(measurement_id_particle_solver)
          end if
 
@@ -429,7 +431,7 @@ c
       if (ipart_method .eq. 2) then
 
          call start_phase(measurement_id_particle_solver)
-         call particle_update_BE(it)
+         call particle_update_BE
          call end_phase(measurement_id_particle_solver)
 
       end if
@@ -460,7 +462,7 @@ c
 
       if (ireintro) then
          call start_phase(measurement_id_particle_reintro)
-         call particle_reintro(it)
+         call particle_reintro
          call end_phase(measurement_id_particle_reintro)
       end if
 
@@ -471,7 +473,7 @@ c
 
          call start_phase(measurement_id_io_traj)
          if (itrajout) then
-         call particle_write_traj(it)
+         call particle_write_traj
          end if
          call end_phase(measurement_id_io_traj)
       end if
@@ -865,7 +867,7 @@ c
 c
       end
 
-      subroutine setup(it)
+      subroutine setup
 c
       use pars
       use fields
@@ -873,7 +875,6 @@ c
       use con_data
       use con_stats
 c
-      it = iti
 c
 c ------------ turn on new sgs model at a particular step
 c
@@ -889,14 +890,14 @@ c
             write(6,510)
             write(6,520) wtsfc(1),utau,amonin,dtdzf(1),zody,zo
      +            ,cdbtm,ugcont
-            call print(6,it,1,nnz)
+            call print(6,1,nnz)
          endif
           if(l_debug) then
             write(nprt,6)iti,utau,tsfcc(1) ,qstar(1)
             write(nprt,510)
             write(nprt,520) wtsfc(1),utau,amonin,dtdzf(1),zody,zo
      +            ,cdbtm,ugcont
-            call print(nprt,it,izs,ize)
+            call print(nprt,izs,ize)
           endif
       endif
 c     if(ifilt.eq.1)call filter
@@ -1108,7 +1109,7 @@ c
 c
       return
       end
-      subroutine iso(it)
+      subroutine iso
 c
       use pars
       use fields
@@ -1226,7 +1227,7 @@ c     write(nprt,3001) (iz,dfac(iz),iz=1,nnz)
  3001 format(' iz ',5x,' dfac ',/,(i5,e15.6))
       return
       end
-      subroutine surfvis(it)
+      subroutine surfvis
 c
       use pars
       use fields
@@ -1255,9 +1256,9 @@ c     xkmax  = dzdz/dt/5.
 c     xkmax  = dzu(izp1)*dzu(izp1)/(5.0*dt)
       dz_i = dzu_i(izp1)
       if(iocean .eq. 1) then
-         call sufto(it)
+         call sufto
       else
-         call suft(it)
+         call suft
       endif
       if(qstar(1) .eq. 0.) then
          zeta = 0.0
@@ -1422,9 +1423,9 @@ c -------- evaluate rhs of scalar equations
 c
       do l=1,nscl
          if (iDNS .eq. 1) then
-            call rhs_scl_dns(istep,l,it) 
+            call rhs_scl_dns(istep,l) 
          else
-            call rhs_scl(istep,l,it) 
+            call rhs_scl(istep,l) 
          end if
       enddo
 
@@ -3064,7 +3065,7 @@ c
 c
       return
       end
-      subroutine lower(it)
+      subroutine lower
 c
 c ------ setup lower boundary condition for entire plane at (iz = 1)
 c        using either businger or large formulas with wind.
@@ -3115,7 +3116,7 @@ c
       enddo
 c
       if(iocean .eq. 1) then
-         call sufto(it)
+         call sufto
          do iy=iys,iye
          do ix=1,nnx
             tau13m(ix,iy) = -au13m
@@ -3132,7 +3133,7 @@ c
 c
       else
 c
-         call suft(it)
+         call suft
          fac = -utau**2/(windm*sqrt(u1xy**2 + v1xy**2))
          do iy=iys,iye
          do ix=1,nnx
@@ -3373,7 +3374,7 @@ c                 = 1, specified surface temperature (Ttop)
       enddo
 
       end subroutine upper_dns
-      subroutine lower_free(it)
+      subroutine lower_free
 c
 c --------------- setup lower boundary condition for free
 c                 convection where each processor applies
@@ -3418,7 +3419,7 @@ c
 c
 c --------- every task gets their own fluxes and surface scalars
 c
-      call suft2(u_level1,it)
+      call suft2(u_level1)
 c
 c --------- send surface scalars and momentum fluxes
 c           back to root(s)
@@ -4873,7 +4874,7 @@ c                              use convective limit for scalars
                             endif
        return
        end
-      subroutine suft(it)
+      subroutine suft
 c
 c ---------- iterate for zeta = z/L using bisection method
 c            either businger or large functions can be specified
@@ -4892,7 +4893,6 @@ c
       integer, parameter :: iter_mo = 30
  
       integer :: iz,izp1,izm1,ix,iy,iscl,iter,ierr
-      integer, intent(in) :: it
       real ::  buf(3+nscl)
       real :: ufree,tol,vsfc,utau2
       real :: zeta,zeta_mn,zeta_mx,zeta_a
@@ -5169,7 +5169,7 @@ c
       call mpi_finalize(ierr)
       stop
       end
-      subroutine sufto(it)
+      subroutine sufto
 c
       use pars
       use fields
@@ -5320,7 +5320,7 @@ c
       call mpi_finalize(ierr)
       stop
       end
-      subroutine suft2(u_level1,it)
+      subroutine suft2(u_level1)
 c
       use pars
       use fields
@@ -7042,7 +7042,7 @@ c
 c
       return
       end
-      subroutine set_sav(it,istart)
+      subroutine set_sav(istart)
 c
       use pars
       use fields
@@ -7097,7 +7097,7 @@ c
            !call close_viz_netcdf
            !call open_viz_netcdf
         else
-           call viz_output_filename(it)
+           call viz_output_filename
         end if
         it_viz_nxt = it_viz_nxt + itape
       endif
@@ -7109,8 +7109,8 @@ c
             call open_his_netcdf
             call open_histog_netcdf
          else
-            call open_histograms(it)
-            call open_his(it)
+            call open_histograms
+            call open_his
          end if
          it_his_nxt = it_his_nxt + itape
       endif
@@ -7304,7 +7304,7 @@ c
 c
       return
       end
-      subroutine print(lu,it,iz_strt,iz_end)
+      subroutine print(lu,iz_strt,iz_end)
 c
       use pars
       use fields
@@ -8978,7 +8978,7 @@ c ---------------------
  4013 format('    after restart qstar = ',e15.6,' nmatch = ',i5,
      +       ' case = ',a3)
       end
-      subroutine save_viz(it)
+      subroutine save_viz
 c
 c --------------- save multiple (x-y), (x-z), (y-z), planes of data .
 c                 modify recl in all open statements for more or less
@@ -9356,12 +9356,13 @@ c
 c
       return
       end
-      subroutine save_v(it)
+      subroutine save_v
 c
 c --------------- save 3d fields
 c
       use pars
       use fields
+      use con_data
 #if defined(SWAP)
       use module_byteswap
 #endif
@@ -9460,7 +9461,7 @@ c --------------------
  8000 format(' in SAVE_V: trouble writing file ',i5,'  myid = ',i5,
      +       ' at iz = ',i5)
       end
-      subroutine save_c(it)
+      subroutine save_c
 c
 c --------------- root process writes constant file
 c                 sequential fortan binary
@@ -9619,6 +9620,7 @@ c
 c ----------- build file names for velocity, pressure, and constants
 c
       use pars
+      use con_data
       include 'mpif.h'
       character cgrid*10, num*3
 c
@@ -10909,7 +10911,7 @@ c
       character(48) :: label
       character(180) :: params_dir
       namelist /step_params/ iti,itmax,imean,ihst,itape,
-     +                       i_viz,itn,max_time
+     +                       i_viz,max_time
 
       namelist /grid_params/ ncpu_s, Uo, Ttop, Tbot,
      +         qstar, tsfcc, ugcont, vgcont, dvdr, hurr_rad,
@@ -10923,7 +10925,7 @@ c
       namelist /flags/ ismlt,ifree,isfc,iradup,
      +         iupwnd,ibuoy,ifilt,itcut,isubs,ibrcl,iocean,
      +         method,idebug,iz_space,ivis0,ifix_dt,new_vis,iDNS,
-     +         icouple,iTcouple,iHcouple,ievap,ifields,ilin,
+     +         icouple,iTcouple,iHcouple,ievap,ifields,irestart,ilin,
      +         ineighbor,icoalesce,ipart_method,inewpart,icase,
      +         ipartdiff,isfs,iexner,ilongwave,ihurr,
      +         inetcdf,iviznetcdf,ihumiditycontrol,ireintro,
