@@ -10,7 +10,7 @@ c     ----------------------------------------------------------------------
      +     icouple,iTcouple,iHcouple,ievap,ifields,ilin,ineighbor,
      +     icoalesce,ipart_method,ipartdiff,isfs,iexner,ilongwave,
      +     inetcdf,iviznetcdf,ihumiditycontrol,ireintro,itrajout,
-     +     inewpart,ihurr,icase,ikernel
+     +     inewpart,ihurr,icase,ikernel,irestart
 
       real :: max_time
 c     
@@ -59,7 +59,7 @@ c     ----------------------------------------------------------------------
      +     nviz_z, nviz_y, 
      +     nviz_x, nviz_s,
      +     kfile, jfile, ibcl, ibcu,
-     +     igrdr, imach, itn, it_his_nxt, it_viz_nxt,
+     +     igrdr, imach, it_his_nxt, it_viz_nxt,
      +     it_his,it_viz
       logical ::    mnout, micut, mtape, mhis, msave,mtrans,
      +     l_root, l_debug, msave_v, mviz
@@ -165,12 +165,12 @@ c     ----------------------------------------------------------------------
       !Integers
       type con_i
       sequence
-      integer :: his_counter,histog_counter,viz_counter
+      integer :: his_counter,histog_counter,viz_counter,itn,it
       end type con_i
 
       type(con_i), target :: c_i
       integer, pointer :: 
-     + his_counter,histog_counter,viz_counter
+     + his_counter,histog_counter,viz_counter,itn,it
        
    
       contains
@@ -225,9 +225,11 @@ c
       end subroutine fill_cc
       subroutine fill_ci
 
-      his_counter => c_i%his_counter
+      his_counter    => c_i%his_counter
       histog_counter => c_i%histog_counter
-      viz_counter => c_i%viz_counter
+      viz_counter    => c_i%viz_counter
+      itn            => c_i%itn
+      it             => c_i%it
 
       end subroutine fill_ci
       end module con_data
