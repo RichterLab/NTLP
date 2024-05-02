@@ -110,6 +110,7 @@ c
       if (irestart.eq.0)  then
          igrdr = 2
          itn = 0
+         iti = 0
          it = iti
          case = case_inp
          call init
@@ -150,6 +151,7 @@ c
          igrdr = 3
          call restart
          call setup
+         iti = it
 
 
          !Call dns_vis even when doing LES since vis_m needs to be initialized with something
@@ -3096,8 +3098,10 @@ c
       if (icase.eq.6) then
       if (time .gt. 3600.0) then
          tsfcc(1) = 286.5
+         surf_rho = 1.2327
       else
          tsfcc(1) = 287.5
+         surf_rho = 1.2284
       end if
       end if 
 
@@ -10910,7 +10914,7 @@ c
 
       character(48) :: label
       character(180) :: params_dir
-      namelist /step_params/ iti,itmax,imean,ihst,itape,
+      namelist /step_params/ itmax,imean,ihst,itape,
      +                       i_viz,max_time
 
       namelist /grid_params/ ncpu_s, Uo, Ttop, Tbot,

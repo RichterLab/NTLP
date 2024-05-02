@@ -1,13 +1,11 @@
 
 !Time step information
 &step_params
-iti=0        !Time step to begin
 itmax=10000   !Max number of time steps
 imean=100    !Number of time steps between writing mean profiles to output log file
 ihst=50     !Number of time steps between writing profiles to history file
 itape=5000  !Number of time steps before opening new history file and writing full 3D volumes
 i_viz=10   !Time steps between writing to viz file
-itn = 0  !Index for "u.le.cou001" files
 max_time = 1.0e9  !Code will stop at the next itape after this time (in seconds) has been exceeded
 /
 
@@ -20,6 +18,7 @@ isfc = 1, 1  ! isfc = 0 sets surface flux (qstar), isfc = 1 sets surface conditi
 iz_space=1, ! 0 = uniform dz, 1 = top/bottom mirror stretched ("channel"), 2 = "open channel", 3 = PBL with stretching at surface and at zi
 iDNS = 1
 ifields = 1  ! if set to 1, reads the initial condition from path_ran below; otherwise calls subroutine random
+irestart = 0
 ihurr = 0  !If set to 1, includes the hurricane forcings from Bryan et al. (2017) BLM and according to dvdr and hurr_rad below
 ilin = 1   !1 means linear interpolation for particle, 6th order otherwise
 icouple=1
@@ -99,8 +98,7 @@ path_ran= "PATH_TO_SCRATCH/pi_chamber/u.le.cou000"
 
 !Material and particle properties and other constants
 &constants
-!grav = 0.043
-grav = 0.545
+grav = 0.043
 t00 = 273.0 !Reference temp for buoyancy
 fcor = 0.0  !Coriolis parameter
 zo = 3.2e-5       !Roughness height (for LES)
@@ -118,7 +116,7 @@ tnumpart = 0
 mult_init = 1000.0
 rhow=1000.0  !kg/m^3
 rhos = 2000.0 !Density of salt, kg/m^3
-part_grav = 0,0,-2.312
+part_grav = 0,0,-0.649
 Cpp = 4179.0  !J/kg-K
 Mw = 0.018015  !kg/mol
 Ru = 8.3144    !J/mol-K Universal gas constant
