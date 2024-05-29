@@ -259,6 +259,11 @@ c ----------------------------------------------------------------------
      +           zconc(maxnz),
      +           vp1mean(maxnz),vp2mean(maxnz),vp3mean(maxnz),
      +           vp1msqr(maxnz),vp2msqr(maxnz),vp3msqr(maxnz),
+     +           vp1cube(maxnz),vp2cube(maxnz),vp3cube(maxnz),
+     +           us1mean(maxnz),us2mean(maxnz),us3mean(maxnz),
+     +           usmag(maxnz),
+     +           vp1four(maxnz),vp2four(maxnz),vp3four(maxnz),    
+     +           us1msqr(maxnz),us2msqr(maxnz),us3msqr(maxnz),
      +           uf1mean(maxnz),uf2mean(maxnz),uf3mean(maxnz),
      +           uf1msqr(maxnz),uf2msqr(maxnz),uf3msqr(maxnz),
      +           m1src(maxnz),m2src(maxnz),m3src(maxnz),
@@ -306,8 +311,12 @@ c ----------------------------------------------------------------------
      +           t_diss(:), t_sprod(:),
      +           zconc(:),
      +           vp1mean(:),vp2mean(:),vp3mean(:),
+     +           us1mean(:),us2mean(:),us3mean(:),usmag(:),
      +           vp1msqr(:),vp2msqr(:),vp3msqr(:),
+     +           vp1cube(:),vp2cube(:),vp3cube(:),
+     +           vp1four(:),vp2four(:),vp3four(:),
      +           uf1mean(:),uf2mean(:),uf3mean(:),
+     +           us1msqr(:),us2msqr(:),us3msqr(:),
      +           uf1msqr(:),uf2msqr(:),uf3msqr(:),
      +           m1src(:),m2src(:),m3src(:),
      +           upwpm(:),
@@ -393,6 +402,19 @@ c
              vp1msqr  => c_s%vp1msqr ; isize = isize + size(vp1msqr)
              vp2msqr  => c_s%vp2msqr ; isize = isize + size(vp2msqr)
              vp3msqr  => c_s%vp3msqr ; isize = isize + size(vp3msqr)
+             us1mean  => c_s%us1mean ; isize = isize + size(us1mean)
+             us2mean  => c_s%us2mean ; isize = isize + size(us2mean)
+             us3mean  => c_s%us3mean ; isize = isize + size(us3mean)
+             us1msqr  => c_s%us1msqr ; isize = isize + size(us1msqr)
+             us2msqr  => c_s%us2msqr ; isize = isize + size(us2msqr)
+             us3msqr  => c_s%us3msqr ; isize = isize + size(us3msqr)
+             usmag  => c_s%usmag     ; isize = isize + size(usmag)
+             vp1cube  => c_s%vp1cube ; isize = isize + size(vp1cube)
+             vp2cube  => c_s%vp2cube ; isize = isize + size(vp2cube)
+             vp3cube  => c_s%vp3cube ; isize = isize + size(vp3cube)
+             vp1four  => c_s%vp1four ; isize = isize + size(vp1four)
+             vp2four  => c_s%vp2four ; isize = isize + size(vp2four)
+             vp3four  => c_s%vp3four ; isize = isize + size(vp3four)
              uf1mean  => c_s%uf1mean ; isize = isize + size(uf1mean)
              uf2mean  => c_s%uf2mean ; isize = isize + size(uf2mean)
              uf3mean  => c_s%uf3mean ; isize = isize + size(uf3mean)
