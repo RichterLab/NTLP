@@ -17,9 +17,9 @@ ismlt=0, ifree=0, iradup=0, iupwnd=1
 ibuoy=0, ifilt=0, itcut=1, isubs=0, ibrcl=0, iocean=0
 method=3, idebug=1, ivis0=1, ifix_dt=0, new_vis=-1
 isfc = 1, 1  ! isfc = 0 sets surface flux (qstar), isfc = 1 sets surface condition (Dirichlet through tsfcc)
-iz_space=1, ! 0 = uniform dz, 1 = top/bottom mirror stretched ("channel"), 2 = "open channel", 3 = PBL with stretching at surface and at zi
+iz_space=1, ! 0 = uniform dz, 1 = top/bottom mirror stretched ("NTLP"), 2 = "open channel", 3 = PBL with stretching at surface and at zi
 iDNS = 1
-ifields = 0  ! if set to 1, reads the initial condition from path_ran below; otherwise calls subroutine random
+ifields = 1  ! if set to 1, reads the initial condition from path_ran below; otherwise calls subroutine random
 ihurr = 0  !If set to 1, includes the hurricane forcings from Bryan et al. (2017) BLM and according to dvdr and hurr_rad below
 ilin = 1   !1 means linear interpolation for particle, 6th order otherwise
 icouple=0
@@ -52,7 +52,7 @@ dt_new = 0.05
 
 !Use for DNS:
 Uo = 0.0  !Sets the magnitude of the top and bottom plate velocities (Couette flow -- assumes equal and opposite)
-Ttop(1) = 280.0, 100.0  !Currently this should be (temperature, relative humidity) (used in DNS)
+Ttop(1) = 299.0, 100.0  !Currently this should be (temperature, relative humidity) (used in DNS)
 Tbot(1) = 299.0, 100.0  !Currently this should be (temperature, relative humidity) (used in DNS)
 
 !Use for LES:
@@ -69,7 +69,7 @@ vgcont = 0.0   !The initial v-velocity
 dvdr = -8.0e-04  !Change in v with hurricane radius
 hurr_rad = 40e3  ! Hurricane radius
 
-dpdx = -0.69325  !The pressure gradient for channel flow (gets put into u_geo for DNS)
+dpdx = -0.69325  !The pressure gradient for NTLP flow (gets put into u_geo for DNS)
 
 Swall = 0.0  !Set the CONSTANT humidity sink to use if ihumiditycontrol = 0
 
@@ -90,18 +90,17 @@ rad_Fcb = 0.0    !Net radiative flux at cloud (or domain) base
 !Set the paths for code I/O. Must be on the scratch directory, not AFS!
 &path_names
 
-path_seed="PATH_TO_SCRATCH/channel/"
-path_part="PATH_TO_SCRATCH/channel/part.le.cou002"
-path_res="PATH_TO_SCRATCH/channel/u.le.cou002"
-path_ran="PATH_TO_SCRATCH/channel/u.le.cou000"
+path_seed="/scratch365/agrace4/NTLP/"
+path_part="/scratch365/agrace4/NTLP/part.le.cou000"
+path_res="/scratch365/agrace4/NTLP/u.le.cou000"
+path_ran="/scratch365/agrace4/NTLP/u.le.cou000"
 
 /
 
 
 !Material and particle properties and other constants
 &constants
-!grav = 0.043
-grav = 0.545
+grav = 9.81
 t00 = 273.0 !Reference temp for buoyancy
 fcor = 0.0  !Coriolis parameter
 zo = 3.2e-5       !Roughness height (for LES)
@@ -116,11 +115,11 @@ Sc = 0.615
 Rd = 286.9     !J/kg-K  dry air gas constant
 
 !Particles:
-tnumpart = 100000
+tnumpart = 1e5
 mult_init = 1.0
 rhow=1000.0  !kg/m^3
 rhos = 2000.0 !Density of salt, kg/m^3
-part_grav = 0,0,0
+part_grav = 0,0,-0.545
 Cpp = 4179.0  !J/kg-K
 Mw = 0.018015  !kg/mol
 Ru = 8.3144    !J/mol-K Universal gas constant
@@ -130,10 +129,10 @@ Sal = 0.066  !INITIAL salinity in kg/kg
 Gam = 7.28e-2
 Ion = 2.0
 
-nprime = 0.01  !particles/cm^3/min, real rate is nprime*multiplicity
+nprime = 0.00  !particles/cm^3/min, real rate is nprime*multiplicity
 
 !Particle initial conditions:
-radius_init=22.8e-6
+radius_init=1.5e-5
 radius_std=0.0
 kappas_init=1.2
 kappas_std=0.0

@@ -1,4 +1,4 @@
-FORTRAN=mpiifort
+FORTRAN=mpif90
 F90=ifort
 
 # Specify the architecture to optimize for.  Should be one of the following:
