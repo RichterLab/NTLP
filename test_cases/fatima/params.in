@@ -61,7 +61,7 @@ tsfcc = 287.5, 100.0    !Surface conditions of (temp, humidity) (used for LES) -
 
 surf_RH = 100.0
 surf_p = 101325  !Pa -- nominal surface pressure, for use in the definition of potential temp
-surf_rho = 1.2
+surf_rho = 1.2284
 
 ugcont = 4.0   !The initial u-velocity in the field
 vgcont = 0.0   !The initial v-velocity
