@@ -3098,10 +3098,10 @@ c
       if (icase.eq.6) then
       if (time .gt. 3600.0) then
          tsfcc(1) = 286.5
-         surf_rho = 1.2327
+         surf_rho = surf_p/Rd/tsfcc(1)
       else
          tsfcc(1) = 287.5
-         surf_rho = 1.2284
+         surf_rho = surf_p/Rd/tsfcc(1)
       end if
       end if 
 
@@ -5995,11 +5995,11 @@ c
 c         profile for potential temperature
             if (zz(iz) .le. 600.0) then
 
-                  t_temp = 302.5   !301.75   !300.0   !301.75(special)   !302.5(ori)
+                  t_temp = 302.75   !301.75   !300.0   !301.75(special)   !302.5(ori)
 
             elseif (zz(iz) .gt. 600.0 .and. zz(iz) .le. 1900.0) then
 
-                  t_surf   = 302.5   !301.75   !300.0   !301.75(special)   !302.5(ori)
+                  t_surf   = 302.75   !301.75   !300.0   !301.75(special)   !302.5(ori)
                   t_switch = 308.0   !316.0   !315.5(special) !8   !313.0 !5   !308.0(ori)
                   slope_t  = (t_switch - t_surf) / (1900.0 - 600.0)
                   t_temp   = t_surf + (slope_t * (zz(iz) - 600.0))
@@ -6027,16 +6027,16 @@ c         profile for potential temperature
 c         profile for qv
             if (zz(iz) .le. 600.0) then
 
-                  q_surf   = 22.5e-3   !19.5e-3
-                  q_switch = 19.75e-3   !17.05e-3
+                  q_surf   = 19.25e-3   !19.5e-3
+                  q_switch = 18.0e-3   !17.05e-3
                   slope_q  = (q_switch - q_surf) / 600.0
                   q_temp   = q_surf + (slope_q * zz(iz))
 
-            elseif (zz(iz) .gt. 600.0 .and. zz(iz) .le. 2000.0) then
+            elseif (zz(iz) .gt. 600.0 .and. zz(iz) .le. 1800.0) then
 
-                  q_surf   = 19.75e-3   !17.05e-3
-                  q_switch = 9.85e-3   !8.5e-3
-                  slope_q  = (q_switch - q_surf) / (2000.0 - 600.0)
+                  q_surf   = 18.0e-3   !17.05e-3
+                  q_switch = 11.5e-3   !8.5e-3
+                  slope_q  = (q_switch - q_surf) / (1800.0 - 600.0)
                   q_temp   = q_surf + (slope_q * (zz(iz) - 600.0))
 
 !            elseif (zz(iz) .gt. 1000.0 .and. zz(iz) .le. 2000.0) then
@@ -6046,23 +6046,23 @@ c         profile for qv
 !                  slope_q  = (q_switch - q_surf) / (2000.0 - 1000.0)
 !                  q_temp   = q_surf + (slope_q * (zz(iz) - 1000.0))
 
-            elseif (zz(iz) .gt. 2000.0 .and. zz(iz) .le. 2400.0) then
+            elseif (zz(iz) .gt. 1800.0 .and. zz(iz) .le. 2400.0) then
 
-                  q_surf   = 9.85e-3   !8.5e-3
-                  q_switch = 4.75e-3
-                  slope_q  = (q_switch - q_surf) / (2400.0 - 2000.0)
-                  q_temp   = q_surf + (slope_q * (zz(iz) - 2000.0))
+                  q_surf   = 11.5e-3   !8.5e-3
+                  q_switch = 5.15e-3
+                  slope_q  = (q_switch - q_surf) / (2400.0 - 1800.0)
+                  q_temp   = q_surf + (slope_q * (zz(iz) - 1800.0))
 
             elseif (zz(iz) .gt. 2400.0 .and. zz(iz) .le. 3000.0) then
 
-                  q_surf   = 4.75e-3
-                  q_switch = 4.0e-3   !3.0e-3
+                  q_surf   = 5.15e-3
+                  q_switch = 4.25e-3   !3.0e-3
                   slope_q  = (q_switch - q_surf) / (3000.0 - 2400.0)
                   q_temp   = q_surf + (slope_q * (zz(iz) - 2400.0))
 
             elseif (zz(iz) .ge. 3000.0) then
 
-                  q_temp = 4.0e-3   !3.0e-3
+                  q_temp = 4.25e-3   !3.0e-3
 
             endif
 
