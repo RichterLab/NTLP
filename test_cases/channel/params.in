@@ -90,10 +90,10 @@ rad_Fcb = 0.0    !Net radiative flux at cloud (or domain) base
 !Set the paths for code I/O. Must be on the scratch directory, not AFS!
 &path_names
 
-path_seed="PATH_TO_SCRATCH/channel/"
-path_part="PATH_TO_SCRATCH/channel/part.le.cou002"
-path_res="PATH_TO_SCRATCH/channel/u.le.cou002"
-path_ran="PATH_TO_SCRATCH/channel/u.le.cou000"
+path_seed="/scratch365/agrace4/channel/"
+path_part="/scratch365/agrace4/channel/part.le.cou002"
+path_res="/scratch365/agrace4/channel/u.le.cou002"
+path_ran="/scratch365/agrace4/channel/u.le.cou000"
 
 /
 
@@ -133,7 +133,7 @@ Ion = 2.0
 nprime = 0.01  !particles/cm^3/min, real rate is nprime*multiplicity
 
 !Particle initial conditions:
-radius_init=22.8e-6
+radius_init=1.5e-5
 radius_std=0.0
 kappas_init=1.2
 kappas_std=0.0

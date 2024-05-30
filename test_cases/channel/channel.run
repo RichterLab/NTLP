@@ -2,7 +2,7 @@
 
 group_storage=/afs/crc.nd.edu/group/RichterLab
 
-#$ -M YOUR_EMAIL@nd.edu
+#$ -M agrace4@nd.edu
 #$ -m n
 #$ -pe mpi-16 64
 #$ -q *@@richter
@@ -13,8 +13,8 @@ case=channel
 time=0000000
 runout=$case.out.$time
 
-datadir=PATH_TO_SCRATCH/$case
-homedir=PATH_TO_CODE/test_cases/$case
+datadir=/scratch365/agrace4/$case
+homedir=/afs/crc.nd.edu/user/a/agrace4/NTLP/test_cases/$case
 
 # create the directory for the output.
 mkdir -p $datadir
