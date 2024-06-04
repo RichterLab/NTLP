@@ -3322,8 +3322,8 @@ c ------------ initialize u, v, w, t and derivatives at izp1
 c
       do iy=iys,iye
       do ix=1,nnx
-         u(ix,iy,izp1)  = 2.0*Uo-u(ix,iy,iz)
-         v(ix,iy,izp1)  = -v(ix,iy,iz) 
+         u(ix,iy,izp1)  = u(ix,iy,iz) !2.0*Uo-u(ix,iy,iz)
+         v(ix,iy,izp1)  = v(ix,iy,iz) !-v(ix,iy,iz) 
          w(ix,iy,izp1)  = 0.0 
          r3(ix,iy,izp1) = 0.0
          e(ix,iy,izp1)  = 0.0 

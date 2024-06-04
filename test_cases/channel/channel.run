@@ -4,20 +4,20 @@ group_storage=/afs/crc.nd.edu/group/RichterLab
 
 #$ -M agrace4@nd.edu
 #$ -m n
-#$ -pe mpi-16 64
-#$ -q *@@richter
+#$ -pe mpi-64 64
+#$ -q hpc
 #$ -N slip_stat
 #$ -j y
 
-case=NTLP
+case=channel
 time=0000000
 runout=$case.out.$time
 
 datadir=/scratch365/agrace4/$case
-homedir=~/$case/test_cases/channel
+homedir=~/NTLP/test_cases/channel
 
 # create the directory for the output.
-# mkdir -p $datadir
+mkdir -p $datadir
 
 cd $homedir
 

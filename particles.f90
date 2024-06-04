@@ -2097,12 +2097,17 @@ CONTAINS
                ngidx = ngidx + 1
    
             end do
-
+      
          else !No injection this time step
             my_reintro = 0
             tot_reintro = 0
          end if
 
+      elseif (inewpart.eq.1) then
+         
+         do np =1,num_destroy
+               call new_particle(np,myid)
+         end do
 
       end if  !Different cases
 
@@ -2192,7 +2197,8 @@ CONTAINS
 
       xv = ran2(iseed)*(xmax-xmin) + xmin
       yv = ran2(iseed)*(ymax-ymin) + ymin
-      zv = ran2(iseed)*zl
+      !zv = ran2(iseed)*zl
+      zv = zl
       xp_init = (/xv,yv,zv/) 
 
       m_s = radius_init**3*pi2*2.0/3.0*rhow*Sal  !Using the salinity specified in params.in
