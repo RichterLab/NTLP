@@ -27,6 +27,10 @@ integer :: zconc_vid
 integer :: pflux_vid,pfluxdiff_vid
 integer :: pmassflux_vid,penegflux_vid
 integer :: vp1mean_vid,vp2mean_vid,vp3mean_vid
+integer :: wcube_vid,wfour_vid
+integer :: vp1cube_vid,vp2cube_vid,vp3cube_vid
+integer :: vp1four_vid,vp2four_vid,vp3four_vid
+integer :: us1msqr_vid,us2msqr_vid,us3msqr_vid,usmag_vid
 integer :: vp1msqr_vid,vp2msqr_vid,vp3msqr_vid
 integer :: uf1mean_vid,uf2mean_vid,uf3mean_vid
 integer :: uf1msqr_vid,uf2msqr_vid,uf3msqr_vid
@@ -178,7 +182,7 @@ subroutine netcdf_init
 
       call netcdf_check( nf90_def_var(ncid,"vxym",NF90_REAL, dimids_zu,vxym_vid) )
       call netcdf_check( nf90_put_att(ncid,vxym_vid,"title","Horiz. avg. v vel") )
-
+     
       call netcdf_check( nf90_def_var(ncid,"wxym",NF90_REAL, dimids_zw,wxym_vid) )
       call netcdf_check( nf90_put_att(ncid,wxym_vid,"title","Horiz. avg. w vel") )
 
@@ -205,7 +209,13 @@ subroutine netcdf_init
 
       call netcdf_check( nf90_def_var(ncid,"wps",NF90_REAL, dimids_zw,wps_vid) )
       call netcdf_check( nf90_put_att(ncid,wps_vid,"title","Fluctuating velocity <w'^2>") )
+      
+      call netcdf_check( nf90_def_var(ncid,"wcube",NF90_REAL, dimids_zw,wcube_vid) )
+      call netcdf_check( nf90_put_att(ncid,wcube_vid,"title","Triple Correlation <w'^3>") )
 
+      call netcdf_check( nf90_def_var(ncid,"wfour",NF90_REAL, dimids_zw,wfour_vid) )
+      call netcdf_check( nf90_put_att(ncid,wfour_vid,"title","Flatness <w'^4>") )
+ 
       call netcdf_check( nf90_def_var(ncid,"tps",NF90_REAL, dimids_zu_s,tps_vid) )
       call netcdf_check( nf90_put_att(ncid,tps_vid,"title","Fluctuating scalars <t'^2>") )
 
@@ -274,7 +284,25 @@ subroutine netcdf_init
 
       call netcdf_check( nf90_def_var(ncid,"vp3msqr",NF90_REAL, dimids_zu,vp3msqr_vid) )
       call netcdf_check( nf90_put_att(ncid,vp3msqr_vid,"title","Mean squared particle velocity <w'^2>") )
+      
+      call netcdf_check( nf90_def_var(ncid,"vp1cube",NF90_REAL, dimids_zu,vp1cube_vid) )
+      call netcdf_check( nf90_put_att(ncid,vp1cube_vid,"title","Mean cubed particle velocity <u'^3>") )
 
+      call netcdf_check( nf90_def_var(ncid,"vp2cube",NF90_REAL, dimids_zu,vp2cube_vid) )
+      call netcdf_check( nf90_put_att(ncid,vp2cube_vid,"title","Mean cubed particle velocity <v'^3>") )
+
+      call netcdf_check( nf90_def_var(ncid,"vp3cube",NF90_REAL, dimids_zu,vp3cube_vid) )
+      call netcdf_check( nf90_put_att(ncid,vp3cube_vid,"title","Mean cube particle velocity <w'^3>") )
+
+      call netcdf_check( nf90_def_var(ncid,"vp1four",NF90_REAL, dimids_zu,vp1four_vid) )
+      call netcdf_check( nf90_put_att(ncid,vp1four_vid,"title","Mean particle velocity fourth power <u'^4>") )
+
+      call netcdf_check( nf90_def_var(ncid,"vp2four",NF90_REAL, dimids_zu,vp2four_vid) )
+      call netcdf_check( nf90_put_att(ncid,vp2four_vid,"title","Mean particle velocity to fourth power <v'^4>") )
+
+      call netcdf_check( nf90_def_var(ncid,"vp3four",NF90_REAL, dimids_zu,vp3four_vid) )
+      call netcdf_check( nf90_put_att(ncid,vp3four_vid,"title","Mean particle velocity to fourth power <w'^4>") )
+      
       call netcdf_check( nf90_def_var(ncid,"uf1mean",NF90_REAL, dimids_zu,uf1mean_vid) )
       call netcdf_check( nf90_put_att(ncid,uf1mean_vid,"title","Horiz. avg. velocity u seen by particle") )
 
@@ -292,6 +320,18 @@ subroutine netcdf_init
 
       call netcdf_check( nf90_def_var(ncid,"uf3msqr",NF90_REAL, dimids_zu,uf3msqr_vid) )
       call netcdf_check( nf90_put_att(ncid,uf3msqr_vid,"title","Mean squared w-velocity seen by particle <wf'^2>") )
+
+      call netcdf_check( nf90_def_var(ncid,"us1msqr",NF90_REAL, dimids_zu,us1msqr_vid) )
+      call netcdf_check( nf90_put_att(ncid,us1msqr_vid,"title","Mean squared u slip-velocity seen by particle <us'^2>") )
+
+      call netcdf_check( nf90_def_var(ncid,"us2msqr",NF90_REAL, dimids_zu,us2msqr_vid) )
+      call netcdf_check( nf90_put_att(ncid,us2msqr_vid,"title","Mean squared v slip-velocity seen by particle <vs'^2>") )
+
+      call netcdf_check( nf90_def_var(ncid,"us3msqr",NF90_REAL, dimids_zu,us3msqr_vid) )
+      call netcdf_check( nf90_put_att(ncid,us3msqr_vid,"title","Mean squared w slip-velocity seen by particle <ws'^2>") )
+
+      call netcdf_check( nf90_def_var(ncid,"usmag",NF90_REAL, dimids_zu,usmag_vid) )
+      call netcdf_check( nf90_put_att(ncid,usmag_vid,"title","Average Slip velocity magnitude <abs(us)>") )
 
       call netcdf_check( nf90_def_var(ncid,"m1src",NF90_REAL, dimids_zu,m1src_vid) )
       call netcdf_check( nf90_put_att(ncid,m1src_vid,"title","Particle x-momentum source") )
@@ -416,7 +456,9 @@ subroutine netcdf_res
       call netcdf_check( nf90_inq_varid(ncid,"tempxym",tempxym_vid) )
       call netcdf_check( nf90_inq_varid(ncid,"ups",ups_vid) )
       call netcdf_check( nf90_inq_varid(ncid,"vps",vps_vid) )
-      call netcdf_check( nf90_inq_varid(ncid,"wps",wps_vid) )
+      call netcdf_check( nf90_inq_varid(ncid,"wps",wps_vid) ) 
+      call netcdf_check( nf90_inq_varid(ncid,"wcube",wcube_vid) )
+      call netcdf_check( nf90_inq_varid(ncid,"wfour",wfour_vid) )
       call netcdf_check( nf90_inq_varid(ncid,"tps",tps_vid) )
       call netcdf_check( nf90_inq_varid(ncid,"uwle",uwle_vid) )
       call netcdf_check( nf90_inq_varid(ncid,"uwsb",uwsb_vid) )
@@ -446,6 +488,16 @@ subroutine netcdf_res
       call netcdf_check( nf90_inq_varid(ncid,"uf1msqr",uf1msqr_vid) )
       call netcdf_check( nf90_inq_varid(ncid,"uf2msqr",uf2msqr_vid) )
       call netcdf_check( nf90_inq_varid(ncid,"uf3msqr",uf3msqr_vid) )
+      call netcdf_check( nf90_inq_varid(ncid,"vp1cube",vp1cube_vid) )
+      call netcdf_check( nf90_inq_varid(ncid,"vp2cube",vp2cube_vid) )
+      call netcdf_check( nf90_inq_varid(ncid,"vp3cube",vp3cube_vid) )
+      call netcdf_check( nf90_inq_varid(ncid,"vp1four",vp1four_vid) )
+      call netcdf_check( nf90_inq_varid(ncid,"vp2four",vp2four_vid) )
+      call netcdf_check( nf90_inq_varid(ncid,"vp3four",vp3four_vid) )
+      call netcdf_check( nf90_inq_varid(ncid,"us1msqr",us1msqr_vid) )
+      call netcdf_check( nf90_inq_varid(ncid,"us2msqr",us2msqr_vid) )
+      call netcdf_check( nf90_inq_varid(ncid,"us3msqr",us3msqr_vid) )
+      call netcdf_check( nf90_inq_varid(ncid,"usmag",usmag_vid) )
       call netcdf_check( nf90_inq_varid(ncid,"m1src",m1src_vid) )
       call netcdf_check( nf90_inq_varid(ncid,"m2src",m2src_vid) )
       call netcdf_check( nf90_inq_varid(ncid,"m3src",m3src_vid) )
@@ -525,8 +577,11 @@ subroutine write_his_netcdf
       tmp(0) = 0.0
       tmp(1:nnz) = wps(1:nnz)
       call netcdf_check( nf90_put_var(ncid,wps_vid,real(tmp),start=(/1, his_counter/)) )
-      call netcdf_check( nf90_put_var(ncid,tps_vid,real(tps(1:nnz,1:nscl)),start=(/1,1,his_counter/)) )
 
+      call netcdf_check( nf90_put_var(ncid,wcube_vid,real(wcube(0:nnz)),start=(/1, his_counter/)) )
+      call netcdf_check( nf90_put_var(ncid,wfour_vid,real(wfour(0:nnz)),start=(/1, his_counter/)) )
+
+      call netcdf_check( nf90_put_var(ncid,tps_vid,real(tps(1:nnz,1:nscl)),start=(/1,1,his_counter/)) )          
       tmp(0) = 0
       tmp(1:nnz) = uwle(1:nnz)
       call netcdf_check( nf90_put_var(ncid,uwle_vid,real(tmp),start=(/1, his_counter/)) )
@@ -580,7 +635,16 @@ subroutine write_his_netcdf
       call netcdf_check( nf90_put_var(ncid,uf1msqr_vid,real(uf1msqr(1:nnz)),start=(/1, his_counter/)) )
       call netcdf_check( nf90_put_var(ncid,uf2msqr_vid,real(uf2msqr(1:nnz)),start=(/1, his_counter/)) )
       call netcdf_check( nf90_put_var(ncid,uf3msqr_vid,real(uf3msqr(1:nnz)),start=(/1, his_counter/)) )
-
+      call netcdf_check( nf90_put_var(ncid,vp1cube_vid,real(vp1cube(1:nnz)),start=(/1, his_counter/)) )
+      call netcdf_check( nf90_put_var(ncid,vp2cube_vid,real(vp2cube(1:nnz)),start=(/1, his_counter/)) )
+      call netcdf_check( nf90_put_var(ncid,vp3cube_vid,real(vp3cube(1:nnz)),start=(/1, his_counter/)) )
+      call netcdf_check( nf90_put_var(ncid,vp1four_vid,real(vp1four(1:nnz)),start=(/1, his_counter/)) )
+      call netcdf_check( nf90_put_var(ncid,vp2four_vid,real(vp2four(1:nnz)),start=(/1, his_counter/)) )
+      call netcdf_check( nf90_put_var(ncid,vp3four_vid,real(vp3four(1:nnz)),start=(/1, his_counter/)) )
+      call netcdf_check( nf90_put_var(ncid,us1msqr_vid,real(us1msqr(1:nnz)),start=(/1, his_counter/)) )
+      call netcdf_check( nf90_put_var(ncid,us2msqr_vid,real(us2msqr(1:nnz)),start=(/1, his_counter/)) )
+      call netcdf_check( nf90_put_var(ncid,us3msqr_vid,real(us3msqr(1:nnz)),start=(/1, his_counter/)) )
+      call netcdf_check( nf90_put_var(ncid,usmag_vid,real(usmag(1:nnz)),start=(/1, his_counter/)) )
       call netcdf_check( nf90_put_var(ncid,m1src_vid,real(m1src(1:nnz)),start=(/1, his_counter/)) )
       call netcdf_check( nf90_put_var(ncid,m2src_vid,real(m2src(1:nnz)),start=(/1, his_counter/)) )
       call netcdf_check( nf90_put_var(ncid,m3src_vid,real(m3src(1:nnz)),start=(/1, his_counter/)) )

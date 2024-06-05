@@ -17,6 +17,11 @@ module particles
   real, allocatable :: partcount(:,:,:),partsrc(:,:,:,:)
   real, allocatable :: vpsum(:,:,:,:),vpsqrsum(:,:,:,:)
   real, allocatable :: ufsum(:,:,:,:),ufsqrsum(:,:,:,:)
+  real, allocatable :: ussum(:,:,:,:),ussum_t(:,:,:,:)
+  real, allocatable :: usmagsum(:,:,:), usmagsum_t(:,:,:)
+  real, allocatable :: ussqrsum(:,:,:,:),ussqrsum_t(:,:,:,:)
+  real, allocatable :: vpcubesum(:,:,:,:),vpcubesum_t(:,:,:,:)
+  real, allocatable :: vpfoursum(:,:,:,:),vpfoursum_t(:,:,:,:)
   real, allocatable :: Tpsum(:,:,:),Tpsum_t(:,:,:)
   real, allocatable :: Tpsqrsum(:,:,:),Tpsqrsum_t(:,:,:)
   real, allocatable :: Tfsum(:,:,:),Tfsum_t(:,:,:)
@@ -2092,12 +2097,11 @@ CONTAINS
                ngidx = ngidx + 1
    
             end do
-
+      
          else !No injection this time step
             my_reintro = 0
             tot_reintro = 0
          end if
-
 
       end if  !Different cases
 
@@ -2187,7 +2191,8 @@ CONTAINS
 
       xv = ran2(iseed)*(xmax-xmin) + xmin
       yv = ran2(iseed)*(ymax-ymin) + ymin
-      zv = ran2(iseed)*zl
+      !zv = ran2(iseed)*zl
+      zv = zl
       xp_init = (/xv,yv,zv/) 
 
       m_s = radius_init**3*pi2*2.0/3.0*rhow*Sal  !Using the salinity specified in params.in
@@ -2593,7 +2598,7 @@ CONTAINS
     !i.e. location is reflected, w-velocity is negated
 
     top = z(nnz)-part%radius
-    bot = 0.0 + part%radius
+    bot = 0.0! + part%radius Andrew Made this change for debugging
 
     if (part%xp(3) .GT. top) then
        part%xp(3) = top - (part%xp(3)-top)
@@ -2659,7 +2664,10 @@ CONTAINS
                call lognormal_dist(rad_init,m_s,kappa_s,M,S)
 
                call create_particle(xp_init,vp_init,Tp_init,m_s,kappa_s,mult,rad_init,idx_old,procidx_old)
-
+          elseif (ireintro.eq.1 .and. inewpart.eq.1) then
+                  call destroy_particle
+                  num_destroy = num_destroy + 1
+                call new_particle(idx_old,procidx_old)
           else
 
                call destroy_particle
@@ -2744,6 +2752,11 @@ CONTAINS
       partcount_t = 0.0
       vpsum_t = 0.0
       ufsum_t = 0.0
+      usmagsum_t = 0.0
+      ussum_t = 0.0
+      ussqrsum_t = 0.0
+      vpcubesum_t = 0.0
+      vpfoursum_t = 0.0
       upwp_t = 0.0
       vpsqrsum_t = 0.0
       ufsqrsum_t = 0.0
@@ -2978,6 +2991,34 @@ CONTAINS
                      vpsqrsum(1:nnx,iys:iye,izs-1:ize+1,3),nnx,nnz,mxs, &
                      mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid, &
                      ncpu_s,numprocs)
+                !vpcube
+      call ztox_trans(vpcubesum_t(0:nnz+1,iys:iye,mxs:mxe,1), &
+                     vpcubesum(1:nnx,iys:iye,izs-1:ize+1,1),nnx,nnz,mxs, &
+                     mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid, &
+                     ncpu_s,numprocs)
+      call ztox_trans(vpcubesum_t(0:nnz+1,iys:iye,mxs:mxe,2), &
+                     vpcubesum(1:nnx,iys:iye,izs-1:ize+1,2),nnx,nnz,mxs, &
+                     mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid, &
+                     ncpu_s,numprocs)
+      call ztox_trans(vpcubesum_t(0:nnz+1,iys:iye,mxs:mxe,3), &
+                     vpcubesum(1:nnx,iys:iye,izs-1:ize+1,3),nnx,nnz,mxs, &
+                     mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid, &
+                     ncpu_s,numprocs)
+                !vpfour
+      call ztox_trans(vpfoursum_t(0:nnz+1,iys:iye,mxs:mxe,1), &
+                     vpfoursum(1:nnx,iys:iye,izs-1:ize+1,1),nnx,nnz,mxs, &
+                     mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid, &
+                     ncpu_s,numprocs)
+      call ztox_trans(vpfoursum_t(0:nnz+1,iys:iye,mxs:mxe,2), &
+                     vpfoursum(1:nnx,iys:iye,izs-1:ize+1,2),nnx,nnz,mxs, &
+                     mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid, &
+                     ncpu_s,numprocs)
+      call ztox_trans(vpfoursum_t(0:nnz+1,iys:iye,mxs:mxe,3), &
+                     vpfoursum(1:nnx,iys:iye,izs-1:ize+1,3),nnx,nnz,mxs, &
+                     mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid, &
+                     ncpu_s,numprocs)
+
+
 
       call ztox_trans(ufsum_t(0:nnz+1,iys:iye,mxs:mxe,1), &
                      ufsum(1:nnx,iys:iye,izs-1:ize+1,1),nnx,nnz,mxs, &
@@ -3004,6 +3045,40 @@ CONTAINS
                      ufsqrsum(1:nnx,iys:iye,izs-1:ize+1,3),nnx,nnz,mxs, &
                      mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid, &
                      ncpu_s,numprocs)
+        !ussqr
+      call ztox_trans(ussqrsum_t(0:nnz+1,iys:iye,mxs:mxe,1), &
+                     ussqrsum(1:nnx,iys:iye,izs-1:ize+1,1),nnx,nnz,mxs, &
+                     mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid, &
+                     ncpu_s,numprocs)
+      call ztox_trans(ussqrsum_t(0:nnz+1,iys:iye,mxs:mxe,2), &
+                     ussqrsum(1:nnx,iys:iye,izs-1:ize+1,2),nnx,nnz,mxs, &
+                     mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid, &
+                     ncpu_s,numprocs)
+      call ztox_trans(ussqrsum_t(0:nnz+1,iys:iye,mxs:mxe,3), &
+                     ussqrsum(1:nnx,iys:iye,izs-1:ize+1,3),nnx,nnz,mxs, &
+                     mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid, &
+                     ncpu_s,numprocs)
+
+             !us
+      call ztox_trans(ussum_t(0:nnz+1,iys:iye,mxs:mxe,1), &
+                     ussum(1:nnx,iys:iye,izs-1:ize+1,1),nnx,nnz,mxs, &
+                     mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid, &
+                     ncpu_s,numprocs)
+      call ztox_trans(ussum_t(0:nnz+1,iys:iye,mxs:mxe,2), &
+                     ussum(1:nnx,iys:iye,izs-1:ize+1,2),nnx,nnz,mxs, &
+                     mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid, &
+                     ncpu_s,numprocs)
+      call ztox_trans(ussum_t(0:nnz+1,iys:iye,mxs:mxe,3), &
+                     ussum(1:nnx,iys:iye,izs-1:ize+1,3),nnx,nnz,mxs, &
+                     mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid, &
+                     ncpu_s,numprocs)
+
+       !umag
+      call ztox_trans(usmagsum_t(0:nnz+1,iys:iye,mxs:mxe), &
+                     usmagsum(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,mxs, &
+                     mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid, &
+                     ncpu_s,numprocs)
+
 
       call ztox_trans(Tpsum_t(0:nnz+1,iys:iye,mxs:mxe), &
                      Tpsum(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,mxs, &
@@ -3132,6 +3207,11 @@ CONTAINS
       partcount_t = 0.0
       vpsum_t = 0.0
       ufsum_t = 0.0
+      usmagsum_t = 0.0
+      ussum_t = 0.0
+      ussqrsum_t = 0.0
+      vpcubesum_t = 0.0
+      vpfoursum_t = 0.0
       upwp_t = 0.0
       vpsqrsum_t = 0.0
       ufsqrsum_t = 0.0
@@ -3511,6 +3591,34 @@ CONTAINS
                      vpsqrsum(1:nnx,iys:iye,izs-1:ize+1,3),nnx,nnz,mxs, &
                      mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid, &
                      ncpu_s,numprocs)
+                !vpcube
+      call ztox_trans(vpcubesum_t(0:nnz+1,iys:iye,mxs:mxe,1), &
+                     vpcubesum(1:nnx,iys:iye,izs-1:ize+1,1),nnx,nnz,mxs, &
+                     mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid, &
+                     ncpu_s,numprocs)
+      call ztox_trans(vpcubesum_t(0:nnz+1,iys:iye,mxs:mxe,2), &
+                     vpcubesum(1:nnx,iys:iye,izs-1:ize+1,2),nnx,nnz,mxs, &
+                     mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid, &
+                     ncpu_s,numprocs)
+      call ztox_trans(vpcubesum_t(0:nnz+1,iys:iye,mxs:mxe,3), &
+                     vpcubesum(1:nnx,iys:iye,izs-1:ize+1,3),nnx,nnz,mxs, &
+                     mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid, &
+                     ncpu_s,numprocs)
+                !vpfour
+      call ztox_trans(vpfoursum_t(0:nnz+1,iys:iye,mxs:mxe,1), &
+                     vpfoursum(1:nnx,iys:iye,izs-1:ize+1,1),nnx,nnz,mxs, &
+                     mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid, &
+                     ncpu_s,numprocs)
+      call ztox_trans(vpfoursum_t(0:nnz+1,iys:iye,mxs:mxe,2), &
+                     vpfoursum(1:nnx,iys:iye,izs-1:ize+1,2),nnx,nnz,mxs, &
+                     mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid, &
+                     ncpu_s,numprocs)
+      call ztox_trans(vpfoursum_t(0:nnz+1,iys:iye,mxs:mxe,3), &
+                     vpfoursum(1:nnx,iys:iye,izs-1:ize+1,3),nnx,nnz,mxs, &
+                     mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid, &
+                     ncpu_s,numprocs)
+
+
 
       call ztox_trans(ufsum_t(0:nnz+1,iys:iye,mxs:mxe,1), &
                      ufsum(1:nnx,iys:iye,izs-1:ize+1,1),nnx,nnz,mxs, &
@@ -3537,6 +3645,41 @@ CONTAINS
                      ufsqrsum(1:nnx,iys:iye,izs-1:ize+1,3),nnx,nnz,mxs, &
                      mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid, &
                      ncpu_s,numprocs)
+        !ussqr
+      call ztox_trans(ussqrsum_t(0:nnz+1,iys:iye,mxs:mxe,1), &
+                     ussqrsum(1:nnx,iys:iye,izs-1:ize+1,1),nnx,nnz,mxs, &
+                     mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid, &
+                     ncpu_s,numprocs)
+      call ztox_trans(ussqrsum_t(0:nnz+1,iys:iye,mxs:mxe,2), &
+                     ussqrsum(1:nnx,iys:iye,izs-1:ize+1,2),nnx,nnz,mxs, &
+                     mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid, &
+                     ncpu_s,numprocs)
+      call ztox_trans(ussqrsum_t(0:nnz+1,iys:iye,mxs:mxe,3), &
+                     ussqrsum(1:nnx,iys:iye,izs-1:ize+1,3),nnx,nnz,mxs, &
+                     mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid, &
+                     ncpu_s,numprocs)
+
+             !us
+      call ztox_trans(ussum_t(0:nnz+1,iys:iye,mxs:mxe,1), &
+                     ussum(1:nnx,iys:iye,izs-1:ize+1,1),nnx,nnz,mxs, &
+                     mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid, &
+                     ncpu_s,numprocs)
+      call ztox_trans(ussum_t(0:nnz+1,iys:iye,mxs:mxe,2), &
+                     ussum(1:nnx,iys:iye,izs-1:ize+1,2),nnx,nnz,mxs, &
+                     mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid, &
+                     ncpu_s,numprocs)
+      call ztox_trans(ussum_t(0:nnz+1,iys:iye,mxs:mxe,3), &
+                     ussum(1:nnx,iys:iye,izs-1:ize+1,3),nnx,nnz,mxs, &
+                     mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid, &
+                     ncpu_s,numprocs)
+
+       !umag
+      call ztox_trans(usmagsum_t(0:nnz+1,iys:iye,mxs:mxe), &
+                     usmagsum(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,mxs, &
+                     mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid, &
+                     ncpu_s,numprocs)
+   
+
 
       call ztox_trans(Tpsum_t(0:nnz+1,iys:iye,mxs:mxe), &
                      Tpsum(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,mxs, &
@@ -3773,10 +3916,19 @@ CONTAINS
       vpsum_t(kpt,jpt,ipt,i) = vpsum_t(kpt,jpt,ipt,i) + part%vp(i)
       vpsqrsum_t(kpt,jpt,ipt,i)=vpsqrsum_t(kpt,jpt,ipt,i)+part%vp(i)**2
 
+      vpcubesum_t(kpt,jpt,ipt,i) = vpcubesum_t(kpt,jpt,ipt,i) + part%vp(i)**3
+      vpfoursum_t(kpt,jpt,ipt,i) = vpfoursum_t(kpt,jpt,ipt,i) + part%vp(i)**4
+
       ufsum_t(kpt,jpt,ipt,i) = ufsum_t(kpt,jpt,ipt,i) + part%uf(i)
       ufsqrsum_t(kpt,jpt,ipt,i)=ufsqrsum_t(kpt,jpt,ipt,i)+part%uf(i)**2
+
+      ussum_t(kpt,jpt,ipt,i) =  ussum_t(kpt,jpt,ipt,i) + (part%uf(i) - part%vp(i))
+      ussqrsum_t(kpt,jpt,ipt,i) =  ussqrsum_t(kpt,jpt,ipt,i) + (part%uf(i) - part%vp(i))**2
       end do
 
+      usmagsum_t(kpt,jpt,ipt) = usmagsum_t(kpt,jpt,ipt) + &
+          sqrt((part%uf(1)-part%vp(1))**2 + (part%uf(2)-part%vp(2))**2 +(part%uf(3)-part%vp(3))**2)
+      
       Tpsum_t(kpt,jpt,ipt) = Tpsum_t(kpt,jpt,ipt) + part%Tp
       Tpsqrsum_t(kpt,jpt,ipt) = Tpsqrsum_t(kpt,jpt,ipt) + part%Tp**2
 

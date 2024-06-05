@@ -3322,8 +3322,8 @@ c ------------ initialize u, v, w, t and derivatives at izp1
 c
       do iy=iys,iye
       do ix=1,nnx
-         u(ix,iy,izp1)  = 2.0*Uo-u(ix,iy,iz)
-         v(ix,iy,izp1)  = -v(ix,iy,iz) 
+         u(ix,iy,izp1)  = u(ix,iy,iz) !2.0*Uo-u(ix,iy,iz)
+         v(ix,iy,izp1)  = v(ix,iy,iz) !-v(ix,iy,iz) 
          w(ix,iy,izp1)  = 0.0 
          r3(ix,iy,izp1) = 0.0
          e(ix,iy,izp1)  = 0.0 
@@ -7273,7 +7273,7 @@ c ------- indices for indexing array stat(.,.)
 c         js = number of non-scalar stats
 c         ns = number of scalar stats
 c
-      integer, parameter :: js = 43, ns = 5, nstat = js + ns*nscl
+      integer, parameter :: js = 53, ns = 5, nstat = js + ns*nscl
       real :: stat(1:nnz,nstat)
 
       integer :: ix,iy,iz,izm1,izp1,izp2,m1,m2,m3,m4,m5,i,l
@@ -7325,6 +7325,16 @@ c          stat(.,40) = ufsum(3)
 c          stat(.,41) = ufsqrsum(1) 
 c          stat(.,42) = ufsqrsum(2) 
 c          stat(.,43) = ufsqrsum(3) 
+c          stat(.,44) = ussqrsum(1)
+c          stat(.,45) = ussqrsum(2)
+c          stat(.,46) = ussqrsum(3)
+c          stat(.,47) = vpcubesum(1)
+c          stat(.,48) = vpcubesum(2)
+c          stat(.,49) = vpcubesum(3)
+c          stat(.,50) = vpfoursum(1)
+c          stat(.,51) = vpfoursum(2)
+c          stat(.,52) = vpfoursum(3)
+c          stat(.,53) = usmag
 c          stat(.,m1) = resolved scalar flux wt at zw = wtle
 c          stat(.,m2) = resolved scalar flux ut at zw = utle
 c          stat(.,m3) = resolved scalar flux vt at zw = vtle
@@ -7423,6 +7433,25 @@ c
          stat(iz,41) = stat(iz,41) + ufsqrsum(ix,iy,iz,1)
          stat(iz,42) = stat(iz,42) + ufsqrsum(ix,iy,iz,2)
          stat(iz,43) = stat(iz,43) + ufsqrsum(ix,iy,iz,3)
+
+c        Add stats for three components of slip velocity
+         stat(iz,44) = stat(iz,44) + ussqrsum(ix,iy,iz,1)
+         stat(iz,45) = stat(iz,45) + ussqrsum(ix,iy,iz,2)
+         stat(iz,46) = stat(iz,46) + ussqrsum(ix,iy,iz,3)
+
+c        Add stats for three components of triple correlation
+         stat(iz,47) = stat(iz,47) + vpcubesum(ix,iy,iz,1)
+         stat(iz,48) = stat(iz,48) + vpcubesum(ix,iy,iz,2)
+         stat(iz,49) = stat(iz,49) + vpcubesum(ix,iy,iz,3)
+
+c        Add stats for three components of quadruple correlation
+         stat(iz,50) = stat(iz,50) + vpfoursum(ix,iy,iz,1)
+         stat(iz,51) = stat(iz,51) + vpfoursum(ix,iy,iz,2)
+         stat(iz,52) = stat(iz,52) + vpfoursum(ix,iy,iz,3)
+
+         stat(iz,53) = stat(iz,53) + usmagsum(ix,iy,iz)      
+
+
       enddo
       enddo
 
@@ -7531,6 +7560,19 @@ c
          uf1msqr(iz) = 0.0
          uf2msqr(iz) = 0.0
          uf3msqr(iz) = 0.0
+         vp1cube(iz) = 0.0
+         vp2cube(iz) = 0.0
+         vp3cube(iz) = 0.0
+         vp1four(iz) = 0.0
+         vp2four(iz) = 0.0
+         vp3four(iz) = 0.0
+         us1mean(iz) = 0.0
+         us2mean(iz) = 0.0
+         us3mean(iz) = 0.0
+         us1msqr(iz) = 0.0
+         us2msqr(iz) = 0.0
+         us3msqr(iz) = 0.0
+         usmag(iz) = 0.0
       else
          zconc(iz)  = stat(iz,11)/xl/yl/dzw(iz)
          vp1mean(iz) = stat(iz,12)/stat(iz,11)
@@ -7556,6 +7598,38 @@ c
          uf1msqr(iz) = stat(iz,41)/stat(iz,11)-uf1mean(iz)**2
          uf2msqr(iz) = stat(iz,42)/stat(iz,11)-uf2mean(iz)**2
          uf3msqr(iz) = stat(iz,43)/stat(iz,11)-uf3mean(iz)**2
+
+         us1mean(iz) = uf1mean(iz) - vp1mean(iz)
+         us2mean(iz) = uf2mean(iz) - vp2mean(iz)
+         us3mean(iz) = uf3mean(iz) - vp3mean(iz)
+         us1msqr(iz) = stat(iz,44)/stat(iz,11)-us1mean(iz)**2
+         us2msqr(iz) = stat(iz,45)/stat(iz,11)-us2mean(iz)**2
+         us3msqr(iz) = stat(iz,46)/stat(iz,11)-us3mean(iz)**2
+
+         vp1cube(iz) = stat(iz,47)/stat(iz,11) - 
+     +      3*vp1mean(iz)*vp1msqr(iz)-
+     +      vp1mean(iz)**3
+         vp2cube(iz) = stat(iz,48)/stat(iz,11) - 
+     +      3*vp2mean(iz)*vp2msqr(iz)-
+     +      vp2mean(iz)**3
+         vp3cube(iz) = stat(iz,49)/stat(iz,11) - 
+     +      3*vp3mean(iz)*vp3msqr(iz)-
+     +      vp3mean(iz)**3
+
+         vp1four(iz) = stat(iz,50)/stat(iz,11) - 
+     +      4*vp1mean(iz)*vp1cube(iz)-
+     +      6*vp1mean(iz)**2*vp1msqr(iz) - vp1mean(iz)**4
+
+         vp2four(iz) = stat(iz,51)/stat(iz,11) - 
+     +      4*vp2mean(iz)*vp2cube(iz)-
+     +      6*vp2mean(iz)**2*vp2msqr(iz) - vp2mean(iz)**4
+
+         vp3four(iz) = stat(iz,52)/stat(iz,11) - 
+     +      4*vp3mean(iz)*vp3cube(iz)-
+     +      6*vp3mean(iz)**2*vp3msqr(iz) - vp3mean(iz)**4
+
+         usmag(iz) = stat(iz,53)/stat(iz,11)
+
       end if
          
          
@@ -8497,6 +8571,32 @@ c
       vpsqrsum = 0.0
       allocate(vpsqrsum_t(0:nnz+1,iys:iye,mxs:mxe,1:3))
       vpsqrsum_t = 0.0
+      
+      allocate(vpcubesum(nnx,iys:iye,izs-1:ize+1,1:3))
+      vpcubesum = 0.0
+      allocate(vpcubesum_t(0:nnz+1,iys:iye,mxs:mxe,1:3))
+      vpcubesum_t = 0.0
+ 
+      allocate(vpfoursum(nnx,iys:iye,izs-1:ize+1,1:3))
+      vpfoursum = 0.0
+      allocate(vpfoursum_t(0:nnz+1,iys:iye,mxs:mxe,1:3))
+      vpfoursum_t = 0.0
+ 
+      allocate(ussum(nnx,iys:iye,izs-1:ize+1,1:3))
+      ussum = 0.0
+      allocate(ussum_t(0:nnz+1,iys:iye,mxs:mxe,1:3))
+      ussum_t = 0.0
+ 
+      allocate(usmagsum(nnx,iys:iye,izs-1:ize+1))
+      usmagsum = 0.0
+      allocate(usmagsum_t(0:nnz+1,iys:iye,mxs:mxe))
+      usmagsum_t = 0.0
+ 
+      allocate(ussqrsum(nnx,iys:iye,izs-1:ize+1,1:3))
+      ussqrsum = 0.0
+      allocate(ussqrsum_t(0:nnz+1,iys:iye,mxs:mxe,1:3))
+      ussqrsum_t = 0.0
+
       allocate(ufsum(nnx,iys:iye,izs-1:ize+1,1:3))
       ufsum = 0.0
       allocate(ufsum_t(0:nnz+1,iys:iye,mxs:mxe,1:3))

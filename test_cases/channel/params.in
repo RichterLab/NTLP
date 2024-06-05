@@ -2,13 +2,21 @@
 !Time step information
 &step_params
 iti=0        !Time step to begin
+<<<<<<< HEAD
 itmax=500000   !Max number of time steps
 imean=100    !Number of time steps between writing mean profiles to output log file
 ihst=10     !Number of time steps between writing profiles to history file
 itape=30  !Number of time steps before opening new history file and writing full 3D volumes
 i_viz=100   !Time steps between writing to viz file
+=======
+itmax=150000   !Max number of time steps
+imean=1500    !Number of time steps between writing mean profiles to output log file
+ihst=100     !Number of time steps between writing profiles to history file
+itape=500  !Number of time steps before opening new history file and writing full 3D volumes
+i_viz=15000   !Time steps between writing to viz file
+>>>>>>> import_feature
 itn = 0  !Index for "u.le.cou001" files
-max_time = 1.0e9  !Code will stop at the next itape after this time (in seconds) has been exceeded
+max_time = 15  !Code will stop at the next itape after this time (in seconds) has been exceeded
 /
 
 !Flags for various features
@@ -17,7 +25,7 @@ ismlt=0, ifree=0, iradup=0, iupwnd=1
 ibuoy=0, ifilt=0, itcut=1, isubs=0, ibrcl=0, iocean=0
 method=3, idebug=1, ivis0=1, ifix_dt=0, new_vis=-1
 isfc = 1, 1  ! isfc = 0 sets surface flux (qstar), isfc = 1 sets surface condition (Dirichlet through tsfcc)
-iz_space=1, ! 0 = uniform dz, 1 = top/bottom mirror stretched ("channel"), 2 = "open channel", 3 = PBL with stretching at surface and at zi
+iz_space=2, ! 0 = uniform dz, 1 = top/bottom mirror stretched ("channel"), 2 = "open channel", 3 = PBL with stretching at surface and at zi
 iDNS = 1
 ifields = 1  ! if set to 1, reads the initial condition from path_ran below; otherwise calls subroutine random
 ihurr = 0  !If set to 1, includes the hurricane forcings from Bryan et al. (2017) BLM and according to dvdr and hurr_rad below
@@ -31,14 +39,14 @@ icoalesce=0
 ipart_method=2   !1 = same RK3 as flow, 2 = backward Euler
 ipartdiff = 0
 inewpart = 1  !1 = new particles have initial conditions defined below, random location in domain; 2 = same, but normal distributions of radius and kappa_s, given by radius_std and kappas_std; 3 = special setup for C-FOG and double lognormal of different type; 4 = crude sea spray setup
-icase = 0  !Special additions for certain cases. 3 = setup for C-FOG, 4 = steady state LES sea spray setup
+icase = 1  !Special additions for certain cases. 3 = setup for C-FOG, 4 = steady state LES sea spray setup
 isfs = 2   !isfs=1 is simple random walk, isfs=2 is Weil et al. (2004) particle subgrid
 iexner = 0  !iexner = 1 applies a correction to part%Tf to account for conversion b/w potential temp and temp. (need in PBL)
 ilongwave = 0   !Use simple longwave radiation scheme when clouds/fog present
 inetcdf = 1  !Set to 1 to output history and histogram data to netcdf format, otherwise original binary format
 iviznetcdf = 1  !Set to 1 to slice viz files to netcdf format (WARNING: it's been a long time since the original have been used)
 ihumiditycontrol = 0  !Adaptive humidity source/sink (used for Pi Chamber; subroutine humidity_control)
-ireintro=0   !Aerosol injection
+ireintro=1   !Aerosol injection
 itrajout=0   !Write the particle trajectory files. Needs a directory within the scratch space, and each processor writes a file (requires postprocessing to stitch together)
 /
 
@@ -47,12 +55,16 @@ itrajout=0   !Write the particle trajectory files. Needs a directory within the 
 ncpu_s=16
 
 !Time step
-cfl = 0.8
+cfl = 0.5
 dt_new = 0.05
 
 !Use for DNS:
 Uo = 0.0  !Sets the magnitude of the top and bottom plate velocities (Couette flow -- assumes equal and opposite)
+<<<<<<< HEAD
 Ttop(1) = 279.0, 100.0  !Currently this should be (temperature, relative humidity) (used in DNS)
+=======
+Ttop(1) = 299.0, 100.0  !Currently this should be (temperature, relative humidity) (used in DNS)
+>>>>>>> import_feature
 Tbot(1) = 299.0, 100.0  !Currently this should be (temperature, relative humidity) (used in DNS)
 
 !Use for LES:
@@ -69,7 +81,11 @@ vgcont = 0.0   !The initial v-velocity
 dvdr = -8.0e-04  !Change in v with hurricane radius
 hurr_rad = 40e3  ! Hurricane radius
 
+<<<<<<< HEAD
 dpdx = -0.0955  !The pressure gradient for channel flow (gets put into u_geo for DNS)
+=======
+dpdx = -0.381289  !The pressure gradient for channel flow (gets put into u_geo for DNS)
+>>>>>>> import_feature
 
 Swall = 0.0  !Set the CONSTANT humidity sink to use if ihumiditycontrol = 0
 
@@ -100,7 +116,10 @@ path_ran="/scratch365/agrace4/channel/u.le.cou000"
 
 !Material and particle properties and other constants
 &constants
+<<<<<<< HEAD
 !grav = 0.043
+=======
+>>>>>>> import_feature
 grav = 9.81
 t00 = 273.0 !Reference temp for buoyancy
 fcor = 0.0 !Coriolis parameter
@@ -116,17 +135,29 @@ Sc = 0.615
 Rd = 286.9     !J/kg-K  dry air gas constant
 
 !Particles:
+<<<<<<< HEAD
 tnumpart = 0
 mult_init = 1.0
 rhow=3878.0  !kg/m^3
 rhos = 2000.0 !Density of salt, kg/m^3
 part_grav = 0,0,-3.00
+=======
+tnumpart = 1e6
+mult_init = 1.0
+rhow = 3878.2  !kg/m^3
+rhos = 2000.0 !Density of salt, kg/m^3
+part_grav = 0,0,-9.81
+>>>>>>> import_feature
 Cpp = 4179.0  !J/kg-K
 Mw = 0.018015  !kg/mol
 Ru = 8.3144    !J/mol-K Universal gas constant
 Ms = 0.05844  !kg/mol: molecular weight of salt
 !Sal = 0.034  !INITIAL salinity in kg/kg
+<<<<<<< HEAD
 Sal = 0.0  !INITIAL salinity in kg/kg
+=======
+Sal = 0.00  !INITIAL salinity in kg/kg
+>>>>>>> import_feature
 Gam = 7.28e-2
 Ion = 2.0
 
@@ -135,8 +166,13 @@ nprime = 0.00  !particles/cm^3/min, real rate is nprime*multiplicity
 !Particle initial conditions:
 radius_init=1.5e-5
 radius_std=0.0
-kappas_init=1.2
+kappas_init=0.0
 kappas_std=0.0
+<<<<<<< HEAD
 Tp_init = 299.0
 vp_init = 0.0, 0.0, 0.0
+=======
+Tp_init = 290.0
+vp_init = 0.0, 0.0, -0.0009
+>>>>>>> import_feature
 /
