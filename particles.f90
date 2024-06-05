@@ -2103,12 +2103,6 @@ CONTAINS
             tot_reintro = 0
          end if
 
-      elseif (inewpart.eq.1) then
-         
-         do np =1,num_destroy
-               call new_particle(np,myid)
-         end do
-
       end if  !Different cases
 
 
@@ -2604,7 +2598,7 @@ CONTAINS
     !i.e. location is reflected, w-velocity is negated
 
     top = z(nnz)-part%radius
-    bot = 0.0 + part%radius
+    bot = 0.0! + part%radius Andrew Made this change for debugging
 
     if (part%xp(3) .GT. top) then
        part%xp(3) = top - (part%xp(3)-top)
@@ -2670,7 +2664,10 @@ CONTAINS
                call lognormal_dist(rad_init,m_s,kappa_s,M,S)
 
                call create_particle(xp_init,vp_init,Tp_init,m_s,kappa_s,mult,rad_init,idx_old,procidx_old)
-
+          elseif (ireintro.eq.1 .and. inewpart.eq.1) then
+                  call destroy_particle
+                  num_destroy = num_destroy + 1
+                call new_particle(idx_old,procidx_old)
           else
 
                call destroy_particle

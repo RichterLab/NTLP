@@ -125,7 +125,7 @@ Mw = 0.018015  !kg/mol
 Ru = 8.3144    !J/mol-K Universal gas constant
 Ms = 0.05844  !kg/mol: molecular weight of salt
 !Sal = 0.034  !INITIAL salinity in kg/kg
-Sal = 0.066  !INITIAL salinity in kg/kg
+Sal = 0.00  !INITIAL salinity in kg/kg
 Gam = 7.28e-2
 Ion = 2.0
 
@@ -134,7 +134,7 @@ nprime = 0.00  !particles/cm^3/min, real rate is nprime*multiplicity
 !Particle initial conditions:
 radius_init=1.5e-5
 radius_std=0.0
-kappas_init=1.2
+kappas_init=0.0
 kappas_std=0.0
 Tp_init = 290.0
 vp_init = 0.0, 0.0, -0.0009
