@@ -6,11 +6,7 @@ group_storage=/afs/crc.nd.edu/group/RichterLab
 #$ -m n
 #$ -pe mpi-64 64
 #$ -q hpc
-<<<<<<< HEAD
 #$ -N test_case_channel
-=======
-#$ -N slip_stat
->>>>>>> import_feature
 #$ -j y
 
 case=channel
@@ -18,11 +14,7 @@ time=0000000
 runout=$case.out.$time
 
 datadir=/scratch365/agrace4/$case
-<<<<<<< HEAD
-homedir=/afs/crc.nd.edu/user/a/agrace4/NTLP/test_cases/$case
-=======
 homedir=~/NTLP/test_cases/channel
->>>>>>> import_feature
 
 # create the directory for the output.
 mkdir -p $datadir
@@ -31,7 +23,6 @@ cd $homedir
 
 module load mvapich2
 module load intel
-##module load intelmpi
 module load netcdf
 
 imachine=0

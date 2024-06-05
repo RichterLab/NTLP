@@ -2,19 +2,11 @@
 !Time step information
 &step_params
 iti=0        !Time step to begin
-<<<<<<< HEAD
-itmax=500000   !Max number of time steps
-imean=100    !Number of time steps between writing mean profiles to output log file
-ihst=10     !Number of time steps between writing profiles to history file
-itape=30  !Number of time steps before opening new history file and writing full 3D volumes
-i_viz=100   !Time steps between writing to viz file
-=======
 itmax=150000   !Max number of time steps
 imean=1500    !Number of time steps between writing mean profiles to output log file
 ihst=100     !Number of time steps between writing profiles to history file
 itape=500  !Number of time steps before opening new history file and writing full 3D volumes
 i_viz=15000   !Time steps between writing to viz file
->>>>>>> import_feature
 itn = 0  !Index for "u.le.cou001" files
 max_time = 15  !Code will stop at the next itape after this time (in seconds) has been exceeded
 /
@@ -60,11 +52,7 @@ dt_new = 0.05
 
 !Use for DNS:
 Uo = 0.0  !Sets the magnitude of the top and bottom plate velocities (Couette flow -- assumes equal and opposite)
-<<<<<<< HEAD
-Ttop(1) = 279.0, 100.0  !Currently this should be (temperature, relative humidity) (used in DNS)
-=======
 Ttop(1) = 299.0, 100.0  !Currently this should be (temperature, relative humidity) (used in DNS)
->>>>>>> import_feature
 Tbot(1) = 299.0, 100.0  !Currently this should be (temperature, relative humidity) (used in DNS)
 
 !Use for LES:
@@ -81,18 +69,14 @@ vgcont = 0.0   !The initial v-velocity
 dvdr = -8.0e-04  !Change in v with hurricane radius
 hurr_rad = 40e3  ! Hurricane radius
 
-<<<<<<< HEAD
-dpdx = -0.0955  !The pressure gradient for channel flow (gets put into u_geo for DNS)
-=======
 dpdx = -0.381289  !The pressure gradient for channel flow (gets put into u_geo for DNS)
->>>>>>> import_feature
 
 Swall = 0.0  !Set the CONSTANT humidity sink to use if ihumiditycontrol = 0
 
-zi = 0.16 !This has to do with grid stretching; make equal to zl for iz_space = 1,2; zi is inversion height for iz_space = 3
-zl = 0.16
-xl = 1.0
-yl = 0.5
+zi = 0.04 !This has to do with grid stretching; make equal to zl for iz_space = 1,2; zi is inversion height for iz_space = 3
+zl = 0.04
+xl = 0.25
+yl = 0.125
 
 zw1 = 0.00013  !The first grid point; only used if stretched grid
 
@@ -116,10 +100,6 @@ path_ran="/scratch365/agrace4/channel/u.le.cou000"
 
 !Material and particle properties and other constants
 &constants
-<<<<<<< HEAD
-!grav = 0.043
-=======
->>>>>>> import_feature
 grav = 9.81
 t00 = 273.0 !Reference temp for buoyancy
 fcor = 0.0 !Coriolis parameter
@@ -135,29 +115,17 @@ Sc = 0.615
 Rd = 286.9     !J/kg-K  dry air gas constant
 
 !Particles:
-<<<<<<< HEAD
-tnumpart = 0
-mult_init = 1.0
-rhow=3878.0  !kg/m^3
-rhos = 2000.0 !Density of salt, kg/m^3
-part_grav = 0,0,-3.00
-=======
 tnumpart = 1e6
 mult_init = 1.0
 rhow = 3878.2  !kg/m^3
 rhos = 2000.0 !Density of salt, kg/m^3
 part_grav = 0,0,-9.81
->>>>>>> import_feature
 Cpp = 4179.0  !J/kg-K
 Mw = 0.018015  !kg/mol
 Ru = 8.3144    !J/mol-K Universal gas constant
 Ms = 0.05844  !kg/mol: molecular weight of salt
 !Sal = 0.034  !INITIAL salinity in kg/kg
-<<<<<<< HEAD
-Sal = 0.0  !INITIAL salinity in kg/kg
-=======
 Sal = 0.00  !INITIAL salinity in kg/kg
->>>>>>> import_feature
 Gam = 7.28e-2
 Ion = 2.0
 
@@ -168,11 +136,6 @@ radius_init=1.5e-5
 radius_std=0.0
 kappas_init=0.0
 kappas_std=0.0
-<<<<<<< HEAD
 Tp_init = 299.0
 vp_init = 0.0, 0.0, 0.0
-=======
-Tp_init = 290.0
-vp_init = 0.0, 0.0, -0.0009
->>>>>>> import_feature
 /
