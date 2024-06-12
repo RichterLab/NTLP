@@ -16,7 +16,7 @@ method = 3, idebug=1, ivis0=1, ifix_dt=0, new_vis=-1
 isfc = 1, 1  ! isfc = 0 sets surface flux (qstar), isfc = 1 sets surface condition (Dirichlet through tsfcc)
 iz_space = 1, ! 0 = uniform dz, 1 = top/bottom mirror stretched ("channel"), 2 = "open channel", 3 = PBL with stretching at surface and at zi
 iDNS = 1
-ifields = 1  ! if set to 1, reads the initial condition from path_ran below; otherwise calls subroutine random
+ifields = 0  ! if set to 1, reads the initial condition from path_ran below; otherwise calls subroutine random
 irestart = 0
 ihurr = 0  !If set to 1, includes the hurricane forcings from Bryan et al. (2017) BLM and according to dvdr and hurr_rad below
 ilin = 1   !1 means linear interpolation for particle, 6th order otherwise
