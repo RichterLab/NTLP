@@ -10973,10 +10973,10 @@ c
       implicit none
 
       !Take in T in Kelvin and return saturation vapor pressure using function from Huang 2018 (converted to Kelvin)
-			real,intent(in) :: T
+      real,intent(in) :: T
       real :: mod_ice
 
-			mod_ice = (exp((43.494-(6545.8/(T-35.15)))/((T+594.85)**2)))
+      mod_ice = (exp((43.494-(6545.8/(T+4.85)))/((T+594.85)**2)))
 
       end function mod_ice
       function mod_magnus(T)
