@@ -117,42 +117,42 @@ toc
 %
 % - Ben Roper 2024
 
-% %% Quick render of w_yz
-% tic
-% 
-% figure
-% for ii = 1:Nt
-%     sc(  flipud((w_yz(:,:,ii))')  ,[min_w max_w],'cold');
-%     movie3(ii) = getframe;
-% end
-% 
-% vidfile = VideoWriter('YZ_W 24 fps','MPEG-4');
-% vidfile.FrameRate = fps;
-% 
-% open(vidfile)
-% writeVideo(vidfile,movie3)
-% close(vidfile)
-% close all
-% 
-% toc
-% %% Quick render of t_xy
-% tic
-% 
-% figure
-% for ii = 1:Nt
-%     sc(  flipud((t_xy(:,:,ii))')  ,[min_t max_t],'cold');
-%     movie4(ii) = getframe;
-% end
-% 
-% vidfile = VideoWriter('XY_T 24 fps','MPEG-4');
-% vidfile.FrameRate = fps;
-% 
-% open(vidfile)
-% writeVideo(vidfile,movie4)
-% close(vidfile)
-% close all
-% 
-% toc
+%% Quick render of w_yz
+tic
+
+figure
+for ii = 1:Nt
+    sc(  flipud((w_yz(:,:,ii))')  ,[min_w max_w],'cold');
+    movie3(ii) = getframe;
+end
+ 
+vidfile = VideoWriter('YZ_W 24 fps','MPEG-4');
+vidfile.FrameRate = fps;
+
+open(vidfile)
+writeVideo(vidfile,movie3)
+close(vidfile)
+close all
+ 
+toc
+%% Quick render of t_xy
+tic
+ 
+figure
+for ii = 1:Nt
+    sc(  flipud((t_xy(:,:,ii))')  ,[min_t max_t],'cold');
+    movie4(ii) = getframe;
+end
+
+vidfile = VideoWriter('XY_T 24 fps','MPEG-4');
+vidfile.FrameRate = fps;
+
+open(vidfile)
+writeVideo(vidfile,movie4)
+close(vidfile)
+close all
+
+toc
 
 %%
 toc
