@@ -10842,7 +10842,7 @@ c
       use pars
       use con_data
       implicit none
-      real :: RHB,RHT,mod_magnus
+      real :: RHB,RHT,mod_magnus,mod_ice
 
       !Assuming tsfcc(2),Ttop(2),Tbot(2) in params.in are giving RH:
       if (iDNS .eq. 1) then
