@@ -1,33 +1,32 @@
-
 !Time step information
 &step_params
-itmax=10000   !Max number of time steps
-imean=100    !Number of time steps between writing mean profiles to output log file
-ihst=50     !Number of time steps between writing profiles to history file
-itape=5000  !Number of time steps before opening new history file and writing full 3D volumes
-i_viz=10   !Time steps between writing to viz file
+itmax = 10000   !Max number of time steps
+imean = 100    !Number of time steps between writing mean profiles to output log file
+ihst = 50     !Number of time steps between writing profiles to history file
+itape = 5000  !Number of time steps before opening new history file and writing full 3D volumes
+i_viz = 10   !Time steps between writing to viz file
 max_time = 1.0e9  !Code will stop at the next itape after this time (in seconds) has been exceeded
 /
 
 !Flags for various features
 &flags
-ismlt=0, ifree=0, iradup=0, iupwnd=1
-ibuoy=1, ifilt=0, itcut=1, isubs=0, ibrcl=0, iocean=0
-method=3, idebug=1, ivis0=1, ifix_dt=0, new_vis=-1
+ismlt = 0, ifree=0, iradup=0, iupwnd=1
+ibuoy = 1, ifilt=0, itcut=1, isubs=0, ibrcl=0, iocean=0
+method = 3, idebug=1, ivis0=1, ifix_dt=0, new_vis=-1
 isfc = 1, 1  ! isfc = 0 sets surface flux (qstar), isfc = 1 sets surface condition (Dirichlet through tsfcc)
-iz_space=1, ! 0 = uniform dz, 1 = top/bottom mirror stretched ("channel"), 2 = "open channel", 3 = PBL with stretching at surface and at zi
+iz_space = 1, ! 0 = uniform dz, 1 = top/bottom mirror stretched ("channel"), 2 = "open channel", 3 = PBL with stretching at surface and at zi
 iDNS = 1
 ifields = 1  ! if set to 1, reads the initial condition from path_ran below; otherwise calls subroutine random
 irestart = 0
 ihurr = 0  !If set to 1, includes the hurricane forcings from Bryan et al. (2017) BLM and according to dvdr and hurr_rad below
 ilin = 1   !1 means linear interpolation for particle, 6th order otherwise
-icouple=1
-iTcouple=1
-iHcouple=1  !iHcouple also controls TE couple
-ievap=1
-ineighbor=0
-icoalesce=0
-ipart_method=2   !1 = same RK3 as flow, 2 = backward Euler
+icouple = 1
+iTcouple = 1
+iHcouple = 1  !iHcouple also controls TE couple
+ievap = 1
+ineighbor = 0
+icoalesce = 0
+ipart_method = 2   !1 = same RK3 as flow, 2 = backward Euler
 ipartdiff = 0
 inewpart = 2  !1 = new particles have initial conditions defined below, random location in domain; 2 = same, but normal distributions of radius and kappa_s, given by radius_std and kappas_std; 3 = special setup for C-FOG and double lognormal of different type; 4 = crude sea spray setup
 icase = 1  !Special additions for certain cases. 0 = particles reflected at lower surface, 3 = setup for C-FOG, 4 = steady state LES sea spray setup
@@ -37,13 +36,13 @@ ilongwave = 0   !Use simple longwave radiation scheme when clouds/fog present
 inetcdf = 1  !Set to 1 to output history and histogram data to netcdf format, otherwise original binary format
 iviznetcdf = 1  !Set to 1 to slice viz files to netcdf format (WARNING: it's been a long time since the original have been used)
 ihumiditycontrol = 0  !Adaptive humidity source/sink (used for Pi Chamber; subroutine humidity_control)
-ireintro=1   !Aerosol injection
-itrajout=1   !Write the particle trajectory files. Needs a directory within the scratch space, and each processor writes a file (requires postprocessing to stitch together)
+ireintro = 1   !Aerosol injection
+itrajout = 1   !Write the particle trajectory files. Needs a directory within the scratch space, and each processor writes a file (requires postprocessing to stitch together)
 /
 
 !Grid and domain parameters
 &grid_params
-ncpu_s=8
+ncpu_s = 8
 
 !Time step
 cfl = 0.5
@@ -51,8 +50,8 @@ dt_new = 0.05
 
 !Use for DNS:
 Uo = 0.0  !Sets the magnitude of the top and bottom plate velocities (Couette flow -- assumes equal and opposite)
-Ttop(1) = 280.0, 100.0  !Currently this should be (temperature, relative humidity) (used in DNS)
-Tbot(1) = 299.0, 100.0  !Currently this should be (temperature, relative humidity) (used in DNS)
+Ttop(1) = 257.15, 100.0  !Currently this should be (temperature, relative humidity) (used in DNS)
+Tbot(1) = 277.15, 100.0  !Currently this should be (temperature, relative humidity) (used in DNS)
 
 !Use for LES:
 qstar = 0.2, 0.2  !Surface fluxes of (temperature, humidity) (used for LES and DNS)
@@ -88,10 +87,10 @@ rad_Fcb = 0.0    !Net radiative flux at cloud (or domain) base
 !Set the paths for code I/O. Must be on the scratch directory, not AFS!
 &path_names
 
-path_seed="PATH_TO_SCRATCH/pi_chamber/"
-path_part="PATH_TO_SCRATCH/pi_chamber/part.le.cou002"
-path_res= "PATH_TO_SCRATCH/pi_chamber/u.le.cou002"
-path_ran= "PATH_TO_SCRATCH/pi_chamber/u.le.cou000"
+path_seed = "PATH_TO_SCRATCH/pi_chamber/"
+path_part = "PATH_TO_SCRATCH/pi_chamber/part.le.cou002"
+path_res = "PATH_TO_SCRATCH/pi_chamber/u.le.cou002"
+path_ran = "PATH_TO_SCRATCH/pi_chamber/u.le.cou000"
 
 /
 
@@ -105,8 +104,8 @@ zo = 3.2e-5       !Roughness height (for LES)
 zos = 3.2e-5       !Scalar roughness height (for LES)
 
 !Air phase:
-nuf=1.57e-5  !m^2/s
-Cpa=1006.0  !J/kg-K
+nuf = 1.57e-5  !m^2/s
+Cpa = 1006.0  !J/kg-K
 Pra = 0.715
 Sc = 0.615
 Rd = 286.9     !J/kg-K  dry air gas constant
@@ -114,7 +113,7 @@ Rd = 286.9     !J/kg-K  dry air gas constant
 !Particles:
 tnumpart = 0
 mult_init = 1000.0
-rhow=1000.0  !kg/m^3
+rhow = 1000.0  !kg/m^3
 rhos = 2000.0 !Density of salt, kg/m^3
 part_grav = 0,0,-0.649
 Cpp = 4179.0  !J/kg-K
@@ -129,10 +128,10 @@ Ion = 2.0
 nprime = 0.01  !particles/cm^3/min, real rate is nprime*multiplicity
 
 !Particle initial conditions:
-radius_init=2.0e-7
-radius_std=0.0
-kappas_init=1.2
-kappas_std=0.0
+radius_init = 2.0e-7
+radius_std = 0.0
+kappas_init = 1.2
+kappas_std = 0.0
 Tp_init = 290.0
 vp_init = 0.0, 0.0, 0.0
 /
