@@ -50,8 +50,8 @@ dt_new = 0.05
 
 !Use for DNS:
 Uo = 0.0  !Sets the magnitude of the top and bottom plate velocities (Couette flow -- assumes equal and opposite)
-Ttop(1) = 257.15, 100.0  !Currently this should be (temperature, relative humidity) (used in DNS)
-Tbot(1) = 277.15, 100.0  !Currently this should be (temperature, relative humidity) (used in DNS)
+Ttop(1) = 257.15, 100.0  !Currently this should be (temperature, relative humidity of ICE) (used in DNS)
+Tbot(1) = 277.15, 100.0  !Currently this should be (temperature, relative humidity of WATER) (used in DNS)
 
 !Use for LES:
 qstar = 0.2, 0.2  !Surface fluxes of (temperature, humidity) (used for LES and DNS)
