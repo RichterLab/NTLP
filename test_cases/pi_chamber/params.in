@@ -1,13 +1,11 @@
 
 !Time step information
 &step_params
-iti=0        !Time step to begin
 itmax=10000   !Max number of time steps
 imean=100    !Number of time steps between writing mean profiles to output log file
 ihst=50     !Number of time steps between writing profiles to history file
 itape=5000  !Number of time steps before opening new history file and writing full 3D volumes
 i_viz=10   !Time steps between writing to viz file
-itn = 0  !Index for "u.le.cou001" files
 max_time = 1.0e9  !Code will stop at the next itape after this time (in seconds) has been exceeded
 /
 
@@ -20,6 +18,7 @@ isfc = 1, 1  ! isfc = 0 sets surface flux (qstar), isfc = 1 sets surface conditi
 iz_space=1, ! 0 = uniform dz, 1 = top/bottom mirror stretched ("channel"), 2 = "open channel", 3 = PBL with stretching at surface and at zi
 iDNS = 1
 ifields = 1  ! if set to 1, reads the initial condition from path_ran below; otherwise calls subroutine random
+irestart = 0
 ihurr = 0  !If set to 1, includes the hurricane forcings from Bryan et al. (2017) BLM and according to dvdr and hurr_rad below
 ilin = 1   !1 means linear interpolation for particle, 6th order otherwise
 icouple=1
@@ -31,7 +30,7 @@ icoalesce=0
 ipart_method=2   !1 = same RK3 as flow, 2 = backward Euler
 ipartdiff = 0
 inewpart = 2  !1 = new particles have initial conditions defined below, random location in domain; 2 = same, but normal distributions of radius and kappa_s, given by radius_std and kappas_std; 3 = special setup for C-FOG and double lognormal of different type; 4 = crude sea spray setup
-icase = 0  !Special additions for certain cases. 3 = setup for C-FOG, 4 = steady state LES sea spray setup
+icase = 1  !Special additions for certain cases. 0 = particles reflected at lower surface, 3 = setup for C-FOG, 4 = steady state LES sea spray setup
 isfs = 2   !isfs=1 is simple random walk, isfs=2 is Weil et al. (2004) particle subgrid
 iexner = 0  !iexner = 1 applies a correction to part%Tf to account for conversion b/w potential temp and temp. (need in PBL)
 ilongwave = 0   !Use simple longwave radiation scheme when clouds/fog present
@@ -60,9 +59,8 @@ qstar = 0.2, 0.2  !Surface fluxes of (temperature, humidity) (used for LES and D
 tsfcc = 300.0, 100.0    !Surface conditions of (temp, humidity) (used for LES) -- make sure tsfcc is gt than t00 for both isfc=0 or 1
 
 surf_RH = 100.0
-surf_temp = 282.0  !Only use this when changing the surface temperature in time! Otherwise set tsfcc
-
-psurf = 101325  !Pa -- nominal surface pressure, for use in the definition of potential temp
+surf_p = 101325  !Pa -- nominal surface pressure, for use in the definition of potential temp
+surf_rho = 1.0
 
 ugcont = 0.0   !The initial u-velocity in the field
 vgcont = 0.0   !The initial v-velocity
@@ -100,15 +98,13 @@ path_ran= "PATH_TO_SCRATCH/pi_chamber/u.le.cou000"
 
 !Material and particle properties and other constants
 &constants
-!grav = 0.043
-grav = 0.545
+grav = 0.043
 t00 = 273.0 !Reference temp for buoyancy
 fcor = 0.0  !Coriolis parameter
 zo = 3.2e-5       !Roughness height (for LES)
 zos = 3.2e-5       !Scalar roughness height (for LES)
 
 !Air phase:
-rhoa=1.0
 nuf=1.57e-5  !m^2/s
 Cpa=1006.0  !J/kg-K
 Pra = 0.715
@@ -120,7 +116,7 @@ tnumpart = 0
 mult_init = 1000.0
 rhow=1000.0  !kg/m^3
 rhos = 2000.0 !Density of salt, kg/m^3
-part_grav = 0,0,-2.312
+part_grav = 0,0,-0.649
 Cpp = 4179.0  !J/kg-K
 Mw = 0.018015  !kg/mol
 Ru = 8.3144    !J/mol-K Universal gas constant

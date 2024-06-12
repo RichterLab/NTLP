@@ -1132,7 +1132,7 @@ CONTAINS
   implicit none
   include 'mpif.h'
   real :: wtx,wty,wtz,wtt,dV
-  real :: rhop,taup_i,partmass
+  real :: rhop,taup_i,partmass,rhoa,func_rho_base
   real :: xv,yv,zv
   real :: ctbuf_s(nnz+2,1:iye-iys+2,6),cbbuf_r(nnz+2,1:iye-iys+2,6)
   real :: crbuf_s(nnz+2,1:mxe-mxs+1,6),clbuf_r(nnz+2,1:mxe-mxs+1,6)
@@ -1175,9 +1175,14 @@ CONTAINS
      wtz = (1.0 - abs(part%xp(3)-zv)/dzu(kpt+1))
      wtt = wtx*wty*wtz
 
+     if (iexner.eq.1) then
+        rhoa = func_rho_base(surf_p,tsfcc(1),part%xp(3))
+     else
+        rhoa = surf_rho
+     end if
      rhop = (part%m_s+pi2*2.0/3.0*part%radius**3*rhow)/(pi2*2.0/3.0*part%radius**3)
      partmass = rhop*2.0/3.0*pi2*(part%radius)**3
-     taup_i = 18.0*rhoa*nuf/rhop/(2.0*part%radius)**2 !Brian 8/4/14
+     taup_i = 18.0*rhoa*nuf/rhop/(2.0*part%radius)**2 
 
      ix = ipt+i
      iy = jpt+j
@@ -2058,7 +2063,7 @@ CONTAINS
 
   end subroutine read_part_res
 
-  subroutine particle_reintro(it)
+  subroutine particle_reintro
       use pars
       use con_data
       use con_stats
@@ -2066,7 +2071,7 @@ CONTAINS
       implicit none
       include 'mpif.h'
 
-      integer :: it,it_delay
+      integer :: it_delay
       integer :: ierr,randproc,np,my_reintro
       real :: totdrops,t_reint
 
@@ -2074,7 +2079,7 @@ CONTAINS
       if (inewpart.eq.4) then
       !!Sea spray, given by Andreas SSGF 98, augmented by Ortiz-Suslow 2016
 
-         call inject_spray(it)
+         call inject_spray
       
 
       elseif (inewpart.eq.2) then
@@ -2281,13 +2286,25 @@ CONTAINS
       
       
       !Generate
-      S = 0.45
-      M = 0.0
-      kappa_s = 1.2
-      mult = mult_init
+      if (zv.lt.zi) then
+         S = 0.45
+         M = 0.0
+         kappa_s = 1.2
+         mult = mult_init
       
-      !With these parameters, get m_s and rad_init from distribution
-      call lognormal_dist(rad_init,m_s,kappa_s,M,S)
+         !With these parameters, get m_s and rad_init from distribution
+         call lognormal_dist(rad_init,m_s,kappa_s,M,S)
+
+      else
+
+         S = 0.2403
+         M = -1.7570
+         kappa_s = 0.6
+         mult = mult_init
+
+         !With these parameters, get m_s and rad_init from distribution
+         call lognormal_dist(rad_init,m_s,kappa_s,M,S)
+      end if
        
       call create_particle(xp_init,vp_init,Tp_init,m_s,kappa_s,mult,rad_init,idx,procidx)
       
@@ -2415,7 +2432,7 @@ CONTAINS
 
   end subroutine lognormal_dist
 
-  subroutine inject_spray(it)
+  subroutine inject_spray
   use pars
   use fields
   use con_data
@@ -2434,7 +2451,6 @@ CONTAINS
   real :: t_reint,xp_init(3),m_s
   integer :: iter,i,nbin,num_create,j,np
   integer :: ssgf_type,it_delay,my_reintro
-  integer, intent(in) :: it
 
   ! implementing the Andreas 1998 sea spray generation function
   !Set the parameters of the two lognormals:
@@ -2721,14 +2737,14 @@ CONTAINS
 
   end subroutine particle_bcs_periodic
 
-  subroutine particle_update_rk3(it,istage)
+  subroutine particle_update_rk3(istage)
       use pars
       use con_data
       use con_stats
       implicit none
       include 'mpif.h'
 
-      integer :: istage,ierr,it
+      integer :: istage,ierr
       real :: pi
       real :: denom,dtl,sigma
       integer :: ix,iy,iz
@@ -2738,7 +2754,7 @@ CONTAINS
       real :: mylwc_sum,myphiw_sum,myphiv_sum,Volp      
       real :: Eff_C,Eff_S
       real :: t_s,t_f,t_s1,t_f1
-      real :: mod_magnus,exner
+      real :: mod_magnus,exner,func_p_base,rhoa,func_rho_base
 
 
       !First fill extended velocity field for interpolation
@@ -2803,8 +2819,14 @@ CONTAINS
          end if
 
          if (iexner .eq. 1) then
-             part%Tf = part%Tf*exner(psurf,psurf-part%xp(3)*rhoa*grav)
+             !Compute using the base-state pressure at the particle height
+             !Neglects any turbulence or other fluctuating pressure sources
+             part%Tf = part%Tf*exner(surf_p,func_p_base(surf_p,tsfcc(1),part%xp(3)))
+             rhoa = func_rho_base(surf_p,tsfcc(1),part%xp(3))
+         else
+             rhoa = surf_rho
          end if
+           
 
 
          if (it .LE. 1 ) then 
@@ -3157,7 +3179,7 @@ CONTAINS
       call mpi_allreduce(myphiv_sum,phiv,1,mpi_real8,mpi_sum,mpi_comm_world,ierr)
 
       
-      phiw = phiw/xl/yl/zl/rhoa
+      phiw = phiw/xl/yl/zl/surf_rho  !This is only an approximation when considering base-state rho(z)
       phiv = phiv/xl/yl/zl
 
       !call mpi_barrier(mpi_comm_world,ierr)
@@ -3166,7 +3188,7 @@ CONTAINS
 
   end subroutine particle_update_rk3
 
-  subroutine particle_update_BE(it)
+  subroutine particle_update_BE
       use pars
       use con_data
       use con_stats
@@ -3174,7 +3196,7 @@ CONTAINS
       implicit none
       include 'mpif.h'
 
-      integer :: ierr,it,fluxloc,fluxloci
+      integer :: ierr,fluxloc,fluxloci
       real :: tmpbuf(9),tmpbuf_rec(9)
       integer :: intbuf(10),intbuf_rec(10)
       integer :: numdrop_center,tnumdrop_center
@@ -3185,7 +3207,7 @@ CONTAINS
       real :: denom,dtl,sigma
       integer :: ix,iy,iz,im,flag,mflag
       real :: Rep,diff(3),diffnorm,corrfac,myRep_avg
-      real :: Nup,Shp,rhop,taup_i,estar,einf
+      real :: Nup,Shp,rhop,taup_i,estar,einf,rhoa,func_rho_base
       real :: mylwc_sum,myphiw_sum,myphiv_sum,Volp
       real :: Eff_C,Eff_S
       real :: t_s,t_f,t_s1,t_f1
@@ -3194,7 +3216,7 @@ CONTAINS
       real :: taup0, dt_taup0, temp_r, temp_t, guess
       real :: tmp_coeff
       real :: xp3i
-      real :: mod_magnus,exner
+      real :: mod_magnus,exner,func_p_base
       real :: rad_i,Tp_i,vp_i(3),mp_i,rhop_i
 
 
@@ -3265,7 +3287,12 @@ CONTAINS
         end if
 
         if (iexner .eq. 1) then
-           part%Tf = part%Tf*exner(psurf,psurf-part%xp(3)*rhoa*grav)
+           !Compute using the base-state pressure at the particle height
+           !Neglects any turbulence or other fluctuating pressure sources
+           part%Tf = part%Tf*exner(surf_p,func_p_base(surf_p,tsfcc(1),part%xp(3)))
+           rhoa = func_rho_base(surf_p,tsfcc(1),part%xp(3))
+        else
+           rhoa = surf_rho
         end if
 
         if (part%qinf .lt. 0.0) then
@@ -3313,7 +3340,7 @@ CONTAINS
                !Gives initial guess into nonlinear solver
                !mflag = 0, has equilibrium radius; mflag = 1, no
                !equilibrium (uses itself as initial guess)
-               call rad_solver2(guess,mflag)
+               call rad_solver2(guess,rhoa,mflag)
 
                if (mflag == 0) then
                 rt_start(1) = guess/part%radius
@@ -3323,12 +3350,12 @@ CONTAINS
                 rt_start(2) = 1.0
                end if
 
-               call gauss_newton_2d(part%vp,dt_taup0,rt_start, rt_zeroes,flag)
+               call gauss_newton_2d(part%vp,dt_taup0,rhoa,rt_start, rt_zeroes,flag)
 
                if (flag==1) then
                num100 = num100+1
 
-               call LV_solver(part%vp,dt_taup0,rt_start, rt_zeroes,flag)
+               call LV_solver(part%vp,dt_taup0,rhoa,rt_start, rt_zeroes,flag)
 
                end if
 
@@ -3816,7 +3843,7 @@ CONTAINS
 
 
 
-      phiw = phiw/xl/yl/zl/rhoa
+      phiw = phiw/xl/yl/zl/surf_rho  !This is only an approximation when considering base-state rho(z)
       phiv = phiv/xl/yl/zl
       if (tnumpart.eq.0) then
          Rep_avg = 0.0
@@ -3954,12 +3981,10 @@ CONTAINS
 
   end subroutine particle_stats
 
-  subroutine particle_write_traj(it)
+  subroutine particle_write_traj
    use con_data
    use pars
    implicit none
-
-   integer :: it
 
    
    part => first_particle
@@ -4255,10 +4280,10 @@ CONTAINS
 
   end subroutine particle_coalesce
 
-  subroutine gauss_newton_2d(vnext,h,vec1,vec2,flag)
+  subroutine gauss_newton_2d(vnext,h,rhoa,vec1,vec2,flag)
         implicit none
 
-        real, intent(in) :: vnext(3), h, vec1(2)
+        real, intent(in) :: vnext(3), h,rhoa,vec1(2)
         real, intent(out) :: vec2(2)
         integer, intent(out) :: flag
         real :: error,fv1(2),fv2(2),v1(2),v_output(3),rel,det
@@ -4280,8 +4305,8 @@ CONTAINS
 
                 iterations = iterations + 1
 
-                call ie_vrt_nd(vnext,v1(1),v1(2),v_output,fv1,h)
-                call jacob_approx_2d(vnext,v1(1),v1(2),h,J)
+                call ie_vrt_nd(rhoa,vnext,v1(1),v1(2),v_output,fv1,h)
+                call jacob_approx_2d(rhoa,vnext,v1(1),v1(2),h,J)
 
                 fancy = matmul(transpose(J),J)
 
@@ -4327,10 +4352,10 @@ CONTAINS
       if (isnan(vec2(1)) .OR. vec2(1)<0 .OR. isnan(vec2(2)) .OR. vec2(2)<0) flag = 1
 
   end subroutine gauss_newton_2d
-  subroutine LV_solver(vnext,h,vec1,vec2,flag)
+  subroutine LV_solver(vnext,h,rhoa,vec1,vec2,flag)
         implicit none
 
-        real, intent(in) :: vnext(3),h, vec1(2)
+        real, intent(in) :: vnext(3),h,rhoa,vec1(2)
         real, intent(out) :: vec2(2)
         integer, intent(out) :: flag
         real :: error,fv1(2),fv2(2),v1(2),v_output(3),rel,det
@@ -4356,8 +4381,8 @@ CONTAINS
 
         iterations = iterations + 1
 
-        call jacob_approx_2d(vnext, v1(1), v1(2), h,J)
-        call ie_vrt_nd(vnext, v1(1), v1(2),v_output,fv1,h)
+        call jacob_approx_2d(rhoa,vnext, v1(1), v1(2), h,J)
+        call ie_vrt_nd(rhoa,vnext, v1(1), v1(2),v_output,fv1,h)
 
         g = matmul(transpose(J),J)+lambda*I
         gradC = matmul(transpose(J),fv1)
@@ -4385,7 +4410,7 @@ CONTAINS
            EXIT
         end if
 
-        call ie_vrt_nd(vnext, vec2(1), vec2(2),v_output,fv2,h)
+        call ie_vrt_nd(rhoa,vnext, vec2(1), vec2(2),v_output,fv2,h)
         newC = 0.5*fv2*fv2
 
 
@@ -4408,11 +4433,11 @@ CONTAINS
 
 
   end subroutine LV_solver
-  subroutine jacob_approx_2d(vnext, rnext, tnext, h, J)
+  subroutine jacob_approx_2d(rhoa,vnext, rnext, tnext, h, J)
         implicit none
         integer :: n
 
-        real, intent(in) :: vnext(3), rnext, tnext, h
+        real, intent(in) :: rhoa,vnext(3), rnext, tnext, h
         real, intent(out), dimension(1:2, 1:2) :: J
         real :: diff = 0, v_output(3), rt_output(2),xper(2),fxper(2), ynext(2),xper2(2),fxper2(2)
 
@@ -4421,7 +4446,7 @@ CONTAINS
         ynext(1) = rnext
         ynext(2) = tnext
 
-        call ie_vrt_nd(vnext, rnext, tnext, v_output, rt_output, h)
+        call ie_vrt_nd(rhoa,vnext, rnext, tnext, v_output, rt_output, h)
 
         xper = ynext
         xper2 = ynext
@@ -4429,8 +4454,8 @@ CONTAINS
         do n=1, 2
                 xper(n) = xper(n) + diff
                 xper2(n) = xper2(n) - diff
-                call ie_vrt_nd(vnext, xper(1), xper(2),v_output,fxper,h)
-                call ie_vrt_nd(vnext, xper2(1), xper2(2),v_output,fxper2,h)
+                call ie_vrt_nd(rhoa,vnext, xper(1), xper(2),v_output,fxper,h)
+                call ie_vrt_nd(rhoa,vnext, xper2(1), xper2(2),v_output,fxper2,h)
                 J(:, n) = (fxper-rt_output)/diff
                 xper(n) = ynext(n)
                 xper2(n) = ynext(n)
@@ -4447,14 +4472,14 @@ CONTAINS
         invC = (1./det)*invC
 
   end subroutine inverse_finder_2d
-  subroutine ie_vrt_nd(vnext, tempr, tempt, v_output,rt_output, h)
+  subroutine ie_vrt_nd(rhoa,vnext, tempr, tempt, v_output,rt_output, h)
       use pars
       use con_data
       use con_stats
       implicit none
       include 'mpif.h'
 
-      real, intent(in) :: vnext(3), tempr, tempt, h
+      real, intent(in) :: rhoa,vnext(3), tempr, tempt, h
       real, intent(out) :: v_output(3), rT_output(2)
 
       real :: esa, dnext,  m_w, rhop, Rep, taup,vprime(3), rprime, Tprime, qstr, Shp, Nup, dp, VolP
@@ -4512,7 +4537,7 @@ CONTAINS
         rT_output(2) = Tnext/part%Tp - 1.0  - h*Tprime
 
   end subroutine ie_vrt_nd
-  subroutine rad_solver2(guess,mflag)
+  subroutine rad_solver2(guess,rhoa,mflag)
       use pars
       use con_data
       use con_stats
@@ -4521,6 +4546,7 @@ CONTAINS
 
       real, intent(OUT) :: guess
       integer, intent(OUT) :: mflag
+      real, intent(in) :: rhoa
       real :: a, c, esa, Q, R, M, val, theta, S, T
       real :: mod_magnus
 

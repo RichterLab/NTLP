@@ -41,6 +41,7 @@ integer :: Tfmean_vid,qfmean_vid
 integer :: radmean_vid,rad2mean_vid
 integer :: qstarm_vid
 integer :: Nc_vid,ql_vid,radsrc_vid
+integer :: rho_base_vid,p_base_vid,T_base_vid,theta_base_vid
 integer :: radbins_vid,resbins_vid
 integer :: radhist_vid,reshist_vid,radhistdeath_vid
 integer :: actresbins_vid,actreshist_vid
@@ -381,6 +382,18 @@ subroutine netcdf_init
       call netcdf_check( nf90_def_var(ncid,"radsrc",NF90_REAL, dimids_zu,radsrc_vid) )
       call netcdf_check( nf90_put_att(ncid,radsrc_vid,"title","Radiation tendency from the longwave model") )
 
+      call netcdf_check( nf90_def_var(ncid,"rho_base",NF90_REAL, dimids_zu,rho_base_vid) )
+      call netcdf_check( nf90_put_att(ncid,rho_base_vid,"title","Base state density used in Boussinesq") )
+
+      call netcdf_check( nf90_def_var(ncid,"p_base",NF90_REAL, dimids_zu,p_base_vid) )
+      call netcdf_check( nf90_put_att(ncid,p_base_vid,"title","Base state pressure used in Boussinesq") )
+
+      call netcdf_check( nf90_def_var(ncid,"T_base",NF90_REAL, dimids_zu,T_base_vid) )
+      call netcdf_check( nf90_put_att(ncid,T_base_vid,"title","Base state temperature used in Boussinesq") )
+
+      call netcdf_check( nf90_def_var(ncid,"theta_base",NF90_REAL, dimids_zu,theta_base_vid) )
+      call netcdf_check( nf90_put_att(ncid,theta_base_vid,"title","Base state potential temperature used in Boussinesq") )
+
       call netcdf_check( nf90_enddef(ncid) )
 
       his_counter = 1
@@ -514,6 +527,10 @@ subroutine netcdf_res
       call netcdf_check( nf90_inq_varid(ncid,"Nc",Nc_vid) )
       call netcdf_check( nf90_inq_varid(ncid,"ql",ql_vid) )
       call netcdf_check( nf90_inq_varid(ncid,"radsrc",radsrc_vid) )
+      call netcdf_check( nf90_inq_varid(ncid,"rho_base",rho_base_vid) )
+      call netcdf_check( nf90_inq_varid(ncid,"p_base",p_base_vid) )
+      call netcdf_check( nf90_inq_varid(ncid,"T_base",T_base_vid) )
+      call netcdf_check( nf90_inq_varid(ncid,"theta_base",theta_base_vid) )
 
 
 end subroutine netcdf_res
@@ -664,6 +681,10 @@ subroutine write_his_netcdf
       call netcdf_check( nf90_put_var(ncid,ql_vid,real(ql(1:nnz)),start=(/1, his_counter/)) )
       call netcdf_check( nf90_put_var(ncid,radsrc_vid,real(radsrc(1:nnz)),start=(/1, his_counter/)) )
 
+      call netcdf_check( nf90_put_var(ncid,rho_base_vid,real(rho_base(1:nnz)),start=(/1, his_counter/)) )
+      call netcdf_check( nf90_put_var(ncid,p_base_vid,real(p_base(1:nnz)),start=(/1, his_counter/)) )
+      call netcdf_check( nf90_put_var(ncid,T_base_vid,real(T_base(1:nnz)),start=(/1, his_counter/)) )
+      call netcdf_check( nf90_put_var(ncid,theta_base_vid,real(theta_base(1:nnz)),start=(/1, his_counter/)) )
       his_counter = his_counter + 1
 
 end subroutine write_his_netcdf

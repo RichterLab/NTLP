@@ -10,7 +10,7 @@ c     ----------------------------------------------------------------------
      +     icouple,iTcouple,iHcouple,ievap,ifields,ilin,ineighbor,
      +     icoalesce,ipart_method,ipartdiff,isfs,iexner,ilongwave,
      +     inetcdf,iviznetcdf,ihumiditycontrol,ireintro,itrajout,
-     +     inewpart,ihurr,icase,ikernel
+     +     inewpart,ihurr,icase,ikernel,irestart
 
       real :: max_time
 c     
@@ -27,7 +27,7 @@ c
       !Boundary conditions and other parameters
       real :: Uo, Ttop(nscl), Tbot(nscl),qstar(nscl),tsfcc(nscl)
       real :: grav,t00,fcor,zi,zl,xl,yl,zw1,dpdx
-      real :: ugcont,vgcont,zo,zos,surf_RH,psurf,surf_temp
+      real :: ugcont,vgcont,zo,zos,surf_RH,surf_p,surf_rho
       real :: meanRH,varRH
       real :: nprime
       real :: dvdr,hurr_rad
@@ -41,7 +41,7 @@ c
       real :: Lv = (25.0 - 0.02274*26.0)*10.0**5
       real :: Sal,Ms,Gam,Ion
       real :: rhow,nuf,rhos
-      real :: CpaCpp,Cpa,Cpp,Pra,Sc,Mw,Ru,rhoa,Rd
+      real :: CpaCpp,Cpa,Cpp,Pra,Sc,Mw,Ru,Rd
 
 c     
 c     ------------ leave following definitions as is
@@ -59,7 +59,7 @@ c     ----------------------------------------------------------------------
      +     nviz_z, nviz_y, 
      +     nviz_x, nviz_s,
      +     kfile, jfile, ibcl, ibcu,
-     +     igrdr, imach, itn, it_his_nxt, it_viz_nxt,
+     +     igrdr, imach, it_his_nxt, it_viz_nxt,
      +     it_his,it_viz
       logical ::    mnout, micut, mtape, mhis, msave,mtrans,
      +     l_root, l_debug, msave_v, mviz
@@ -125,6 +125,8 @@ c     ---------------------------------------------------------------------
       real, allocatable :: 
      +     ubc(:,:,:), vbc(:,:,:), wbc(:,:,:), tbc(:,:,:,:), 
      +     ebc(:,:,:), pbc(:,:,:), pbc2(:,:,:)
+      real, allocatable ::
+     +     p_base(:),rho_base(:),T_base(:),theta_base(:)
       end module fields
 c     ----------------------------------------------------------------------
       module fftwk
@@ -138,7 +140,7 @@ c     ----------------------------------------------------------------------
       sequence
       real ::  vk, vkin, vk74, vk74in, 
      +     gcp, fcor_h, pi2,
-     +     batagk, batag,
+     +     batagk, batag, bfac,
      +     cdbtm, dtdzf(nscl), dtjump, ugal, divgls,
      +     z1, utausv, dx, dy, dz, dt, 
      +     fnxy, dzdz, dsl, c23, dtgama, dtzeta, xkmax,
@@ -151,7 +153,7 @@ c     ----------------------------------------------------------------------
       real, pointer ::
      +     vk, vkin, vk74, vk74in, 
      +     gcp, fcor_h, pi2,
-     +     batagk, batag,
+     +     batagk, batag, bfac,
      +     cdbtm, dtdzf(:), dtjump, ugal, divgls,
      +     z1, utausv, dx, dy, dz, dt,
      +     fnxy, dzdz, dsl, c23, dtgama, dtzeta, xkmax, 
@@ -163,12 +165,12 @@ c     ----------------------------------------------------------------------
       !Integers
       type con_i
       sequence
-      integer :: his_counter,histog_counter,viz_counter
+      integer :: his_counter,histog_counter,viz_counter,itn,it
       end type con_i
 
       type(con_i), target :: c_i
       integer, pointer :: 
-     + his_counter,histog_counter,viz_counter
+     + his_counter,histog_counter,viz_counter,itn,it
        
    
       contains
@@ -185,6 +187,7 @@ c
       pi2    => c_c%pi2
       batagk => c_c%batagk
       batag  => c_c%batag
+      bfac   => c_c%bfac
       cdbtm  => c_c%cdbtm
       dtdzf  => c_c%dtdzf
       dtjump => c_c%dtjump
@@ -222,9 +225,11 @@ c
       end subroutine fill_cc
       subroutine fill_ci
 
-      his_counter => c_i%his_counter
+      his_counter    => c_i%his_counter
       histog_counter => c_i%histog_counter
-      viz_counter => c_i%viz_counter
+      viz_counter    => c_i%viz_counter
+      itn            => c_i%itn
+      it             => c_i%it
 
       end subroutine fill_ci
       end module con_data

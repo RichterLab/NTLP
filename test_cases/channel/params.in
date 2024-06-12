@@ -1,14 +1,12 @@
 
 !Time step information
 &step_params
-iti=0        !Time step to begin
-itmax=150000   !Max number of time steps
-imean=1500    !Number of time steps between writing mean profiles to output log file
-ihst=100     !Number of time steps between writing profiles to history file
-itape=500  !Number of time steps before opening new history file and writing full 3D volumes
-i_viz=15000   !Time steps between writing to viz file
-itn = 0  !Index for "u.le.cou001" files
-max_time = 15  !Code will stop at the next itape after this time (in seconds) has been exceeded
+itmax=500000   !Max number of time steps
+imean=100    !Number of time steps between writing mean profiles to output log file
+ihst=50     !Number of time steps between writing profiles to history file
+itape=10000  !Number of time steps before opening new history file and writing full 3D volumes
+i_viz=50   !Time steps between writing to viz file
+max_time = 1.0e9  !Code will stop at the next itape after this time (in seconds) has been exceeded
 /
 
 !Flags for various features
@@ -19,7 +17,8 @@ method=3, idebug=1, ivis0=1, ifix_dt=0, new_vis=-1
 isfc = 1, 1  ! isfc = 0 sets surface flux (qstar), isfc = 1 sets surface condition (Dirichlet through tsfcc)
 iz_space=2, ! 0 = uniform dz, 1 = top/bottom mirror stretched ("channel"), 2 = "open channel", 3 = PBL with stretching at surface and at zi
 iDNS = 1
-ifields = 1  ! if set to 1, reads the initial condition from path_ran below; otherwise calls subroutine random
+ifields = 0  ! if set to 1, reads the initial condition from path_ran below; otherwise calls subroutine random
+irestart = 0
 ihurr = 0  !If set to 1, includes the hurricane forcings from Bryan et al. (2017) BLM and according to dvdr and hurr_rad below
 ilin = 1   !1 means linear interpolation for particle, 6th order otherwise
 icouple=0
@@ -60,10 +59,8 @@ qstar = 0.2, 0.2  !Surface fluxes of (temperature, humidity) (used for LES and D
 tsfcc = 300.0, 100.0    !Surface conditions of (temp, humidity) (used for LES) -- make sure tsfcc is gt than t00 for both isfc=0 or 1
 
 surf_RH = 100.0
-surf_temp = 299.0  !Only use this when changing the surface temperature in time! Otherwise set tsfcc
-
-psurf = 101325  !Pa -- nominal surface pressure, for use in the definition of potential temp
-
+surf_p = 101325  !Pa -- nominal surface pressure, for use in the definition of potential temp
+surf_rho = 1.0
 ugcont = 0.0   !The initial u-velocity in the field
 vgcont = 0.0   !The initial v-velocity
 dvdr = -8.0e-04  !Change in v with hurricane radius
@@ -107,7 +104,6 @@ zo = 3.2e-5       !Roughness height (for LES)
 zos = 3.2e-5       !Scalar roughness height (for LES)
 
 !Air phase:
-rhoa=1.2
 nuf=1.57e-5  !m^2/s
 Cpa=1006.0  !J/kg-K
 Pra = 0.715

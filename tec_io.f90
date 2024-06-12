@@ -317,7 +317,7 @@ integer :: yfore,yback,nsend,nrecv
 integer :: ix,iy,iz,jloc,iscl
 integer :: ierr,istatus(mpi_status_size)
 real :: sendbuf(1:nnx,kmin:kmax,6),recvbuf(1:nnx,kmin:kmax,6)
-real :: Ttmp,mod_magnus
+real :: Ttmp,mod_magnus,exner,func_p_base,rhoa,func_rho_base
 
   !First fill everything except y-halo
   do iz=kmin,kmax
@@ -391,7 +391,8 @@ real :: Ttmp,mod_magnus
   do iy=jmin,jmax
   do ix=1,nnx
 
-     Ttmp = tplt(ix,iy,iz)*(psurf/(psurf-zz(iz)*rhoa*grav))**(-Rd/Cpa)
+     rhoa = func_rho_base(surf_p,tsfcc(1),zz(iz))
+     Ttmp = tplt(ix,iy,iz)*exner(surf_p,func_p_base(surf_p,tsfcc(1),zz(iz)))
      rhplt(ix,iy,iz) = Ttmp*qplt(ix,iy,iz)*Ru/Mw/mod_magnus(Ttmp)*rhoa*100.0
 
   end do
@@ -404,6 +405,7 @@ real :: Ttmp,mod_magnus
   do iy=jmin,jmax
   do ix=1,nnx
 
+     rhoa = surf_rho
      Ttmp = tplt(ix,iy,iz)
      rhplt(ix,iy,iz) = Ttmp*qplt(ix,iy,iz)*Ru/Mw/mod_magnus(Ttmp)*rhoa*100.0
 
