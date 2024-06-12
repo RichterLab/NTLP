@@ -2,10 +2,10 @@
 
 group_storage=/afs/crc.nd.edu/group/RichterLab
 
-#$ -M agrace4@nd.edu
+#$ -M YOUR_EMAIL@nd.edu
 #$ -m n
-#$ -pe mpi-64 64
-#$ -q hpc
+#$ -pe mpi-16 64
+#$ -q *@@richter
 #$ -N test_case_channel
 #$ -j y
 
@@ -13,11 +13,11 @@ case=channel
 time=0000000
 runout=$case.out.$time
 
-datadir=/scratch365/agrace4/$case
-homedir=~/NTLP/test_cases/channel
+datadir=PATH_TO_SCRATCH/$case
+homedir=PATH_TO_CODE/test_cases/$case
 
-# create the directory for the output.
-mkdir -p $datadir
+# create the directory for the particle tracking output.
+mkdir -p $datadir/particle_traj
 
 cd $homedir
 

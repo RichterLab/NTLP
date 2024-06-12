@@ -20,7 +20,7 @@ appropriate.
 
 ```shell
 TEST_CASE=channel
-USER=agrace4
+USER=username
 HOME=~
 sed -i -e "s#PATH_TO_SCRATCH#/scratch365/${USER}#" ${TEST_CASE}/params.in
 sed -i -e "s#PATH_TO_SCRATCH#/scratch365/${USER}#" \
