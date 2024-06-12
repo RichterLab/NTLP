@@ -1,16 +1,13 @@
 tic
+clear; clc; close all;
+%% Setup
 
-clear
-clc
-close all
-%%
+% The "viz file" contains slices of velocities and scalars
+% The frequency that this is written out is governed by the "i_viz" paramater in params.in
+% To see the contents of the file within Matlab, use the "ncdisp" command
+% By default the slices are at the midplanes in each direction; to change, see the subroutine "write_viz_netcdf"
 
-%The "viz file" contains slices of velocities and scalars
-%The frequency that this is written out is governed by the "i_viz" paramater in params.in
-%To see the contents of the file within Matlab, use the "ncdisp" command
-%By default the slices are at the midplanes in each direction; to change, see the subroutine "write_viz_netcdf"
-
-%"viz.nc" is a netCDF file which can be read using standard packages
+% "viz.nc" is a netCDF file which can be read using standard packages
 
 % I modified this script to save each of the animations at 32 frames per second as an mp4 file in the folder that the .m file is run in. To change
 % the framerate of all animations (and therefore the length as the number of frames is constant) change the variable called "fps" just below. To
@@ -113,8 +110,8 @@ toc
 % the following two animations will be pixelated and square, but will
 % animate much faster. To use this part of the script, the add on titled
 % "SC - powerful image rendering" must be installed. After install,
-% uncomment the code below and run the sections
-%
+% uncomment the code below and run the sections. If uncommented wtihout 
+% the add-on installed, this part of the script will throw an error.
 % - Ben Roper 2024
 
 %% Quick render of w_yz
