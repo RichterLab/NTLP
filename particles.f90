@@ -2614,7 +2614,7 @@ CONTAINS
     !i.e. location is reflected, w-velocity is negated
 
     top = z(nnz)-part%radius
-    bot = 0.0! + part%radius Andrew Made this change for debugging
+    bot = 0.0! Set to if you want this part%radius. More important for DNS than for LES.
 
     if (part%xp(3) .GT. top) then
        part%xp(3) = top - (part%xp(3)-top)

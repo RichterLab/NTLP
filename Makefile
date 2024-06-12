@@ -16,7 +16,7 @@ F90=ifort
 # NOTE: Specifying this incorrectly will, at best, result in degraded execution
 #       times and, at worst, result in crashes due to illegal instructions.
 #
-ARCH ?= avx
+ARCH ?= host
 
 ifeq ($(ARCH), host)
 ARCH_FLAGS = -xHost
