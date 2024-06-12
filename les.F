@@ -10851,7 +10851,7 @@ c
          RHB = Tbot(2)
 
          !Convert RH given in input file into specific humidity
-         Ttop(2) = RHT/100.0*Mw/Ru/Ttop(1)*mod_magnus(Ttop(1))/surf_rho
+         Ttop(2) = RHT/100.0*Mw/Ru/Ttop(1)*mod_ice(Ttop(1))/surf_rho
          Tbot(2) = RHB/100.0*Mw/Ru/Tbot(1)*mod_magnus(Tbot(1))/surf_rho
 
          if (myid==0) then
@@ -10968,6 +10968,17 @@ c
 
 
       end subroutine read_input_file
+     
+      function mod_ice(T)
+      implicit none
+
+      !Take in T in Kelvin and return saturation vapor pressure using function from Huang 2018 (converted to Kelvin)
+			real,intent(in) :: T
+      real :: mod_ice
+
+			mod_ice = (exp((43.494-(6545.8/(T-35.15)))/((T+594.85)**2))
+
+      end function mod_ice
       function mod_magnus(T)
       implicit none
 
@@ -10976,7 +10987,6 @@ c
       real :: mod_magnus
 
       mod_magnus = 610.94 *exp((17.6257*(T-273.15))/(243.04+(T-273.15)))
-
 
       end function mod_magnus
       function exner(p0,p)
