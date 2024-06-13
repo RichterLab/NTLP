@@ -51,7 +51,7 @@ figure(3)
 for i=1:stride:Nt
 
     figure(3); clf
-    plot(qxym(:,i),zu(:,i),'linewidth',2)
+    plot(qxym(:,i),zu(:),'linewidth',2)
     xlabel('qv [kg/kg]')
     ylabel('z [m]')
     drawnow
