@@ -10830,7 +10830,7 @@ c
 
 
       if (ihumiditycontrol) then
-          meanRH_target = 102.0
+          meanRH_target = 106.0
           Swall = Swall + (meanRH_target - meanRH_curr)*1.0e-9
       end if
 
