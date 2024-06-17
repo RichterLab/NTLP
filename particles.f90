@@ -3426,7 +3426,7 @@ CONTAINS
       part => part%next
       end do
       call end_phase(measurement_id_particle_loop)
-
+	!ICE STUFF HERE
 
       !Enforce nonperiodic bcs (either elastic or destroying particles)
       call start_phase(measurement_id_particle_bcs)
