@@ -68,7 +68,7 @@ hurr_rad = 40e3  ! Hurricane radius
 
 dpdx = 0.0  !The pressure gradient for channel flow (gets put into u_geo for DNS)
 
-Swall = 3.672917330277414e-7  !Set the CONSTANT humidity sink to use if ihumiditycontrol = 0
+Swall = -6.352560717459710e-07  !Set the CONSTANT humidity sink to use if ihumiditycontrol = 0
 
 zi = 1.0  !This has to do with grid stretching; make equal to zl for iz_space = 1,2; zi is inversion height for iz_space = 3
 zl = 1.0
