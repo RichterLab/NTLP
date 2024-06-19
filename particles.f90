@@ -3633,7 +3633,7 @@ CONTAINS
         numdrop_center = numdrop_center + 1
      end if
 
-      if (part%radius .gt. part%rc) then
+      if (part%radius .gt. 3.5e-6) then
          numdrop = numdrop + 1
       else
          numaerosol = numaerosol + 1
@@ -3710,8 +3710,8 @@ CONTAINS
          radmsqr = 0.0
       else
          Rep_avg = Rep_avg/tnumpart
-         radavg = radavg/tnumpart
-         radmsqr = radmsqr/tnumpart
+         radavg = radavg/tnumdrop
+         radmsqr = radmsqr/tnumdrop
       end if
       
       if (tnum_destroy.eq.0) then
