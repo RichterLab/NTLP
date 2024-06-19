@@ -132,6 +132,6 @@ radius_init = 2.0e-7
 radius_std = 0.0
 kappas_init = 1.2
 kappas_std = 0.0
-Tp_init = 290.0
+Tp_init = 267.15
 vp_init = 0.0, 0.0, 0.0
 /
