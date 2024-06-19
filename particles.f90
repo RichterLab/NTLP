@@ -88,6 +88,7 @@ module particles
   end type particle
 
   type(particle), pointer :: part,first_particle
+  type(particle), pointer :: icepart,first_ice_particle
 
 CONTAINS
 
