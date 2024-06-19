@@ -330,6 +330,7 @@ CONTAINS
 
 
   end subroutine fill_ext
+
   subroutine fill_extSFS
     !       This subroutine calculte the extented fields for SFS velocity
 
@@ -555,7 +556,7 @@ CONTAINS
 
   end subroutine fill_extSFS
 
-  subroutine uf_interp
+subroutine uf_interp
   use pars
   use fields
   use con_stats
@@ -766,9 +767,9 @@ CONTAINS
      end do 
      end do
 
-  end subroutine uf_interp 
+end subroutine uf_interp 
 
-  subroutine uf_interp_lin
+subroutine uf_interp_lin
   use pars
   use fields
   use con_stats
@@ -848,9 +849,9 @@ CONTAINS
   end do
 
 
-  end subroutine uf_interp_lin
+end subroutine uf_interp_lin
 
-  subroutine sigm_interp(sigm_sdxp,sigm_sdyp,sigm_sdzp,vis_sp,iz_part)
+subroutine sigm_interp(sigm_sdxp,sigm_sdyp,sigm_sdzp,vis_sp,iz_part)
   use pars
   use fields
   use con_stats
@@ -1065,9 +1066,9 @@ CONTAINS
   end do
 
 
-  end subroutine sigm_interp
+end subroutine sigm_interp
 
-  subroutine particle_coupling_exchange
+subroutine particle_coupling_exchange
       use pars
       use con_data
       use con_stats
@@ -1119,9 +1120,9 @@ CONTAINS
       partTEsrc_t(0:nnz+1,iys,mxs:mxe) = partTEsrc_t(0:nnz+1,iys,mxs:mxe) + clbuf_r(1:nnz+2,1:mxe-mxs+1,6)
 
 
-  end subroutine particle_coupling_exchange
+end subroutine particle_coupling_exchange
 
-  subroutine particle_coupling_update
+subroutine particle_coupling_update
   use pars
   use con_data
   use con_stats
@@ -1231,9 +1232,9 @@ CONTAINS
      part => part%next
   end do
 
-  end subroutine particle_coupling_update
+end subroutine particle_coupling_update
 
-  subroutine assign_nbrs
+subroutine assign_nbrs
         use pars
         include 'mpif.h'
       !Figure out which processors lie to all sides: 
@@ -1350,9 +1351,9 @@ CONTAINS
       end if
 
       return
-  end subroutine assign_nbrs
+end subroutine assign_nbrs
 
-  subroutine particle_exchange
+subroutine particle_exchange
       use pars
       use con_data
       use con_stats
@@ -1681,9 +1682,9 @@ CONTAINS
       deallocate(lbuf_r,blbuf_r,bbuf_r,brbuf_r)
       deallocate(totalbuf)
 
-  end subroutine particle_exchange
+end subroutine particle_exchange
 
-  subroutine set_bounds  
+subroutine set_bounds  
         use pars
         use con_data
         use con_stats
@@ -1698,9 +1699,9 @@ CONTAINS
       xmin = dx*(mxs-1)
       xmax = dx*(mxe)
 
-  end subroutine set_bounds
+end subroutine set_bounds
 
-  subroutine particle_init
+subroutine particle_init
       use pars
       use con_data
       implicit none
@@ -1744,9 +1745,9 @@ CONTAINS
       partTEsrc_t = 0.0
 
 
-  end subroutine particle_init
+end subroutine particle_init
 
-  subroutine particle_setup
+subroutine particle_setup
 
       use pars
       implicit none 
@@ -1897,9 +1898,9 @@ CONTAINS
 
       call mpi_type_commit(particletype,ierr)
 
-  end subroutine particle_setup
+end subroutine particle_setup
 
-  subroutine save_particles
+subroutine save_particles
       use pars
       implicit none
       include 'mpif.h'
@@ -1957,9 +1958,9 @@ CONTAINS
       if (myid==0) write(*,7000) path_sav_part
  7000 format(' PARTICLE DATA IS WRITTEN IN FILE  ',a80)
 
-  end subroutine save_particles
+end subroutine save_particles
 
-  subroutine read_part_res
+subroutine read_part_res
       use pars
       implicit none
       include 'mpif.h'
@@ -2057,9 +2058,9 @@ CONTAINS
       write(*,*) 'proc',myid,'read in numpart:',myp
       if (myid==0) write(*,*) 'total number of particles read:',totalp
 
-  end subroutine read_part_res
+end subroutine read_part_res
 
-  subroutine particle_reintro
+subroutine particle_reintro
       use pars
       use con_data
       use con_stats
@@ -2119,9 +2120,9 @@ CONTAINS
       call mpi_allreduce(numpart,tnumpart,1,mpi_integer,mpi_sum,mpi_comm_world,ierr)
 
 
-  end subroutine particle_reintro
+end subroutine particle_reintro
 
-  subroutine create_particle(xp,vp,Tp,m_s,kappa_s,mult,rad_init,idx,procidx)
+subroutine create_particle(xp,vp,Tp,m_s,kappa_s,mult,rad_init,idx,procidx)
       use pars
       implicit none
 
@@ -2173,9 +2174,9 @@ CONTAINS
       part%numact = 0.0
 
       
-  end subroutine create_particle
+end subroutine create_particle
 
-  subroutine new_particle(idx,procidx)
+subroutine new_particle(idx,procidx)
   use pars
   use con_data
   implicit none
@@ -2353,9 +2354,9 @@ CONTAINS
 
    end if
 
-  end subroutine new_particle
+end subroutine new_particle
 
-  subroutine lognormal_dist(rad_init,m_s,kappa_s,M,S)
+subroutine lognormal_dist(rad_init,m_s,kappa_s,M,S)
   use pars
   use con_data
   implicit none
@@ -2426,9 +2427,9 @@ CONTAINS
      endif
    enddo
 
-  end subroutine lognormal_dist
+end subroutine lognormal_dist
 
-  subroutine inject_spray
+subroutine inject_spray
   use pars
   use fields
   use con_data
@@ -2459,7 +2460,7 @@ CONTAINS
     rmax10 = log10(500e-06)
     dh = (rmax10-rmin10)/100.0
 
-!   ===== update x-axis for each bin =====
+   !   ===== update x-axis for each bin =====
     binsdata10(1) = rmin10
     binsdata(1) = 1.0d6*(10**binsdata10(1))
     do i = 1,99
@@ -2582,9 +2583,9 @@ CONTAINS
     end if
 
 
-  end subroutine inject_spray
+end subroutine inject_spray
 
-  subroutine particle_bcs_nonperiodic
+subroutine particle_bcs_nonperiodic
   use con_stats
   use pars
   implicit none
@@ -2697,9 +2698,9 @@ CONTAINS
 
   end do
 
-  end subroutine particle_bcs_nonperiodic
+end subroutine particle_bcs_nonperiodic
 
-  subroutine particle_bcs_periodic
+subroutine particle_bcs_periodic
       use pars
       implicit none 
 
@@ -2728,9 +2729,9 @@ CONTAINS
       end do
 
 
-  end subroutine particle_bcs_periodic
+end subroutine particle_bcs_periodic
 
-  subroutine particle_update_rk3(istage)
+subroutine particle_update_rk3(istage)
       use pars
       use con_data
       use con_stats
@@ -3112,9 +3113,9 @@ CONTAINS
       !t_f = mpi_wtime()
       !if (myid==5) write(*,*) 'time mpi_allreduce: ', t_f - t_s
 
-  end subroutine particle_update_rk3
+end subroutine particle_update_rk3
 
-  subroutine particle_update_BE
+subroutine particle_update_BE
       use pars
       use con_data
       use con_stats
@@ -3742,9 +3743,9 @@ CONTAINS
       call end_phase(measurement_id_particle_stats)
 
 
-  end subroutine particle_update_BE
+end subroutine particle_update_BE
 
-  subroutine destroy_particle
+subroutine destroy_particle
       implicit none
 
       type(particle), pointer :: tmp
@@ -3770,9 +3771,9 @@ CONTAINS
         end if
       end if
    
-  end subroutine destroy_particle
+end subroutine destroy_particle
 
-  subroutine particle_stats
+subroutine particle_stats
       use pars
       use con_stats
       use con_data
@@ -3830,9 +3831,9 @@ CONTAINS
       part => part%next
       end do
 
-  end subroutine particle_stats
+end subroutine particle_stats
 
-  subroutine particle_write_traj
+subroutine particle_write_traj
    use con_data
    use pars
    implicit none
@@ -3852,9 +3853,9 @@ CONTAINS
       close(ntraj)
    end if
 
-  end subroutine particle_write_traj
+end subroutine particle_write_traj
 
-  subroutine particle_coalesce
+subroutine particle_coalesce
       use pars
       use kd_tree
       use pars
@@ -3988,7 +3989,7 @@ CONTAINS
          end if
 
          !Choose the kernel:
-!         K = pi2/2.0*E*veldiff*(rad_data(i) + rad_data(coal_idx))**2
+   !         K = pi2/2.0*E*veldiff*(rad_data(i) + rad_data(coal_idx))**2
 
          if (ikernel.eq.0) then ! Golovin (1963) kernel
             pvol_j = pi2*2.0/3.0*rad_data(j_idx)**3.0
@@ -4129,9 +4130,9 @@ CONTAINS
       deallocate(rad_data,mult_data,coal_data,destroy_data)
       deallocate(kappa_s_data, ms_data)
 
-  end subroutine particle_coalesce
+end subroutine particle_coalesce
 
-  subroutine gauss_newton_2d(vnext,h,rhoa,vec1,vec2,flag)
+subroutine gauss_newton_2d(vnext,h,rhoa,vec1,vec2,flag)
         implicit none
 
         real, intent(in) :: vnext(3), h,rhoa,vec1(2)
@@ -4202,8 +4203,9 @@ CONTAINS
       if (iterations == iteration_max) flag = 1
       if (isnan(vec2(1)) .OR. vec2(1)<0 .OR. isnan(vec2(2)) .OR. vec2(2)<0) flag = 1
 
-  end subroutine gauss_newton_2d
-  subroutine LV_solver(vnext,h,rhoa,vec1,vec2,flag)
+end subroutine gauss_newton_2d
+
+subroutine LV_solver(vnext,h,rhoa,vec1,vec2,flag)
         implicit none
 
         real, intent(in) :: vnext(3),h,rhoa,vec1(2)
@@ -4283,8 +4285,9 @@ CONTAINS
         end if
 
 
-  end subroutine LV_solver
-  subroutine jacob_approx_2d(rhoa,vnext, rnext, tnext, h, J)
+end subroutine LV_solver
+
+subroutine jacob_approx_2d(rhoa,vnext, rnext, tnext, h, J)
         implicit none
         integer :: n
 
@@ -4312,8 +4315,9 @@ CONTAINS
                 xper2(n) = ynext(n)
         end do
 
-  end subroutine jacob_approx_2d
-  subroutine inverse_finder_2d(C,det,invC)
+end subroutine jacob_approx_2d
+
+subroutine inverse_finder_2d(C,det,invC)
         implicit none
         real, intent(in) :: det
         real, dimension(1:2, 1:2), intent(in) :: C
@@ -4322,8 +4326,9 @@ CONTAINS
         invC = reshape((/C(2, 2), -C(2,1), -C(1, 2), C(1, 1)/),shape(invC))
         invC = (1./det)*invC
 
-  end subroutine inverse_finder_2d
-  subroutine ie_vrt_nd(rhoa,vnext, tempr, tempt, v_output,rt_output, h)
+end subroutine inverse_finder_2d
+
+subroutine ie_vrt_nd(rhoa,vnext, tempr, tempt, v_output,rt_output, h)
       use pars
       use con_data
       use con_stats
@@ -4387,8 +4392,9 @@ CONTAINS
         rT_output(1) = rnext/part%radius - 1.0  - h*rprime
         rT_output(2) = Tnext/part%Tp - 1.0  - h*Tprime
 
-  end subroutine ie_vrt_nd
-  subroutine rad_solver2(guess,rhoa,mflag)
+end subroutine ie_vrt_nd
+
+subroutine rad_solver2(guess,rhoa,mflag)
       use pars
       use con_data
       use con_stats
@@ -4431,9 +4437,9 @@ CONTAINS
         end if
       end if
 
-  end subroutine rad_solver2
+end subroutine rad_solver2
 
-  subroutine SFS_velocity
+subroutine SFS_velocity
   !This subroutine calculate the SFS velocity for particles
   !Uses Weil et al. (2004) formulation
   use pars
@@ -4453,7 +4459,7 @@ CONTAINS
   integer :: ix,iy,iz,izp1,izm1,ind,iz_part,ierr
   integer :: fluxloc,fluxloci
 
-!       ---initialize -------
+   !       ---initialize -------
   fs = 0.0
   C0 = 0.0
   T_lagr = 0.0
@@ -4474,9 +4480,9 @@ CONTAINS
   sigm_w = 0.0
   pfluxdiff = 0.0
 
-!       ------------------
-!       compute sigma squre (sigm_s) based on subgrid energy field
-!       -----------------       
+   !       ------------------
+   !       compute sigma squre (sigm_s) based on subgrid energy field
+   !       -----------------       
   do iz =izs,ize
     izp1 = iz+1
     izm1 = iz-1
@@ -4491,30 +4497,30 @@ CONTAINS
        sigm_sdx(ix,iy,iz) =  sigm_s(ix,iy,iz)       !for xderiv
        sigm_sdy(ix,iy,iz) =  sigm_s(ix,iy,iz)       !for yderiv
 
-!     --------------------
-!     calculate z derivative of sigma_s
-!     this will be at the u-point!
-!     --------------------
+   !     --------------------
+   !     calculate z derivative of sigma_s
+   !     this will be at the u-point!
+   !     --------------------
        sigm_sdz(ix,iy,iz)=(sigm_s(ix,iy,iz)-sigm_s(ix,iy,izm1))*dzw_i(iz)
       end do
       end do
 
-!     -------------------
-!     calculate x derivatives of sigma_s
-!     -------------------
+   !     -------------------
+   !     calculate x derivatives of sigma_s
+   !     -------------------
      call xderivp(sigm_sdx(1,iys,iz),trigx(1,1),xk(1),nnx,iys,iye)
 
   end do
 
-!     ------------------
-!     calculate y derivative of sigma_s
-!     ------------------
+   !     ------------------
+   !     calculate y derivative of sigma_s
+   !     ------------------
 
   call yd_mpi(sigm_sdy(1,iys,izs),trigx(1,2),yk(1),nnx,nny,ixs,ixe,ix_s,ix_e,iys,iye,iy_s,iy_e,izs,ize,myid,ncpu_s,numprocs)
 
-!     ----------------
-!    calculate extented fileds of sigm_s and its derivatives
-!     ---------------
+   !     ----------------
+   !    calculate extented fileds of sigm_s and its derivatives
+   !     ---------------
 
   call fill_extSFS
 
@@ -4529,14 +4535,14 @@ CONTAINS
     part%sigm_s = abs(part%sigm_s)  !Interpolation near surface can give small negative numbers
     part%sigm_s = max(part%sigm_s,1.0e-4) !Prevent it from getting too small, makes time derivative term singular
 
-!     -----------------
-!     calculate the subgrid velocity Weil et al ,2004-isotropic turb.
-!     ----------------
+   !     -----------------
+   !     calculate the subgrid velocity Weil et al ,2004-isotropic turb.
+   !     ----------------
      l_flt = (2.25*dx*dy*dzw(iz_part+1))**(1.0/3.0)! filtered with
      epsn = (0.93/l_flt)*(3.0*part%sigm_s/2.0)**(1.5) ! tur. dis.rt
      ! TKE : resolved + Subgrid at grid center
       !---------------------------------
-!      tot_eng = (engsbz(iz_part+1) + engz(iz_part+1))
+   !      tot_eng = (engsbz(iz_part+1) + engz(iz_part+1))
      if (iz_part.eq.0) then
         englez_bar = 0.5*englez(iz_part+1)
      elseif (iz_part.eq.nnz) then
@@ -4558,27 +4564,27 @@ CONTAINS
 
      sigm_ws = 0.5*(engsbz(iz_part)+engsbz(iz_part+1))/3.0
 
-!     ---------write for single droplet ---------
-!       write(*,*)'sigm_w:', sigm_w,sigm_ws
-!     ------------------------------------------
+   !     ---------write for single droplet ---------
+   !       write(*,*)'sigm_w:', sigm_w,sigm_ws
+   !     ------------------------------------------
     if(tengz.gt.0.0)then
-!      fs = engsbz(iz_part+1)/(engsbz(iz_part+1) + engz(iz_part+1))
-!      fs = engsbz_bar/tengz
+   !      fs = engsbz(iz_part+1)/(engsbz(iz_part+1) + engz(iz_part+1))
+   !      fs = engsbz_bar/tengz
        fs = sigm_ws/(sigm_w + sigm_ws)
     else
        fs =0.0
     end if
     C0 = 6.0  ! Changed to 6.0 from 3.0 Indrjith 11-20-17
 
-!     ---------Check for single-part----------
+   !     ---------Check for single-part----------
        T_lagr = 2*part%sigm_s/(C0*epsn)   ! Lagrangian time scale
-!       write(*,*) 'L_time:',part%xp(3),T_lagr
-!     -----------------------------------
-!    ------------------
-!      Calculate subgrid velocity components
-!     -----------------
+   !       write(*,*) 'L_time:',part%xp(3),T_lagr
+   !     -----------------------------------
+   !    ------------------
+   !      Calculate subgrid velocity components
+   !     -----------------
      us(1:3) = part%u_sub(1:3)
-!    -----x component ----------------
+   !    -----x component ----------------
      a1 = 0.0
      a2 =0.0
      a3 = 0.0
@@ -4588,8 +4594,8 @@ CONTAINS
      us_ran = sqrt(fs*C0*epsn*dt)*gasdev(iseed)
      part%u_sub(1) = (a1+a2+a3)*dt + us_ran
 
-!     ----------------------------------
-!     -----y component ----------------
+   !     ----------------------------------
+   !     -----y component ----------------
     a1 = 0.0
     a2 =0.0
     a3 = 0.0
@@ -4599,8 +4605,8 @@ CONTAINS
     us_ran = sqrt(fs*C0*epsn*dt)*gasdev(iseed)
     part%u_sub(2) = (a1+a2+a3)*dt + us_ran
 
-!     ----------------------------------
-!     -----z component ----------------
+   !     ----------------------------------
+   !     -----z component ----------------
     a1 = 0.0
     a2 =0.0
     a3 = 0.0
@@ -4610,14 +4616,14 @@ CONTAINS
     us_ran = sqrt(fs*C0*epsn*dt)*gasdev(iseed)
     part%u_sub(3) = (a1+a2+a3)*dt + us_ran
 
-!     -------------------
-!     Update particle location and velocity
-!     ------------------
+   !     -------------------
+   !     Update particle location and velocity
+   !     ------------------
     xp3i = part%xp(3)
     do ind = 1,3
       part%xp(ind) = part%xp(ind) + part%u_sub(ind)*dt
     end do
-!     ---------------------------------        
+   !     ---------------------------------        
 
     Volp = pi2*2.0/3.0*part%radius**3
     rhop = (part%m_s+Volp*rhow)/Volp
@@ -4671,9 +4677,9 @@ CONTAINS
   !Compute total number of particles
   call mpi_allreduce(numpart,tnumpart,1,mpi_integer,mpi_sum,mpi_comm_world,ierr)
 
-  end subroutine SFS_velocity
+end subroutine SFS_velocity
 
-  subroutine SFS_position
+subroutine SFS_position
   !Use a more simplistic SFS treatment: Stochastic particle position rather than velocity
   !Designed to be consistent with LES subgrid eddy diffusivity
   !Does not use Weil et al. 2004 formulation at all
@@ -4695,9 +4701,9 @@ CONTAINS
     sigm_s = 0.0
     pfluxdiff = 0.0
 
-!       ------------------
-!       compute sigma squre (sigm_s) based on subgrid energy field
-!       -----------------       
+   !       ------------------
+   !       compute sigma squre (sigm_s) based on subgrid energy field
+   !       -----------------       
     do iz =izs,ize
     izp1 = iz+1
     izm1 = iz-1
@@ -4786,9 +4792,9 @@ CONTAINS
   call mpi_allreduce(numpart,tnumpart,1,mpi_integer,mpi_sum,mpi_comm_world,ierr)
 
 
-  end subroutine SFS_position
+end subroutine SFS_position
 
-  subroutine particle_neighbor_search_kd
+subroutine particle_neighbor_search_kd
   use pars
   use kd_tree
   implicit none 
@@ -4878,9 +4884,9 @@ CONTAINS
   deallocate(xp_data,index_data)
 
 
-  end subroutine particle_neighbor_search_kd
+end subroutine particle_neighbor_search_kd
 
-  subroutine particle_neighbor_search_brute
+subroutine particle_neighbor_search_brute
   use pars
   implicit none 
 
@@ -4927,10 +4933,9 @@ CONTAINS
   end do
 
 
-  end subroutine particle_neighbor_search_brute
+end subroutine particle_neighbor_search_brute
 
-
-  subroutine set_binsdata(binsdata,sizea,rmin,rmax)
+subroutine set_binsdata(binsdata,sizea,rmin,rmax)
   use pars
   use fields
   use con_data
@@ -4950,19 +4955,19 @@ CONTAINS
     rmin10 = log10(rmin)
     rmax10 = log10(rmax)
 
-!       Calculate size of interval
+   !       Calculate size of interval
     dh = (rmax10-rmin10)/(nbin-1)
 
-!       ===== update x-axis for each bin ===== 
+   !       ===== update x-axis for each bin ===== 
     binsdata(1) = rmin10-dh
     do i = 1,histbins+1
       binsdata(i+1)= dh+binsdata(i)
     end do
 
 
-  end subroutine set_binsdata
+end subroutine set_binsdata
 
-  subroutine set_binsdata_integer(binsdata,sizea,rmin)
+subroutine set_binsdata_integer(binsdata,sizea,rmin)
   use pars
   use fields
   use con_data
@@ -4979,19 +4984,19 @@ CONTAINS
 
     nbin = histbins !From Module Particle 
 
-!       Calculate size of interval
+   !       Calculate size of interval  
     dh = 1.0
 
-!       ===== update x-axis for each bin ===== 
+   !       ===== update x-axis for each bin ===== 
     binsdata(1) = rmin-dh
     do i = 1,histbins+1
       binsdata(i+1)= dh+binsdata(i)
     end do
 
 
-  end subroutine set_binsdata_integer
+end subroutine set_binsdata_integer
 
-  subroutine add_histogram(binsdata,histdata,sizea,val1,mult)
+subroutine add_histogram(binsdata,histdata,sizea,val1,mult)
 
   use pars
   use fields
@@ -5014,7 +5019,7 @@ CONTAINS
     nbin = histbins !From Module Particle 
     rmax = binsdata(nbin+1)
 
-!       Calculate size of interval
+   !       Calculate size of interval
     dh = (rmax-rmin)/(nbin-1)
 
     logval1 = log10(val1)
@@ -5026,12 +5031,12 @@ CONTAINS
             ibin = (floor((logval1-(rmin-0.5*dh))/dh)+1)+1
     end if
 
-!       Add the current event to the histogram
+   !       Add the current event to the histogram
     histdata(ibin) = histdata(ibin) + dble(mult)
 
-  end subroutine add_histogram
+end subroutine add_histogram
 
-  subroutine add_histogram_integer(binsdata,histdata,sizea,val)
+subroutine add_histogram_integer(binsdata,histdata,sizea,val)
 
   use pars
   use fields
@@ -5053,7 +5058,7 @@ CONTAINS
     nbin = histbins !From Module Particle 
     rmax = binsdata(nbin+1)
 
-!       Calculate size of interval
+   !       Calculate size of interval
     dh = (rmax-rmin)/(nbin-1)
 
     if (val .gt. rmax+0.5*dh) then
@@ -5065,12 +5070,12 @@ CONTAINS
     end if
 
 
-!       Add the current event to the histogram
+   !       Add the current event to the histogram
     histdata(ibin) = histdata(ibin) + 1.0
 
-  end subroutine add_histogram_integer
+end subroutine add_histogram_integer
 
-  subroutine radius_histogram
+subroutine radius_histogram
   implicit none
 
   hist_rad = 0.0
@@ -5080,9 +5085,9 @@ CONTAINS
      part => part%next
   end do
 
-  end subroutine radius_histogram
+end subroutine radius_histogram
 
-   subroutine eigen_roots(a,m,rtr,rti)
+subroutine eigen_roots(a,m,rtr,rti)
    ! USES balanc,hqr
    !Find all the roots of a polynomial with real coeﬃcients. The method is to construct an upper Hessenberg matrix
    !whose eigenvalues are the desired roots, and then use the routines balanc and hqr . The real and imaginary parts of the roots are returned in rtr(1:m) and rti(1:m) , respectively.
@@ -5124,10 +5129,10 @@ CONTAINS
          rti(k+1)=xi
       enddo
       return
-   end subroutine
+end subroutine
    
    
-   SUBROUTINE balanc(a,n,np)
+SUBROUTINE balanc(a,n,np)
    !Given an n by n matrix a stored in an array of physical dimensions np by np , this routine
    !replaces it by a balanced matrix with identical eigenvalues. A symmetric matrix is already
    !balanced and is unaﬀected by this procedure. The parameter RADIX should be the machine’s
@@ -5184,9 +5189,9 @@ CONTAINS
    
       if(last.eq.0) goto 2
       return
-   END subroutine
+END subroutine
    
-   SUBROUTINE hqr(a,n,np,wr,wi)
+SUBROUTINE hqr(a,n,np,wr,wi)
    !Finds all eigenvalues of an n by n upper Hessenberg matrix a that is stored in an np by np
    !array. On input a can be exactly as output from elmhes; on output it is destroyed.
    !The real and imaginary parts of the eigenvalues are returned in wr and wi , respectively.
@@ -5351,10 +5356,10 @@ CONTAINS
             goto 5
          endif
       return
-   END subroutine
+END subroutine
 
 
-  function crit_radius(m_s,kappa_s,Tf)
+function crit_radius(m_s,kappa_s,Tf)
     use pars
     use con_data
     implicit none
@@ -5387,9 +5392,9 @@ CONTAINS
     crit_radius = radval(maxidx(1))
 
 
-  end function crit_radius
+end function crit_radius
 
-  function smithssgf(u10,r80,vk)
+function smithssgf(u10,r80,vk)
   implicit none
   real :: u10,r80,cdn10,vk,u14
   real :: a1,a2,smithssgf
@@ -5413,10 +5418,10 @@ CONTAINS
   ! calcaulate dFs/dr80 (Eq. A1 in Andreas 1998)
   smithssgf = a1*exp(-3.1*(alog(r80/2.1))**2) + a2*exp(-3.3*(alog(r80/9.2))**2)
 
-  end function smithssgf
+end function smithssgf
 
-! Long (1974) collection efficiencies (as in Bott 1998)
-   real function long_effic(r1,r2)
+   ! Long (1974) collection efficiencies (as in Bott 1998)
+real function long_effic(r1,r2)
       implicit none
       real :: r1, r2, effic, rbig, rsmall
 
@@ -5437,10 +5442,10 @@ CONTAINS
 
       long_effic = effic
 
-   end function long_effic
+end function long_effic
 
    ! modified Hall (1980) collection efficiencies (as in Bott 1998)
-	real function hall_effic(r1,r2)
+real function hall_effic(r1,r2)
       implicit none
       dimension rat(21),r0(15), ecoll(15,21)
       integer :: k, ir, kk, iq
@@ -5544,6 +5549,6 @@ CONTAINS
 
       hall_effic = ec
 
-   end function hall_effic
+end function hall_effic
 
 end module particles
