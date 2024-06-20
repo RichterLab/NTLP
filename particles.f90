@@ -49,7 +49,7 @@ module particles
   real :: Rep_avg,part_grav(3)
   real :: radavg,radmin,radmax,radmsqr,tempmin,tempmax,qmin,qmax
   real :: radavg_center,radmsqr_center
-  real :: vp_init(3),Tp_init,radius_init,radius_std,kappas_init,kappas_std
+  real :: vp_init(3),vp_i_init(3),Tp_init,Tp_i_init,radius_init,,rad_i_init,radius_std,rad_i_std,kappas_init,kappas_i_init,kappas_std,kappas_i_std
   real :: pdf_factor,pdf_prob
   integer*8 :: mult_init,mult_init_ice,mult_factor,mult_a,mult_c
 
