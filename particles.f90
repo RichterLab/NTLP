@@ -53,9 +53,13 @@ module particles
   real :: pdf_factor,pdf_prob
   integer*8 :: mult_init,mult_factor,mult_a,mult_c
 
-  real,parameter :: Cvv=1463.0
+  real,parameter :: Cvv = 1463.0
   real,parameter :: Cpv = 1952.0
   real,parameter :: Cva = 717.04
+  real,parameter :: Cpi = 2108.0
+  real,parameter :: Ls = 2.838e6
+  real,parameter :: rho_i = 916.8
+  real,parameter :: Rv = 467
 
   real :: avgres=0,tavgres=0
 
@@ -3196,68 +3200,308 @@ subroutine particle_update_BE
       do while (associated(part))
 
 
-        !First, interpolate to get the fluid velocity part%uf(1:3):
-        if (ilin .eq. 1) then
-           call uf_interp_lin   !Use trilinear interpolation
-        else
-           call uf_interp       !Use 6th order Lagrange interpolation
-        end if
+         !First, interpolate to get the fluid velocity part%uf(1:3):
+         if (ilin .eq. 1) then
+            call uf_interp_lin   !Use trilinear interpolation
+         else
+            call uf_interp       !Use 6th order Lagrange interpolation
+         end if
 
 
-        if (it .LE. 1) then
-           part%vp(1:3) = part%uf
-        end if
+         if (it .LE. 1) then
+            part%vp(1:3) = part%uf
+         end if
 
-        if (iexner .eq. 1) then
-           !Compute using the base-state pressure at the particle height
-           !Neglects any turbulence or other fluctuating pressure sources
-           part%Tf = part%Tf*exner(surf_p,func_p_base(surf_p,tsfcc(1),part%xp(3)))
-           rhoa = func_rho_base(surf_p,tsfcc(1),part%xp(3))
-        else
-           rhoa = surf_rho
-        end if
+         if (iexner .eq. 1) then
+            !Compute using the base-state pressure at the particle height
+            !Neglects any turbulence or other fluctuating pressure sources
+            part%Tf = part%Tf*exner(surf_p,func_p_base(surf_p,tsfcc(1),part%xp(3)))
+            rhoa = func_rho_base(surf_p,tsfcc(1),part%xp(3))
+         else
+            rhoa = surf_rho
+         end if
 
-        if (part%qinf .lt. 0.0) then
-          write(*,'(a30,2i,12e15.6)') 'WARNING: NEG QINF',  &
-          part%pidx,part%procidx, &
-          part%radius,part%qinf,part%Tp,part%Tf,part%xp(3), &
-          part%kappa_s,part%m_s,part%vp(1),part%vp(2),part%vp(3), &
-          part%res,part%sigm_s
-        end if
-
-
-        diff(1:3) = part%vp - part%uf
-        diffnorm = sqrt(diff(1)**2 + diff(2)**2 + diff(3)**2)
-        Volp = pi2*2.0/3.0*part%radius**3
-        rhop = (part%m_s+Volp*rhow)/Volp
-        taup_i = 18.0*rhoa*nuf/rhop/(2.0*part%radius)**2
-        Rep = 2.0*part%radius*diffnorm/nuf
-        corrfac = (1.0 + 0.15*Rep**(0.687))
-
-        corrfac = 1.0
-
-        xp3i = part%xp(3)   !Store this to do flux calculation
-
-        !Store these to compute the feedback terms
-        rad_i = part%radius
-        Tp_i = part%Tp
-        vp_i(1:3) = part%vp(1:3)
-        mp_i = Volp*rhop
-        rhop_i = rhop
-
-        !implicitly calculates next velocity and position
-        part%xp(1:3) = part%xp(1:3) + dt*part%vp(1:3)
-        part%vp(1:3) = (part%vp(1:3)+taup_i*dt*corrfac*part%uf(1:3)+dt*part_grav(1:3))/(1+dt*corrfac*taup_i)
+         if (part%qinf .lt. 0.0) then
+            write(*,'(a30,2i,12e15.6)') 'WARNING: NEG QINF',  &
+            part%pidx,part%procidx, &
+            part%radius,part%qinf,part%Tp,part%Tf,part%xp(3), &
+            part%kappa_s,part%m_s,part%vp(1),part%vp(2),part%vp(3), &
+            part%res,part%sigm_s
+         end if
 
 
-        ! non-dimensionalizes particle radius and temperature before
-        ! iteratively solving for next radius and temperature
+         diff(1:3) = part%vp - part%uf
+         diffnorm = sqrt(diff(1)**2 + diff(2)**2 + diff(3)**2)
+         Volp = pi2*2.0/3.0*part%radius**3
+         rhop = (part%m_s+Volp*rhow)/Volp
+         taup_i = 18.0*rhoa*nuf/rhop/(2.0*part%radius)**2
+         Rep = 2.0*part%radius*diffnorm/nuf
+         corrfac = (1.0 + 0.15*Rep**(0.687))
 
-        taup0 = (((part%m_s)/((2./3.)*pi2*radius_init**3) + rhow)*(radius_init*2)**2)/(18*rhoa*nuf)
+         corrfac = 1.0
 
-        dt_taup0 = dt/taup0
+         xp3i = part%xp(3)   !Store this to do flux calculation
 
-        if (ievap .EQ. 1 .and. part%qinf .gt. 0.0) then
+         !Store these to compute the feedback terms
+         rad_i = part%radius
+         Tp_i = part%Tp
+         vp_i(1:3) = part%vp(1:3)
+         mp_i = Volp*rhop
+         rhop_i = rhop
+
+         !implicitly calculates next velocity and position
+         part%xp(1:3) = part%xp(1:3) + dt*part%vp(1:3)
+         part%vp(1:3) = (part%vp(1:3)+taup_i*dt*corrfac*part%uf(1:3)+dt*part_grav(1:3))/(1+dt*corrfac*taup_i)
+
+
+         ! non-dimensionalizes particle radius and temperature before
+         ! iteratively solving for next radius and temperature
+
+         taup0 = (((part%m_s)/((2./3.)*pi2*radius_init**3) + rhow)*(radius_init*2)**2)/(18*rhoa*nuf)
+
+         dt_taup0 = dt/taup0
+
+         if (ievap .EQ. 1 .and. part%qinf .gt. 0.0) then
+
+                  !Gives initial guess into nonlinear solver
+                  !mflag = 0, has equilibrium radius; mflag = 1, no
+                  !equilibrium (uses itself as initial guess)
+                  call rad_solver2(guess,rhoa,mflag)
+
+                  if (mflag == 0) then
+                  rt_start(1) = guess/part%radius
+                  rt_start(2) = part%Tf/part%Tp
+                  else
+                  rt_start(1) = 1.0
+                  rt_start(2) = 1.0
+                  end if
+
+                  call gauss_newton_2d(part%vp,dt_taup0,rhoa,rt_start, rt_zeroes,flag)
+
+                  if (flag==1) then
+                  num100 = num100+1
+
+                  call LV_solver(part%vp,dt_taup0,rhoa,rt_start, rt_zeroes,flag)
+
+                  end if
+
+                  if (flag == 1) num1000 = num1000 + 1
+
+                  if      (isnan(rt_zeroes(1)) &
+                     .OR. (rt_zeroes(1)*part%radius<0) &
+                     .OR. isnan(rt_zeroes(2)) &
+                     .OR. (rt_zeroes(2)<0) &
+                     .OR. (rt_zeroes(1)*part%radius>1.0e-2)) & !These last 2 are very specific to pi chamber
+                     !.OR. (rt_zeroes(2)*part%Tp > Tbot(1)*1.1)  &
+                     !.OR. (rt_zeroes(2)*part%Tp < Ttop(1)*0.9)) &
+                  then
+
+                  write(*,'(a30,14e15.6)') 'WARNING: CONVERGENCE',  &
+                  part%radius,part%qinf,part%Tp,part%Tf,part%xp(3), &
+                  part%kappa_s,part%m_s,part%vp(1),part%vp(2),part%vp(3), &
+                  part%res,part%sigm_s,rt_zeroes(1),rt_zeroes(2)
+
+                  numimpos = numimpos + 1  !How many have failed?
+                  !If they failed (should be very small number), radius,
+                  !temp remain unchanged
+                  rt_zeroes(1) = 1.0
+                  rt_zeroes(2) = part%Tf/part%Tp
+
+
+                  end if
+
+                  !Get the critical radius based on old temp
+                  part%rc = crit_radius(part%m_s,part%kappa_s,part%Tp) 
+
+                  !Count if activated/deactivated
+                  if (part%radius > part%rc .AND. part%radius*rt_zeroes(1) < part%rc) then
+                     denum = denum + 1
+
+                     !Also add activated lifetime to histogram
+                  call add_histogram(bins_actres,hist_actres,histbins+2,part%actres,part%mult)
+                     
+
+                  elseif (part%radius < part%rc .AND. part%radius*rt_zeroes(1) > part%rc) then
+                     actnum = actnum + 1
+                     part%numact = part%numact + 1.0
+
+                     !Reset the activation lifetime
+                     part%actres = 0.0
+
+                  endif
+
+                  !Redimensionalize
+                  part%radius = rt_zeroes(1)*part%radius
+                  part%Tp = rt_zeroes(2)*part%Tp
+         end if
+
+            if (part%radius .gt. 1.0e-2) then
+            write(*,'(a30,12e15.6)') 'WARNING: BIG DROPLET',  &
+            part%radius,part%qinf,part%Tp,part%Tf,part%xp(3), &
+            part%kappa_s,part%m_s,part%vp(1),part%vp(2),part%vp(3), &
+            part%res,part%sigm_s
+            end if
+
+
+            !New volume and particle density
+            Volp = pi2*2.0/3.0*part%radius**3
+            rhop = (part%m_s+Volp*rhow)/Volp
+
+            !Intermediate Values
+            diff(1:3) = part%vp - part%uf
+            diffnorm = sqrt(diff(1)**2 + diff(2)**2 + diff(3)**2)
+            Rep = 2.0*part%radius*diffnorm/nuf
+
+            myRep_avg = myRep_avg + Rep
+            corrfac = (1.0 + 0.15*Rep**(0.687))
+            mylwc_sum = mylwc_sum + Volp*rhop*real(part%mult)
+            myphiw_sum = myphiw_sum + Volp*rhow
+            myphiv_sum = myphiv_sum + Volp
+
+            !Compute Nusselt number for particle:
+            !Ranz-Marshall relation
+            Nup = 2.0 + 0.6*Rep**(1.0/2.0)*Pra**(1.0/3.0)
+            Shp = 2.0 + 0.6*Rep**(1.0/2.0)*Sc**(1.0/3.0)
+
+            !Mass Transfer calculations
+            einf = mod_magnus(part%Tf)
+
+            Eff_C = 2.0*Mw*Gam/(Ru*rhow*part%radius*part%Tp)
+            Eff_S = part%kappa_s*part%m_s*rhow/rhos/(Volp*rhop-part%m_s)
+            estar = einf*exp(Mw*Lv/Ru*(1.0/part%Tf-1.0/part%Tp)+Eff_C-Eff_S)
+            part%qstar = Mw/Ru*estar/part%Tp/rhoa
+
+         if (ievap .EQ. 1) then
+               !part%radrhs = Shp/9.0/Sc*rhop/rhow*part%radius*taup_i*(part%qinf-part%qstar) !assumes qinf=rhov/rhoa rather than rhov/rhom
+               part%radrhs = (part%radius-rad_i)/dt
+         else
+
+               part%radrhs = 0.0
+               part%rc = 0.0
+
+               !Also update the temperature directly using BE:
+               tmp_coeff = Nup/3.0/Pra*CpaCpp*rhop/rhow*taup_i
+               part%Tp = (part%Tp + tmp_coeff*dt*part%Tf)/(1+dt*tmp_coeff)
+         end if
+
+         !part%Tprhs_s = -Nup/3.0/Pra*CpaCpp*rhop/rhow*taup_i*(part%Tp-part%Tf)
+         part%Tprhs_L = 3.0*Lv/Cpp/part%radius*part%radrhs
+         part%Tprhs_s = (part%Tp-Tp_i)/dt - part%Tprhs_L
+
+         part%xrhs(1:3) = part%vp(1:3)
+         !part%vrhs(1:3) = corrfac*taup_i*(part%uf(1:3)-part%vp(1:3)) + part_grav(1:3)
+         part%vrhs(1:3) = (part%vp(1:3)-vp_i(1:3))/dt
+
+         part%res = part%res + dt
+         part%actres = part%actres + dt
+
+
+         !Store the particle flux now that everything has been updated
+         if (part%xp(3) .gt. zl) then   !This will get treated in particle_bcs_nonperiodic, but record here
+            fluxloc = nnz+1
+            fluxloci = minloc(z,1,mask=(z.gt.xp3i))-1
+         elseif (part%xp(3) .lt. 0.0) then !This will get treated in particle_bcs_nonperiodic, but record here
+            fluxloci = minloc(z,1,mask=(z.gt.xp3i))-1
+            fluxloc = 0
+         else
+
+         fluxloc = minloc(z,1,mask=(z.gt.part%xp(3)))-1
+         fluxloci = minloc(z,1,mask=(z.gt.xp3i))-1
+
+         end if  !Only apply flux calc to particles in domain
+
+         if (xp3i .lt. part%xp(3)) then !Particle moved up
+
+         do iz=fluxloci,fluxloc-1
+            pflux(iz) = pflux(iz) + part%mult
+            pmassflux(iz) = pmassflux(iz) + rhop*Volp*part%mult
+            penegflux(iz) = penegflux(iz) + rhop*Volp*Cpp*part%Tp*part%mult
+         end do
+
+         elseif (xp3i .gt. part%xp(3)) then !Particle moved down
+
+         do iz=fluxloc,fluxloci-1
+            pflux(iz) = pflux(iz) - part%mult
+            pmassflux(iz) = pmassflux(iz) - rhop*Volp*part%mult
+            penegflux(iz) = penegflux(iz) - rhop*Volp*Cpp*part%Tp*part%mult
+         end do
+
+         end if  !Up/down conditional statement
+
+
+         part => part%next
+      end do
+      call end_phase(measurement_id_particle_loop)
+	
+      !ICE STUFF HERE
+
+      part => first_ice_particle
+
+      do while (associated(part))
+            
+
+         !First, interpolate to get the fluid velocity part%uf(1:3):
+         if (ilin .eq. 1) then
+            call uf_interp_lin   !Use trilinear interpolation
+         else
+            call uf_interp       !Use 6th order Lagrange interpolation
+         end if
+
+
+         if (it .LE. 1) then
+            part%vp(1:3) = part%uf
+         end if
+
+         if (iexner .eq. 1) then
+            !Compute using the base-state pressure at the particle height
+            !Neglects any turbulence or other fluctuating pressure sources
+            part%Tf = part%Tf*exner(surf_p,func_p_base(surf_p,tsfcc(1),part%xp(3)))
+            rhoa = func_rho_base(surf_p,tsfcc(1),part%xp(3))
+         else
+            rhoa = surf_rho
+         end if
+
+         if (part%qinf .lt. 0.0) then
+         write(*,'(a30,2i,12e15.6)') 'WARNING: NEG QINF',  &
+         part%pidx,part%procidx, &
+         part%radius,part%qinf,part%Tp,part%Tf,part%xp(3), &
+         part%kappa_s,part%m_s,part%vp(1),part%vp(2),part%vp(3), &
+         part%res,part%sigm_s
+         end if
+
+
+         diff(1:3) = part%vp - part%uf
+         diffnorm = sqrt(diff(1)**2 + diff(2)**2 + diff(3)**2)
+         Volp = pi2*2.0/3.0*part%radius**3
+         rhop = (part%m_s+Volp*rhow)/Volp
+         taup_i = 18.0*rhoa*nuf/rhop/(2.0*part%radius)**2
+         Rep = 2.0*part%radius*diffnorm/nuf
+         corrfac = (1.0 + 0.15*Rep**(0.687))
+
+         corrfac = 1.0
+
+         xp3i = part%xp(3)   !Store this to do flux calculation
+
+         !Store these to compute the feedback terms
+         rad_i = part%radius
+         Tp_i = part%Tp
+         vp_i(1:3) = part%vp(1:3)
+         mp_i = Volp*rhop
+         rhop_i = rhop
+
+         !implicitly calculates next velocity and position
+         part%xp(1:3) = part%xp(1:3) + dt*part%vp(1:3)
+         part%vp(1:3) = (part%vp(1:3)+taup_i*dt*corrfac*part%uf(1:3)+dt*part_grav(1:3))/(1+dt*corrfac*taup_i)
+
+
+         ! non-dimensionalizes particle radius and temperature before
+         ! iteratively solving for next radius and temperature
+
+         taup0 = (((part%m_s)/((2./3.)*pi2*radius_init**3) + rhow)*(radius_init*2)**2)/(18*rhoa*nuf)
+
+         dt_taup0 = dt/taup0
+
+         if (ievap .EQ. 1 .and. part%qinf .gt. 0.0) then
 
                !Gives initial guess into nonlinear solver
                !mflag = 0, has equilibrium radius; mflag = 1, no
@@ -3265,11 +3509,11 @@ subroutine particle_update_BE
                call rad_solver2(guess,rhoa,mflag)
 
                if (mflag == 0) then
-                rt_start(1) = guess/part%radius
-                rt_start(2) = part%Tf/part%Tp
+               rt_start(1) = guess/part%radius
+               rt_start(2) = part%Tf/part%Tp
                else
-                rt_start(1) = 1.0
-                rt_start(2) = 1.0
+               rt_start(1) = 1.0
+               rt_start(2) = 1.0
                end if
 
                call gauss_newton_2d(part%vp,dt_taup0,rhoa,rt_start, rt_zeroes,flag)
@@ -3292,16 +3536,16 @@ subroutine particle_update_BE
                   !.OR. (rt_zeroes(2)*part%Tp < Ttop(1)*0.9)) &
                then
 
-                write(*,'(a30,14e15.6)') 'WARNING: CONVERGENCE',  &
+               write(*,'(a30,14e15.6)') 'WARNING: CONVERGENCE',  &
                part%radius,part%qinf,part%Tp,part%Tf,part%xp(3), &
                part%kappa_s,part%m_s,part%vp(1),part%vp(2),part%vp(3), &
                part%res,part%sigm_s,rt_zeroes(1),rt_zeroes(2)
 
-                numimpos = numimpos + 1  !How many have failed?
-                !If they failed (should be very small number), radius,
-                !temp remain unchanged
-                rt_zeroes(1) = 1.0
-                rt_zeroes(2) = part%Tf/part%Tp
+               numimpos = numimpos + 1  !How many have failed?
+               !If they failed (should be very small number), radius,
+               !temp remain unchanged
+               rt_zeroes(1) = 1.0
+               rt_zeroes(2) = part%Tf/part%Tp
 
 
                end if
@@ -3311,25 +3555,25 @@ subroutine particle_update_BE
 
                !Count if activated/deactivated
                if (part%radius > part%rc .AND. part%radius*rt_zeroes(1) < part%rc) then
-                   denum = denum + 1
+                  denum = denum + 1
 
-                   !Also add activated lifetime to histogram
+                  !Also add activated lifetime to histogram
                call add_histogram(bins_actres,hist_actres,histbins+2,part%actres,part%mult)
-                   
+                  
 
                elseif (part%radius < part%rc .AND. part%radius*rt_zeroes(1) > part%rc) then
-                   actnum = actnum + 1
-                   part%numact = part%numact + 1.0
+                  actnum = actnum + 1
+                  part%numact = part%numact + 1.0
 
-                   !Reset the activation lifetime
-                   part%actres = 0.0
+                  !Reset the activation lifetime
+                  part%actres = 0.0
 
                endif
 
                !Redimensionalize
                part%radius = rt_zeroes(1)*part%radius
                part%Tp = rt_zeroes(2)*part%Tp
-        end if
+         end if
 
          if (part%radius .gt. 1.0e-2) then
          write(*,'(a30,12e15.6)') 'WARNING: BIG DROPLET',  &
@@ -3367,10 +3611,10 @@ subroutine particle_update_BE
          estar = einf*exp(Mw*Lv/Ru*(1.0/part%Tf-1.0/part%Tp)+Eff_C-Eff_S)
          part%qstar = Mw/Ru*estar/part%Tp/rhoa
 
-        if (ievap .EQ. 1) then
+         if (ievap .EQ. 1) then
             !part%radrhs = Shp/9.0/Sc*rhop/rhow*part%radius*taup_i*(part%qinf-part%qstar) !assumes qinf=rhov/rhoa rather than rhov/rhom
             part%radrhs = (part%radius-rad_i)/dt
-        else
+         else
 
             part%radrhs = 0.0
             part%rc = 0.0
@@ -3378,57 +3622,56 @@ subroutine particle_update_BE
             !Also update the temperature directly using BE:
             tmp_coeff = Nup/3.0/Pra*CpaCpp*rhop/rhow*taup_i
             part%Tp = (part%Tp + tmp_coeff*dt*part%Tf)/(1+dt*tmp_coeff)
-        end if
+         end if
 
-        !part%Tprhs_s = -Nup/3.0/Pra*CpaCpp*rhop/rhow*taup_i*(part%Tp-part%Tf)
-        part%Tprhs_L = 3.0*Lv/Cpp/part%radius*part%radrhs
-        part%Tprhs_s = (part%Tp-Tp_i)/dt - part%Tprhs_L
+         !part%Tprhs_s = -Nup/3.0/Pra*CpaCpp*rhop/rhow*taup_i*(part%Tp-part%Tf)
+         part%Tprhs_L = 3.0*Lv/Cpp/part%radius*part%radrhs
+         part%Tprhs_s = (part%Tp-Tp_i)/dt - part%Tprhs_L
 
-        part%xrhs(1:3) = part%vp(1:3)
-        !part%vrhs(1:3) = corrfac*taup_i*(part%uf(1:3)-part%vp(1:3)) + part_grav(1:3)
-        part%vrhs(1:3) = (part%vp(1:3)-vp_i(1:3))/dt
+         part%xrhs(1:3) = part%vp(1:3)
+         !part%vrhs(1:3) = corrfac*taup_i*(part%uf(1:3)-part%vp(1:3)) + part_grav(1:3)
+         part%vrhs(1:3) = (part%vp(1:3)-vp_i(1:3))/dt
 
-        part%res = part%res + dt
-        part%actres = part%actres + dt
-
-
-        !Store the particle flux now that everything has been updated
-        if (part%xp(3) .gt. zl) then   !This will get treated in particle_bcs_nonperiodic, but record here
-           fluxloc = nnz+1
-           fluxloci = minloc(z,1,mask=(z.gt.xp3i))-1
-        elseif (part%xp(3) .lt. 0.0) then !This will get treated in particle_bcs_nonperiodic, but record here
-           fluxloci = minloc(z,1,mask=(z.gt.xp3i))-1
-           fluxloc = 0
-        else
-
-        fluxloc = minloc(z,1,mask=(z.gt.part%xp(3)))-1
-        fluxloci = minloc(z,1,mask=(z.gt.xp3i))-1
-
-        end if  !Only apply flux calc to particles in domain
-
-        if (xp3i .lt. part%xp(3)) then !Particle moved up
-
-        do iz=fluxloci,fluxloc-1
-           pflux(iz) = pflux(iz) + part%mult
-           pmassflux(iz) = pmassflux(iz) + rhop*Volp*part%mult
-           penegflux(iz) = penegflux(iz) + rhop*Volp*Cpp*part%Tp*part%mult
-        end do
-
-        elseif (xp3i .gt. part%xp(3)) then !Particle moved down
-
-        do iz=fluxloc,fluxloci-1
-           pflux(iz) = pflux(iz) - part%mult
-           pmassflux(iz) = pmassflux(iz) - rhop*Volp*part%mult
-           penegflux(iz) = penegflux(iz) - rhop*Volp*Cpp*part%Tp*part%mult
-        end do
-
-        end if  !Up/down conditional statement
+         part%res = part%res + dt
+         part%actres = part%actres + dt
 
 
-      part => part%next
+         !Store the particle flux now that everything has been updated
+         if (part%xp(3) .gt. zl) then   !This will get treated in particle_bcs_nonperiodic, but record here
+            fluxloc = nnz+1
+            fluxloci = minloc(z,1,mask=(z.gt.xp3i))-1
+         elseif (part%xp(3) .lt. 0.0) then !This will get treated in particle_bcs_nonperiodic, but record here
+            fluxloci = minloc(z,1,mask=(z.gt.xp3i))-1
+            fluxloc = 0
+         else
+
+         fluxloc = minloc(z,1,mask=(z.gt.part%xp(3)))-1
+         fluxloci = minloc(z,1,mask=(z.gt.xp3i))-1
+
+         end if  !Only apply flux calc to particles in domain
+
+         if (xp3i .lt. part%xp(3)) then !Particle moved up
+
+         do iz=fluxloci,fluxloc-1
+            pflux(iz) = pflux(iz) + part%mult
+            pmassflux(iz) = pmassflux(iz) + rhop*Volp*part%mult
+            penegflux(iz) = penegflux(iz) + rhop*Volp*Cpp*part%Tp*part%mult
+         end do
+
+         elseif (xp3i .gt. part%xp(3)) then !Particle moved down
+
+         do iz=fluxloc,fluxloci-1
+            pflux(iz) = pflux(iz) - part%mult
+            pmassflux(iz) = pmassflux(iz) - rhop*Volp*part%mult
+            penegflux(iz) = penegflux(iz) - rhop*Volp*Cpp*part%Tp*part%mult
+         end do
+
+         end if  !Up/down conditional statement
+
+
+         part => part%next
+
       end do
-      call end_phase(measurement_id_particle_loop)
-	!ICE STUFF HERE
 
       !Enforce nonperiodic bcs (either elastic or destroying particles)
       call start_phase(measurement_id_particle_bcs)
