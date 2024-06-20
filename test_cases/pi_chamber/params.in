@@ -29,6 +29,7 @@ icoalesce = 0
 ipart_method = 2   !1 = same RK3 as flow, 2 = backward Euler
 ipartdiff = 0
 inewpart = 2  !1 = new particles have initial conditions defined below, random location in domain; 2 = same, but normal distributions of radius and kappa_s, given by radius_std and kappas_std; 3 = special setup for C-FOG and double lognormal of different type; 4 = crude sea spray setup
+inewpartice = 1
 icase = 1  !Special additions for certain cases. 0 = particles reflected at lower surface, 3 = setup for C-FOG, 4 = steady state LES sea spray setup
 isfs = 2   !isfs=1 is simple random walk, isfs=2 is Weil et al. (2004) particle subgrid
 iexner = 0  !iexner = 1 applies a correction to part%Tf to account for conversion b/w potential temp and temp. (need in PBL)
@@ -112,13 +113,18 @@ Rd = 286.9     !J/kg-K  dry air gas constant
 
 !Particles:
 tnumpart = 0
+tnumice = 0
 mult_init = 1000.0
+mult_init_ice = 1000.0
 rhow = 1000.0  !kg/m^3
 rhos = 2000.0 !Density of salt, kg/m^3
+rhoi = 916.8
 part_grav = 0,0,-0.649
 Cpp = 4179.0  !J/kg-K
+Cpi = 2108.0
 Mw = 0.018015  !kg/mol
 Ru = 8.3144    !J/mol-K Universal gas constant
+Rv = 467
 Ms = 0.05844  !kg/mol: molecular weight of salt
 !Sal = 0.034  !INITIAL salinity in kg/kg
 Sal = 0.066  !INITIAL salinity in kg/kg
@@ -134,4 +140,15 @@ kappas_init = 1.2
 kappas_std = 0.0
 Tp_init = 267.15
 vp_init = 0.0, 0.0, 0.0
+
+nprimeice = 0.01
+
+!Ice Particle Inital conditions
+rad_i_init = 2.0e-6
+rad_i_std = 0.0
+kappas_i_init = 1.2
+kappas_i_std = 0.0
+Tp_i_init = 267.15
+vp_i_init = 0.0, 0.0, 0.0
+
 /
