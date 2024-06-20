@@ -10930,14 +10930,15 @@ c
      +         iupwnd,ibuoy,ifilt,itcut,isubs,ibrcl,iocean,
      +         method,idebug,iz_space,ivis0,ifix_dt,new_vis,iDNS,
      +         icouple,iTcouple,iHcouple,ievap,ifields,irestart,ilin,
-     +         ineighbor,icoalesce,ipart_method,inewpart,inewpartice,icase,
-     +         ipartdiff,isfs,iexner,ilongwave,ihurr,
+     +         ineighbor,icoalesce,ipart_method,inewpart,inewpartice,
+     +         icase, ipartdiff,isfs,iexner,ilongwave,ihurr,
      +         inetcdf,iviznetcdf,ihumiditycontrol,ireintro,
      +         itrajout, ikernel
 
 
       namelist /constants/ nuf, Cpa, Pra, Sc,
-     +         tnumpart,tnumice,mult_init,mult_init_ice,rhow,rhoi,part_grav,rhos,
+     +         tnumpart,tnumice,mult_init,mult_init_ice,rhow,rhoi,
+     +         part_grav,rhos,
      +         Cpp,Cpi,Mw,Ms,Ru,Rv,Gam,Ion,Sal,Rd,
      +         radius_init,radius_std,kappas_init,kappas_std,
      +         grav, t00,fcor,zo,zos,
