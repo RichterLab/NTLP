@@ -2414,6 +2414,57 @@ subroutine new_particle(idx,procidx)
 
 end subroutine new_particle
 
+subroutine new_ice_particle(idx,procidx)
+   use pars
+   use con_data
+   implicit none
+ 
+   real :: xv,yv,zv,ran2,m_s
+   real :: kappas_i_dinit,radius_i_dinit
+   real :: xp_init(3)
+   integer :: idx,procidx
+ 
+   !C-FOG and FATIMA parameters: lognormal of accumulation + lognormal of coarse, with extra "resolution" on the coarse mode
+   real :: S,M,kappa_s,rad_init
+   integer*8 :: mult
+ 
+   if (inewpartice.eq.1) then  !Simple: properties as in params.in, randomly located in domain
+ 
+       xv = ran2(iseed)*(xmax-xmin) + xmin
+       yv = ran2(iseed)*(ymax-ymin) + ymin
+       zv = ran2(iseed)*zl
+       xp_init = (/xv,yv,zv/) 
+ 
+       m_s = 0
+ 
+       call create_ice_particle(xp_init,vp_i_init,Tp_i_init,m_s,kappas_i_init,mult_init_ice,rad_i_init,ngidx,procidx)
+ 
+ 
+ 
+ 
+    elseif (inewpartice.eq.2) then  !Same as above, but with NORMAL distribution of radius and kappa given by radius_std and kappas_std
+                               !Use for Pi Chamber
+ 
+       xv = ran2(iseed)*(xmax-xmin) + xmin
+       yv = ran2(iseed)*(ymax-ymin) + ymin
+       !zv = ran2(iseed)*(zmax-zmin) + zmin
+       zv = zl/2.0   !Midplane of the Pi Chamber domain
+       xp_init = (/xv,yv,zv/) 
+ 
+       ! Set distribution for initial radius
+       radius_i_dinit = abs(rad_i_std*sqrt(-2*log(ran2(iseed)))*cos(pi2*ran2(iseed)) + rad_i_init)
+ 
+       ! Set distribution for kappa_s
+       kappas_i_dinit = abs(kappas_i_std * sqrt(-2*log(ran2(iseed)))*cos(pi2*ran2(iseed)) + kappas_i_init)
+ 
+       m_s = 0  !Using the salinity specified in params.in
+ 
+       call create_ice_particle(xp_init,vp_i_init,Tp_i_init,m_s,kappas_i_dinit,mult_init_ice,radius_i_dinit,ngidx,procidx)
+ 
+    end if
+ 
+ end subroutine new_particle
+
 subroutine lognormal_dist(rad_init,m_s,kappa_s,M,S)
   use pars
   use con_data
