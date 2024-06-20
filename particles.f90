@@ -2180,6 +2180,60 @@ subroutine create_particle(xp,vp,Tp,m_s,kappa_s,mult,rad_init,idx,procidx)
       
 end subroutine create_particle
 
+subroutine create_ice_particle(xp,vp,Tp,m_s,kappa_s,mult,rad_init,idx,procidx)
+   use pars
+   implicit none
+
+   real :: xp(3),vp(3),Tp,qinfp,rad_init,pi,m_s,kappa_s
+   integer :: idx,procidx
+   integer*8 :: mult
+
+   if (.NOT. associated(first_ice_particle)) then
+      allocate(first_ice_particle)
+      part => first_ice_particle
+      nullify(part%next,part%prev)
+   else
+      !Add to beginning of list since it's more convenient
+      part => first_ice_particle
+      allocate(part%prev)
+      first_ice_particle => part%prev
+      part%prev%next => part
+      part => first_ice_particle
+      nullify(part%prev)
+   end if
+
+   pi = 4.0*atan(1.0)
+
+   part%xp(1:3) = xp(1:3)
+   part%vp(1:3) = vp(1:3)
+   part%Tp = Tp
+   part%radius = rad_init
+   part%uf(1:3) = vp(1:3)
+   part%qinf = tsfcc(2)
+   part%qstar = 0.008
+   part%Tf = Tp
+   part%xrhs(1:3) = 0.0
+   part%vrhs(1:3) = 0.0 
+   part%Tprhs_s = 0.0
+   part%Tprhs_L = 0.0
+   part%radrhs = 0.0
+   part%pidx = idx 
+   part%procidx = procidx
+   part%nbr_pidx = -1
+   part%nbr_procidx = -1
+   part%mult = mult
+   part%res = 0.0
+   part%actres = 0.0
+   part%m_s = m_s
+   part%kappa_s = kappa_s
+   part%dist = 0.0
+   part%u_sub(1:3) = 0.0
+   part%sigm_s = 0.0
+   part%numact = 0.0
+
+   
+end subroutine create_ice_particle
+
 subroutine new_particle(idx,procidx)
   use pars
   use con_data
