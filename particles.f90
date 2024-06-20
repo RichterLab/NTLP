@@ -51,16 +51,13 @@ module particles
   real :: radavg_center,radmsqr_center
   real :: vp_init(3),Tp_init,radius_init,radius_std,kappas_init,kappas_std
   real :: pdf_factor,pdf_prob
-  integer*8 :: mult_init,mult_factor,mult_a,mult_c
+  integer*8 :: mult_init,mult_init_ice,mult_factor,mult_a,mult_c
 
   real,parameter :: Cvv = 1463.0
   real,parameter :: Cpv = 1952.0
   real,parameter :: Cva = 717.04
-  real,parameter :: Cpi = 2108.0
   real,parameter :: Ls = 2.838e6
-  real,parameter :: rho_i = 916.8
-  real,parameter :: Rv = 467
-
+  
   real :: avgres=0,tavgres=0
 
   integer, parameter :: histbins = 512
@@ -2463,7 +2460,7 @@ subroutine new_ice_particle(idx,procidx)
  
     end if
  
- end subroutine new_particle
+end subroutine new_ice_particle
 
 subroutine lognormal_dist(rad_init,m_s,kappa_s,M,S)
   use pars
