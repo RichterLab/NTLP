@@ -10943,8 +10943,8 @@ c
      +         radius_init,radius_std,kappas_init,kappas_std,
      +         grav, t00,fcor,zo,zos,
      +         vp_init,Tp_init,nprime,
-     +         nprimeice,rad_i_init,rad_i_std,kappas_i_init,kappas_i_std,
-     +         Tp_i_init,vp_i_init
+     +         nprimeice,rad_i_init,rad_i_std,kappas_i_init,
+     +         kappas_i_std,Tp_i_init,vp_i_init
 
 
       !params.in contains namelists to read

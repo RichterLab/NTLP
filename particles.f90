@@ -36,7 +36,7 @@ module particles
   real, allocatable :: vis_ss(:,:,:),vis_sext(:,:,:)
 
   integer :: particletype,pad_diff
-  integer :: numpart,tnumpart,ngidx
+  integer :: numpart,tnumpart,tnumice,ngidx
   integer :: numdrop,tnumdrop
   integer :: numaerosol,tnumaerosol
   integer :: iseed

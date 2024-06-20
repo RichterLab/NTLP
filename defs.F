@@ -41,7 +41,7 @@ c
       real :: Lv = (25.0 - 0.02274*26.0)*10.0**5
       real :: Sal,Ms,Gam,Ion
       real :: rhow,nuf,rhos,rhoi
-      real :: CpaCpp,Cpa,Cpp,Cpi,Pra,Sc,Mw,Ru,Rd
+      real :: CpaCpp,Cpa,Cpp,Cpi,Pra,Sc,Mw,Ru,Rd,Rv
 
 c     
 c     ------------ leave following definitions as is
