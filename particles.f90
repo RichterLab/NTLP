@@ -3147,7 +3147,7 @@ subroutine particle_update_BE
       real :: taup0, dt_taup0, temp_r, temp_t, guess
       real :: tmp_coeff
       real :: xp3i
-      real :: mod_magnus,exner,func_p_base
+      real :: mod_magnus,mod_ice,exner,func_p_base
       real :: rad_i,Tp_i,vp_i(3),mp_i,rhop_i
 
 
@@ -3433,7 +3433,7 @@ subroutine particle_update_BE
       end do
       call end_phase(measurement_id_particle_loop)
 	
-      !ICE STUFF HERE
+      !ICE STUFF HERE!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
       part => first_ice_particle
 
@@ -3473,7 +3473,7 @@ subroutine particle_update_BE
          diff(1:3) = part%vp - part%uf
          diffnorm = sqrt(diff(1)**2 + diff(2)**2 + diff(3)**2)
          Volp = pi2*2.0/3.0*part%radius**3
-         rhop = (part%m_s+Volp*rhow)/Volp
+         rhop = rho_i
          taup_i = 18.0*rhoa*nuf/rhop/(2.0*part%radius)**2
          Rep = 2.0*part%radius*diffnorm/nuf
          corrfac = (1.0 + 0.15*Rep**(0.687))
@@ -3585,7 +3585,7 @@ subroutine particle_update_BE
 
          !New volume and particle density
          Volp = pi2*2.0/3.0*part%radius**3
-         rhop = (part%m_s+Volp*rhow)/Volp
+         rhop = rho_i
 
          !Intermediate Values
          diff(1:3) = part%vp - part%uf
@@ -3604,7 +3604,7 @@ subroutine particle_update_BE
          Shp = 2.0 + 0.6*Rep**(1.0/2.0)*Sc**(1.0/3.0)
 
          !Mass Transfer calculations
-         einf = mod_magnus(part%Tf)
+         einf = mod_ice(part%Tf)
 
          Eff_C = 2.0*Mw*Gam/(Ru*rhow*part%radius*part%Tp)
          Eff_S = part%kappa_s*part%m_s*rhow/rhos/(Volp*rhop-part%m_s)
