@@ -10,7 +10,7 @@ c     ----------------------------------------------------------------------
      +     icouple,iTcouple,iHcouple,ievap,ifields,ilin,ineighbor,
      +     icoalesce,ipart_method,ipartdiff,isfs,iexner,ilongwave,
      +     inetcdf,iviznetcdf,ihumiditycontrol,ireintro,itrajout,
-     +     inewpart,ihurr,icase,ikernel,irestart
+     +     inewpart,inewpartice,ihurr,icase,ikernel,irestart
 
       real :: max_time
 c     
@@ -29,7 +29,7 @@ c
       real :: grav,t00,fcor,zi,zl,xl,yl,zw1,dpdx
       real :: ugcont,vgcont,zo,zos,surf_RH,surf_p,surf_rho
       real :: meanRH,varRH
-      real :: nprime
+      real :: nprime,nprimeice
       real :: dvdr,hurr_rad
       integer :: isfc(nscl)
 
@@ -40,8 +40,8 @@ c
       !Material parameters, both air and particles
       real :: Lv = (25.0 - 0.02274*26.0)*10.0**5
       real :: Sal,Ms,Gam,Ion
-      real :: rhow,nuf,rhos
-      real :: CpaCpp,Cpa,Cpp,Pra,Sc,Mw,Ru,Rd
+      real :: rhow,nuf,rhos,rhoi
+      real :: CpaCpp,Cpa,Cpp,Cpi,Pra,Sc,Mw,Ru,Rd
 
 c     
 c     ------------ leave following definitions as is
