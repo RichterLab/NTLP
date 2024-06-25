@@ -46,12 +46,12 @@ zu = ncread(fname,'zu'); %"zu" is the vertical grid points at the locations whic
 %1. Animate
 
 Nt = length(time); %Number of time steps
-stride = 10; %Don't necessarily want to animate each frame
+stride = 3; %Don't necessarily want to animate each frame
 figure(3)
 for i=1:stride:Nt
 
     figure(3); clf
-    plot(qxym(:,i),zu(:,i),'linewidth',2)
+    plot(qxym(:,i),zu(:),'linewidth',2)
     xlabel('qv [kg/kg]')
     ylabel('z [m]')
     drawnow
@@ -59,6 +59,7 @@ for i=1:stride:Nt
 end
 
 
+%%
 %2. Plot as a time-height contour
 Nz = length(zu(:,1)); %Number of u-level grid points in z
 
@@ -73,7 +74,7 @@ contourf(T,Z,qxym,clevels,'edgecolor','none')
 colorbar
 title('qv [kg/kg]')
 xlabel('time [s]')
-ylabel(['z [m]'])
+ylabel('z [m]')
 
 
 %3. Perform a time average
