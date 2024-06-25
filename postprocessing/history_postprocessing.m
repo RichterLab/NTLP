@@ -46,7 +46,7 @@ zu = ncread(fname,'zu'); %"zu" is the vertical grid points at the locations whic
 %1. Animate
 
 Nt = length(time); %Number of time steps
-stride = 3; %Don't necessarily want to animate each frame
+stride = 10; %Don't necessarily want to animate each frame
 figure(3)
 for i=1:stride:Nt
 
