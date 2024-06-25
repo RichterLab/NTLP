@@ -11,7 +11,9 @@ fps = 32;
 fname = './viz.nc';
 time = ncread(fname,'time');
 Nt = length(time);
+
 %% T_xy
+
 t_xy = ncread(fname,'t_xy');
 min_t = min(min(min(t_xy)));
 max_t = max(max(max(t_xy)));
@@ -25,7 +27,9 @@ open(vidfile)
 writeVideo(vidfile,movie1)
 close(vidfile)
 close all
+
 %% W_yz
+
 w_yz = ncread(fname,'w_yz');
 min_w = min(min(min(w_yz)));
 max_w = max(max(max(w_yz)));
@@ -39,7 +43,9 @@ open(vidfile)
 writeVideo(vidfile,movie2)
 close(vidfile)
 close all
+
 %% vmag_yz
+
 u_yz = ncread(fname,'u_yz');
 v_yz = ncread(fname,'v_yz');
 w_yz = ncread(fname,'w_yz');
