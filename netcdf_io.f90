@@ -51,6 +51,7 @@ integer :: u_yz_vid,t_yz_vid,q_yz_vid,w_yz_vid,v_yz_vid
 integer :: u_xy_vid,t_xy_vid,q_xy_vid,w_xy_vid,v_xy_vid
 integer :: u_xz_vid,t_xz_vid,q_xz_vid,w_xz_vid,v_xz_vid
 integer :: xgrid_vid,ygrid_vid,zugrid_vid,zwgrid_vid
+integer :: LWP_vid,surf_precip_vid
 
 character(len=80) :: path_netcdf_his,path_netcdf_histog,path_netcdf_viz
 
@@ -859,6 +860,12 @@ subroutine netcdf_init_viz
       call netcdf_check( nf90_def_var(ncid_viz, "q_xy", NF90_REAL, dimids_xy,q_xy_vid) )
       call netcdf_check( nf90_put_att(ncid_viz,q_xy_vid,"title","xy slice of water vapor mixing ratio") )
 
+      call netcdf_check( nf90_def_var(ncid_viz, "LWP", NF90_REAL, dimids_xy,LWP_vid) )
+      call netcdf_check( nf90_put_att(ncid_viz,LWP_vid,"title","Liquid water path [kg/m^2]") )
+
+      call netcdf_check( nf90_def_var(ncid_viz, "surf_precip", NF90_REAL, dimids_xy,surf_precip_vid) )
+      call netcdf_check( nf90_put_att(ncid_viz,surf_precip_vid,"title","Surface precipitation rate [kg/m^2/s]") )
+
       !xz slices
       call netcdf_check( nf90_def_var(ncid_viz, "u_xz", NF90_REAL, dimids_xz,u_xz_vid) )
       call netcdf_check( nf90_put_att(ncid_viz,u_xz_vid,"title","xz slice of u-velocity") )
@@ -943,6 +950,8 @@ subroutine netcdf_res_viz
       call netcdf_check( nf90_inq_varid(ncid_viz, "w_xy",w_xy_vid) )
       call netcdf_check( nf90_inq_varid(ncid_viz, "t_xy",t_xy_vid) )
       call netcdf_check( nf90_inq_varid(ncid_viz, "q_xy",q_xy_vid) )
+      call netcdf_check( nf90_inq_varid(ncid_viz, "LWP",LWP_vid) )
+      call netcdf_check( nf90_inq_varid(ncid_viz, "surf_precip",surf_precip_vid) )
 
       !xz slices
       call netcdf_check( nf90_inq_varid(ncid_viz, "u_xz",u_xz_vid) )
@@ -969,6 +978,7 @@ subroutine write_viz_netcdf
       real :: xvec(nnx),yvec(nny)
  
 
+      if (myid==0) write(*,'(a35,i)') 'WRITE VIZ FILE, VIZ_COUNTER = ',viz_counter
 
       !Fill the grid on the first time through
       if (viz_counter == 1) then
@@ -1056,6 +1066,19 @@ subroutine write_viz_netcdf
       call fill_xz_slice(xzslice,t(1:nnx,iys:iye,2,izs:ize),tmpxz)
       if (myid==0)  call netcdf_check( nf90_put_var(ncid_viz, q_xz_vid,real(tmpxz(1:nnx,1:nnz)),start=(/1,1,viz_counter/)) ) 
 
+
+      !Now do the 2D particle stats
+      call fill_xy_part_slice(LWP(mxs:mxe,iys:iye),tmpxy)
+      tmpxy = tmpxy/dx/dy
+      if (myid==0)  call netcdf_check( nf90_put_var(ncid_viz, LWP_vid,real(tmpxy(1:nnx,1:nny)),start=(/1,1,viz_counter/)) ) 
+
+      call fill_xy_part_slice(surf_precip(mxs:mxe,iys:iye),tmpxy)
+      tmpxy = tmpxy/dx/dy/viz_t_elapsed
+      if (myid==0)  call netcdf_check( nf90_put_var(ncid_viz, surf_precip_vid,real(tmpxy(1:nnx,1:nny)),start=(/1,1,viz_counter/)) ) 
+
+
+      surf_precip = 0.0
+      viz_t_elapsed = 0.0
       viz_counter = viz_counter + 1
 
 
@@ -1067,7 +1090,7 @@ subroutine close_his_netcdf
       use pars
       implicit none
 
-      call netcdf_check( nf90_close(ncid) )
+      if (myid==0) call netcdf_check( nf90_close(ncid) )
 
 end subroutine close_his_netcdf
 
@@ -1076,7 +1099,7 @@ subroutine close_histog_netcdf
       use pars
       implicit none
 
-      call netcdf_check( nf90_close(ncid_histog) )
+      if (myid==0) call netcdf_check( nf90_close(ncid_histog) )
 
 end subroutine close_histog_netcdf
 
@@ -1085,7 +1108,7 @@ subroutine close_viz_netcdf
       use pars
       implicit none
 
-      call netcdf_check( nf90_close(ncid_viz) )
+      if (myid==0) call netcdf_check( nf90_close(ncid_viz) )
 
 end subroutine close_viz_netcdf
 
@@ -1094,7 +1117,7 @@ subroutine open_his_netcdf
       use pars
       implicit none
 
-      call netcdf_check( nf90_open(path_netcdf_his,NF90_WRITE,ncid) )
+      if (myid==0) call netcdf_check( nf90_open(path_netcdf_his,NF90_WRITE,ncid) )
 
 end subroutine open_his_netcdf
 
@@ -1103,7 +1126,7 @@ subroutine open_histog_netcdf
       use pars
       implicit none
 
-      call netcdf_check( nf90_open(path_netcdf_histog,NF90_WRITE,ncid_histog) )
+      if (myid==0) call netcdf_check( nf90_open(path_netcdf_histog,NF90_WRITE,ncid_histog) )
 
 end subroutine open_histog_netcdf
 
@@ -1113,7 +1136,7 @@ subroutine open_viz_netcdf
       implicit none
       include 'mpif.h'
 
-      call netcdf_check( nf90_open(path_netcdf_viz,NF90_WRITE,ncid_viz) )
+      if (myid==0) call netcdf_check( nf90_open(path_netcdf_viz,NF90_WRITE,ncid_viz) )
 
 end subroutine open_viz_netcdf
 
@@ -1267,6 +1290,73 @@ subroutine fill_xy_slice(xyslice,dat,tmp)
 
 end subroutine fill_xy_slice
 
+subroutine fill_xy_part_slice(dat,tmp)
+!Does all the MPI communication to fill a slice on proc 0 that can be written
+!This is specifically for particle stats decomposed across the XY plane
+      use pars
+      use fields
+      use particles
+      implicit none
+      include 'mpif.h'
+      real,intent(in) :: dat(mxs:mxe,iys:iye)
+      real,intent(out) :: tmp(nnx,nny)
+      integer :: ierr,ip,mynx,myny,mynz,iystmp,iyetmp,ixstmp,ixetmp,istatus(MPI_STATUS_SIZE)
+      integer :: sbuf_limits(4),rbuf_limits(4)
+      real,allocatable :: sbuf_data(:,:),rbuf_data(:,:)
+
+      !Now start the process of collecting the slices on myid==0
+
+      !For the xy slice, not all processors participate
+      if (myid==0) then
+
+	 !Proc 0 puts its data in the full array
+         tmp(mxs:mxe,iys:iye) = dat(mxs:mxe,iys:iye)
+
+         do ip = 1,numprocs-1
+
+            call mpi_recv(rbuf_limits,4,mpi_integer,ip,2,mpi_comm_world,istatus,ierr)
+
+            mynx = (rbuf_limits(2)-rbuf_limits(1))+1
+            myny = (rbuf_limits(4)-rbuf_limits(3))+1
+
+            ixstmp = rbuf_limits(1)
+            ixetmp = rbuf_limits(2)
+            iystmp = rbuf_limits(3)
+            iyetmp = rbuf_limits(4)
+
+            allocate(rbuf_data(mynx,myny))
+
+            call mpi_recv(rbuf_data,mynx*myny,mpi_real8,ip,2,mpi_comm_world,istatus,ierr)
+
+            tmp(ixstmp:ixetmp,iystmp:iyetmp) = rbuf_data
+            
+            deallocate(rbuf_data)
+
+         end do
+         
+
+      else  !All other processors
+
+         mynx = (mxe-mxs)+1
+         myny = (iye-iys)+1
+
+         sbuf_limits = (/mxs,mxe,iys,iye/)
+
+         call mpi_send(sbuf_limits,4,mpi_integer,0,2,mpi_comm_world,ierr)
+
+         allocate(sbuf_data(mynx,myny))
+
+         sbuf_data = dat(mxs:mxe,iys:iye)
+         call mpi_send(sbuf_data,mynx*myny,mpi_real8,0,2,mpi_comm_world,ierr)
+         
+         deallocate(sbuf_data)
+
+      end if
+
+     !Now tmp contains the whole slice on processor 0
+
+end subroutine fill_xy_part_slice
+
 subroutine fill_xz_slice(xzslice,dat,tmp)
 !Does all the MPI communication to fill a slice on proc 0 that can be written
       use pars
@@ -1348,6 +1438,7 @@ subroutine fill_xz_slice(xzslice,dat,tmp)
      !Now tmp contains the whole slice on processor 0
 
 end subroutine fill_xz_slice
+
 
 
 subroutine write_histograms

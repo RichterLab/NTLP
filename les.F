@@ -488,10 +488,12 @@ c
       end if
 #endif
 
+
       call get_max
       call get_dt
 
       call end_phase(measurement_id_timestepping_loop)
+
 
       if (it.ge.itmax) go to 99000
 
@@ -7062,6 +7064,7 @@ c
 c ------------------- increment time if not first time through
 c
          time=time+dt
+         viz_t_elapsed = viz_t_elapsed + dt
       endif
 c
       it=it+1
@@ -8724,7 +8727,14 @@ c
       allocate(qstarsum_t(0:nnz+1,iys:iye,mxs:mxe)) 
       qstarsum_t = 0.0
 
+      allocate(LWP(mxs:mxe,iys:iye))
+      LWP = 0.0
+
+      allocate(surf_precip(mxs:mxe,iys:iye))
+      surf_precip = 0.0
+
       radsrc = 0.0
+      viz_t_elapsed = 1.0e-10 !Initialize very small to prevent blowing up on 1st time step
 
 c ------------- allocate space for boundary condition arrays
 c               on top and bottom of domain
@@ -10718,7 +10728,7 @@ c
       implicit none
       include 'mpif.h'
 
-      real :: LWP_tmp(nnz-1),LWP(nnz-1)  !Have to calulate the integral from top down, then reverse ordering
+      real :: LWP_tmp(nnz-1),LWP_rad(nnz-1)  !Have to calulate the integral from top down, then reverse ordering
       real :: rhoa,func_rho_base
       integer :: iz,lc
 
@@ -10748,19 +10758,19 @@ c
          lc = lc + 1
       end do
 
-      !Reverse the order so that LWP(1) is the bottom
-      !LWP is stored at the interior zw points, since this is center of integral trapezoid
+      !Reverse the order so that LWP_rad(1) is the bottom
+      !LWP_rad is stored at the interior zw points, since this is center of integral trapezoid
       do iz=1,nnz-1
-         LWP(iz) = LWP_tmp(nnz-iz)
+         LWP_rad(iz) = LWP_tmp(nnz-iz)
       end do
 
-      !Now calculate the radiative flux based on LWP -- at zw points,
+      !Now calculate the radiative flux based on LWP_rad -- at zw points,
       !including top/bottom
 
       do iz=1,nnz-1
 
-         radflux(iz) = rad_Fct*exp(-rad_kappa*LWP(iz)) +
-     +         rad_Fcb*exp(-rad_kappa*(LWP(1) - LWP(iz)))
+         radflux(iz) = rad_Fct*exp(-rad_kappa*LWP_rad(iz)) +
+     +         rad_Fcb*exp(-rad_kappa*(LWP_rad(1) - LWP_rad(iz)))
 
 
       end do
