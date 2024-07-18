@@ -76,6 +76,9 @@ module particles
   real :: hist_numact(histbins+2)
   real :: bins_numact(histbins+2)
 
+  !2D droplet statistics
+  real, allocatable :: LWP(:,:),surf_precip(:,:)
+
   !REMEMBER: IF ADDING ANYTHING, MUST UPDATE MPI DATATYPE!
   type :: particle
     integer :: pidx,procidx,nbr_pidx,nbr_procidx
@@ -1836,6 +1839,9 @@ CONTAINS
       !Num activations histogram
       call set_binsdata_integer(bins_numact,histbins+2,0.0)
 
+      !Zero out the cumulative stats
+      surf_precip = 0.0
+
       !Initialize the linked list of particles:
       nullify(part,first_particle)
 
@@ -2585,6 +2591,7 @@ CONTAINS
 
   subroutine particle_bcs_nonperiodic
   use con_stats
+  use con_data
   use pars
   implicit none
   real :: top,bot
@@ -2593,6 +2600,7 @@ CONTAINS
   real :: xv,yv,zv,ran2,m_s
   real :: kappas_dinit,radius_dinit
   real :: xp_init(3)
+  integer :: ipt,jpt
 
   !C-FOG and FATIMA parameters: lognormal of accumulation + lognormal of coarse, with extra "resolution" on the coarse mode
   real :: S,M,kappa_s,rad_init
@@ -2641,6 +2649,12 @@ CONTAINS
 
           !Also record the size of the dead droplet
           call add_histogram(bins_rad,hist_raddeath,histbins+2,part%radius,part%mult)
+
+	  !Store the spatial location of this mass crossing the surface -- surface precipitation
+          ipt = floor(part%xp(1)/dx) + 1
+          jpt = floor(part%xp(2)/dy) + 1
+	  surf_precip(ipt,jpt) = surf_precip(ipt,jpt) + real(part%mult)*(rhow*2.0/3.0*pi2*part%radius**3)
+
 
           if (ireintro.eq.1 .and. inewpart.eq.6) then  !FATIMA can reintroduce particle of the same type
 
@@ -2777,6 +2791,7 @@ CONTAINS
       myphiw_sum = 0.0
       myphiv_sum = 0.0
       qstarsum_t = 0.0 
+      LWP = 0.0
 
       t_s = mpi_wtime()
 
@@ -3171,6 +3186,7 @@ CONTAINS
       myphiw_sum = 0.0
       myphiv_sum = 0.0
       qstarsum_t = 0.0
+      LWP = 0.0
 
       !partsrc_t = 0.0
       !partTsrc_t = 0.0
@@ -3823,6 +3839,8 @@ CONTAINS
       mwsum_t(kpt,jpt,ipt) = mwsum_t(kpt,jpt,ipt) + real(part%mult)*(rhow*4.0/3.0*pi*part%radius**3)
 
       qstarsum_t(kpt,jpt,ipt) = qstarsum_t(kpt,jpt,ipt) + part%qstar
+
+      LWP(ipt,jpt) = LWP(ipt,jpt) + real(part%mult)*(rhow*4.0/3.0*pi*part%radius**3)
 
       part => part%next
       end do

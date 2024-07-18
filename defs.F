@@ -32,6 +32,7 @@ c
       real :: nprime
       real :: dvdr,hurr_rad
       integer :: isfc(nscl)
+      real :: viz_t_elapsed
 
       !Radiation parameters
       real :: rad_kappa,rad_Fct,rad_Fcb
