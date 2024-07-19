@@ -3852,19 +3852,25 @@ CONTAINS
    use pars
    implicit none
 
-   
    part => first_particle
-   do while (associated(part))
-      
-      if (mod(part%pidx,4000) .eq. 0) then
-          write(ntraj,'(2i,14e15.6)') part%pidx,part%procidx,time,part%xp(1),part%xp(2),part%xp(3),part%vp(1),part%vp(2),part%vp(3),part%radius,part%Tp,part%Tf,part%qinf,part%qstar,part%rc,part%numact
-      end if
 
-   part => part%next
+   do while (associated(part))
+
+     if (mod(part%pidx, 1000) .eq. 0) then
+
+       write(ntraj,'(2i,19e15.6)') part%pidx, part%procidx, time, part%xp(1), part%xp(2), part%xp(3), &
+                                   part%vp(1), part%vp(2), part%vp(3), part%radius, part%Tp, part%Tf, &
+                                   part%qinf, part%qstar, part%rc, part%mult, part%m_s, part%kappa_s, &
+                                   part%res, part%actres, part%numact
+
+     end if
+
+     part => part%next
+
    end do
 
    if (it .ge. itmax) then
-      close(ntraj)
+     close(ntraj)
    end if
 
   end subroutine particle_write_traj

@@ -16,16 +16,16 @@ F90=ifort
 # NOTE: Specifying this incorrectly will, at best, result in degraded execution
 #       times and, at worst, result in crashes due to illegal instructions.
 #
-ARCH ?= host
+ARCH ?= avx2
 
 ifeq ($(ARCH), host)
-ARCH_FLAGS = -xHost
+ARCH_FLAGS = -xHost   # David's OLD Machine/Server on CRC
 endif
 ifeq ($(ARCH), avx)
 ARCH_FLAGS = -march=corei7-avx
 endif
 ifeq ($(ARCH), avx2)
-ARCH_FLAGS = -march=core-avx2
+ARCH_FLAGS = -march=core-avx2   # David's NEW Machine/Server on CRC
 endif
 
 # Always used compilation flags:
@@ -96,9 +96,9 @@ OUTPUTLIB = -L$(NETCDFBASE)/lib
 LINKOPTS  = -lnetcdf -lnetcdff
 
 # TecPlot output is only used when requested.
-TECPLOT ?= no
+TECPLOT ?= yes
 TECFLAGS = -DTECIO
-TECLIB   = ~/Research/tecio/libteciompi.a
+TECLIB   = ~/Research/TecIO-MPI/libteciompi.a
 TECLINK  = -lm -lstdc++ -lgcc_eh
 
 SRC = data_structures.f90 \

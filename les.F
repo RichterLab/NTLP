@@ -481,7 +481,7 @@ c
       end if
 
 #ifdef TECIO
-      if (mod(it,200) .eq. 0) then
+      if (mod(it, 1000) .eq. 0) then
       call start_phase(measurement_id_io_tecio)
       call plt_fields
       call end_phase(measurement_id_io_tecio)
