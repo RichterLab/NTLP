@@ -8,4 +8,6 @@ case1
 lesmpi.a
 mach.file
 test_cases/*/cou.mp.*.out
+test_cases/*/*.o*
+test_cases/*/*.po*
 test_cases/*/test_case_*
