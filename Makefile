@@ -102,6 +102,8 @@ TECFLAGS = -DTECIO
 TECLIB   = ~/Research/tecio/libteciompi.a
 TECLINK  = -lm -lstdc++ -lgcc_eh
 
+ROSENNA_DIR = droplet_approximation/rosenna
+
 SRC = data_structures.f90 \
       defs.F \
       fft.f \
@@ -112,7 +114,21 @@ SRC = data_structures.f90 \
       particles.f90 \
       tec_io.f90
 
+BENCHMARK_SRC = benchmark_approximation.f90
+
+ROSENNA_SRC = $(addprefix $(ROSENNA_DIR)/, \
+                          activation_funcs.f90 \
+                          derived_types.f90 \
+                          layers.f90 \
+                          modelCreator.f90 \
+                          reader.f90 \
+                          rosenna.f90)
+
 OBJS = $(addsuffix .o, $(basename $(SRC)))
+
+BENCHMARK_OBJS = $(addsuffix .o, $(basename $(BENCHMARK_SRC)))
+
+ROSENNA_OBJS = $(addsuffix .o, $(basename $(ROSENNA_SRC)))
 
 ifeq ($(TECPLOT), yes)
 FLAGS    += $(TECFLAGS)
@@ -133,7 +149,20 @@ lesmpi.a: $(OBJS)
 
 
 clean:
-	rm -f *.o *.mod lesmpi.a mach.file
+	rm -f *.o $(ROSENNA_DIR)/*.o *.mod lesmpi.a librosenna.a mach.file
+
+#
+# NOTE: We specify the higher level of optimization *after* the flags so it
+#       overrides anything previously specified.
+#
+$(ROSENNA_DIR)/%.o: $(ROSENNA_DIR)/%.f90
+	$(FORTRAN) $(FLAGS) -O3 -c $< -o $@
+
+librosenna.a: $(ROSENNA_OBJS)
+	ar crv librosenna.a $^
+
+benchmark_approximation.x: $(BENCHMARK_OBJS) librosenna.a measurement.o data_structures.o
+	$(FORTRAN) $(FLAGS) -O3 $(LINKOPTS) -o $@ $^
 
 # Dependencies between the individual objects.
 les.o: defs.o measurement.o netcdf_io.o particles.o tec_io.o
@@ -141,3 +170,11 @@ measurement.o: data_structures.o
 particles.o: defs.o measurement.o
 netcdf_io.o: particles.o
 tec_io.o: particles.o
+
+benchmark_approximation.o: measurement.o librosenna.a
+
+$(ROSENNA_DIR)/derived_types.o: $(ROSENNA_DIR)/activation_funcs.o
+$(ROSENNA_DIR)/layers.o: $(ROSENNA_DIR)/activation_funcs.o $(ROSENNA_DIR)/derived_types.o
+$(ROSENNA_DIR)/modelCreator.o: $(ROSENNA_DIR)/activation_funcs.o $(ROSENNA_DIR)/layers.o $(ROSENNA_DIR)/reader.o
+$(ROSENNA_DIR)/reader.o: $(ROSENNA_DIR)/derived_types.o $(ROSENNA_DIR)/activation_funcs.o
+$(ROSENNA_DIR)/rosenna.o: $(ROSENNA_DIR)/activation_funcs.o $(ROSENNA_DIR)/derived_types.o $(ROSENNA_DIR)/modelCreator.o $(ROSENNA_DIR)/layers.o $(ROSENNA_DIR)/reader.o 
