@@ -1026,6 +1026,7 @@ module profiling
          measurement_id_particle_reintro, &
          measurement_id_particle_diff, &
          measurement_id_particle_coalesce, &
+         measurement_id_particle_estimation, &
          measurement_id_particle_fill_ext, &
          measurement_id_particle_loop, &
          measurement_id_particle_bcs, &
@@ -1085,6 +1086,7 @@ contains
         measurement_id_particle_reintro       = create_phase( "particle_reintro" )
         measurement_id_particle_diff          = create_phase( "particle_diff" )
         measurement_id_particle_coalesce      = create_phase( "particle_coalesce" )
+        measurement_id_particle_estimation    = create_phase( "particle size/temp estimation" )
         measurement_id_particle_fill_ext      = create_phase( "particle_fill_ext" )
         measurement_id_particle_loop          = create_phase( "particle_loop" )
         measurement_id_particle_bcs           = create_phase( "particle_bcs" )
@@ -1126,6 +1128,7 @@ contains
                                 duration_particle_reintro, &
                                 duration_particle_diff, &
                                 duration_particle_coalesce, &
+                                duration_particle_estimation, &
                                 duration_particle_fill_ext, &
                                 duration_particle_loop, &
                                 duration_particle_bcs, &
@@ -1171,6 +1174,7 @@ contains
         duration_particle_reintro       = get_duration( measurement_id_particle_reintro )
         duration_particle_diff          = get_duration( measurement_id_particle_diff )
         duration_particle_coalesce      = get_duration( measurement_id_particle_coalesce )
+        duration_particle_estimation    = get_duration( measurement_id_particle_estimation )
         duration_particle_fill_ext      = get_duration( measurement_id_particle_fill_ext )
         duration_particle_loop          = get_duration( measurement_id_particle_loop )
         duration_particle_bcs           = get_duration( measurement_id_particle_bcs )
@@ -1265,6 +1269,8 @@ contains
              duration_particle_fill_ext, duration_particle_solver )
         call print_duration( file_unit, "               particle_loop:                  ", &
              duration_particle_loop, duration_particle_solver )
+        call print_duration( file_unit, "               particle_estimation:            ", &
+             duration_particle_loop, duration_particle_estimation )
         call print_duration( file_unit, "               particle_bcs:                   ", &
              duration_particle_bcs, duration_particle_solver )
         call print_duration( file_unit, "               particle_exchange:              ", &
@@ -1331,6 +1337,7 @@ contains
         measurement_id_particle_reintro       = 0
         measurement_id_particle_diff          = 0
         measurement_id_particle_coalesce      = 0
+        measurement_id_particle_estimation    = 0
         measurement_id_particle_fill_ext      = 0
         measurement_id_particle_loop          = 0
         measurement_id_particle_bcs           = 0

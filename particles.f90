@@ -35,6 +35,9 @@ module particles
   real, allocatable :: sigm_sdzext(:,:,:)
   real, allocatable :: vis_ss(:,:,:),vis_sext(:,:,:)
 
+  ! XXX: do not keep!
+  integer :: numpart_processed=0
+
   integer :: particletype,pad_diff
   integer :: numpart,tnumpart,ngidx
   integer :: numdrop,tnumdrop
@@ -3273,6 +3276,9 @@ CONTAINS
 
         if (ievap .EQ. 1 .and. part%qinf .gt. 0.0) then
 
+               numpart_processed = numpart_processed + 1
+               call start_phase(measurement_id_particle_estimation)
+
                !Gives initial guess into nonlinear solver
                !mflag = 0, has equilibrium radius; mflag = 1, no
                !equilibrium (uses itself as initial guess)
@@ -3339,6 +3345,8 @@ CONTAINS
                    part%actres = 0.0
 
                endif
+
+               call end_phase(measurement_id_particle_estimation)
 
                !Redimensionalize
                part%radius = rt_zeroes(1)*part%radius
