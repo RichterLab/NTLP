@@ -51,14 +51,14 @@ ifeq ($(DEBUG), yes)
 
 # Generate debugging information.  This is necessary for running the solver
 # under a debugger and can be useful for other tools (e.g. profilers).
-#
-# NOTE: This disables optimizations and enables run-time checks!
-#
 DEBUG_FLAGS = -g
 
 # Enable all compilation warnings except for when temporary arrays are created
 # when passing to a subroutine or Fortran.  Temporary arrays occur throughout
 # the code base and will be addressed at a later date.
+#
+# NOTE: This disables optimizations and enables run-time checks!
+#
 DEBUG_FLAGS += -check all,noarg_temp_created
 
 # Exit with a SIGFPE whenever a floating point exception (FPE) is detected.
@@ -70,6 +70,8 @@ DEBUG_FLAGS += -fpe0
 # NaNs.  Combined with exiting on FPEs this makes it trivial to identify the use
 # of uninitialized floating point values.
 DEBUG_FLAGS += -init=arrays -init=snan
+
+DEBUG_FLAGS += -O0
 
 else # DEBUG == no
 
@@ -95,6 +97,7 @@ endif
 OUTPUTINC = -I$(NETCDFBASE)/include
 OUTPUTLIB = -L$(NETCDFBASE)/lib
 LINKOPTS  = -lnetcdf -lnetcdff
+
 # Are we profiling the code?  This enables basic block profiling which allows
 # most tools (e.g. gprof) to time subroutine/function calls as well as identify
 # expensive call paths.
@@ -156,20 +159,20 @@ lesmpi.a: $(OBJS)
 
 
 clean:
-	rm -f *.o $(ROSENNA_DIR)/*.o *.mod lesmpi.a librosenna.a mach.file
+	rm -f *.o $(ROSENNA_DIR)/*.o *.mod lesmpi.a librosenna.a benchmark_approximation.x mach.file
 
 #
 # NOTE: We specify the higher level of optimization *after* the flags so it
 #       overrides anything previously specified.
 #
 $(ROSENNA_DIR)/%.o: $(ROSENNA_DIR)/%.f90
-	$(FORTRAN) $(FLAGS) -O3 -c $< -o $@
+	$(FORTRAN) $(FLAGS) $(DEBUG_FLAGS) -O3 -c $< -o $@
 
 librosenna.a: $(ROSENNA_OBJS)
 	ar crv librosenna.a $^
 
 benchmark_approximation.x: $(BENCHMARK_OBJS) librosenna.a measurement.o data_structures.o
-	$(FORTRAN) $(FLAGS) -O3 $(LINKOPTS) -o $@ $^
+	$(FORTRAN) $(FLAGS) $(DEBUG_FLAGS) -O3 $(OUTPUTLIB) $(LINKOPTS) -o $@ $^
 
 # Dependencies between the individual objects.
 les.o: defs.o measurement.o netcdf_io.o particles.o tec_io.o
