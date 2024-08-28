@@ -95,6 +95,13 @@ endif
 OUTPUTINC = -I$(NETCDFBASE)/include
 OUTPUTLIB = -L$(NETCDFBASE)/lib
 LINKOPTS  = -lnetcdf -lnetcdff
+# Are we profiling the code?  This enables basic block profiling which allows
+# most tools (e.g. gprof) to time subroutine/function calls as well as identify
+# expensive call paths.
+ifeq ($(PROFILE), yes)
+FLAGS    += -pg
+LINKOPTS += -pg
+endif
 
 # TecPlot output is only used when requested.
 TECPLOT ?= no
