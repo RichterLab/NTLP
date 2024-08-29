@@ -40,8 +40,8 @@ module particles
   integer :: numdrop,tnumdrop
   integer :: numaerosol,tnumaerosol
   integer :: iseed
-  integer :: num100=0, num1000=0, numimpos=0
-  integer :: tnum100, tnum1000, tnumimpos
+  integer :: num100=0, numimpos=0
+  integer :: tnum100, tnumimpos
   integer :: denum, actnum, tdenum, tactnum
   integer :: num_destroy=0,tnum_destroy=0
   integer :: tot_reintro=0
@@ -3138,7 +3138,7 @@ CONTAINS
 
       integer :: ierr,fluxloc,fluxloci
       real :: tmpbuf(9),tmpbuf_rec(9)
-      integer :: intbuf(10),intbuf_rec(10)
+      integer :: intbuf(9),intbuf_rec(9)
       integer :: numdrop_center,tnumdrop_center
       real :: myradavg,myradmax,myradmin,mytempmax,mytempmin
       real :: myradavg_center,myradmsqr_center
@@ -3199,9 +3199,8 @@ CONTAINS
 
       denum = 0
       actnum = 0
-      num100 = 0
-      num1000 = 0
-      numimpos = 0
+      !num100 = 0
+      !numimpos = 0
       num_destroy = 0
 
       call start_phase(measurement_id_particle_loop)
@@ -3286,6 +3285,14 @@ CONTAINS
                 rt_start(2) = 1.0
                end if
 
+	       if (part%xp(3) .gt. 100.0) then
+		  
+               part%rc = crit_radius(part%m_s,part%kappa_s,part%Tp) 
+	       part%radius = guess
+	       part%Tp = part%Tf
+
+               else
+
                call gauss_newton_2d(part%vp,dt_taup0,rhoa,rt_start, rt_zeroes,flag)
 
                if (flag==1) then
@@ -3295,9 +3302,8 @@ CONTAINS
 
                end if
 
-               if (flag == 1) num1000 = num1000 + 1
-
-               if      (isnan(rt_zeroes(1)) &
+               if ((flag == 1)  &
+	          .OR. isnan(rt_zeroes(1)) &
                   .OR. (rt_zeroes(1)*part%radius<0) &
                   .OR. isnan(rt_zeroes(2)) &
                   .OR. (rt_zeroes(2)<0) &
@@ -3306,10 +3312,10 @@ CONTAINS
                   !.OR. (rt_zeroes(2)*part%Tp < Ttop(1)*0.9)) &
                then
 
-                write(*,'(a30,14e15.6)') 'WARNING: CONVERGENCE',  &
-               part%radius,part%qinf,part%Tp,part%Tf,part%xp(3), &
-               part%kappa_s,part%m_s,part%vp(1),part%vp(2),part%vp(3), &
-               part%res,part%sigm_s,rt_zeroes(1),rt_zeroes(2)
+               ! write(*,'(a30,14e15.6)') 'WARNING: CONVERGENCE',  &
+               !part%radius,part%qinf,part%Tp,part%Tf,part%xp(3), &
+               !part%kappa_s,part%m_s,part%vp(1),part%vp(2),part%vp(3), &
+               !part%res,part%sigm_s,rt_zeroes(1),rt_zeroes(2)
 
                 numimpos = numimpos + 1  !How many have failed?
                 !If they failed (should be very small number), radius,
@@ -3343,6 +3349,8 @@ CONTAINS
                !Redimensionalize
                part%radius = rt_zeroes(1)*part%radius
                part%Tp = rt_zeroes(2)*part%Tp
+
+               endif
         end if
 
          if (part%radius .gt. 1.0e-2) then
@@ -3672,11 +3680,10 @@ CONTAINS
       intbuf(5) = actnum
       intbuf(6) = num_destroy
       intbuf(7) = num100
-      intbuf(8) = num1000
-      intbuf(9) = numimpos
-      intbuf(10) = numdrop_center
+      intbuf(8) = numimpos
+      intbuf(9) = numdrop_center
 
-      call mpi_allreduce(intbuf,intbuf_rec,10,mpi_integer,mpi_sum,mpi_comm_world,ierr)
+      call mpi_allreduce(intbuf,intbuf_rec,9,mpi_integer,mpi_sum,mpi_comm_world,ierr)
 
       tnumpart = intbuf_rec(1)
       tnumdrop = intbuf_rec(2)
@@ -3685,9 +3692,8 @@ CONTAINS
       tactnum = intbuf_rec(5)
       tnum_destroy = intbuf_rec(6)
       tnum100 = intbuf_rec(7)
-      tnum1000 = intbuf_rec(8)
-      tnumimpos = intbuf_rec(9)
-      tnumdrop_center = intbuf_rec(10)
+      tnumimpos = intbuf_rec(8)
+      tnumdrop_center = intbuf_rec(9)
 
       
       !Compute sums of real quantities

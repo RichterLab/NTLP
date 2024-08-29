@@ -1,8 +1,9 @@
 c     ----------------------------------------------------------------------
       module pars
 c     ----------------------------------------------------------------------
-      integer :: iti,itmax,imean,ihst,itape
-      integer :: itstr,i_viz
+      integer :: iti,itmax,imean,itape
+      integer :: itstr
+      real :: i_viz,ihst
 
       integer :: ismlt,ifree,iradup,
      +     iupwnd,ibuoy,ifilt,itcut,isubs,ibrcl,iocean,method,
@@ -20,7 +21,7 @@ c
       integer, parameter :: j_recl=4, k8=8
 
       integer, parameter :: nscl = 2, nvar = (4+nscl)
-      integer, parameter :: maxnx=128,maxny=128,maxnz=128
+      integer, parameter :: maxnx=256,maxny=256,maxnz=128
       integer, parameter :: maxnz1=maxnz+1,
      + maxnz2=maxnz+2,maxnx2=maxnx+2,maxny2=maxny+2
 
