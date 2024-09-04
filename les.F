@@ -3098,13 +3098,19 @@ c
 
       ! FATIMA ADV. CASE SETUP
       if (icase.eq.6) then
-      if (time .gt. 3600.0) then
-         tsfcc(1) = 286.5
-         surf_rho = surf_p/Rd/tsfcc(1)
-      else
-         tsfcc(1) = 287.5
-         surf_rho = surf_p/Rd/tsfcc(1)
-      end if
+
+        !if (time .gt. 1800.0) then   !3600.0
+
+          tsfcc(1) = 291.0   !286.5
+          surf_rho = surf_p/Rd/tsfcc(1)
+
+        !else
+
+          !tsfcc(1) = 287.5
+          !surf_rho = surf_p/Rd/tsfcc(1)
+
+        !end if
+
       end if 
 
 
@@ -6214,21 +6220,70 @@ c                 qv
       !FATIMA fog setup
 
             !qv setup
-            z_switch_q = 70.0
-            q_surf = 0.0099
-            q_switch = 0.0098
-            q_top = 0.0094
-            slope_q1 = (q_switch-q_surf)/z_switch_q
-            slope_q2 = (q_top-q_switch)/(128.0-z_switch_q)
+!            z_switch_q = 70.0
+!            q_surf = 0.0099
+!            q_switch = 0.0098
+!            q_top = 0.0094
+!            slope_q1 = (q_switch-q_surf)/z_switch_q
+!            slope_q2 = (q_top-q_switch)/(128.0-z_switch_q)
 
             !theta setup
-            z_switch_t = 70.0
-            t_surf = 287.5
-            t_switch = 287.51
-            t_top = 289.5
-            slope_t1 = (t_switch-t_surf)/z_switch_t
-            slope_t2 = (t_top-t_switch)/(128.0-z_switch_t)
+!            z_switch_t = 70.0
+!            t_surf = 287.5
+!            t_switch = 287.51
+!            t_top = 289.5
+!            slope_t1 = (t_switch-t_surf)/z_switch_t
+!            slope_t2 = (t_top-t_switch)/(128.0-z_switch_t)
 
+        do iz = izs, ize
+
+          if (zz(iz) .le. 120.0) then
+
+            t_temp = 291.0
+
+          elseif (zz(iz) .gt. 120.0 .and. zz(iz) .le. 205.0) then
+
+            t_surf   = 291.0
+            t_switch = 298.0
+            slope_t  = (t_switch - t_surf) / (205.0 - 120.0)
+            t_temp   = t_surf + (slope_t * (zz(iz) - 120.0))
+
+          elseif (zz(iz) .gt. 205.0 .and. zz(iz) .le. 256.0) then
+
+            t_surf   = 298.0
+            t_switch = 299.5
+            slope_t  = (t_switch - t_surf) / (256.0 - 205.0)
+            t_temp   = t_surf + (slope_t * (zz(iz) - 205.0))
+
+          elseif (zz(iz) .ge. 256.0) then
+
+            t_temp = 299.5
+
+          end if
+
+          if (zz(iz) .le. 135.0) then
+
+            q_temp = 12.15e-3
+
+          elseif (zz(iz) .gt. 135.0 .and. zz(iz) .le. 160.0) then
+
+            q_surf   = 12.15e-3
+            q_switch = 12.6e-3
+            slope_q  = (q_switch - q_surf) / (160.0 - 135.0)
+            q_temp   = q_surf + (slope_q * (zz(iz) - 135.0))
+
+          elseif (zz(iz) .gt. 160.0 .and. zz(iz) .le. 256.0) then
+
+            q_surf   = 12.6e-3
+            q_switch = 9.5e-3
+            slope_q  = (q_switch - q_surf) / (256.0 - 160.0)
+            q_temp   = q_surf + (slope_q * (zz(iz) - 160.0))
+
+          elseif (zz(iz) .ge. 256.0) then
+
+            q_temp = 9.5e-3
+
+          end if
 
             !u setup
             z_switch_u = 128.0
@@ -6244,32 +6299,36 @@ c                 qv
             v_top = 0.4
             slope_v1 = (v_top-v_surf)/128.0
 
-            do iz=izs,ize
+            !do iz=izs,ize
             do iy=iys,iye
             do ix=1,nnx
 
                 ! u
                 !u(ix,iy,iz) = u_surf + slope_u1*zz(iz)
-                u(ix,iy,iz) = 4.0
+                u(ix,iy,iz) = 10.0   !4.0
                  ! v
                 !v(ix,iy,iz) = v_surf + slope_v1*zz(iz)
                 v(ix,iy,iz) = 0.0
 
+              t(ix,iy,1,iz) = t_temp
+
+              t(ix,iy,2,iz) = q_temp
+
                 ! q
-                if (zz(iz) .le. z_switch_q) then
-                    t(ix,iy,2,iz) = q_surf + slope_q1*zz(iz)
-                elseif (zz(iz) .gt. z_switch_q) then
-                    t(ix,iy,2,iz) = q_switch +
-     +                          slope_q2*(zz(iz)-z_switch_q)
-                end if
+!                if (zz(iz) .le. z_switch_q) then
+!                    t(ix,iy,2,iz) = q_surf + slope_q1*zz(iz)
+!                elseif (zz(iz) .gt. z_switch_q) then
+!                    t(ix,iy,2,iz) = q_switch +
+!     +                          slope_q2*(zz(iz)-z_switch_q)
+!                end if
 
                 ! theta
-                if (zz(iz) .le. z_switch_t) then
-                    t(ix,iy,1,iz) = t_surf + slope_t1*zz(iz)
-                elseif (zz(iz) .ge. z_switch_t) then
-                    t(ix,iy,1,iz) = t_switch +
-     +                          slope_t2*(zz(iz)-z_switch_t)
-                end if
+!                if (zz(iz) .le. z_switch_t) then
+!                    t(ix,iy,1,iz) = t_surf + slope_t1*zz(iz)
+!                elseif (zz(iz) .ge. z_switch_t) then
+!                    t(ix,iy,1,iz) = t_switch +
+!     +                          slope_t2*(zz(iz)-z_switch_t)
+!                end if
 
                 w(ix,iy,iz) = 0.0
                 e(ix,iy,iz) = 0.0
@@ -11095,7 +11154,7 @@ c
       real :: d,CDF,M,S,cdf_func_single
 
       cdf_func_single = 1.0/2.0*
-     + (1.0 + erf((log(d) - M)/S/sqrt(2.0)))  - CDF
+     + (1.0 + erf((log(d) - M)/S/sqrt(2.0))) - CDF
 
       end function cdf_func_single
       function cdf_func(d,CDF,factor,Ma,Sa,Mc,Sc)

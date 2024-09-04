@@ -1,4 +1,5 @@
 module particles
+
   integer :: rproc,trproc,tproc,tlproc,lproc,blproc,bproc,brproc
   integer :: pr_r,pl_r,pt_r,pb_r,ptr_r,ptl_r,pbl_r,pbr_r
   integer :: pr_s,pl_s,pt_s,pb_s,ptr_s,ptl_s,pbl_s,pbr_s
@@ -60,17 +61,38 @@ module particles
   real :: avgres=0,tavgres=0
 
   integer, parameter :: histbins = 512
-  real :: hist_rad(histbins+2)
-  real :: hist_raddeath(histbins+2)
-  real :: bins_rad(histbins+2)
+  real :: hist_rad(histbins + 2)
+  real :: hist_rad_FL(histbins + 2)
+  real :: hist_rad_FL_act(histbins + 2)
+  real :: hist_rad_FL_unact(histbins + 2)
+  real :: hist_rad_FL_accum(histbins + 2)
+  real :: hist_rad_FL_coarse(histbins + 2)
+  real :: hist_rad_0_15(histbins + 2)
+  real :: hist_rad_15_30(histbins + 2)
+  real :: hist_rad_30_45(histbins + 2)
+  real :: hist_rad_45_60(histbins + 2)
+  real :: hist_rad_60_75(histbins + 2)
+  real :: hist_rad_75_90(histbins + 2)
+  real :: hist_rad_90_105(histbins + 2)
+  real :: hist_rad_105_120(histbins + 2)
+  real :: hist_raddeath(histbins + 2)
+  real :: hist_raddeath_act(histbins + 2)
+  real :: hist_raddeath_unact(histbins + 2)
+  real :: hist_raddeath_accum(histbins + 2)
+  real :: hist_raddeath_coarse(histbins + 2)
+  real :: bins_rad(histbins + 2)
 
   real :: hist_res(histbins+2)
+  real :: hist_res_accum(histbins + 2)
+  real :: hist_res_coarse(histbins + 2)
   real :: bins_res(histbins+2)
 
   real :: hist_actres(histbins+2)
   real :: bins_actres(histbins+2)
 
   real :: hist_acttodeath(histbins+2)
+  real :: hist_acttodeath_accum(histbins + 2)
+  real :: hist_acttodeath_coarse(histbins + 2)
   real :: bins_acttodeath(histbins+2)
 
   real :: hist_numact(histbins+2)
@@ -1702,51 +1724,67 @@ CONTAINS
 
   end subroutine set_bounds
 
+
   subroutine particle_init
-      use pars
-      use con_data
-      implicit none
-      include 'mpif.h' 
-      integer :: values(8)
-      integer :: idx,ierr
+    use pars
+    use con_data
+    implicit none
+    include 'mpif.h' 
+    integer :: values(8)
+    integer :: idx, procidx, ierr
+    integer*8 :: mult
+    real :: xv, yv, zv, ran2, xp_init(3)
+    real :: rad_init, m_s, kappa_s, M, S
 
-      !Create the seed for the random number generator:
-      call date_and_time(VALUES=values)
-      iseed = -(myid+values(8)+values(7)+values(6))
+    ! Create the seed for the random number generator:
+    call date_and_time(VALUES=values)
+    iseed = -(myid+values(8)+values(7)+values(6))
 
+    numpart = tnumpart / numprocs
 
-      numpart = tnumpart/numprocs
-      if (myid == 0) then
-      numpart = numpart + MOD(tnumpart,numprocs)
-      endif
+    if (myid == 0) then
+      numpart = numpart + MOD(tnumpart, numprocs)
+    end if
 
+    ! Initialize ngidx, the particle global index for this processor
+    ngidx = 1
 
-      !Initialize ngidx, the particle global index for this processor
-      ngidx = 1
-
-      !Initialize the linked list of particles:
-      nullify(part,first_particle)
+    ! Initialize the linked list of particles:
+    nullify(part, first_particle)
       
+    do idx = 1, numpart
 
-      do idx=1,numpart
+      ! Call new_particle, which creates a new particle based on some strategy dictated by inewpart
+      !call new_particle(idx, myid)
 
-         ! Call new_particle, which creates a new particle basd on some strategy dictated by inewpart
-         call new_particle(idx,myid)
+      S = 0.2403
+      M = -1.7570
+      kappa_s = 0.6
+      mult = mult_init
 
+      ! With the parameters above, obtain m_s and rad_init from distribution
+      call lognormal_dist(rad_init, m_s, kappa_s, M, S)
 
+      xv = (ran2(iseed) * (xmax - xmin)) + xmin
+      yv = (ran2(iseed) * (ymax - ymin)) + ymin
+      zv = (ran2(iseed) * (zi - zw1)) + zw1
+      
+      xp_init = (/xv, yv, zv/)
+
+      call create_particle(xp_init, vp_init, Tp_init, m_s, kappa_s, mult, rad_init, ngidx, myid)
       ngidx = ngidx + 1
-      end do
 
+    end do
 
-      partTsrc = 0.0
-      partTsrc_t = 0.0
-      partHsrc = 0.0
-      partHsrc_t = 0.0
-      partTEsrc = 0.0
-      partTEsrc_t = 0.0
-
+    partTsrc = 0.0
+    partTsrc_t = 0.0
+    partHsrc = 0.0
+    partHsrc_t = 0.0
+    partTEsrc = 0.0
+    partTEsrc_t = 0.0
 
   end subroutine particle_init
+
 
   subroutine particle_setup
 
@@ -1808,20 +1846,39 @@ CONTAINS
 
       end if
 
-
-      !Set up the histograms
+      ! Set up the histograms
       hist_rad = 0.0
+      hist_rad_FL = 0.0
+      hist_rad_FL_act = 0.0
+      hist_rad_FL_unact = 0.0
+      hist_rad_FL_accum = 0.0
+      hist_rad_FL_coarse = 0.0
+      hist_rad_0_15 = 0.0
+      hist_rad_15_30 = 0.0
+      hist_rad_30_45 = 0.0
+      hist_rad_45_60 = 0.0
+      hist_rad_60_75 = 0.0
+      hist_rad_75_90 = 0.0
+      hist_rad_90_105 = 0.0
+      hist_rad_105_120 = 0.0
       hist_raddeath = 0.0
+      hist_raddeath_act = 0.0
+      hist_raddeath_unact = 0.0
+      hist_raddeath_accum = 0.0
+      hist_raddeath_coarse = 0.0
       bins_rad = 0.0
+
       hist_res = 0.0
       bins_res = 0.0
+
       hist_actres = 0.0
       bins_actres = 0.0
+
       hist_acttodeath = 0.0
       bins_acttodeath = 0.0
+
       hist_numact = 0.0
       bins_numact = 0.0
-
 
       !set_binsdata does logarithmic binning!
       !Radius histogram
@@ -2064,6 +2121,7 @@ CONTAINS
 
   end subroutine read_part_res
 
+
   subroutine particle_reintro
       use pars
       use con_data
@@ -2076,55 +2134,56 @@ CONTAINS
       integer :: ierr,randproc,np,my_reintro
       real :: totdrops,t_reint
 
-
       if (inewpart.eq.4) then
-      !!Sea spray, given by Andreas SSGF 98, augmented by Ortiz-Suslow 2016
 
-         call inject_spray
-      
+        call inject_spray   ! Sea spray, given by Andreas SSGF 98, augmented by Ortiz-Suslow 2016
 
-      elseif (inewpart.eq.2) then
-      !!Pi Chamber, given by constant injection rate (nprime)
+      elseif (inewpart == 7) then
+
+        call inject_aerosols   ! Continuous injection of coarse mode aerosols source function based on Monahan et al. (1986)
+
+      elseif (inewpart.eq.2) then   ! Pi Chamber, given by constant injection rate (nprime)
 
          it_delay = 20
 
-         if (mod(it,it_delay)==0) then
+         if (mod(it, it_delay) == 0) then
 
             my_reintro = nprime*(1./60.)*(10.**6.)*dt*4/numprocs*real(it_delay) !4m^3 (vol chamber)
-            tot_reintro = my_reintro*numprocs
+            tot_reintro = my_reintro * numprocs
 
-            if (myid==0) write(*,*) 'time,tot_reintro:',time,tot_reintro
+            if (myid == 0) write(*,*) 'time, tot_reintro: ', time, tot_reintro
 
-            do np=1,my_reintro
+            do np = 1, my_reintro
 
-               call new_particle(np,myid)
-
-               !Update this processor's global ID for each one created:
-               ngidx = ngidx + 1
+               call new_particle(np, myid)
+               ngidx = ngidx + 1   ! Update this processor's global ID for each one created
    
             end do
 
          else !No injection this time step
+
             my_reintro = 0
             tot_reintro = 0
-         end if
 
+         end if
 
       end if  !Different cases
 
-
-      !Now update the total number of particles
+      ! Now update the total number of particles
       numpart = 0
       part => first_particle
+
       do while (associated(part))
-      numpart = numpart + 1
-      part => part%next
+
+        numpart = numpart + 1
+        part => part%next
+
       end do
 
-      call mpi_allreduce(numpart,tnumpart,1,mpi_integer,mpi_sum,mpi_comm_world,ierr)
-
+      call mpi_allreduce(numpart, tnumpart, 1, mpi_integer, mpi_sum, mpi_comm_world, ierr)
 
   end subroutine particle_reintro
+
 
   subroutine create_particle(xp,vp,Tp,m_s,kappa_s,mult,rad_init,idx,procidx)
       use pars
@@ -2284,8 +2343,8 @@ CONTAINS
       yv = ran2(iseed)*(ymax-ymin) + ymin
       zv = ran2(iseed)*zl
       xp_init = (/xv,yv,zv/)
-      
-      
+
+
       !Generate
       if (zv.lt.zi) then
          S = 0.45
@@ -2329,6 +2388,7 @@ CONTAINS
          call lognormal_dist(rad_init,m_s,kappa_s,M,S)
 
       else  !It's coarse mode
+
 
          S = 0.2997
          M = -0.1930
@@ -2432,6 +2492,7 @@ CONTAINS
    enddo
 
   end subroutine lognormal_dist
+
 
   subroutine inject_spray
   use pars
@@ -2584,133 +2645,254 @@ CONTAINS
          ngidx = ngidx + 1
 
        end do
-    end if
 
+    end if
 
   end subroutine inject_spray
 
+
+  subroutine inject_aerosols
+  use pars
+  use fields
+  use con_data
+  implicit none
+  include 'mpif.h'
+
+  real :: rmin, rmax, rmin10, rmax10, dh
+  real :: binsdata(100), binsdata10(100)
+  real :: B(100), dFdr_1(100), dFdr_2(100), dFdr_3(100)
+  real :: dFdr(100), dFdr_sum(101), totAerosols
+  real :: a, t_reintro, t_stop, rad_init, r_interval
+  real :: xv, yv, zv, xp_init(3)
+  real :: rand, ran2, Tp_init, vp_init(3), m_s
+  integer :: i, np, iter, it_delay, tot_reintro
+  integer :: my_reintro
+  integer*8 :: mult_SSGF
+
+    ! Setting up two lognormals
+    rmin10 = log10(0.3e-6 / 2)   ! converting from r80 to r0
+    rmax10 = log10(20.0e-6 / 2)
+    dh = (rmax10 - rmin10) / 100.0
+
+    binsdata10(1) = rmin10
+    binsdata(1) = 1.0e6 * (10 ** binsdata10(1))
+
+    do i = 1, 99
+
+      binsdata10(i + 1) = dh + binsdata10(i)
+      binsdata(i + 1) = 1.0e6 * (10 ** binsdata10(i))
+
+    end do
+
+    ! Now introduce aerosol source function
+    dFdr_sum(1) = 0
+
+    do i = 1, 100
+
+      ! Introduce source function from Monahan et al. (1986)
+      B(i) = (0.38 - log10(binsdata(i))) / 0.65
+      dFdr_1(i) = 1.373 * (u10 ** 3.41) * (binsdata(i) ** -3)
+      dFdr_2(i) = 1 + (0.057 * (binsdata(i) ** 1.05))
+      dFdr_3(i) = 10 ** (1.19 * exp(-B(i) ** 2))
+      dFdr(i) = dFdr_1(i) * dFdr_2(i) * dFdr_3(i)
+
+      if (i == 1) then
+        dFdr_sum(i + 1) = dFdr(i)
+      else if (i > 1) then
+        dFdr_sum(i + 1) = dFdr_sum(i) + dFdr(i)
+      end if
+
+    end do
+
+    totAerosols = dFdr_sum(101)
+
+    t_reintro = 1800.0   !3600.0   ! Time to start injecting
+    t_stop = 18000.0   ! Time to stop injecting
+    it_delay = 250   !500 !250(128 procs) !500(256 procs) !numprocs * 5   ! Number of time steps between injection events (make sure it is larger than numprocs)
+
+    mult_SSGF = 1e8   !1e8(ori) !5e8/5e7(sensitivity studies) ! Multiplicity of injected coarse mode aerosols
+
+    if (time > t_reintro .and. time < t_stop) then
+
+      my_reintro = (xl * yl * dt * real(it_delay) * totAerosols) / (numprocs * mult_SSGF)
+      tot_reintro = 0
+
+    else
+
+      my_reintro = 0
+      tot_reintro = 0
+
+    end if
+
+    if (mod(it, it_delay) == 0) then
+
+      tot_reintro = my_reintro * numprocs
+
+      if (myid == 0) write(*,*) 'time, dt, tot_reintro: ', time, dt, tot_reintro
+      !if (myid == 0) write(*,*) 'xl, yl, it_delay, my_reintro: ', xl, yl, it_delay, my_reintro
+      !if (myid == 0) write(*,*) 'totAerosols, numprocs, mult_SSGF: ', totAerosols, numprocs, mult_SSGF
+
+      do np = 1, my_reintro
+
+        rand = ran2(iseed)
+        a = totAerosols * rand
+
+        do i = 1, 100
+   
+          if ((a > dFdr_sum(i)) .and. (a <= dFdr_sum(i + 1))) then
+
+            r_interval = (10 ** (binsdata10(i) + (dh / 2.0))) - (10 ** (binsdata10(i) - (dh / 2.0)))
+            rad_init = binsdata(i) + (2.0 * (rand - 0.5) * r_interval)
+
+          end if
+
+        end do
+
+        rad_init = rad_init * 1.0e-6
+
+        Tp_init = tsfcc(1)
+
+        xv = (ran2(iseed) * (xmax - xmin)) + xmin
+        yv = (ran2(iseed) * (ymax - ymin)) + ymin
+        zv = ran2(iseed) * 1.5   ! Distributing aerosols between 0 and 1.5 meter
+
+        xp_init = (/xv, yv, zv/)
+
+        m_s = 2.0 / 3.0 * pi2 * rad_init ** 3 * rhos   ! Assume sphere salt aerosol where 'rhos' being specified in params.in, and 'pi2' is 2*pi
+
+        call create_particle(xp_init, vp_init, Tp_init, m_s, kappas_init, mult_SSGF, rad_init, ngidx, myid)
+        ngidx = ngidx + 1   ! Update this processor's global ID for each one created
+
+      end do
+
+    end if
+
+  end subroutine inject_aerosols
+
+
   subroutine particle_bcs_nonperiodic
   use con_stats
-  use con_data
   use pars
   implicit none
-  real :: top,bot
-  integer :: idx,procidx,idx_old,procidx_old
-
-  real :: xv,yv,zv,ran2,m_s
-  real :: kappas_dinit,radius_dinit
+  real :: top, bot
+  real :: xv, yv, zv, ran2, m_s
+  real :: kappas_dinit, radius_dinit
   real :: xp_init(3)
-  integer :: ipt,jpt
+  integer :: idx, procidx, idx_old, procidx_old
 
-  !C-FOG and FATIMA parameters: lognormal of accumulation + lognormal of coarse, with extra "resolution" on the coarse mode
-  real :: S,M,kappa_s,rad_init
+  ! C-FOG and FATIMA parameters: lognormal of accumulation + lognormal of coarse, with extra "resolution" on the coarse mode
+  real :: S, M, kappa_s, rad_init
   integer*8 :: mult
 
-
-  !Assumes domain goes from [0,xl),[0,yl),[0,zl]
-  !Also maintain the number of particles on each proc
+  ! Assumes domain goes from [0,xl],[0,yl],[0,zl] - also maintain the number of particles on each proc
 
   part => first_particle
   do while (associated(part))
 
-    !perfectly elastic collisions on top, bottom walls
-    !i.e. location is reflected, w-velocity is negated
-
-    top = z(nnz)-part%radius
+    ! Perfectly elastic collisions on top and bottom walls, i.e. location is reflected, w-velocity is negated
+    top = z(nnz) - part%radius
     bot = 0.0 + part%radius
 
     if (part%xp(3) .GT. top) then
-       part%xp(3) = top - (part%xp(3)-top)
-       part%vp(3) = -part%vp(3)
-       part => part%next
+
+      part%xp(3) = top - (part%xp(3) - top)
+      part%vp(3) = -part%vp(3)
+      part => part%next
+
     elseif (part%xp(3) .LT. bot) then
 
-       if (icase.eq.0) then  !Reflect
+      if (icase.eq.0) then  ! Reflect
 
-          part%xp(3) = bot + (bot-part%xp(3))
-          part%vp(3) = -part%vp(3)
-          part => part%next
+        part%xp(3) = bot + (bot - part%xp(3))
+        part%vp(3) = -part%vp(3)
+        part => part%next
 
-       else  !All cases other than icase=0 kill particle
+      else  ! All cases other than icase = 0, kill particle
 
-          idx_old = part%pidx
-          procidx_old = part%procidx
+        idx_old = part%pidx
+        procidx_old = part%procidx
 
-          !Before destroying it, put its residence time in histogram
-          call add_histogram(bins_res,hist_res,histbins+2,part%res,part%mult)
+        ! Before destroying it, put its residence time in histogram
+        call add_histogram(bins_res, hist_res, histbins + 2, part%res, part%mult)
 
-          !Also record this in the "activation till death" residence time
-          if (part%radius .gt. part%rc) then
-            call add_histogram(bins_acttodeath,hist_acttodeath,histbins+2,part%actres,part%mult)
-          end if
+        ! Also record this in the "activation till death" residence time
+        if (part%radius .gt. part%rc) then
+          call add_histogram(bins_acttodeath, hist_acttodeath, histbins + 2, part%actres, part%mult)
+        end if
 
-          !Also record the number of activations
-          call add_histogram_integer(bins_numact,hist_numact,histbins+2,part%numact)
+        ! Also record the number of activations
+        call add_histogram_integer(bins_numact, hist_numact, histbins + 2, part%numact)
 
-          !Also record the size of the dead droplet
-          call add_histogram(bins_rad,hist_raddeath,histbins+2,part%radius,part%mult)
-
-	  !Store the spatial location of this mass crossing the surface -- surface precipitation
-          ipt = floor(part%xp(1)/dx) + 1
-          jpt = floor(part%xp(2)/dy) + 1
-	  surf_precip(ipt,jpt) = surf_precip(ipt,jpt) + real(part%mult)*(rhow*2.0/3.0*pi2*part%radius**3)
-
-
-          if (ireintro.eq.1 .and. inewpart.eq.6) then  !FATIMA can reintroduce particle of the same type
-
-               xv = ran2(iseed)*(xmax-xmin) + xmin
-               yv = ran2(iseed)*(ymax-ymin) + ymin
-               zv = ran2(iseed)*(zi-zw1) + zw1
-               xp_init = (/xv,yv,zv/)
-
-               ! acummulation mode
-               if (part%mult .eq. mult_a) then
+        ! Also record the size of the dead droplet
+        call add_histogram(bins_rad, hist_raddeath, histbins + 2, part%radius, part%mult)
    
-                   S = 0.2403
-                   M = -1.7570
-                   kappa_s = 0.6
-                   mult = mult_a
+        if (part%radius > part%rc) then   ! Activated/unactivated aerosols/droplets
+          call add_histogram(bins_rad, hist_raddeath_act, histbins + 2, part%radius, part%mult)
+        end if
 
-               ! coarse mode
-               elseif (part%mult .eq. mult_c) then
+        if (part%radius < part%rc) then
+          call add_histogram(bins_rad, hist_raddeath_unact, histbins + 2, part%radius, part%mult)
+        end if
 
-                   S = 0.2997
-                   M = -0.1930
-                   kappa_s = 1.2
-                   mult = mult_c
+        if (abs(part%kappa_s - 0.6) < 1.0e-8) then   ! Accumulation/coarse mode aerosols
 
-               end if
+          call add_histogram(bins_rad, hist_raddeath_accum, histbins + 2, part%radius, part%mult)
+          call add_histogram(bins_res, hist_res_accum, histbins + 2, part%res, part%mult)
+          call add_histogram(bins_acttodeath, hist_acttodeath_accum, histbins + 2, part%actres, part%mult)
 
-               ! destroy old particle before creating new one
-               call destroy_particle
-               num_destroy = num_destroy + 1
-   
-               !With these parameters, get m_s and rad_init from distribution
-               call lognormal_dist(rad_init,m_s,kappa_s,M,S)
+        end if
 
-               call create_particle(xp_init,vp_init,Tp_init,m_s,kappa_s,mult,rad_init,idx_old,procidx_old)
+        if (abs(part%kappa_s - 1.2) < 1.0e-8) then
 
-          else
+          call add_histogram(bins_rad, hist_raddeath_coarse, histbins + 2, part%radius, part%mult)
+          call add_histogram(bins_res, hist_res_coarse, histbins + 2, part%res, part%mult)
+          call add_histogram(bins_acttodeath, hist_acttodeath_coarse, histbins + 2, part%actres, part%mult)
 
-               call destroy_particle
-               num_destroy = num_destroy + 1
+        end if
 
-          end if
+        if (part%mult == mult_init) then
+
+          call destroy_particle
+          num_destroy = num_destroy + 1
+
+          S = 0.2403
+          M = -1.7570
+          kappa_s = 0.6
+          mult = mult_init
+
+          call lognormal_dist(rad_init, m_s, kappa_s, M, S)
+
+          xv = (ran2(iseed) * (xmax - xmin)) + xmin
+          yv = (ran2(iseed) * (ymax - ymin)) + ymin
+          zv = (ran2(iseed) * (zi - zw1)) + zw1
+
+          xp_init = (/xv, yv, zv/)
+
+          call create_particle(xp_init, vp_init, Tp_init, m_s, kappa_s, mult, rad_init, idx_old, procidx_old)
+
+        else
+
+          call destroy_particle
+          num_destroy = num_destroy + 1
+
+        end if
        
-          if (icase.eq.5 .or. icase.eq.3) then
-             call new_particle(idx_old,procidx_old)
-          end if
+        if (icase.eq.5 .or. icase.eq.3) then
+          call new_particle(idx_old, procidx_old)
+        end if
 
-       end if ! icase to decide whether to reflect
+      end if ! icase to decide whether to reflect
 
     else
-       part => part%next
-    end if
 
+      part => part%next
+
+    end if
 
   end do
 
   end subroutine particle_bcs_nonperiodic
+
 
   subroutine particle_bcs_periodic
       use pars
@@ -3847,10 +4029,13 @@ CONTAINS
 
   end subroutine particle_stats
 
+
   subroutine particle_write_traj
    use con_data
    use pars
    implicit none
+
+   real :: partmass
 
    part => first_particle
 
@@ -3859,9 +4044,8 @@ CONTAINS
      if (mod(part%pidx, 1000) .eq. 0) then
 
        write(ntraj,'(2i,19e15.6)') part%pidx, part%procidx, time, part%xp(1), part%xp(2), part%xp(3), &
-                                   part%vp(1), part%vp(2), part%vp(3), part%radius, part%Tp, part%Tf, &
-                                   part%qinf, part%qstar, part%rc, part%mult, part%m_s, part%kappa_s, &
-                                   part%res, part%actres, part%numact
+             part%vp(1), part%vp(2), part%vp(3), part%radius, part%Tp, part%Tf, part%qinf, part%qstar, &
+             part%rc, part%mult, part%kappa_s, part%res, part%actres, part%numact
 
      end if
 
@@ -3874,6 +4058,7 @@ CONTAINS
    end if
 
   end subroutine particle_write_traj
+
 
   subroutine particle_coalesce
       use pars
@@ -5091,17 +5276,117 @@ CONTAINS
 
   end subroutine add_histogram_integer
 
+
   subroutine radius_histogram
+  use pars
+  use fields
+  use con_data
+  use con_stats
   implicit none
 
+  real :: threshold_fogLayer, min_index
+  real :: ql_fogLayer, z_fogLayer
+
+  threshold_fogLayer = 0.01e-3   ![kg/kg]
+  z_fogLayer = 0.0
+
+  if (maxval(ql) > threshold_fogLayer) then
+
+    min_index = minloc(ql, 1, mask = (ql >= threshold_fogLayer))
+
+    ql_fogLayer = ql(min_index)
+    z_fogLayer = zz(min_index)
+
+    if (myid == 0) write(*,*) 'ql_fogLayer, z_fogLayer: ', ql_fogLayer, z_fogLayer
+
+  else
+
+    ql_fogLayer = 0.0
+    z_fogLayer = 0.0
+
+    if (myid == 0) write(*,*) 'ql_fogLayer_noFog, z_fogLayer_noFog: ', ql_fogLayer, z_fogLayer
+
+  end if
+
   hist_rad = 0.0
+  hist_rad_FL = 0.0
+  hist_rad_FL_act = 0.0
+  hist_rad_FL_unact = 0.0
+  hist_rad_FL_accum = 0.0
+  hist_rad_FL_coarse = 0.0
+  hist_rad_0_15 = 0.0
+  hist_rad_15_30 = 0.0
+  hist_rad_30_45 = 0.0
+  hist_rad_45_60 = 0.0
+  hist_rad_60_75 = 0.0
+  hist_rad_75_90 = 0.0
+  hist_rad_90_105 = 0.0
+  hist_rad_105_120 = 0.0
+
   part => first_particle
+
   do while (associated(part))
-     call add_histogram(bins_rad,hist_rad,histbins+2,part%radius,part%mult)
-     part => part%next
+
+    call add_histogram(bins_rad, hist_rad, histbins + 2, part%radius, part%mult)
+
+    if (part%xp(3) <= z_fogLayer) then   ! Fog layer
+      call add_histogram(bins_rad, hist_rad_FL, histbins + 2, part%radius, part%mult)
+    end if
+
+    if (part%xp(3) <= z_fogLayer .and. part%radius > part%rc) then   ! Activated aerosols/droplets within fog layer
+      call add_histogram(bins_rad, hist_rad_FL_act, histbins + 2, part%radius, part%mult)
+    end if
+
+    if (part%xp(3) <= z_fogLayer .and. part%radius < part%rc) then   ! Unactivated aerosols/droplets within fog layer
+      call add_histogram(bins_rad, hist_rad_FL_unact, histbins + 2, part%radius, part%mult)
+    end if
+
+    if (part%xp(3) <= z_fogLayer .and. abs(part%kappa_s - 0.6) < 8) then   ! Accumulation mode aerosols/droplets within fog layer
+      call add_histogram(bins_rad, hist_rad_FL_accum, histbins + 2, part%radius, part%mult)
+    end if
+   
+    if (part%xp(3) <= z_fogLayer .and. abs(part%kappa_s - 1.2) < 1.0e-8) then   ! Coarse mode aerosols/droplets within fog layer
+      call add_histogram(bins_rad, hist_rad_FL_coarse, histbins + 2, part%radius, part%mult)
+    end if
+
+    if (part%xp(3) >= 0 .and. part%xp(3) <= 15) then   ! Aerosols/droplets within specific heights
+      call add_histogram(bins_rad, hist_rad_0_15, histbins + 2, part%radius, part%mult)
+    end if
+
+    if (part%xp(3) > 15 .and. part%xp(3) <= 30) then   ! Aerosols/droplets within specific heights
+      call add_histogram(bins_rad, hist_rad_15_30, histbins + 2, part%radius, part%mult)
+    end if
+
+    if (part%xp(3) > 30 .and. part%xp(3) <= 45) then   ! Aerosols/droplets within specific heights
+      call add_histogram(bins_rad, hist_rad_30_45, histbins + 2, part%radius, part%mult)
+    end if
+
+    if (part%xp(3) > 45 .and. part%xp(3) <= 60) then   ! Aerosols/droplets within specific heights
+      call add_histogram(bins_rad, hist_rad_45_60, histbins + 2, part%radius, part%mult)
+    end if
+
+    if (part%xp(3) > 60 .and. part%xp(3) <= 75) then   ! Aerosols/droplets within specific heights
+      call add_histogram(bins_rad, hist_rad_60_75, histbins + 2, part%radius, part%mult)
+    end if
+
+    if (part%xp(3) > 75 .and. part%xp(3) <= 90) then   ! Aerosols/droplets within specific heights
+      call add_histogram(bins_rad, hist_rad_75_90, histbins + 2, part%radius, part%mult)
+    end if
+
+    if (part%xp(3) > 90 .and. part%xp(3) <= 105) then   ! Aerosols/droplets within specific heights
+      call add_histogram(bins_rad, hist_rad_90_105, histbins + 2, part%radius, part%mult)
+    end if
+
+    if (part%xp(3) > 105 .and. part%xp(3) <= 120) then   ! Aerosols/droplets within specific heights
+      call add_histogram(bins_rad, hist_rad_105_120, histbins + 2, part%radius, part%mult)
+    end if
+
+    part => part%next
+
   end do
 
   end subroutine radius_histogram
+
 
    subroutine eigen_roots(a,m,rtr,rti)
    ! USES balanc,hqr

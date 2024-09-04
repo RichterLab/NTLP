@@ -39,9 +39,15 @@ integer :: qstarm_vid
 integer :: Nc_vid,ql_vid,radsrc_vid
 integer :: rho_base_vid,p_base_vid,T_base_vid,theta_base_vid
 integer :: radbins_vid,resbins_vid
-integer :: radhist_vid,reshist_vid,radhistdeath_vid
-integer :: actresbins_vid,actreshist_vid
-integer :: acttodeathbins_vid,acttodeathhist_vid
+integer :: radhist_vid, radhist_FL_vid, radhist_FL_act_vid, radhist_FL_unact_vid
+integer :: radhist_FL_accum_vid, radhist_FL_coarse_vid, radhist_0_15_vid, radhist_15_30_vid
+integer :: radhist_30_45_vid, radhist_45_60_vid, radhist_60_75_vid
+integer :: radhist_75_90_vid, radhist_90_105_vid, radhist_105_120_vid
+integer :: radhistdeath_vid, radhistdeath_act_vid, radhistdeath_unact_vid
+integer :: radhistdeath_accum_vid, radhistdeath_coarse_vid
+integer :: reshist_vid, reshist_accum_vid, reshist_coarse_vid
+integer :: actresbins_vid, actreshist_vid
+integer :: acttodeathbins_vid, acttodeathhist_vid, acttodeathhist_accum_vid, acttodeathhist_coarse_vid
 integer :: numactbins_vid,numacthist_vid
 
 !Viz:
@@ -626,6 +632,7 @@ subroutine write_his_netcdf
 
 end subroutine write_his_netcdf
 
+
 subroutine netcdf_init_histog
       use netcdf
       use pars
@@ -673,17 +680,80 @@ subroutine netcdf_init_histog
       call netcdf_check( nf90_def_var(ncid_histog, "radhist", NF90_REAL, dimids_t_bins,radhist_vid) )
       call netcdf_check( nf90_put_att(ncid_histog,radhist_vid,"title","Histogram of particle radius at snapshot") )
 
+      call netcdf_check(nf90_def_var(ncid_histog, "radhist_FL", NF90_REAL, dimids_t_bins, radhist_FL_vid))
+      call netcdf_check(nf90_put_att(ncid_histog, radhist_FL_vid, "title", "Histogram of particle radius within fog layer at snapshot"))
+
+      call netcdf_check(nf90_def_var(ncid_histog, "radhist_FL_act", NF90_REAL, dimids_t_bins, radhist_FL_act_vid))
+      call netcdf_check(nf90_put_att(ncid_histog, radhist_FL_act_vid, "title", "Histogram of activated particle radius within fog layer at snapshot"))
+
+      call netcdf_check(nf90_def_var(ncid_histog, "radhist_FL_unact", NF90_REAL, dimids_t_bins, radhist_FL_unact_vid))
+      call netcdf_check(nf90_put_att(ncid_histog, radhist_FL_unact_vid, "title", "Histogram of unactivated particle radius within fog layer at snapshot"))
+
+      call netcdf_check(nf90_def_var(ncid_histog, "radhist_FL_accum", NF90_REAL, dimids_t_bins, radhist_FL_accum_vid))
+      call netcdf_check(nf90_put_att(ncid_histog, radhist_FL_accum_vid, "title", "Histogram of accumulation mode particles radius within fog layer at snapshot"))
+
+      call netcdf_check(nf90_def_var(ncid_histog, "radhist_FL_coarse", NF90_REAL, dimids_t_bins, radhist_FL_coarse_vid))
+      call netcdf_check(nf90_put_att(ncid_histog, radhist_FL_coarse_vid, "title", "Histogram of coarse mode particles radius within fog layer at snapshot"))
+
+      call netcdf_check(nf90_def_var(ncid_histog, "radhist_0_15", NF90_REAL, dimids_t_bins, radhist_0_15_vid))
+      call netcdf_check(nf90_put_att(ncid_histog, radhist_0_15_vid, "title", "Histogram of particles radius between 0 and 15 meters at snapshot"))
+
+      call netcdf_check(nf90_def_var(ncid_histog, "radhist_15_30", NF90_REAL, dimids_t_bins, radhist_15_30_vid))
+      call netcdf_check(nf90_put_att(ncid_histog, radhist_15_30_vid, "title", "Histogram of particles radius between 15 and 30 meters at snapshot"))
+
+      call netcdf_check(nf90_def_var(ncid_histog, "radhist_30_45", NF90_REAL, dimids_t_bins, radhist_30_45_vid))
+      call netcdf_check(nf90_put_att(ncid_histog, radhist_30_45_vid, "title", "Histogram of particles radius between 30 and 45 meters at snapshot"))
+
+      call netcdf_check(nf90_def_var(ncid_histog, "radhist_45_60", NF90_REAL, dimids_t_bins, radhist_45_60_vid))
+      call netcdf_check(nf90_put_att(ncid_histog, radhist_45_60_vid, "title", "Histogram of particles radius between 45 and 60 meters at snapshot"))
+
+      call netcdf_check(nf90_def_var(ncid_histog, "radhist_60_75", NF90_REAL, dimids_t_bins, radhist_60_75_vid))
+      call netcdf_check(nf90_put_att(ncid_histog, radhist_60_75_vid, "title", "Histogram of particles radius between 60 and 75 meters at snapshot"))
+
+      call netcdf_check(nf90_def_var(ncid_histog, "radhist_75_90", NF90_REAL, dimids_t_bins, radhist_75_90_vid))
+      call netcdf_check(nf90_put_att(ncid_histog, radhist_75_90_vid, "title", "Histogram of particles radius between 75 and 90 meters at snapshot"))
+
+      call netcdf_check(nf90_def_var(ncid_histog, "radhist_90_105", NF90_REAL, dimids_t_bins, radhist_90_105_vid))
+      call netcdf_check(nf90_put_att(ncid_histog, radhist_90_105_vid, "title", "Histogram of particles radius between 90 and 105 meters at snapshot"))
+
+      call netcdf_check(nf90_def_var(ncid_histog, "radhist_105_120", NF90_REAL, dimids_t_bins, radhist_105_120_vid))
+      call netcdf_check(nf90_put_att(ncid_histog, radhist_105_120_vid, "title", "Histogram of particles radius between 105 and 120 meters at snapshot"))
+
       call netcdf_check( nf90_def_var(ncid_histog, "radhistdeath", NF90_REAL, dimids_t_bins,radhistdeath_vid) )
       call netcdf_check( nf90_put_att(ncid_histog,radhistdeath_vid,"title","Histogram of particle radius of those which died over past ihst") )
 
+      call netcdf_check(nf90_def_var(ncid_histog, "radhistdeath_act", NF90_REAL, dimids_t_bins, radhistdeath_act_vid))
+      call netcdf_check(nf90_put_att(ncid_histog, radhistdeath_act_vid, "title", "Histogram of activated particle radius of those which died over past ihst"))
+
+      call netcdf_check(nf90_def_var(ncid_histog, "radhistdeath_unact", NF90_REAL, dimids_t_bins, radhistdeath_unact_vid))
+      call netcdf_check(nf90_put_att(ncid_histog, radhistdeath_unact_vid, "title", "Histogram of unactivated particle radius of those which died over past ihst"))
+
+      call netcdf_check(nf90_def_var(ncid_histog, "radhistdeath_accum", NF90_REAL, dimids_t_bins, radhistdeath_accum_vid))
+      call netcdf_check(nf90_put_att(ncid_histog, radhistdeath_accum_vid, "title", "Histogram of accumulation mode particle radius of those which died over past ihst"))
+
+      call netcdf_check(nf90_def_var(ncid_histog, "radhistdeath_coarse", NF90_REAL, dimids_t_bins, radhistdeath_coarse_vid))
+      call netcdf_check(nf90_put_att(ncid_histog, radhistdeath_coarse_vid, "title", "Histogram of coarse mode particle radius of those which died over past ihst"))
+
       call netcdf_check( nf90_def_var(ncid_histog, "reshist", NF90_REAL, dimids_t_bins,reshist_vid) )
       call netcdf_check( nf90_put_att(ncid_histog,reshist_vid,"title","Histogram of residence time of particles which died over past ihst") )
+
+      call netcdf_check(nf90_def_var(ncid_histog, "reshist_accum", NF90_REAL, dimids_t_bins, reshist_accum_vid))
+      call netcdf_check(nf90_put_att(ncid_histog, reshist_accum_vid, "title", "Histogram of residence time of accumulation mode particles which died over past ihst"))
+
+      call netcdf_check(nf90_def_var(ncid_histog, "reshist_coarse", NF90_REAL, dimids_t_bins, reshist_coarse_vid))
+      call netcdf_check(nf90_put_att(ncid_histog, reshist_coarse_vid, "title", "Histogram of residence time of coarse mode particles which died over past ihst"))
 
       call netcdf_check( nf90_def_var(ncid_histog, "actreshist", NF90_REAL, dimids_t_bins,actreshist_vid) )
       call netcdf_check( nf90_put_att(ncid_histog,actreshist_vid,"title","Histogram of residence time of particles which deactivated OR died over past ihst") )
 
       call netcdf_check( nf90_def_var(ncid_histog, "acttodeathhist", NF90_REAL, dimids_t_bins,acttodeathhist_vid) )
       call netcdf_check( nf90_put_att(ncid_histog,acttodeathhist_vid,"title","Histogram of residence time of particles which deactivated OR died over past ihst") )
+
+      call netcdf_check(nf90_def_var(ncid_histog, "acttodeathhist_accum", NF90_REAL, dimids_t_bins, acttodeathhist_accum_vid))
+      call netcdf_check(nf90_put_att(ncid_histog, acttodeathhist_accum_vid, "title", "Histogram of residence time of accumulation mode particles which deactivated OR died over past ihst"))
+
+      call netcdf_check(nf90_def_var(ncid_histog, "acttodeathhist_coarse", NF90_REAL, dimids_t_bins, acttodeathhist_coarse_vid))
+      call netcdf_check(nf90_put_att(ncid_histog, acttodeathhist_coarse_vid, "title", "Histogram of residence time of coarse mode particles which deactivated OR died over past ihst"))
 
       call netcdf_check( nf90_def_var(ncid_histog, "numacthist", NF90_REAL, dimids_t_bins,numacthist_vid) )
       call netcdf_check( nf90_put_att(ncid_histog,numacthist_vid,"title","Histogram of number of activations of particles which died over past ihst") )
@@ -693,6 +763,7 @@ subroutine netcdf_init_histog
       histog_counter = 1
 
 end subroutine netcdf_init_histog
+
 
 subroutine netcdf_res_histog
       use netcdf
@@ -731,13 +802,35 @@ subroutine netcdf_res_histog
 
 !!! Histograms
       call netcdf_check( nf90_inq_varid(ncid_histog, "radhist",radhist_vid) )
+      call netcdf_check(nf90_inq_varid(ncid_histog, "radhist_FL", radhist_FL_vid))
+      call netcdf_check(nf90_inq_varid(ncid_histog, "radhist_FL_act", radhist_FL_act_vid))
+      call netcdf_check(nf90_inq_varid(ncid_histog, "radhist_FL_unact", radhist_FL_unact_vid))
+      call netcdf_check(nf90_inq_varid(ncid_histog, "radhist_FL_accum", radhist_FL_accum_vid))
+      call netcdf_check(nf90_inq_varid(ncid_histog, "radhist_FL_coarse", radhist_FL_coarse_vid))
+      call netcdf_check(nf90_inq_varid(ncid_histog, "radhist_0_15", radhist_0_15_vid))
+      call netcdf_check(nf90_inq_varid(ncid_histog, "radhist_15_30", radhist_15_30_vid))
+      call netcdf_check(nf90_inq_varid(ncid_histog, "radhist_30_45", radhist_30_45_vid))
+      call netcdf_check(nf90_inq_varid(ncid_histog, "radhist_45_60", radhist_45_60_vid))
+      call netcdf_check(nf90_inq_varid(ncid_histog, "radhist_60_75", radhist_60_75_vid))
+      call netcdf_check(nf90_inq_varid(ncid_histog, "radhist_75_90", radhist_75_90_vid))
+      call netcdf_check(nf90_inq_varid(ncid_histog, "radhist_90_105", radhist_90_105_vid))
+      call netcdf_check(nf90_inq_varid(ncid_histog, "radhist_105_120", radhist_105_120_vid))
       call netcdf_check( nf90_inq_varid(ncid_histog, "radhistdeath",radhistdeath_vid) )
+      call netcdf_check(nf90_inq_varid(ncid_histog, "radhistdeath_act", radhistdeath_act_vid))
+      call netcdf_check(nf90_inq_varid(ncid_histog, "radhistdeath_unact", radhistdeath_unact_vid))
+      call netcdf_check(nf90_inq_varid(ncid_histog, "radhistdeath_accum", radhistdeath_accum_vid))
+      call netcdf_check(nf90_inq_varid(ncid_histog, "radhistdeath_coarse", radhistdeath_coarse_vid))
       call netcdf_check( nf90_inq_varid(ncid_histog, "reshist",reshist_vid) )
+      call netcdf_check(nf90_inq_varid(ncid_histog, "reshist_accum", reshist_accum_vid))
+      call netcdf_check(nf90_inq_varid(ncid_histog, "reshist_coarse", reshist_coarse_vid))
       call netcdf_check( nf90_inq_varid(ncid_histog, "actreshist",actreshist_vid) )
       call netcdf_check( nf90_inq_varid(ncid_histog, "acttodeathhist",acttodeathhist_vid) )
+      call netcdf_check(nf90_inq_varid(ncid_histog, "acttodeathhist_accum", acttodeathhist_accum_vid))
+      call netcdf_check(nf90_inq_varid(ncid_histog, "acttodeathhist_coarse", acttodeathhist_coarse_vid))
       call netcdf_check( nf90_inq_varid(ncid_histog, "numacthist",numacthist_vid) )
 
 end subroutine netcdf_res_histog
+
 
 subroutine write_histog_netcdf
       use netcdf
@@ -763,15 +856,38 @@ subroutine write_histog_netcdf
       end if
 
       call netcdf_check( nf90_put_var(ncid_histog, radhist_vid, real(hist_rad),start=(/1,histog_counter/)) )
+
+      call netcdf_check(nf90_put_var(ncid_histog, radhist_FL_vid, real(hist_rad_FL), start=(/1, histog_counter/)))
+      call netcdf_check(nf90_put_var(ncid_histog, radhist_FL_act_vid, real(hist_rad_FL_act), start=(/1, histog_counter/)))
+      call netcdf_check(nf90_put_var(ncid_histog, radhist_FL_unact_vid, real(hist_rad_FL_unact), start=(/1, histog_counter/)))
+      call netcdf_check(nf90_put_var(ncid_histog, radhist_FL_accum_vid, real(hist_rad_FL_accum), start=(/1, histog_counter/)))
+      call netcdf_check(nf90_put_var(ncid_histog, radhist_FL_coarse_vid, real(hist_rad_FL_coarse), start=(/1, histog_counter/)))
+      call netcdf_check(nf90_put_var(ncid_histog, radhist_0_15_vid, real(hist_rad_0_15), start=(/1, histog_counter/)))
+      call netcdf_check(nf90_put_var(ncid_histog, radhist_15_30_vid, real(hist_rad_15_30), start=(/1, histog_counter/)))
+      call netcdf_check(nf90_put_var(ncid_histog, radhist_30_45_vid, real(hist_rad_30_45), start=(/1, histog_counter/)))
+      call netcdf_check(nf90_put_var(ncid_histog, radhist_45_60_vid, real(hist_rad_45_60), start=(/1, histog_counter/)))
+      call netcdf_check(nf90_put_var(ncid_histog, radhist_60_75_vid, real(hist_rad_60_75), start=(/1, histog_counter/)))
+      call netcdf_check(nf90_put_var(ncid_histog, radhist_75_90_vid, real(hist_rad_75_90), start=(/1, histog_counter/)))
+      call netcdf_check(nf90_put_var(ncid_histog, radhist_90_105_vid, real(hist_rad_90_105), start=(/1, histog_counter/)))
+      call netcdf_check(nf90_put_var(ncid_histog, radhist_105_120_vid, real(hist_rad_105_120), start=(/1, histog_counter/)))
       call netcdf_check( nf90_put_var(ncid_histog, radhistdeath_vid, real(hist_raddeath),start=(/1,histog_counter/)) )
+      call netcdf_check(nf90_put_var(ncid_histog, radhistdeath_act_vid, real(hist_raddeath_act), start=(/1, histog_counter/)))
+      call netcdf_check(nf90_put_var(ncid_histog, radhistdeath_unact_vid, real(hist_raddeath_unact), start=(/1, histog_counter/)))
+      call netcdf_check(nf90_put_var(ncid_histog, radhistdeath_accum_vid, real(hist_raddeath_accum), start=(/1, histog_counter/)))
+      call netcdf_check(nf90_put_var(ncid_histog, radhistdeath_coarse_vid, real(hist_raddeath_coarse), start=(/1, histog_counter/)))
       call netcdf_check( nf90_put_var(ncid_histog, reshist_vid, real(hist_res),start=(/1,histog_counter/)) )
+      call netcdf_check(nf90_put_var(ncid_histog, reshist_accum_vid, real(hist_res_accum), start=(/1, histog_counter/)))
+      call netcdf_check(nf90_put_var(ncid_histog, reshist_coarse_vid, real(hist_res_coarse), start=(/1, histog_counter/)))
       call netcdf_check( nf90_put_var(ncid_histog, actreshist_vid, real(hist_actres),start=(/1,histog_counter/)) )
       call netcdf_check( nf90_put_var(ncid_histog, acttodeathhist_vid, real(hist_acttodeath),start=(/1,histog_counter/)) )
+      call netcdf_check(nf90_put_var(ncid_histog, acttodeathhist_accum_vid, real(hist_acttodeath_accum), start=(/1,histog_counter/)))
+      call netcdf_check(nf90_put_var(ncid_histog, acttodeathhist_coarse_vid, real(hist_acttodeath_coarse), start=(/1,histog_counter/)))
       call netcdf_check( nf90_put_var(ncid_histog, numacthist_vid, real(hist_numact),start=(/1,histog_counter/)) )
 
       histog_counter = histog_counter + 1
 
 end subroutine write_histog_netcdf
+
 
 subroutine netcdf_init_viz
       use netcdf
@@ -1458,10 +1574,31 @@ integer :: iblnk
 integer :: num_entries
 
 real :: sumbuf_rad(histbins+2)
+real :: sumbuf_rad_FL(histbins + 2)
+real :: sumbuf_rad_FL_act(histbins + 2)
+real :: sumbuf_rad_FL_unact(histbins + 2)
+real :: sumbuf_rad_FL_accum(histbins + 2)
+real :: sumbuf_rad_FL_coarse(histbins + 2)
+real :: sumbuf_rad_0_15(histbins + 2)
+real :: sumbuf_rad_15_30(histbins + 2)
+real :: sumbuf_rad_30_45(histbins + 2)
+real :: sumbuf_rad_45_60(histbins + 2)
+real :: sumbuf_rad_60_75(histbins + 2)
+real :: sumbuf_rad_75_90(histbins + 2)
+real :: sumbuf_rad_90_105(histbins + 2)
+real :: sumbuf_rad_105_120(histbins + 2)
 real :: sumbuf_raddeath(histbins+2)
+real :: sumbuf_raddeath_act(histbins + 2)
+real :: sumbuf_raddeath_unact(histbins + 2)
+real :: sumbuf_raddeath_accum(histbins + 2)
+real :: sumbuf_raddeath_coarse(histbins + 2)
 real :: sumbuf_res(histbins+2)
+real :: sumbuf_res_accum(histbins + 2)
+real :: sumbuf_res_coarse(histbins + 2)
 real :: sumbuf_actres(histbins+2)
 real :: sumbuf_acttodeath(histbins+2)
+real :: sumbuf_acttodeath_accum(histbins + 2)
+real :: sumbuf_acttodeath_coarse(histbins + 2)
 real :: sumbuf_numact(histbins+2)
 
 character :: fformat*10, num*3
@@ -1476,13 +1613,70 @@ character :: fformat*10, num*3
   sumbuf_rad = hist_rad
   call mpi_reduce(sumbuf_rad,hist_rad,num_entries,mpi_real8,mpi_sum,0,mpi_comm_world,ierr)
 
+  sumbuf_rad_FL = hist_rad_FL
+  call mpi_reduce(sumbuf_rad_FL, hist_rad_FL, num_entries, mpi_real8, mpi_sum, 0, mpi_comm_world, ierr)
+
+  sumbuf_rad_FL_act = hist_rad_FL_act
+  call mpi_reduce(sumbuf_rad_FL_act, hist_rad_FL_act, num_entries, mpi_real8, mpi_sum, 0, mpi_comm_world, ierr)
+
+  sumbuf_rad_FL_unact = hist_rad_FL_unact
+  call mpi_reduce(sumbuf_rad_FL_unact, hist_rad_FL_unact, num_entries, mpi_real8, mpi_sum, 0, mpi_comm_world, ierr)
+
+  sumbuf_rad_FL_accum = hist_rad_FL_accum
+  call mpi_reduce(sumbuf_rad_FL_accum, hist_rad_FL_accum, num_entries, mpi_real8, mpi_sum, 0, mpi_comm_world, ierr)
+
+  sumbuf_rad_FL_coarse = hist_rad_FL_coarse
+  call mpi_reduce(sumbuf_rad_FL_coarse, hist_rad_FL_coarse, num_entries, mpi_real8, mpi_sum, 0, mpi_comm_world, ierr)
+
+  sumbuf_rad_0_15 = hist_rad_0_15
+  call mpi_reduce(sumbuf_rad_0_15, hist_rad_0_15, num_entries, mpi_real8, mpi_sum, 0, mpi_comm_world, ierr)
+
+  sumbuf_rad_15_30 = hist_rad_15_30
+  call mpi_reduce(sumbuf_rad_15_30, hist_rad_15_30, num_entries, mpi_real8, mpi_sum, 0, mpi_comm_world, ierr)
+
+  sumbuf_rad_30_45 = hist_rad_30_45
+  call mpi_reduce(sumbuf_rad_30_45, hist_rad_30_45, num_entries, mpi_real8, mpi_sum, 0, mpi_comm_world, ierr)
+
+  sumbuf_rad_45_60 = hist_rad_45_60
+  call mpi_reduce(sumbuf_rad_45_60, hist_rad_45_60, num_entries, mpi_real8, mpi_sum, 0, mpi_comm_world, ierr)
+
+  sumbuf_rad_60_75 = hist_rad_60_75
+  call mpi_reduce(sumbuf_rad_60_75, hist_rad_60_75, num_entries, mpi_real8, mpi_sum, 0, mpi_comm_world, ierr)
+
+  sumbuf_rad_75_90 = hist_rad_75_90
+  call mpi_reduce(sumbuf_rad_75_90, hist_rad_75_90, num_entries, mpi_real8, mpi_sum, 0, mpi_comm_world, ierr)
+
+  sumbuf_rad_90_105 = hist_rad_90_105
+  call mpi_reduce(sumbuf_rad_90_105, hist_rad_90_105, num_entries, mpi_real8, mpi_sum, 0, mpi_comm_world, ierr)
+
+  sumbuf_rad_105_120 = hist_rad_105_120
+  call mpi_reduce(sumbuf_rad_105_120, hist_rad_105_120, num_entries, mpi_real8, mpi_sum, 0, mpi_comm_world, ierr)
+
   !Radius PDF at death
   sumbuf_raddeath = hist_raddeath
   call mpi_reduce(sumbuf_raddeath,hist_raddeath,num_entries,mpi_real8,mpi_sum,0,mpi_comm_world,ierr)
 
+  sumbuf_raddeath_act = hist_raddeath_act
+  call mpi_reduce(sumbuf_raddeath_act, hist_raddeath_act, num_entries, mpi_real8, mpi_sum, 0, mpi_comm_world, ierr)
+
+  sumbuf_raddeath_unact = hist_raddeath_unact
+  call mpi_reduce(sumbuf_raddeath_unact, hist_raddeath_unact, num_entries, mpi_real8, mpi_sum, 0, mpi_comm_world, ierr)
+
+  sumbuf_raddeath_accum = hist_raddeath_accum
+  call mpi_reduce(sumbuf_raddeath_accum, hist_raddeath_accum, num_entries, mpi_real8, mpi_sum, 0, mpi_comm_world, ierr)
+
+  sumbuf_raddeath_coarse = hist_raddeath_coarse
+  call mpi_reduce(sumbuf_raddeath_coarse, hist_raddeath_coarse, num_entries, mpi_real8, mpi_sum, 0, mpi_comm_world, ierr)
+
   !Residence time PDF
   sumbuf_res = hist_res
   call mpi_reduce(sumbuf_res,hist_res,num_entries,mpi_real8,mpi_sum,0,mpi_comm_world,ierr)
+
+  sumbuf_res_accum = hist_res_accum
+  call mpi_reduce(sumbuf_res_accum, hist_res_accum, num_entries, mpi_real8, mpi_sum, 0, mpi_comm_world, ierr)
+
+  sumbuf_res_coarse = hist_res_coarse
+  call mpi_reduce(sumbuf_res_coarse, hist_res_coarse, num_entries, mpi_real8, mpi_sum, 0, mpi_comm_world, ierr)
 
   !Activation residence time PDF
   sumbuf_actres = hist_actres
@@ -1491,6 +1685,12 @@ character :: fformat*10, num*3
   !Activation residence time until death PDF
   sumbuf_acttodeath = hist_acttodeath
   call mpi_reduce(sumbuf_acttodeath,hist_acttodeath,num_entries,mpi_real8,mpi_sum,0,mpi_comm_world,ierr)
+
+  sumbuf_acttodeath_accum = hist_acttodeath_accum
+  call mpi_reduce(sumbuf_acttodeath_accum, hist_acttodeath_accum, num_entries, mpi_real8, mpi_sum, 0, mpi_comm_world, ierr)
+
+  sumbuf_acttodeath_coarse = hist_acttodeath_coarse
+  call mpi_reduce(sumbuf_acttodeath_coarse, hist_acttodeath_coarse, num_entries, mpi_real8, mpi_sum, 0, mpi_comm_world, ierr)
 
   !# of activations PDF
   sumbuf_numact = hist_numact
@@ -1511,19 +1711,52 @@ character :: fformat*10, num*3
   fformat = '('//num//'e15.6)'
 
   write(nrad,fformat),hist_rad(1:histbins+2)
+  write(nrad, fformat), hist_rad_FL(1 : histbins + 2)
+  write(nrad, fformat), hist_rad_FL_act(1 : histbins + 2)
+  write(nrad, fformat), hist_rad_FL_unact(1 : histbins + 2)
+  write(nrad, fformat), hist_rad_FL_accum(1 : histbins + 2)
+  write(nrad, fformat), hist_rad_FL_coarse(1 : histbins + 2)
+  write(nrad, fformat), hist_rad_0_15(1 : histbins + 2)
+  write(nrad, fformat), hist_rad_15_30(1 : histbins + 2)
+  write(nrad, fformat), hist_rad_30_45(1 : histbins + 2)
+  write(nrad, fformat), hist_rad_45_60(1 : histbins + 2)
+  write(nrad, fformat), hist_rad_60_75(1 : histbins + 2)
+  write(nrad, fformat), hist_rad_75_90(1 : histbins + 2)
+  write(nrad, fformat), hist_rad_90_105(1 : histbins + 2)
+  write(nrad, fformat), hist_rad_105_120(1 : histbins + 2)
   write(nrad,fformat),hist_raddeath(1:histbins+2)
+  write(nrad, fformat), hist_raddeath_act(1 : histbins + 2)
+  write(nrad, fformat), hist_raddeath_unact(1 : histbins + 2)
+  write(nrad, fformat), hist_raddeath_accum(1 : histbins + 2)
+  write(nrad, fformat), hist_raddeath_coarse(1 : histbins + 2)
   write(nres,fformat),hist_res(1:histbins+2)
+  write(nres, fformat), hist_res_accum(1 : histbins + 2)
+  write(nres, fformat), hist_res_coarse(1 : histbins + 2)
   write(nactres,fformat),hist_actres(1:histbins+2)
 
   end if
 
   end if
 
-  hist_res = 0.0  !Reset this one every time it writes
-  hist_actres = 0.0  !Reset this one every time it writes
-  hist_acttodeath = 0.0  !Reset this one every time it writes
-  hist_numact = 0.0  !Reset this one every time it writes
-  hist_raddeath = 0.0 !Reset this one every time it writes
+  ! Reset everytime it writes
+  hist_res = 0.0
+
+  hist_res_accum = 0.0
+  hist_res_coarse = 0.0
+
+  hist_actres = 0.0
+  hist_acttodeath = 0.0
+
+  hist_acttodeath_accum = 0.0
+  hist_acttodeath_coarse = 0.0
+
+  hist_numact = 0.0
+  hist_raddeath = 0.0
+
+  hist_raddeath_act = 0.0
+  hist_raddeath_unact = 0.0
+  hist_raddeath_accum = 0.0
+  hist_raddeath_coarse = 0.0
 
 end subroutine write_histograms
 
