@@ -1,8 +1,9 @@
 c     ----------------------------------------------------------------------
       module pars
 c     ----------------------------------------------------------------------
-      integer :: iti,itmax,imean,ihst,itape
-      integer :: itstr,i_viz
+      integer :: iti,itmax,imean,itape
+      integer :: itstr
+      real :: i_viz,ihst
 
       integer :: ismlt,ifree,iradup,
      +     iupwnd,ibuoy,ifilt,itcut,isubs,ibrcl,iocean,method,

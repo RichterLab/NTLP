@@ -15,7 +15,7 @@ integer :: Swall_vid
 integer :: meanRH_vid,varRH_vid
 integer :: radavg_vid,radmsqr_vid
 integer :: radavg_center_vid,radmsqr_center_vid
-integer :: tdenum_vid,tactnum_vid,tnumimpos_vid
+integer :: tdenum_vid,tactnum_vid,tnumimpos_vid,tnum100_vid
 integer :: zw_vid,zw_dimid
 integer :: uxym_vid,vxym_vid,wxym_vid,txym_vid,RHxym_vid,tempxym_vid,exym_vid,RHmsqr_vid
 integer :: ups_vid,vps_vid,wps_vid,tps_vid
@@ -134,8 +134,11 @@ subroutine netcdf_init
       call netcdf_check( nf90_def_var(ncid, "tactnum", NF90_REAL, dimids,tactnum_vid) )
       call netcdf_check( nf90_put_att(ncid,tactnum_vid,"title","Number of particles activated") )
 
+      call netcdf_check( nf90_def_var(ncid, "tnum100", NF90_REAL, dimids,tnum100_vid) )
+      call netcdf_check( nf90_put_att(ncid,tnum100_vid,"title","Number of particles which did not converge Gauss-Newton solver since last history file write") )
+
       call netcdf_check( nf90_def_var(ncid, "tnumimpos", NF90_REAL, dimids,tnumimpos_vid) )
-      call netcdf_check( nf90_put_att(ncid,tnumimpos_vid,"title","Number of particles in this step which did not converge implicit solver") )
+      call netcdf_check( nf90_put_att(ncid,tnumimpos_vid,"title","Number of particles which did not converge BOTH implicit solvers since last history file write") )
 
       call netcdf_check( nf90_def_var(ncid, "tot_reintro", NF90_REAL, dimids,tot_reintro_vid) )
       call netcdf_check( nf90_put_att(ncid,tot_reintro_vid,"title","Particles introduced this time step") )
@@ -408,6 +411,7 @@ subroutine netcdf_res
       call netcdf_check( nf90_inq_varid(ncid,"tnum_destroy",tnum_destroy_vid) )
       call netcdf_check( nf90_inq_varid(ncid,"tdenum",tdenum_vid) )
       call netcdf_check( nf90_inq_varid(ncid,"tactnum",tactnum_vid) )
+      call netcdf_check( nf90_inq_varid(ncid,"tnum100",tnum100_vid) )
       call netcdf_check( nf90_inq_varid(ncid,"tnumimpos",tnumimpos_vid) )
       call netcdf_check( nf90_inq_varid(ncid,"tot_reintro",tot_reintro_vid) )
       call netcdf_check( nf90_inq_varid(ncid,"Tsfc",Tsfc_vid) )
@@ -520,6 +524,7 @@ subroutine write_his_netcdf
       call netcdf_check( nf90_put_var(ncid, tnum_destroy_vid, real(tnum_destroy),start=(/his_counter/)) )
       call netcdf_check( nf90_put_var(ncid, tdenum_vid, real(tdenum),start=(/his_counter/)) )
       call netcdf_check( nf90_put_var(ncid, tactnum_vid, real(tactnum),start=(/his_counter/)) )
+      call netcdf_check( nf90_put_var(ncid, tnum100_vid, real(tnum100),start=(/his_counter/)) )
       call netcdf_check( nf90_put_var(ncid, tnumimpos_vid, real(tnumimpos),start=(/his_counter/)) )
       call netcdf_check( nf90_put_var(ncid, tot_reintro_vid, real(tot_reintro),start=(/his_counter/)) )
       call netcdf_check( nf90_put_var(ncid, Tsfc_vid, real(tsfcc(1)),start=(/his_counter/)) )
@@ -628,6 +633,11 @@ subroutine write_his_netcdf
       call netcdf_check( nf90_put_var(ncid,p_base_vid,real(p_base(1:nnz)),start=(/1, his_counter/)) )
       call netcdf_check( nf90_put_var(ncid,T_base_vid,real(T_base(1:nnz)),start=(/1, his_counter/)) )
       call netcdf_check( nf90_put_var(ncid,theta_base_vid,real(theta_base(1:nnz)),start=(/1, his_counter/)) )
+
+      !Reset some cumulative quantities
+
+      num100 = 0
+      numimpos = 0
       his_counter = his_counter + 1
 
 end subroutine write_his_netcdf

@@ -221,8 +221,7 @@ c
        write(*,'(a15,3e15.6)') 'tempmin,tempmax:',time,tempmin,tempmax
        write(*,'(a15,3e15.6)') 'qmin,qmax:',time,qmin,qmax
        write(*,'(a15,3e15.6)') 'time,radavg:',time,radavg
-       write(*,'(a15,e15.6,3i)'),'time,100,1000,impos:',time,tnum100,
-     + tnum1000,tnumimpos
+       write(*,'(a15,e15.6,3i)'),'time,100,impos:',time,tnum100,tnumimpos
       !if (myid==0) write(*,*), 'time,actnum',time,tactnum
       !if (myid==0) write(*,*), 'time,denum',time,tdenum
       end if
@@ -288,9 +287,9 @@ c
       call bcast_pbc
       call bcast_lbc
       call get_means(istage)
-      if(ivis .eq. 1) then
+      if(ivis .eq. 1 .and. iDNS .ne. 1) then
          call iso
-         call surfvis
+	 call surfvis
       endif
       if(istage .eq. 1)then
         call xy_stats
@@ -316,10 +315,11 @@ c
       if(l_root) then
          if (inetcdf .eq. 1) then
            call start_phase(measurement_id_io_history)
-           if(mhis  .and. istage .eq. 1)  call write_his_netcdf
-           if(mhis  .and. istage .eq. 1 .and. mtape) then
+           if(mhis  .and. istage .eq. 1) then
+              call open_his_netcdf
+              call write_his_netcdf
               call close_his_netcdf
-           endif
+	   endif
            call end_phase(measurement_id_io_history)
 
          else
@@ -368,7 +368,9 @@ c
 
       if(mhis  .and. istage .eq. 1) then
           call start_phase(measurement_id_io_histograms)
+          call open_histog_netcdf
           call write_histograms
+          call close_histog_netcdf
           call end_phase(measurement_id_io_histograms)
       end if
 
@@ -414,7 +416,7 @@ c
       if(l_root) then
          if (inetcdf .eq. 1) then
            if(mhis  .and. istage .eq. 1 .and. mtape)  then
-              call close_histog_netcdf
+              !call close_histog_netcdf
            endif
          else
             if(mhis  .and. istage .eq. 1 .and. mtape) then
@@ -1954,6 +1956,7 @@ c
           call mpi_sum_xy(sfc_flx,myid,iss,ise,2)
           uwsfc = sfc_flx(1)*fnxy
           vwsfc = sfc_flx(2)*fnxy
+	  utau = sqrt(uwsfc**2 + vwsfc**2)
        end if
 c
 c ----------- x and z horizontal SGS fluxes for u, v, w
@@ -7133,18 +7136,21 @@ c
       mnout = (mod(it,imean).eq.0).or. (it.eq.1)
       mtape = (mod(it,itape).eq.0)
       micut = (mod(it,itcut).eq.0)
-      mviz  = (mod(it,i_viz).eq.0)
       if(ihst .lt. 0) then
          mhis = .false.
       else
-         mhis = (mod(it,ihst).eq.0 .and. it.ge.it_his .or. it.eq.1)
+         !mhis = (mod(it,ihst).eq.0 .and. it.ge.it_his .or. it.eq.1)
+	 mhis     = (floor(time/ihst) .ne. 
+     +              floor((time+dt)/ihst))
       endif
-       mtrans = (mod(it+1,ihst).eq.0)
+       mtrans = mhis
 
       if (i_viz .lt. 0) then
          msave_v = .false.
       else
-         msave_v = (mod(it,i_viz).eq.0 .and. it .ge. it_viz)
+         !msave_v = (mod(it,i_viz).eq.0 .and. it .ge. it_viz)
+	 msave_v = (floor(time/i_viz) .ne. 
+     +              floor((time+dt)/i_viz))
       endif
 c
 c ---------- decide whether velocity fields are saved
@@ -7172,8 +7178,8 @@ c --------- decide whether history files are to be saved
 c
       if((ihst .gt. 0) .and. (it .ge. it_his_nxt)) then
          if (inetcdf .eq. 1) then
-            call open_his_netcdf
-            call open_histog_netcdf
+            !call open_his_netcdf
+            !call open_histog_netcdf
          else
             call open_histograms
             call open_his
