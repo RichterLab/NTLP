@@ -78,6 +78,9 @@ else # DEBUG == no
 # Enable optimizations that are almost always beneficial.
 FLAGS += -O2
 
+# Compile the droplet model with full optimizations so we get vectorized code.
+MODEL_FLAGS += -O3
+
 endif
 
 # NetCDF output is always enabled.  Make sure we can find its headers and
@@ -112,10 +115,9 @@ TECFLAGS = -DTECIO
 TECLIB   = ~/Research/tecio/libteciompi.a
 TECLINK  = -lm -lstdc++ -lgcc_eh
 
-ROSENNA_DIR = droplet_approximation/rosenna
-
 SRC = data_structures.f90 \
       defs.F \
+      droplet_model.f90 \
       fft.f \
       kdtree.f90 \
       les.F \
@@ -126,19 +128,9 @@ SRC = data_structures.f90 \
 
 BENCHMARK_SRC = benchmark_approximation.f90
 
-ROSENNA_SRC = $(addprefix $(ROSENNA_DIR)/, \
-                          activation_funcs.f90 \
-                          derived_types.f90 \
-                          layers.f90 \
-                          modelCreator.f90 \
-                          reader.f90 \
-                          rosenna.f90)
-
 OBJS = $(addsuffix .o, $(basename $(SRC)))
 
 BENCHMARK_OBJS = $(addsuffix .o, $(basename $(BENCHMARK_SRC)))
-
-ROSENNA_OBJS = $(addsuffix .o, $(basename $(ROSENNA_SRC)))
 
 ifeq ($(TECPLOT), yes)
 FLAGS    += $(TECFLAGS)
@@ -147,6 +139,11 @@ endif
 
 lesmpi.a: $(OBJS)
 	$(FORTRAN) $^ -o $@  $(FLAGS) $(DEBUG_FLAGS) $(OUTPUTINC) $(OUTPUTLIB) $(LINKOPTS)
+
+# Apply the model compilation flags so we have finer-grained control on
+# generating optimized code.
+droplet_model.o: droplet_model.f90
+	$(FORTRAN) $(FLAGS) $(MODEL_FLAGS) $(DEBUG_FLAGS) -c $< $(OUTPUTINC) $(OUTPUTLIB)
 
 %.o: %.f
 	$(FORTRAN) $(FLAGS) $(DEBUG_FLAGS) -c $< $(OUTPUTINC) $(OUTPUTLIB)
@@ -159,20 +156,10 @@ lesmpi.a: $(OBJS)
 
 
 clean:
-	rm -f *.o $(ROSENNA_DIR)/*.o *.mod lesmpi.a librosenna.a benchmark_approximation.x mach.file
+	rm -f *.o *.mod lesmpi.a benchmark_approximation.x mach.file
 
-#
-# NOTE: We specify the higher level of optimization *after* the flags so it
-#       overrides anything previously specified.
-#
-$(ROSENNA_DIR)/%.o: $(ROSENNA_DIR)/%.f90
-	$(FORTRAN) $(FLAGS) $(DEBUG_FLAGS) -O3 -c $< -o $@
-
-librosenna.a: $(ROSENNA_OBJS)
-	ar crv librosenna.a $^
-
-benchmark_approximation.x: $(BENCHMARK_OBJS) librosenna.a measurement.o data_structures.o
-	$(FORTRAN) $(FLAGS) $(DEBUG_FLAGS) -O3 $(OUTPUTLIB) $(LINKOPTS) -o $@ $^
+benchmark_approximation.x: $(BENCHMARK_OBJS) measurement.o data_structures.o droplet_model.o
+	$(FORTRAN) $(FLAGS) $(DEBUG_FLAGS) $(MODEL_FLAGS) $(OUTPUTLIB) $(LINKOPTS) -o $@ $^
 
 # Dependencies between the individual objects.
 les.o: defs.o measurement.o netcdf_io.o particles.o tec_io.o
@@ -181,10 +168,4 @@ particles.o: defs.o measurement.o
 netcdf_io.o: particles.o
 tec_io.o: particles.o
 
-benchmark_approximation.o: measurement.o librosenna.a
-
-$(ROSENNA_DIR)/derived_types.o: $(ROSENNA_DIR)/activation_funcs.o
-$(ROSENNA_DIR)/layers.o: $(ROSENNA_DIR)/activation_funcs.o $(ROSENNA_DIR)/derived_types.o
-$(ROSENNA_DIR)/modelCreator.o: $(ROSENNA_DIR)/activation_funcs.o $(ROSENNA_DIR)/layers.o $(ROSENNA_DIR)/reader.o
-$(ROSENNA_DIR)/reader.o: $(ROSENNA_DIR)/derived_types.o $(ROSENNA_DIR)/activation_funcs.o
-$(ROSENNA_DIR)/rosenna.o: $(ROSENNA_DIR)/activation_funcs.o $(ROSENNA_DIR)/derived_types.o $(ROSENNA_DIR)/modelCreator.o $(ROSENNA_DIR)/layers.o $(ROSENNA_DIR)/reader.o 
+benchmark_approximation.o: measurement.o droplet_model.o

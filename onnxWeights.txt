@@ -1,1 +1,0 @@
-droplet_approximation/model/onnxWeights.txt
