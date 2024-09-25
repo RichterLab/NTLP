@@ -263,7 +263,7 @@ c ----------------------------------------------------------------------
      +           t_wp(maxnz), t_tau(maxnz),
      +           t_tran(maxnz), t_buoy(maxnz),
      +           t_diss(maxnz), t_sprod(maxnz),
-     +           zconc(maxnz),
+     +           zconc(maxnz), !zconc_accum(maxnz), zconc_coarse(maxnz),
      +           vp1mean(maxnz),vp2mean(maxnz),vp3mean(maxnz),
      +           vp1msqr(maxnz),vp2msqr(maxnz),vp3msqr(maxnz),
      +           uf1mean(maxnz),uf2mean(maxnz),uf3mean(maxnz),
@@ -276,11 +276,13 @@ c ----------------------------------------------------------------------
      +           Tv_tran(maxnz,nscl),Tv_prod(maxnz,nscl),
      +           Tv_diss(maxnz,nscl),
      +           Tv_part1(maxnz,nscl),Tv_part2(maxnz),
-     +           radmean(maxnz),rad2mean(maxnz),
-     +           multmean(maxnz),mwmean(maxnz), 
-     +           Nc(maxnz),ql(maxnz),  
-     +           Hpsrc(maxnz),TEpsrc(maxnz),
-     +           qstarm(maxnz),
+     +           radmean(maxnz), !radmean_accum(maxnz),
+!     +           radmean_coarse(maxnz),
+     +           rad2mean(maxnz),multmean(maxnz),mwmean(maxnz),
+     +           Nc(maxnz), !Nc_accum(maxnz), Nc_coarse(maxnz),
+     +           ql(maxnz), !ql_accum(maxnz), ql_coarse(maxnz),
+!     +           LWC_accum(maxnz), LWC_coarse(maxnz),
+     +           Hpsrc(maxnz),TEpsrc(maxnz),qstarm(maxnz),
      +           trip(maxnz),TpSq(maxnz),Tpdqp(maxnz),
      +           radtend(maxnz),
      +           RHxym(maxnz),RHmsqr(maxnz),tempxym(maxnz),
@@ -311,7 +313,7 @@ c ----------------------------------------------------------------------
      +           wps(:), tps(:,:), t_rprod(:), t_wq(:),
      +           t_wp(:), t_tau(:), t_tran(:), t_buoy(:),
      +           t_diss(:), t_sprod(:),
-     +           zconc(:),
+     +           zconc(:), !zconc_accum(:), zconc_coarse(:),
      +           vp1mean(:),vp2mean(:),vp3mean(:),
      +           vp1msqr(:),vp2msqr(:),vp3msqr(:),
      +           uf1mean(:),uf2mean(:),uf3mean(:),
@@ -323,11 +325,12 @@ c ----------------------------------------------------------------------
      +           wpTpm(:),Tpsrc(:),
      +           Tv_tran(:,:),Tv_prod(:,:),Tv_diss(:,:),
      +           Tv_part1(:,:),Tv_part2(:),
-     +           radmean(:),rad2mean(:),
-     +           multmean(:),mwmean(:),
-     +           Nc(:),ql(:), 
-     +           Hpsrc(:), TEpsrc(:),
-     +           qstarm(:),
+     +           radmean(:), !radmean_accum(:), radmean_coarse(:),
+     +           rad2mean(:),multmean(:),mwmean(:),
+     +           Nc(:), !Nc_accum(:), Nc_coarse(:),
+     +           ql(:), !ql_accum(:), ql_coarse(:),
+!     +           LWC_accum(:), LWC_coarse(:),
+     +           Hpsrc(:), TEpsrc(:),qstarm(:),
      +           trip(:),TpSq(:),Tpdqp(:),
      +           radtend(:),
      +           RHxym(:),RHmsqr(:),tempxym(:),
@@ -394,6 +397,10 @@ c
              t_diss  => c_s%t_diss   ; isize = isize + size(t_diss)
              t_sprod => c_s%t_sprod  ; isize = isize + size(t_sprod)
              zconc   => c_s%zconc    ; isize = isize + size(zconc)
+             !zconc_accum => c_s%zconc_accum;
+             !isize = isize + size(zconc_accum)
+             !zconc_coarse => c_s%zconc_coarse;
+             !isize = isize + size(zconc_coarse)
              vp1mean  => c_s%vp1mean ; isize = isize + size(vp1mean)
              vp2mean  => c_s%vp2mean ; isize = isize + size(vp2mean)
              vp3mean  => c_s%vp3mean ; isize = isize + size(vp3mean)
@@ -419,25 +426,36 @@ c
              Tv_tran => c_s%Tv_tran  ; isize = isize + size(Tv_tran)
              Tv_prod => c_s%Tv_prod  ; isize = isize + size(Tv_prod)
              Tv_diss => c_s%Tv_diss  ; isize = isize + size(Tv_diss)
-             Tv_part1 => c_s%Tv_part1  ; isize = isize + size(Tv_part1)
-             Tv_part2 => c_s%Tv_part2  ; isize = isize + size(Tv_part2)
-             radmean => c_s%radmean  ; isize = isize + size(radmean)
-             rad2mean => c_s%rad2mean  ; isize = isize + size(rad2mean)
-             multmean => c_s%multmean ; isize = isize + size(multmean)
+             Tv_part1 => c_s%Tv_part1; isize = isize + size(Tv_part1)
+             Tv_part2 => c_s%Tv_part2; isize = isize + size(Tv_part2)
+             radmean => c_s%radmean; isize = isize + size(radmean)
+             !radmean_accum => c_s%radmean_accum;
+             !isize = isize + size(radmean_accum)
+             !radmean_coarse => c_s%radmean_coarse;
+             !isize = isize + size(radmean_coarse)
+             rad2mean => c_s%rad2mean; isize = isize + size(rad2mean)
+             multmean => c_s%multmean; isize = isize + size(multmean)
              mwmean => c_s%mwmean    ; isize = isize + size(mwmean) 
-             Nc => c_s%Nc    ; isize = isize + size(Nc) 
-             ql => c_s%ql    ; isize = isize + size(ql)
-             Hpsrc   => c_s%Hpsrc    ; isize = isize + size(Hpsrc)
-             TEpsrc  => c_s%TEpsrc  ; isize = isize + size(TEpsrc)
+             Nc => c_s%Nc              ; isize = isize + size(Nc)
+             !Nc_accum => c_s%Nc_accum  ; isize = isize + size(Nc_accum)
+             !Nc_coarse => c_s%Nc_coarse; isize = isize + size(Nc_coarse)
+             ql => c_s%ql              ; isize = isize + size(ql)
+             !ql_accum => c_s%ql_accum  ; isize = isize + size(ql_accum)
+             !ql_coarse => c_s%ql_coarse; isize = isize + size(ql_coarse)
+             !LWC_accum => c_s%LWC_accum; isize = isize + size(LWC_accum)
+             !LWC_coarse => c_s%LWC_coarse;
+             !isize = isize + size(LWC_coarse)
+             Hpsrc   => c_s%Hpsrc  ; isize = isize + size(Hpsrc)
+             TEpsrc  => c_s%TEpsrc ; isize = isize + size(TEpsrc)
              qstarm => c_s%qstarm  ; isize = isize + size(qstarm)
-             trip => c_s%trip; isize = isize + size(trip)
-             TpSq => c_s%TpSq; isize = isize + size(TpSq)
-             Tpdqp => c_s%Tpdqp; isize = isize + size(Tpdqp)
+             trip => c_s%trip      ; isize = isize + size(trip)
+             TpSq => c_s%TpSq      ; isize = isize + size(TpSq)
+             Tpdqp => c_s%Tpdqp    ; isize = isize + size(Tpdqp)
              radtend => c_s%radtend; isize = isize + size(radtend)
-             RHxym => c_s%RHxym; isize = isize + size(RHxym)
-             RHmsqr => c_s%RHmsqr; isize = isize + size(RHmsqr)
+             RHxym => c_s%RHxym    ; isize = isize + size(RHxym)
+             RHmsqr => c_s%RHmsqr  ; isize = isize + size(RHmsqr)
              tempxym => c_s%tempxym; isize = isize + size(tempxym)
-             pflux => c_s%pflux; isize = isize + size(pflux)
+             pflux => c_s%pflux    ; isize = isize + size(pflux)
              pfluxdiff => c_s%pfluxdiff; isize = isize + size(pfluxdiff)
              pmassflux => c_s%pmassflux; isize = isize + size(pmassflux)
              penegflux => c_s%penegflux; isize = isize + size(penegflux)

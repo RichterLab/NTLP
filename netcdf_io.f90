@@ -23,7 +23,7 @@ integer :: wtle_vid,wtsb_vid
 integer :: uwle_vid,uwsb_vid
 integer :: vwle_vid,vwsb_vid
 integer :: t_diss_vid,t_rprod_vid,t_sprod_vid,t_tran_vid,t_buoy_vid
-integer :: zconc_vid
+integer :: zconc_vid!, zconc_accum_vid, zconc_coarse_vid
 integer :: pflux_vid,pfluxdiff_vid
 integer :: pmassflux_vid,penegflux_vid
 integer :: vp1mean_vid,vp2mean_vid,vp3mean_vid
@@ -34,9 +34,11 @@ integer :: m1src_vid,m2src_vid,m3src_vid
 integer :: Tpsrc_vid,TEpsrc_vid,Hpsrc_vid
 integer :: Tpmean_vid,Tpmsqr_vid
 integer :: Tfmean_vid,qfmean_vid
-integer :: radmean_vid,rad2mean_vid
-integer :: qstarm_vid
-integer :: Nc_vid,ql_vid,radsrc_vid
+integer :: radmean_vid!, radmean_accum_vid, radmean_coarse_vid
+integer :: rad2mean_vid,qstarm_vid,radsrc_vid
+integer :: ql_vid!, ql_accum_vid, ql_coarse_vid
+!integer :: LWC_accum_vid, LWC_coarse_vid
+integer :: Nc_vid!, Nc_accum_vid, Nc_coarse_vid
 integer :: rho_base_vid,p_base_vid,T_base_vid,theta_base_vid
 integer :: radbins_vid,resbins_vid
 integer :: radhist_vid, radhist_FL_vid, radhist_FL_act_vid, radhist_FL_unact_vid
@@ -46,7 +48,7 @@ integer :: radhist_75_90_vid, radhist_90_105_vid, radhist_105_120_vid
 integer :: radhistdeath_vid, radhistdeath_act_vid, radhistdeath_unact_vid
 integer :: radhistdeath_accum_vid, radhistdeath_coarse_vid
 integer :: reshist_vid, reshist_accum_vid, reshist_coarse_vid
-integer :: actresbins_vid, actreshist_vid
+integer :: actresbins_vid, actreshist_vid, actreshist_accum_vid, actreshist_coarse_vid
 integer :: acttodeathbins_vid, acttodeathhist_vid, acttodeathhist_accum_vid, acttodeathhist_coarse_vid
 integer :: numactbins_vid,numacthist_vid
 
@@ -256,6 +258,12 @@ subroutine netcdf_init
       call netcdf_check( nf90_def_var(ncid,"zconc",NF90_REAL, dimids_zu,zconc_vid) )
       call netcdf_check( nf90_put_att(ncid,zconc_vid,"title","Computational droplet number concentration") )
 
+      !call netcdf_check(nf90_def_var(ncid, "zconc_accum", NF90_REAL, dimids_zu, zconc_accum_vid))
+      !call netcdf_check(nf90_put_att(ncid, zconc_accum_vid, "title", "Computational droplet (accumulation mode) number concentration"))
+
+      !call netcdf_check(nf90_def_var(ncid, "zconc_coarse", NF90_REAL, dimids_zu, zconc_coarse_vid))
+      !call netcdf_check(nf90_put_att(ncid, zconc_coarse_vid, "title", "Computational droplet (coarse mode) number concentration"))
+
       call netcdf_check( nf90_def_var(ncid,"pflux",NF90_REAL, dimids_zw,pflux_vid) )
       call netcdf_check( nf90_put_att(ncid,pflux_vid,"title","Flux of particles through zw points due to gravity/advection") )
 
@@ -337,6 +345,12 @@ subroutine netcdf_init
       call netcdf_check( nf90_def_var(ncid,"radmean",NF90_REAL, dimids_zu,radmean_vid) )
       call netcdf_check( nf90_put_att(ncid,radmean_vid,"title","Horiz. avg. particle radius") )
 
+      !call netcdf_check(nf90_def_var(ncid, "radmean_accum", NF90_REAL, dimids_zu, radmean_accum_vid))
+      !call netcdf_check(nf90_put_att(ncid, radmean_accum_vid, "title", "Horiz. avg. accumulation mode particle radius"))
+
+      !call netcdf_check(nf90_def_var(ncid, "radmean_coarse", NF90_REAL, dimids_zu, radmean_coarse_vid))
+      !call netcdf_check(nf90_put_att(ncid, radmean_coarse_vid, "title", "Horiz. avg. coarse mode particle radius"))
+
       call netcdf_check( nf90_def_var(ncid,"rad2mean",NF90_REAL, dimids_zu,rad2mean_vid) )
       call netcdf_check( nf90_put_att(ncid,rad2mean_vid,"title","Mean squared particle radius <rp^2>") )
 
@@ -346,8 +360,26 @@ subroutine netcdf_init
       call netcdf_check( nf90_def_var(ncid,"Nc",NF90_REAL, dimids_zu,Nc_vid) )
       call netcdf_check( nf90_put_att(ncid,Nc_vid,"title","Horiz. avg. total number concentration") )
 
+      !call netcdf_check(nf90_def_var(ncid, "Nc_accum", NF90_REAL, dimids_zu, Nc_accum_vid))
+      !call netcdf_check(nf90_put_att(ncid, Nc_accum_vid, "title", "Horiz. avg. total (accumulation mode) number concentration"))
+
+      !call netcdf_check(nf90_def_var(ncid, "Nc_coarse", NF90_REAL, dimids_zu, Nc_coarse_vid))
+      !call netcdf_check(nf90_put_att(ncid, Nc_coarse_vid, "title", "Horiz. avg. total (coarse mode) number concentration"))
+
       call netcdf_check( nf90_def_var(ncid,"ql",NF90_REAL, dimids_zu,ql_vid) )
       call netcdf_check( nf90_put_att(ncid,ql_vid,"title","Horiz. avg. liquid droplet mixing ratio") )
+
+      !call netcdf_check(nf90_def_var(ncid, "ql_accum", NF90_REAL, dimids_zu, ql_accum_vid))
+      !call netcdf_check(nf90_put_att(ncid, ql_accum_vid, "title", "Horiz. avg. (accumulation mode) liquid droplet mixing ratio"))
+
+      !call netcdf_check(nf90_def_var(ncid, "ql_coarse", NF90_REAL, dimids_zu, ql_coarse_vid))
+      !call netcdf_check(nf90_put_att(ncid, ql_coarse_vid, "title", "Horiz. avg. (coarse mode) liquid droplet mixing ratio"))
+
+      !call netcdf_check(nf90_def_var(ncid, "LWC_accum", NF90_REAL, dimids_zu, LWC_accum_vid))
+      !call netcdf_check(nf90_put_att(ncid, LWC_accum_vid, "title", "Horiz. avg. (accumulation mode) liquid water content"))
+
+      !call netcdf_check(nf90_def_var(ncid, "LWC_coarse", NF90_REAL, dimids_zu, LWC_coarse_vid))
+      !call netcdf_check(nf90_put_att(ncid, LWC_coarse_vid, "title", "Horiz. avg. (coarse mode) liquid water content"))
 
       call netcdf_check( nf90_def_var(ncid,"radsrc",NF90_REAL, dimids_zu,radsrc_vid) )
       call netcdf_check( nf90_put_att(ncid,radsrc_vid,"title","Radiation tendency from the longwave model") )
@@ -454,6 +486,8 @@ subroutine netcdf_res
       call netcdf_check( nf90_inq_varid(ncid,"t_buoy",t_buoy_vid) )
       call netcdf_check( nf90_inq_varid(ncid,"t_diss",t_diss_vid) )
       call netcdf_check( nf90_inq_varid(ncid,"zconc",zconc_vid) )
+      !call netcdf_check(nf90_inq_varid(ncid, "zconc_accum", zconc_accum_vid))
+      !call netcdf_check(nf90_inq_varid(ncid, "zconc_coarse", zconc_coarse_vid))
       call netcdf_check( nf90_inq_varid(ncid,"pflux",pflux_vid) )
       call netcdf_check( nf90_inq_varid(ncid,"pfluxdiff",pfluxdiff_vid) )
       call netcdf_check( nf90_inq_varid(ncid,"pmassflux",pmassflux_vid) )
@@ -481,10 +515,18 @@ subroutine netcdf_res
       call netcdf_check( nf90_inq_varid(ncid,"Tfmean",Tfmean_vid) )
       call netcdf_check( nf90_inq_varid(ncid,"qfmean",qfmean_vid) )
       call netcdf_check( nf90_inq_varid(ncid,"radmean",radmean_vid) )
+      !call netcdf_check(nf90_inq_varid(ncid, "radmean_accum", radmean_accum_vid))
+      !call netcdf_check(nf90_inq_varid(ncid, "radmean_coarse", radmean_coarse_vid))
       call netcdf_check( nf90_inq_varid(ncid,"rad2mean",rad2mean_vid) )
       call netcdf_check( nf90_inq_varid(ncid,"qstarm",qstarm_vid) )
       call netcdf_check( nf90_inq_varid(ncid,"Nc",Nc_vid) )
+      !call netcdf_check(nf90_inq_varid(ncid, "Nc_accum", Nc_accum_vid))
+      !call netcdf_check(nf90_inq_varid(ncid, "Nc_coarse", Nc_coarse_vid))
       call netcdf_check( nf90_inq_varid(ncid,"ql",ql_vid) )
+      !call netcdf_check(nf90_inq_varid(ncid, "ql_accum", ql_accum_vid))
+      !call netcdf_check(nf90_inq_varid(ncid, "ql_coarse", ql_coarse_vid))
+      !call netcdf_check(nf90_inq_varid(ncid, "LWC_accum", LWC_accum_vid))
+      !call netcdf_check(nf90_inq_varid(ncid, "LWC_coarse", LWC_coarse_vid))
       call netcdf_check( nf90_inq_varid(ncid,"radsrc",radsrc_vid) )
       call netcdf_check( nf90_inq_varid(ncid,"rho_base",rho_base_vid) )
       call netcdf_check( nf90_inq_varid(ncid,"p_base",p_base_vid) )
@@ -593,6 +635,8 @@ subroutine write_his_netcdf
       call netcdf_check( nf90_put_var(ncid,t_diss_vid,real(tmp),start=(/1, his_counter/)) )
 
       call netcdf_check( nf90_put_var(ncid,zconc_vid,real(zconc(1:nnz)),start=(/1, his_counter/)) )
+      !call netcdf_check(nf90_put_var(ncid, zconc_accum_vid, real(zconc_accum(1 : nnz)), start=(/1, his_counter/)))
+      !call netcdf_check(nf90_put_var(ncid, zconc_coarse_vid, real(zconc_coarse(1 : nnz)), start=(/1, his_counter/)))
       call netcdf_check( nf90_put_var(ncid,pflux_vid,real(pflux(0:nnz)),start=(/1, his_counter/)) )
       call netcdf_check( nf90_put_var(ncid,pfluxdiff_vid,real(pfluxdiff(0:nnz)),start=(/1, his_counter/)) )
       call netcdf_check( nf90_put_var(ncid,pmassflux_vid,real(pmassflux(0:nnz)),start=(/1, his_counter/)) )
@@ -623,10 +667,18 @@ subroutine write_his_netcdf
       call netcdf_check( nf90_put_var(ncid,Tfmean_vid,real(Tfmean(1:nnz)),start=(/1, his_counter/)) )
       call netcdf_check( nf90_put_var(ncid,qfmean_vid,real(qfmean(1:nnz)),start=(/1, his_counter/)) )
       call netcdf_check( nf90_put_var(ncid,radmean_vid,real(radmean(1:nnz)),start=(/1, his_counter/)) )
+      !call netcdf_check(nf90_put_var(ncid, radmean_accum_vid, real(radmean_accum(1 : nnz)), start=(/1, his_counter/)))
+      !call netcdf_check(nf90_put_var(ncid, radmean_coarse_vid, real(radmean_coarse(1 : nnz)), start=(/1, his_counter/)))
       call netcdf_check( nf90_put_var(ncid,rad2mean_vid,real(rad2mean(1:nnz)),start=(/1, his_counter/)) )
       call netcdf_check( nf90_put_var(ncid,qstarm_vid,real(qstarm(1:nnz)),start=(/1, his_counter/)) )
       call netcdf_check( nf90_put_var(ncid,Nc_vid,real(Nc(1:nnz)),start=(/1, his_counter/)) )
+      !call netcdf_check(nf90_put_var(ncid, Nc_accum_vid, real(Nc_accum(1 : nnz)), start=(/1, his_counter/)))
+      !call netcdf_check(nf90_put_var(ncid, Nc_coarse_vid, real(Nc_coarse(1 : nnz)), start=(/1, his_counter/)))
       call netcdf_check( nf90_put_var(ncid,ql_vid,real(ql(1:nnz)),start=(/1, his_counter/)) )
+      !call netcdf_check(nf90_put_var(ncid, ql_accum_vid, real(ql_accum(1 : nnz)), start=(/1, his_counter/)))
+      !call netcdf_check(nf90_put_var(ncid, ql_coarse_vid, real(ql_coarse(1 : nnz)), start=(/1, his_counter/)))
+      !call netcdf_check(nf90_put_var(ncid, LWC_accum_vid, real(LWC_accum(1 : nnz)), start=(/1, his_counter/)))
+      !call netcdf_check(nf90_put_var(ncid, LWC_coarse_vid, real(LWC_coarse(1 : nnz)), start=(/1, his_counter/)))
       call netcdf_check( nf90_put_var(ncid,radsrc_vid,real(radsrc(1:nnz)),start=(/1, his_counter/)) )
 
       call netcdf_check( nf90_put_var(ncid,rho_base_vid,real(rho_base(1:nnz)),start=(/1, his_counter/)) )
@@ -756,6 +808,12 @@ subroutine netcdf_init_histog
       call netcdf_check( nf90_def_var(ncid_histog, "actreshist", NF90_REAL, dimids_t_bins,actreshist_vid) )
       call netcdf_check( nf90_put_att(ncid_histog,actreshist_vid,"title","Histogram of residence time of particles which deactivated OR died over past ihst") )
 
+      call netcdf_check(nf90_def_var(ncid_histog, "actreshist_accum", NF90_REAL, dimids_t_bins, actreshist_accum_vid))
+      call netcdf_check(nf90_put_att(ncid_histog, actreshist_accum_vid, "title", "Histogram of residence time of accumulation mode particles which deactivated OR died over past ihst"))
+
+      call netcdf_check(nf90_def_var(ncid_histog, "actreshist_coarse", NF90_REAL, dimids_t_bins, actreshist_coarse_vid))
+      call netcdf_check(nf90_put_att(ncid_histog, actreshist_coarse_vid, "title", "Histogram of residence time of coarse mode particles which deactivated OR died over past ihst"))
+
       call netcdf_check( nf90_def_var(ncid_histog, "acttodeathhist", NF90_REAL, dimids_t_bins,acttodeathhist_vid) )
       call netcdf_check( nf90_put_att(ncid_histog,acttodeathhist_vid,"title","Histogram of residence time of particles which deactivated OR died over past ihst") )
 
@@ -834,6 +892,8 @@ subroutine netcdf_res_histog
       call netcdf_check(nf90_inq_varid(ncid_histog, "reshist_accum", reshist_accum_vid))
       call netcdf_check(nf90_inq_varid(ncid_histog, "reshist_coarse", reshist_coarse_vid))
       call netcdf_check( nf90_inq_varid(ncid_histog, "actreshist",actreshist_vid) )
+      call netcdf_check(nf90_inq_varid(ncid_histog, "actreshist_accum", actreshist_accum_vid))
+      call netcdf_check(nf90_inq_varid(ncid_histog, "actreshist_coarse", actreshist_coarse_vid))
       call netcdf_check( nf90_inq_varid(ncid_histog, "acttodeathhist",acttodeathhist_vid) )
       call netcdf_check(nf90_inq_varid(ncid_histog, "acttodeathhist_accum", acttodeathhist_accum_vid))
       call netcdf_check(nf90_inq_varid(ncid_histog, "acttodeathhist_coarse", acttodeathhist_coarse_vid))
@@ -889,9 +949,11 @@ subroutine write_histog_netcdf
       call netcdf_check(nf90_put_var(ncid_histog, reshist_accum_vid, real(hist_res_accum), start=(/1, histog_counter/)))
       call netcdf_check(nf90_put_var(ncid_histog, reshist_coarse_vid, real(hist_res_coarse), start=(/1, histog_counter/)))
       call netcdf_check( nf90_put_var(ncid_histog, actreshist_vid, real(hist_actres),start=(/1,histog_counter/)) )
+      call netcdf_check(nf90_put_var(ncid_histog, actreshist_accum_vid, real(hist_actres_accum), start=(/1, histog_counter/)))
+      call netcdf_check(nf90_put_var(ncid_histog, actreshist_coarse_vid, real(hist_actres_coarse), start=(/1, histog_counter/)))
       call netcdf_check( nf90_put_var(ncid_histog, acttodeathhist_vid, real(hist_acttodeath),start=(/1,histog_counter/)) )
-      call netcdf_check(nf90_put_var(ncid_histog, acttodeathhist_accum_vid, real(hist_acttodeath_accum), start=(/1,histog_counter/)))
-      call netcdf_check(nf90_put_var(ncid_histog, acttodeathhist_coarse_vid, real(hist_acttodeath_coarse), start=(/1,histog_counter/)))
+      call netcdf_check(nf90_put_var(ncid_histog, acttodeathhist_accum_vid, real(hist_acttodeath_accum), start=(/1, histog_counter/)))
+      call netcdf_check(nf90_put_var(ncid_histog, acttodeathhist_coarse_vid, real(hist_acttodeath_coarse), start=(/1, histog_counter/)))
       call netcdf_check( nf90_put_var(ncid_histog, numacthist_vid, real(hist_numact),start=(/1,histog_counter/)) )
 
       histog_counter = histog_counter + 1
@@ -1606,6 +1668,8 @@ real :: sumbuf_res(histbins+2)
 real :: sumbuf_res_accum(histbins + 2)
 real :: sumbuf_res_coarse(histbins + 2)
 real :: sumbuf_actres(histbins+2)
+real :: sumbuf_actres_accum(histbins + 2)
+real :: sumbuf_actres_coarse(histbins + 2)
 real :: sumbuf_acttodeath(histbins+2)
 real :: sumbuf_acttodeath_accum(histbins + 2)
 real :: sumbuf_acttodeath_coarse(histbins + 2)
@@ -1692,6 +1756,12 @@ character :: fformat*10, num*3
   sumbuf_actres = hist_actres
   call mpi_reduce(sumbuf_actres,hist_actres,num_entries,mpi_real8,mpi_sum,0,mpi_comm_world,ierr)
 
+  sumbuf_actres_accum = hist_actres_accum
+  call mpi_reduce(sumbuf_actres_accum, hist_actres_accum, num_entries, mpi_real8, mpi_sum, 0, mpi_comm_world, ierr)
+
+  sumbuf_actres_coarse = hist_actres_coarse
+  call mpi_reduce(sumbuf_actres_coarse, hist_actres_coarse, num_entries, mpi_real8, mpi_sum, 0, mpi_comm_world, ierr)
+
   !Activation residence time until death PDF
   sumbuf_acttodeath = hist_acttodeath
   call mpi_reduce(sumbuf_acttodeath,hist_acttodeath,num_entries,mpi_real8,mpi_sum,0,mpi_comm_world,ierr)
@@ -1743,6 +1813,8 @@ character :: fformat*10, num*3
   write(nres, fformat), hist_res_accum(1 : histbins + 2)
   write(nres, fformat), hist_res_coarse(1 : histbins + 2)
   write(nactres,fformat),hist_actres(1:histbins+2)
+  write(nactres, fformat), hist_actres_accum(1 : histbins + 2)
+  write(nactres, fformat), hist_actres_coarse(1 : histbins + 2)
 
   end if
 
@@ -1750,23 +1822,24 @@ character :: fformat*10, num*3
 
   ! Reset everytime it writes
   hist_res = 0.0
-
   hist_res_accum = 0.0
   hist_res_coarse = 0.0
 
   hist_actres = 0.0
-  hist_acttodeath = 0.0
+  hist_actres_accum = 0.0
+  hist_actres_coarse = 0.0
 
+  hist_acttodeath = 0.0
   hist_acttodeath_accum = 0.0
   hist_acttodeath_coarse = 0.0
 
-  hist_numact = 0.0
   hist_raddeath = 0.0
-
   hist_raddeath_act = 0.0
   hist_raddeath_unact = 0.0
   hist_raddeath_accum = 0.0
   hist_raddeath_coarse = 0.0
+
+  hist_numact = 0.0
 
 end subroutine write_histograms
 

@@ -692,8 +692,8 @@ c
 
       end do
 
-      if (tauc/15.0 .lt. dt_new) then
-            dt_new = tauc/15.0
+      if (tauc/50.0 .lt. dt_new) then   !"tauc/15.0"
+            dt_new = tauc/50.0
             if (l_root) then
             write(6,6210) dt_new, dt_cfl, tauc
  6210       format(' 6210 cfl time step too large for droplets',/,
@@ -3100,12 +3100,12 @@ c
       end if
 
       ! FATIMA ADV. CASE SETUP
-      if (icase.eq.6) then
+      !if (icase.eq.6) then
 
         !if (time .gt. 1800.0) then   !3600.0
 
-          tsfcc(1) = 291.0   !286.5
-          surf_rho = surf_p/Rd/tsfcc(1)
+          !tsfcc(1) = 291.0   !286.5
+          !surf_rho = surf_p/Rd/tsfcc(1)
 
         !else
 
@@ -3114,7 +3114,7 @@ c
 
         !end if
 
-      end if 
+      !end if 
 
 
       iz   = 1
@@ -7627,6 +7627,20 @@ c
          stat(iz,41) = stat(iz,41) + ufsqrsum(ix,iy,iz,1)
          stat(iz,42) = stat(iz,42) + ufsqrsum(ix,iy,iz,2)
          stat(iz,43) = stat(iz,43) + ufsqrsum(ix,iy,iz,3)
+
+         !!! ** REMEMBER TO CHANGE BACK "js" VALUE **
+         !stat(iz,44) = stat(iz,44) + partcount_accum(ix,iy,iz)
+         !stat(iz,45) = stat(iz,45) + partcount_coarse(ix,iy,iz)
+
+         !stat(iz,46) = stat(iz,46) + multcount_accum(ix,iy,iz)
+         !stat(iz,47) = stat(iz,47) + multcount_coarse(ix,iy,iz)
+
+         !stat(iz,48) = stat(iz,48) + radsum_accum(ix,iy,iz)
+         !stat(iz,49) = stat(iz,49) + radsum_coarse(ix,iy,iz)
+
+         !stat(iz,50) = stat(iz, 50) + mwsum_accum(ix,iy,iz)
+         !stat(iz,51) = stat(iz, 51) + mwsum_coarse(ix,iy,iz)
+
       enddo
       enddo
 
@@ -7735,8 +7749,10 @@ c
          uf1msqr(iz) = 0.0
          uf2msqr(iz) = 0.0
          uf3msqr(iz) = 0.0
+
       else
-         zconc(iz)  = stat(iz,11)/xl/yl/dzw(iz)
+
+         zconc(iz) = stat(iz,11)/xl/yl/dzw(iz)
          vp1mean(iz) = stat(iz,12)/stat(iz,11)
          vp2mean(iz) = stat(iz,13)/stat(iz,11)
          vp3mean(iz) = stat(iz,14)/stat(iz,11)
@@ -7749,7 +7765,7 @@ c
          Tfmean(iz) = stat(iz,24)/stat(iz,11)
          qfmean(iz) = stat(iz,25)/stat(iz,11)
          wpTpm(iz) = stat(iz,26)/stat(iz,11)-(Tpmean(iz)*vp3mean(iz))
-         radmean(iz) = stat(iz,28)/stat(iz,11) 
+         radmean(iz) = stat(iz,28)/stat(iz,11)
          rad2mean(iz)= stat(iz,29)/stat(iz,11)
          multmean(iz) = stat(iz,30)/stat(iz,11)
          mwmean(iz) = stat(iz,31)/stat(iz,11)
@@ -7761,7 +7777,30 @@ c
          uf2msqr(iz) = stat(iz,42)/stat(iz,11)-uf2mean(iz)**2
          uf3msqr(iz) = stat(iz,43)/stat(iz,11)-uf3mean(iz)**2
       end if
-         
+
+      !if (stat(iz,44)==0) then
+
+        !zconc_accum(iz) = 0.0
+        !radmean_accum(iz) = 0.0
+
+      !else
+
+        !zconc_accum(iz) = stat(iz,44)/xl/yl/dzw(iz)
+        !radmean_accum(iz) = stat(iz,48)/stat(iz,44)
+
+      !end if
+
+      !if (stat(iz,45)==0) then
+
+        !zconc_coarse(iz) = 0.0
+        !radmean_coarse(iz) = 0.0
+
+      !else
+
+        !zconc_coarse(iz) = stat(iz,45)/xl/yl/dzw(iz)
+        !radmean_coarse(iz) = stat(iz,49)/stat(iz,45)
+
+      !end if
          
       m1src(iz) = stat(iz,18)*fnxy
       m2src(iz) = stat(iz,19)*fnxy
@@ -7770,7 +7809,13 @@ c
       vw_tot(iz) = vwle(iz) + vwsb(iz)
       Tpsrc(iz) = stat(iz,27)*fnxy
       Nc(iz) = stat(iz,30)/xl/yl/dzw(iz)
+      !Nc_accum(iz) = stat(iz,46)/xl/yl/dzw(iz)
+      !Nc_coarse(iz) = stat(iz,47)/xl/yl/dzw(iz)
       ql(iz) = stat(iz,31)/xl/yl/dzw(iz)/rhoa
+      !ql_accum(iz) = stat(iz,50)/xl/yl/dzw(iz)/rhoa
+      !ql_coarse(iz) = stat(iz,51)/xl/yl/dzw(iz)/rhoa
+      !LWC_accum(iz) = stat(iz,50)/xl/yl/dzw(iz)
+      !LWC_coarse(iz) = stat(iz,51)/xl/yl/dzw(iz)
       Hpsrc(iz) = stat(iz,32)*fnxy
       TEpsrc(iz) = stat(iz,33)*fnxy
       RHxym(iz) = stat(iz,35)*fnxy
@@ -8713,8 +8758,16 @@ c
 
       allocate(partcount(nnx,iys:iye,izs-1:ize+1))
       partcount = 0.0
+      !allocate(partcount_accum(nnx,iys:iye,izs-1:ize+1))
+      !partcount_accum = 0.0
+      !allocate(partcount_coarse(nnx,iys:iye,izs-1:ize+1))
+      !partcount_coarse = 0.0
       allocate(partcount_t(0:nnz+1,iys:iye,mxs:mxe))
       partcount_t = 0.0
+      !allocate(partcount_accum_t(0:nnz+1,iys:iye,mxs:mxe))
+      !partcount_accum_t = 0.0
+      !allocate(partcount_coarse_t(0:nnz+1,iys:iye,mxs:mxe))
+      !partcount_coarse_t = 0.0
       allocate(upwp_t(0:nnz+1,iys:iye,mxs:mxe))
       upwp_t = 0.0
       allocate(upwp(nnx,iys:iye,izs-1:ize+1))
@@ -8765,20 +8818,44 @@ c
       partTsrc_t = 0.0
       allocate(radsum(nnx,iys:iye,izs-1:ize+1))
       radsum = 0.0
+      !allocate(radsum_accum(nnx,iys:iye,izs-1:ize+1))
+      !radsum_accum = 0.0
+      !allocate(radsum_coarse(nnx,iys:iye,izs-1:ize+1))
+      !radsum_coarse = 0.0
       allocate(radsum_t(0:nnz+1,iys:iye,mxs:mxe)) 
       radsum_t = 0.0
+      !allocate(radsum_accum_t(0:nnz+1,iys:iye,mxs:mxe))
+      !radsum_accum_t = 0.0
+      !allocate(radsum_coarse_t(0:nnz+1,iys:iye,mxs:mxe)) 
+      !radsum_coarse_t = 0.0
       allocate(rad2sum(nnx,iys:iye,izs-1:ize+1)) 
       rad2sum = 0.0
       allocate(rad2sum_t(0:nnz+1,iys:iye,mxs:mxe))
       rad2sum_t = 0.0
       allocate(multcount(nnx,iys:iye,izs-1:ize+1)) 
       multcount = 0.0
+      !allocate(multcount_accum(nnx,iys:iye,izs-1:ize+1))
+      !multcount_accum = 0.0
+      !allocate(multcount_coarse(nnx,iys:iye,izs-1:ize+1))
+      !multcount_coarse = 0.0
       allocate(multcount_t(0:nnz+1,iys:iye,mxs:mxe)) 
       multcount_t = 0.0
+      !allocate(multcount_accum_t(0:nnz+1,iys:iye,mxs:mxe))
+      !multcount_accum_t = 0.0
+      !allocate(multcount_coarse_t(0:nnz+1,iys:iye,mxs:mxe))
+      !multcount_coarse_t = 0.0
       allocate(mwsum(nnx,iys:iye,izs-1:ize+1)) 
       mwsum = 0.0
+      !allocate(mwsum_accum(nnx,iys:iye,izs-1:ize+1))
+      !mwsum_accum = 0.0
+      !allocate(mwsum_coarse(nnx,iys:iye,izs-1:ize+1))
+      !mwsum_coarse = 0.0
       allocate(mwsum_t(0:nnz+1,iys:iye,mxs:mxe)) 
       mwsum_t = 0.0
+      !allocate(mwsum_accum_t(0:nnz+1,iys:iye,mxs:mxe))
+      !mwsum_accum_t = 0.0
+      !allocate(mwsum_coarse_t(0:nnz+1,iys:iye,mxs:mxe))
+      !mwsum_coarse_t = 0.0
       allocate(partHsrc(nnx,iys:iye,izs-1:ize+1))
       partHsrc = 0.0
       allocate(partHsrc_t(0:nnz+1,iys:iye+1,mxs:mxe+1))

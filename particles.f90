@@ -12,10 +12,12 @@ module particles
   real, allocatable :: partHsrc(:,:,:),partHsrc_t(:,:,:)
   real, allocatable :: partTEsrc(:,:,:),partTEsrc_t(:,:,:)
   real, allocatable :: partcount_t(:,:,:),partsrc_t(:,:,:,:)
+  !real, allocatable :: partcount_accum_t(:,:,:), partcount_coarse_t(:,:,:)
   real, allocatable :: vpsum_t(:,:,:,:),vpsqrsum_t(:,:,:,:)
   real, allocatable :: ufsum_t(:,:,:,:),ufsqrsum_t(:,:,:,:)
   real, allocatable :: upwp_t(:,:,:),upwp(:,:,:)
   real, allocatable :: partcount(:,:,:),partsrc(:,:,:,:)
+  !real, allocatable :: partcount_accum(:,:,:), partcount_coarse(:,:,:)
   real, allocatable :: vpsum(:,:,:,:),vpsqrsum(:,:,:,:)
   real, allocatable :: ufsum(:,:,:,:),ufsqrsum(:,:,:,:)
   real, allocatable :: Tpsum(:,:,:),Tpsum_t(:,:,:)
@@ -23,10 +25,13 @@ module particles
   real, allocatable :: Tfsum(:,:,:),Tfsum_t(:,:,:)
   real, allocatable :: qfsum(:,:,:),qfsum_t(:,:,:)
   real, allocatable :: wpTpsum(:,:,:),wpTpsum_t(:,:,:)
-  real, allocatable :: radsum(:,:,:),radsum_t(:,:,:)
+  real, allocatable :: radsum(:,:,:)!, radsum_accum(:,:,:), radsum_coarse(:,:,:)
+  real, allocatable :: radsum_t(:,:,:)!, radsum_accum_t(:,:,:), radsum_coarse_t(:,:,:)
   real, allocatable :: rad2sum(:,:,:),rad2sum_t(:,:,:)
-  real, allocatable :: multcount(:,:,:),multcount_t(:,:,:) 
-  real, allocatable :: mwsum(:,:,:),mwsum_t(:,:,:)
+  real, allocatable :: multcount(:,:,:)!, multcount_accum(:,:,:), multcount_coarse(:,:,:)
+  real, allocatable :: multcount_t(:,:,:)!, multcount_accum_t(:,:,:), multcount_coarse_t(:,:,:)
+  real, allocatable :: mwsum(:,:,:)!, mwsum_accum(:,:,:), mwsum_coarse(:,:,:)
+  real, allocatable :: mwsum_t(:,:,:)!, mwsum_accum_t(:,:,:), mwsum_coarse_t(:,:,:)
   real, allocatable :: qstarsum(:,:,:),qstarsum_t(:,:,:)
 
   !--- SFS velocity calculation ---------
@@ -88,6 +93,8 @@ module particles
   real :: bins_res(histbins+2)
 
   real :: hist_actres(histbins+2)
+  real :: hist_actres_accum(histbins + 2)
+  real :: hist_actres_coarse(histbins + 2)
   real :: bins_actres(histbins+2)
 
   real :: hist_acttodeath(histbins+2)
@@ -1872,6 +1879,8 @@ CONTAINS
       bins_res = 0.0
 
       hist_actres = 0.0
+      hist_actres_accum = 0.0
+      hist_actres_coarse = 0.0
       bins_actres = 0.0
 
       hist_acttodeath = 0.0
@@ -2708,7 +2717,7 @@ CONTAINS
 
     t_reintro = 1800.0   !3600.0   ! Time to start injecting
     t_stop = 18000.0   ! Time to stop injecting
-    it_delay = 250   !500 !250(128 procs) !500(256 procs) !numprocs * 5   ! Number of time steps between injection events (make sure it is larger than numprocs)
+    it_delay = 500   !250(128 procs) !500(256 procs) !numprocs * 5   ! Number of time steps between injection events (make sure it is larger than numprocs)
 
     mult_SSGF = 1e8   !1e8(ori) !5e8/5e7(sensitivity studies) ! Multiplicity of injected coarse mode aerosols
 
@@ -2954,6 +2963,8 @@ CONTAINS
 
 
       partcount_t = 0.0
+      !partcount_accum_t = 0.0
+      !partcount_coarse_t = 0.0
       vpsum_t = 0.0
       ufsum_t = 0.0
       upwp_t = 0.0
@@ -2962,10 +2973,16 @@ CONTAINS
       Tpsum_t = 0.0
       Tfsum_t = 0.0
       qfsum_t = 0.0
-      radsum_t = 0.0  
+      radsum_t = 0.0
+      !radsum_accum_t = 0.0
+      !radsum_coarse_t = 0.0
       rad2sum_t = 0.0  
       multcount_t = 0.0
+      !multcount_accum_t = 0.0
+      !multcount_coarse_t = 0.0
       mwsum_t = 0.0
+      !mwsum_accum_t = 0.0
+      !mwsum_coarse_t = 0.0
       Tpsqrsum_t = 0.0
       wpTpsum_t = 0.0
       myRep_avg = 0.0
@@ -3165,6 +3182,16 @@ CONTAINS
                      mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid, &
                      ncpu_s,numprocs)
 
+      !call ztox_trans(mwsum_accum_t(0:nnz+1,iys:iye,mxs:mxe), &
+      !               mwsum_accum(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,mxs, &
+      !               mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid, &
+      !               ncpu_s,numprocs)
+
+      !call ztox_trans(mwsum_coarse_t(0:nnz+1,iys:iye,mxs:mxe), &
+      !               mwsum_coarse(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,mxs, &
+      !               mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid, &
+      !               ncpu_s,numprocs)
+
       !Try only calling these when the history data is being written:
       if(mtrans  .and. istage .eq. 3) then
       call ztox_trans(upwp_t(0:nnz+1,iys:iye,mxs:mxe), &
@@ -3250,10 +3277,30 @@ CONTAINS
                      mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid, &
                      ncpu_s,numprocs)
 
+      !call ztox_trans(partcount_accum_t(0:nnz+1,iys:iye,mxs:mxe), &
+      !               partcount_accum(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,mxs, &
+      !               mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid, &
+      !               ncpu_s,numprocs)
+
+      !call ztox_trans(partcount_coarse_t(0:nnz+1,iys:iye,mxs:mxe), &
+      !               partcount_coarse(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,mxs, &
+      !               mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid, &
+      !               ncpu_s,numprocs)
+
       call ztox_trans(radsum_t(0:nnz+1,iys:iye,mxs:mxe), &
                      radsum(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,mxs, &
                      mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid, &
                      ncpu_s,numprocs)
+
+      !call ztox_trans(radsum_accum_t(0:nnz+1,iys:iye,mxs:mxe), &
+      !               radsum_accum(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,mxs, &
+      !               mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid, &
+      !               ncpu_s,numprocs)
+
+      !call ztox_trans(radsum_coarse_t(0:nnz+1,iys:iye,mxs:mxe), &
+      !               radsum_coarse(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,mxs, &
+      !               mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid, &
+      !               ncpu_s,numprocs)
 
       call ztox_trans(rad2sum_t(0:nnz+1,iys:iye,mxs:mxe), &
                      rad2sum(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,mxs, &
@@ -3265,6 +3312,15 @@ CONTAINS
                      mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid, &
                      ncpu_s,numprocs)
 
+      !call ztox_trans(multcount_accum_t(0:nnz+1,iys:iye,mxs:mxe), &
+      !               multcount_accum(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,mxs, &
+      !               mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid, &
+      !               ncpu_s,numprocs)
+
+      !call ztox_trans(multcount_coarse_t(0:nnz+1,iys:iye,mxs:mxe), &
+      !               multcount_coarse(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,mxs, &
+      !               mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid, &
+      !               ncpu_s,numprocs)
 
       call ztox_trans(qstarsum_t(0:nnz+1,iys:iye,mxs:mxe), &
                      qstarsum(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,mxs, &
@@ -3349,6 +3405,8 @@ CONTAINS
       call end_phase(measurement_id_particle_fill_ext)
 
       partcount_t = 0.0
+      !partcount_accum_t = 0.0
+      !partcount_coarse_t = 0.0
       vpsum_t = 0.0
       ufsum_t = 0.0
       upwp_t = 0.0
@@ -3358,9 +3416,15 @@ CONTAINS
       Tfsum_t = 0.0
       qfsum_t = 0.0
       radsum_t = 0.0
+      !radsum_accum_t = 0.0
+      !radsum_coarse_t = 0.0
       rad2sum_t = 0.0
       multcount_t = 0.0
+      !multcount_accum_t = 0.0
+      !multcount_coarse_t = 0.0
       mwsum_t = 0.0
+      !mwsum_accum_t = 0.0
+      !mwsum_coarse_t = 0.0
       Tpsqrsum_t = 0.0
       wpTpsum_t = 0.0
       myRep_avg = 0.0
@@ -3513,18 +3577,27 @@ CONTAINS
 
                !Count if activated/deactivated
                if (part%radius > part%rc .AND. part%radius*rt_zeroes(1) < part%rc) then
-                   denum = denum + 1
 
-                   !Also add activated lifetime to histogram
-               call add_histogram(bins_actres,hist_actres,histbins+2,part%actres,part%mult)
-                   
+                 denum = denum + 1
+
+                 !Also add activated lifetime to histogram
+                 call add_histogram(bins_actres,hist_actres,histbins+2,part%actres,part%mult)
+
+                 if (abs(part%kappa_s - 0.6) < 1.0e-8) then
+                   call add_histogram(bins_actres, hist_actres_accum, histbins + 2, part%actres, part%mult)
+                 end if
+
+                 if (abs(part%kappa_s - 1.2) < 1.0e-8) then
+                   call add_histogram(bins_actres, hist_actres_coarse, histbins + 2, part%actres, part%mult)
+                 end if
 
                elseif (part%radius < part%rc .AND. part%radius*rt_zeroes(1) > part%rc) then
-                   actnum = actnum + 1
-                   part%numact = part%numact + 1.0
 
-                   !Reset the activation lifetime
-                   part%actres = 0.0
+                 actnum = actnum + 1
+                 part%numact = part%numact + 1.0
+
+                 ! Reset the activation lifetime
+                 part%actres = 0.0
 
                endif
 
@@ -3695,20 +3768,60 @@ CONTAINS
                      mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid, &
                      ncpu_s,numprocs)
 
+      !call ztox_trans(mwsum_accum_t(0:nnz+1,iys:iye,mxs:mxe), &
+      !               mwsum_accum(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,mxs, &
+      !               mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid, &
+      !               ncpu_s,numprocs)
+
+      !call ztox_trans(mwsum_coarse_t(0:nnz+1,iys:iye,mxs:mxe), &
+      !               mwsum_coarse(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,mxs, &
+      !               mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid, &
+      !               ncpu_s,numprocs)
+
       call ztox_trans(partcount_t(0:nnz+1,iys:iye,mxs:mxe), &
                      partcount(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,mxs, &
                      mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid, &
                      ncpu_s,numprocs)
+
+      !call ztox_trans(partcount_accum_t(0:nnz+1,iys:iye,mxs:mxe), &
+      !               partcount_accum(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,mxs, &
+      !               mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid, &
+      !               ncpu_s,numprocs)
+
+      !call ztox_trans(partcount_coarse_t(0:nnz+1,iys:iye,mxs:mxe), &
+      !               partcount_coarse(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,mxs, &
+      !               mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid, &
+      !               ncpu_s,numprocs)
 
       call ztox_trans(multcount_t(0:nnz+1,iys:iye,mxs:mxe), &
                      multcount(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,mxs, &
                      mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid, &
                      ncpu_s,numprocs)
 
+      !call ztox_trans(multcount_accum_t(0:nnz+1,iys:iye,mxs:mxe), &
+      !               multcount_accum(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,mxs, &
+      !               mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid, &
+      !               ncpu_s,numprocs)
+
+      !call ztox_trans(multcount_coarse_t(0:nnz+1,iys:iye,mxs:mxe), &
+      !               multcount_coarse(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,mxs, &
+      !               mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid, &
+      !               ncpu_s,numprocs)
+
       call ztox_trans(radsum_t(0:nnz+1,iys:iye,mxs:mxe), &
                      radsum(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,mxs, &
                      mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid, &
                      ncpu_s,numprocs)
+
+      !call ztox_trans(radsum_accum_t(0:nnz+1,iys:iye,mxs:mxe), &
+      !               radsum_accum(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,mxs, &
+      !               mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid, &
+      !               ncpu_s,numprocs)
+
+      !call ztox_trans(radsum_coarse_t(0:nnz+1,iys:iye,mxs:mxe), &
+      !               radsum_coarse(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,mxs, &
+      !               mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid, &
+      !               ncpu_s,numprocs)
 
 
 
@@ -3997,6 +4110,14 @@ CONTAINS
       !and computes quantities needed to get particle statistics
 
       partcount_t(kpt,jpt,ipt) = partcount_t(kpt,jpt,ipt) + 1.0
+
+      !if (abs(part%kappa_s - 0.6) < 1.0e-8) then
+      !  partcount_accum_t(kpt,jpt,ipt) = partcount_accum_t(kpt,jpt,ipt) + 1.0
+      !end if
+
+      !if (abs(part%kappa_s - 1.2) < 1.0e-8) then
+      !  partcount_coarse_t(kpt,jpt,ipt) = partcount_coarse_t(kpt,jpt,ipt) + 1.0
+      !end if
       
       !Get su mean, mean-squared of particle velocities at each level
       upwp_t(kpt,jpt,ipt) = upwp_t(kpt,jpt,ipt) + part%vp(1)*part%vp(3)
@@ -4017,14 +4138,37 @@ CONTAINS
 
       wpTpsum_t(kpt,jpt,ipt) = wpTpsum_t(kpt,jpt,ipt) + part%Tp*part%vp(3)
 
+      radsum_t(kpt,jpt,ipt) = radsum_t(kpt,jpt,ipt) + part%radius
 
-      radsum_t(kpt,jpt,ipt) = radsum_t(kpt,jpt,ipt) + part%radius 
+      !if (abs(part%kappa_s - 0.6) < 1.0e-8) then
+      !  radsum_accum_t(kpt,jpt,ipt) = radsum_accum_t(kpt,jpt,ipt) + part%radius
+      !end if
+
+      !if (abs(part%kappa_s - 1.2) < 1.0e-8) then
+      !  radsum_coarse_t(kpt,jpt,ipt) = radsum_coarse_t(kpt,jpt,ipt) + part%radius
+      !end if
 
       rad2sum_t(kpt,jpt,ipt) = rad2sum_t(kpt,jpt,ipt) + part%radius**2  
 
       multcount_t(kpt,jpt,ipt) = multcount_t(kpt,jpt,ipt) + real(part%mult)
 
+      !if (abs(part%kappa_s - 0.6) < 1.0e-8) then
+      !  multcount_accum_t(kpt,jpt,ipt) = multcount_accum_t(kpt,jpt,ipt) + real(part%mult)
+      !end if
+
+      !if (abs(part%kappa_s - 1.2) < 1.0e-8) then
+      !  multcount_coarse_t(kpt,jpt,ipt) = multcount_coarse_t(kpt,jpt,ipt) + real(part%mult)
+      !end if
+
       mwsum_t(kpt,jpt,ipt) = mwsum_t(kpt,jpt,ipt) + real(part%mult)*(rhow*4.0/3.0*pi*part%radius**3)
+
+      !if (abs(part%kappa_s - 0.6) < 1.0e-8) then
+      !  mwsum_accum_t(kpt,jpt,ipt) = mwsum_accum_t(kpt,jpt,ipt) + real(part%mult)*(rhow*4.0/3.0*pi*part%radius**3)
+      !end if
+
+      !if (abs(part%kappa_s - 1.2) < 1.0e-8) then
+      !  mwsum_coarse_t(kpt,jpt,ipt) = mwsum_coarse_t(kpt,jpt,ipt) + real(part%mult)*(rhow*4.0/3.0*pi*part%radius**3)
+      !end if
 
       qstarsum_t(kpt,jpt,ipt) = qstarsum_t(kpt,jpt,ipt) + part%qstar
 
@@ -5347,7 +5491,7 @@ CONTAINS
       call add_histogram(bins_rad, hist_rad_FL_unact, histbins + 2, part%radius, part%mult)
     end if
 
-    if (part%xp(3) <= z_fogLayer .and. abs(part%kappa_s - 0.6) < 8) then   ! Accumulation mode aerosols/droplets within fog layer
+    if (part%xp(3) <= z_fogLayer .and. abs(part%kappa_s - 0.6) < 1.0e-8) then   ! Accumulation mode aerosols/droplets within fog layer
       call add_histogram(bins_rad, hist_rad_FL_accum, histbins + 2, part%radius, part%mult)
     end if
    
