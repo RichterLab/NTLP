@@ -12,6 +12,10 @@ F90=ifort
 #   avx2    Optimize for Intel's AVX2 instruction set.  This is the most advanced
 #           optimization for Intel Haswell processors, or newer, and AMD's Epyc
 #           7001, 7002, and 7003 (Zen 1-3) processors.
+#   avx512  Optimizes for Intel's AVX-512 instruction set.  This allows for
+#           vector widths twice as large relative to provided by AVX2
+#           instructions.  Intel Skylake and AMD Epyc 7004 (Zen 4) processors or
+#           newer are required.
 #
 # NOTE: Specifying this incorrectly will, at best, result in degraded execution
 #       times and, at worst, result in crashes due to illegal instructions.
@@ -26,6 +30,9 @@ ARCH_FLAGS = -march=corei7-avx
 endif
 ifeq ($(ARCH), avx2)
 ARCH_FLAGS = -march=core-avx2
+endif
+ifeq ($(ARCH), avx512)
+ARCH_FLAGS = -march=skylake-avx512
 endif
 
 # Always used compilation flags:
