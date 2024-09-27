@@ -1754,6 +1754,7 @@ CONTAINS
   subroutine particle_setup
 
       use pars
+      use droplet_model
       implicit none 
       include 'mpif.h'
 
@@ -1765,6 +1766,9 @@ CONTAINS
       integer :: num_reals,num_integers,num_longs
       character*4 :: myid_char
       character*80 :: traj_file
+
+      !Initialize the droplet approximation model's weights.
+      call initialize_model
 
       !First set up the neighbors for the interpolation stage:
       call assign_nbrs
@@ -3136,6 +3140,7 @@ CONTAINS
       use con_data
       use con_stats
       use profiling
+      use droplet_model
       implicit none
       include 'mpif.h'
 
@@ -3155,14 +3160,14 @@ CONTAINS
       real :: Eff_C,Eff_S
       real :: t_s,t_f,t_s1,t_f1
       real :: rt_start(2)
-      real :: rt_zeroes(2)
+      real*4 :: rt_zeroes(2)
       real :: taup0, dt_taup0, temp_r, temp_t, guess
       real :: tmp_coeff
       real :: xp3i
       real :: mod_magnus,exner,func_p_base
       real :: rad_i,Tp_i,vp_i(3),mp_i,rhop_i
 
-
+      real*4 :: droplet_parameters(7)
 
       !First fill extended velocity field for interpolation
       call start_phase(measurement_id_particle_fill_ext)
@@ -3274,84 +3279,72 @@ CONTAINS
 
         dt_taup0 = dt/taup0
 
+        ! XXX: Need to remove any (now) unused dimensionalization code above.
+        ! XXX: Need to re-implement (or remove) the two-way coupling.
         if (ievap .EQ. 1 .and. part%qinf .gt. 0.0) then
 
-               numpart_processed = numpart_processed + 1
-               call start_phase(measurement_id_particle_estimation)
+            numpart_processed = numpart_processed + 1
+            call start_phase(measurement_id_particle_estimation)
 
-               !Gives initial guess into nonlinear solver
-               !mflag = 0, has equilibrium radius; mflag = 1, no
-               !equilibrium (uses itself as initial guess)
-               call rad_solver2(guess,rhoa,mflag)
+            !Pack the parameters required by the model into a single array.
+            !
+            ! NOTE: This converts from double precision to single.
+            !
+            droplet_parameters(1) = part%radius
+            droplet_parameters(2) = part%Tp
+            droplet_parameters(3) = part%m_s
+            droplet_parameters(4) = part%Tf
+            droplet_parameters(5) = part%qinf
+            droplet_parameters(6) = rhoa
+            droplet_parameters(7) = dt
 
-               if (mflag == 0) then
-                rt_start(1) = guess/part%radius
-                rt_start(2) = part%Tf/part%Tp
-               else
-                rt_start(1) = 1.0
-                rt_start(2) = 1.0
-               end if
+            call estimate( droplet_parameters, rt_zeroes )
 
-               call gauss_newton_2d(part%vp,dt_taup0,rhoa,rt_start, rt_zeroes,flag)
-
-               if (flag==1) then
-               num100 = num100+1
-
-               call LV_solver(part%vp,dt_taup0,rhoa,rt_start, rt_zeroes,flag)
-
-               end if
-
-               if (flag == 1) num1000 = num1000 + 1
-
-               if      (isnan(rt_zeroes(1)) &
-                  .OR. (rt_zeroes(1)*part%radius<0) &
-                  .OR. isnan(rt_zeroes(2)) &
-                  .OR. (rt_zeroes(2)<0) &
-                  .OR. (rt_zeroes(1)*part%radius>1.0e-2)) & !These last 2 are very specific to pi chamber
-                  !.OR. (rt_zeroes(2)*part%Tp > Tbot(1)*1.1)  &
-                  !.OR. (rt_zeroes(2)*part%Tp < Ttop(1)*0.9)) &
-               then
+            if     ((rt_zeroes(1)<0) &
+               .OR. (rt_zeroes(2)<0) &
+               .OR. (rt_zeroes(1)>1.0e-2)) & !These last 2 are very specific to pi chamber
+               !.OR. (rt_zeroes(2) > Tbot(1)*1.1)  &
+               !.OR. (rt_zeroes(2) < Ttop(1)*0.9)) &
+            then
 
                 write(*,'(a30,14e15.6)') 'WARNING: CONVERGENCE',  &
-               part%radius,part%qinf,part%Tp,part%Tf,part%xp(3), &
-               part%kappa_s,part%m_s,part%vp(1),part%vp(2),part%vp(3), &
-               part%res,part%sigm_s,rt_zeroes(1),rt_zeroes(2)
+                    part%radius,part%qinf,part%Tp,part%Tf,part%xp(3), &
+                    part%kappa_s,part%m_s,part%vp(1),part%vp(2),part%vp(3), &
+                    part%res,part%sigm_s,rt_zeroes(1),rt_zeroes(2)
 
                 numimpos = numimpos + 1  !How many have failed?
                 !If they failed (should be very small number), radius,
                 !temp remain unchanged
-                rt_zeroes(1) = 1.0
-                rt_zeroes(2) = part%Tf/part%Tp
+                rt_zeroes(1) = part%radius
+                rt_zeroes(2) = part%Tp
 
+            end if
 
-               end if
+            !Get the critical radius based on old temp
+            part%rc = crit_radius(part%m_s,part%kappa_s,part%Tp)
 
-               !Get the critical radius based on old temp
-               part%rc = crit_radius(part%m_s,part%kappa_s,part%Tp) 
+            !Count if activated/deactivated
+            if (part%radius > part%rc .AND. rt_zeroes(1) < part%rc) then
+                denum = denum + 1
 
-               !Count if activated/deactivated
-               if (part%radius > part%rc .AND. part%radius*rt_zeroes(1) < part%rc) then
-                   denum = denum + 1
+                !Also add activated lifetime to histogram
+                call add_histogram(bins_actres,hist_actres,histbins+2,part%actres,part%mult)
 
-                   !Also add activated lifetime to histogram
-               call add_histogram(bins_actres,hist_actres,histbins+2,part%actres,part%mult)
-                   
+            elseif (part%radius < part%rc .AND. rt_zeroes(1) > part%rc) then
+                actnum = actnum + 1
+                part%numact = part%numact + 1.0
 
-               elseif (part%radius < part%rc .AND. part%radius*rt_zeroes(1) > part%rc) then
-                   actnum = actnum + 1
-                   part%numact = part%numact + 1.0
+                !Reset the activation lifetime
+                part%actres = 0.0
+            endif
 
-                   !Reset the activation lifetime
-                   part%actres = 0.0
+            part%radius = rt_zeroes(1)
+            part%Tp     = rt_zeroes(2)
 
-               endif
+            call end_phase(measurement_id_particle_estimation)
 
-               call end_phase(measurement_id_particle_estimation)
-
-               !Redimensionalize
-               part%radius = rt_zeroes(1)*part%radius
-               part%Tp = rt_zeroes(2)*part%Tp
         end if
+
 
          if (part%radius .gt. 1.0e-2) then
          write(*,'(a30,12e15.6)') 'WARNING: BIG DROPLET',  &
