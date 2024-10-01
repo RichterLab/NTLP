@@ -1027,6 +1027,10 @@ module profiling
          measurement_id_particle_diff, &
          measurement_id_particle_coalesce, &
          measurement_id_particle_estimation, &
+         measurement_id_particle_estimation_call, &
+         measurement_id_particle_estimation_checks, &
+         measurement_id_particle_estimation_assignment, &
+         measurement_id_particle_estimation_cr, &
          measurement_id_particle_fill_ext, &
          measurement_id_particle_loop, &
          measurement_id_particle_bcs, &
@@ -1069,34 +1073,38 @@ contains
 
         call initialize_base_measurements()
 
-        measurement_id_derivatives            = create_phase( "calculating derivatives" )
-        measurement_id_eddy_viscosity_and_bcs = create_phase( "eddy viscosity and BCs" )
-        measurement_id_flow_solve_1           = create_phase( "flow solve comp1" )
-        measurement_id_flow_solve_2           = create_phase( "flow solve comp2" )
-        measurement_id_flow_solve_p           = create_phase( "flow solve comp_p" )
-        measurement_id_humidity               = create_phase( "humidity" )
-        measurement_id_io_histograms          = create_phase( "I/O - histograms" )
-        measurement_id_io_history             = create_phase( "I/O - history" )
-        measurement_id_io_particles           = create_phase( "I/O - particles" )
-        measurement_id_io_traj                = create_phase( "I/O - trajectories" )
-        measurement_id_io_pressure            = create_phase( "I/O - pressure field" )
-        measurement_id_io_tecio               = create_phase( "I/O - TecIO" )
-        measurement_id_io_viz                 = create_phase( "I/O - viz" )
-        measurement_id_particle_solver        = create_phase( "particle_solver" )
-        measurement_id_particle_reintro       = create_phase( "particle_reintro" )
-        measurement_id_particle_diff          = create_phase( "particle_diff" )
-        measurement_id_particle_coalesce      = create_phase( "particle_coalesce" )
-        measurement_id_particle_estimation    = create_phase( "particle size/temp estimation" )
-        measurement_id_particle_fill_ext      = create_phase( "particle_fill_ext" )
-        measurement_id_particle_loop          = create_phase( "particle_loop" )
-        measurement_id_particle_bcs           = create_phase( "particle_bcs" )
-        measurement_id_particle_exchange      = create_phase( "particle_exchange" )
-        measurement_id_particle_coupling      = create_phase( "particle_coupling" )
-        measurement_id_particle_ztox          = create_phase( "particle_ztox" )
-        measurement_id_particle_stats         = create_phase( "particle_stats" )
-        measurement_id_setup                  = create_phase( "setup" )
-        measurement_id_solver                 = create_phase( "solver" )
-        measurement_id_timestepping_loop      = create_phase( "solver time stepping loop" )
+        measurement_id_derivatives                    = create_phase( "calculating derivatives" )
+        measurement_id_eddy_viscosity_and_bcs         = create_phase( "eddy viscosity and BCs" )
+        measurement_id_flow_solve_1                   = create_phase( "flow solve comp1" )
+        measurement_id_flow_solve_2                   = create_phase( "flow solve comp2" )
+        measurement_id_flow_solve_p                   = create_phase( "flow solve comp_p" )
+        measurement_id_humidity                       = create_phase( "humidity" )
+        measurement_id_io_histograms                  = create_phase( "I/O - histograms" )
+        measurement_id_io_history                     = create_phase( "I/O - history" )
+        measurement_id_io_particles                   = create_phase( "I/O - particles" )
+        measurement_id_io_traj                        = create_phase( "I/O - trajectories" )
+        measurement_id_io_pressure                    = create_phase( "I/O - pressure field" )
+        measurement_id_io_tecio                       = create_phase( "I/O - TecIO" )
+        measurement_id_io_viz                         = create_phase( "I/O - viz" )
+        measurement_id_particle_solver                = create_phase( "particle_solver" )
+        measurement_id_particle_reintro               = create_phase( "particle_reintro" )
+        measurement_id_particle_diff                  = create_phase( "particle_diff" )
+        measurement_id_particle_coalesce              = create_phase( "particle_coalesce" )
+        measurement_id_particle_estimation            = create_phase( "particle size/temp estimation" )
+        measurement_id_particle_estimation_call       = create_phase( "particle size/temp estimation (estimate())" )
+        measurement_id_particle_estimation_checks     = create_phase( "particle size/temp estimation (sanity checks)" )
+        measurement_id_particle_estimation_assignment = create_phase( "particle size/temp estimation (activated/deactivated)" )
+        measurement_id_particle_estimation_cr         = create_phase( "particle size/temp estimation (crit radius)" )
+        measurement_id_particle_fill_ext              = create_phase( "particle_fill_ext" )
+        measurement_id_particle_loop                  = create_phase( "particle_loop" )
+        measurement_id_particle_bcs                   = create_phase( "particle_bcs" )
+        measurement_id_particle_exchange              = create_phase( "particle_exchange" )
+        measurement_id_particle_coupling              = create_phase( "particle_coupling" )
+        measurement_id_particle_ztox                  = create_phase( "particle_ztox" )
+        measurement_id_particle_stats                 = create_phase( "particle_stats" )
+        measurement_id_setup                          = create_phase( "setup" )
+        measurement_id_solver                         = create_phase( "solver" )
+        measurement_id_timestepping_loop              = create_phase( "solver time stepping loop" )
 
     end subroutine initialize_profiling
 
@@ -1129,6 +1137,10 @@ contains
                                 duration_particle_diff, &
                                 duration_particle_coalesce, &
                                 duration_particle_estimation, &
+                                duration_particle_estimation_call, &
+                                duration_particle_estimation_checks, &
+                                duration_particle_estimation_assignment, &
+                                duration_particle_estimation_cr, &
                                 duration_particle_fill_ext, &
                                 duration_particle_loop, &
                                 duration_particle_bcs, &
@@ -1157,34 +1169,38 @@ contains
 
         ! Get each phase's duration so we can report it and its percentage
         ! relative to the total duration.
-        duration_derivatives            = get_duration( measurement_id_derivatives )
-        duration_eddy_viscosity_and_bcs = get_duration( measurement_id_eddy_viscosity_and_bcs )
-        duration_flow_solve_1           = get_duration( measurement_id_flow_solve_1 )
-        duration_flow_solve_2           = get_duration( measurement_id_flow_solve_2 )
-        duration_flow_solve_p           = get_duration( measurement_id_flow_solve_p )
-        duration_humidity               = get_duration( measurement_id_humidity )
-        duration_io_histograms          = get_duration( measurement_id_io_histograms )
-        duration_io_history             = get_duration( measurement_id_io_history )
-        duration_io_particles           = get_duration( measurement_id_io_particles )
-        duration_io_traj                = get_duration( measurement_id_io_traj )
-        duration_io_pressure            = get_duration( measurement_id_io_pressure )
-        duration_io_tecio               = get_duration( measurement_id_io_tecio )
-        duration_io_viz                 = get_duration( measurement_id_io_viz )
-        duration_particle_solver        = get_duration( measurement_id_particle_solver )
-        duration_particle_reintro       = get_duration( measurement_id_particle_reintro )
-        duration_particle_diff          = get_duration( measurement_id_particle_diff )
-        duration_particle_coalesce      = get_duration( measurement_id_particle_coalesce )
-        duration_particle_estimation    = get_duration( measurement_id_particle_estimation )
-        duration_particle_fill_ext      = get_duration( measurement_id_particle_fill_ext )
-        duration_particle_loop          = get_duration( measurement_id_particle_loop )
-        duration_particle_bcs           = get_duration( measurement_id_particle_bcs )
-        duration_particle_exchange      = get_duration( measurement_id_particle_exchange )
-        duration_particle_coupling      = get_duration( measurement_id_particle_coupling )
-        duration_particle_ztox          = get_duration( measurement_id_particle_ztox )
-        duration_particle_stats         = get_duration( measurement_id_particle_stats )
-        duration_setup                  = get_duration( measurement_id_setup )
-        duration_solver                 = get_duration( measurement_id_solver )
-        duration_timestepping_loop      = get_duration( measurement_id_timestepping_loop )
+        duration_derivatives                    = get_duration( measurement_id_derivatives )
+        duration_eddy_viscosity_and_bcs         = get_duration( measurement_id_eddy_viscosity_and_bcs )
+        duration_flow_solve_1                   = get_duration( measurement_id_flow_solve_1 )
+        duration_flow_solve_2                   = get_duration( measurement_id_flow_solve_2 )
+        duration_flow_solve_p                   = get_duration( measurement_id_flow_solve_p )
+        duration_humidity                       = get_duration( measurement_id_humidity )
+        duration_io_histograms                  = get_duration( measurement_id_io_histograms )
+        duration_io_history                     = get_duration( measurement_id_io_history )
+        duration_io_particles                   = get_duration( measurement_id_io_particles )
+        duration_io_traj                        = get_duration( measurement_id_io_traj )
+        duration_io_pressure                    = get_duration( measurement_id_io_pressure )
+        duration_io_tecio                       = get_duration( measurement_id_io_tecio )
+        duration_io_viz                         = get_duration( measurement_id_io_viz )
+        duration_particle_solver                = get_duration( measurement_id_particle_solver )
+        duration_particle_reintro               = get_duration( measurement_id_particle_reintro )
+        duration_particle_diff                  = get_duration( measurement_id_particle_diff )
+        duration_particle_coalesce              = get_duration( measurement_id_particle_coalesce )
+        duration_particle_estimation            = get_duration( measurement_id_particle_estimation )
+        duration_particle_estimation_call       = get_duration( measurement_id_particle_estimation_call )
+        duration_particle_estimation_checks     = get_duration( measurement_id_particle_estimation_checks )
+        duration_particle_estimation_assignment = get_duration( measurement_id_particle_estimation_assignment )
+        duration_particle_estimation_cr         = get_duration( measurement_id_particle_estimation_cr )
+        duration_particle_fill_ext              = get_duration( measurement_id_particle_fill_ext )
+        duration_particle_loop                  = get_duration( measurement_id_particle_loop )
+        duration_particle_bcs                   = get_duration( measurement_id_particle_bcs )
+        duration_particle_exchange              = get_duration( measurement_id_particle_exchange )
+        duration_particle_coupling              = get_duration( measurement_id_particle_coupling )
+        duration_particle_ztox                  = get_duration( measurement_id_particle_ztox )
+        duration_particle_stats                 = get_duration( measurement_id_particle_stats )
+        duration_setup                          = get_duration( measurement_id_setup )
+        duration_solver                         = get_duration( measurement_id_solver )
+        duration_timestepping_loop              = get_duration( measurement_id_timestepping_loop )
 
         ! Sum the measured durations into higher-level phases.
 
@@ -1270,7 +1286,15 @@ contains
         call print_duration( file_unit, "               particle_loop:                  ", &
              duration_particle_loop, duration_particle_solver )
         call print_duration( file_unit, "               particle_estimation:            ", &
-             duration_particle_loop, duration_particle_estimation )
+             duration_particle_estimation, duration_particle_loop )
+        call print_duration( file_unit, "                   estimate():                     ", &
+             duration_particle_estimation_call, duration_particle_estimation )
+        call print_duration( file_unit, "                   checks:                         ", &
+             duration_particle_estimation_checks, duration_particle_estimation )
+        call print_duration( file_unit, "                   critical radius:                ", &
+             duration_particle_estimation_cr, duration_particle_estimation )
+        call print_duration( file_unit, "                   assignment:                     ", &
+             duration_particle_estimation_assignment, duration_particle_estimation )
         call print_duration( file_unit, "               particle_bcs:                   ", &
              duration_particle_bcs, duration_particle_solver )
         call print_duration( file_unit, "               particle_exchange:              ", &
@@ -1320,34 +1344,38 @@ contains
 
         ! Clear each of the phase identifiers so they can't accidentally be used
         ! after shutdown.
-        measurement_id_derivatives            = 0
-        measurement_id_eddy_viscosity_and_bcs = 0
-        measurement_id_flow_solve_1           = 0
-        measurement_id_flow_solve_2           = 0
-        measurement_id_flow_solve_p           = 0
-        measurement_id_humidity               = 0
-        measurement_id_io_histograms          = 0
-        measurement_id_io_history             = 0
-        measurement_id_io_particles           = 0
-        measurement_id_io_traj                = 0
-        measurement_id_io_pressure            = 0
-        measurement_id_io_tecio               = 0
-        measurement_id_io_viz                 = 0
-        measurement_id_particle_solver        = 0
-        measurement_id_particle_reintro       = 0
-        measurement_id_particle_diff          = 0
-        measurement_id_particle_coalesce      = 0
-        measurement_id_particle_estimation    = 0
-        measurement_id_particle_fill_ext      = 0
-        measurement_id_particle_loop          = 0
-        measurement_id_particle_bcs           = 0
-        measurement_id_particle_exchange      = 0
-        measurement_id_particle_coupling      = 0
-        measurement_id_particle_ztox          = 0
-        measurement_id_particle_stats         = 0
-        measurement_id_setup                  = 0
-        measurement_id_solver                 = 0
-        measurement_id_timestepping_loop      = 0
+        measurement_id_derivatives                    = 0
+        measurement_id_eddy_viscosity_and_bcs         = 0
+        measurement_id_flow_solve_1                   = 0
+        measurement_id_flow_solve_2                   = 0
+        measurement_id_flow_solve_p                   = 0
+        measurement_id_humidity                       = 0
+        measurement_id_io_histograms                  = 0
+        measurement_id_io_history                     = 0
+        measurement_id_io_particles                   = 0
+        measurement_id_io_traj                        = 0
+        measurement_id_io_pressure                    = 0
+        measurement_id_io_tecio                       = 0
+        measurement_id_io_viz                         = 0
+        measurement_id_particle_solver                = 0
+        measurement_id_particle_reintro               = 0
+        measurement_id_particle_diff                  = 0
+        measurement_id_particle_coalesce              = 0
+        measurement_id_particle_estimation            = 0
+        measurement_id_particle_estimation_call       = 0
+        measurement_id_particle_estimation_checks     = 0
+        measurement_id_particle_estimation_assignment = 0
+        measurement_id_particle_estimation_cr         = 0
+        measurement_id_particle_fill_ext              = 0
+        measurement_id_particle_loop                  = 0
+        measurement_id_particle_bcs                   = 0
+        measurement_id_particle_exchange              = 0
+        measurement_id_particle_coupling              = 0
+        measurement_id_particle_ztox                  = 0
+        measurement_id_particle_stats                 = 0
+        measurement_id_setup                          = 0
+        measurement_id_solver                         = 0
+        measurement_id_timestepping_loop              = 0
 
     end subroutine shutdown_profiling
 

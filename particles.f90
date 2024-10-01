@@ -3298,8 +3298,11 @@ CONTAINS
             droplet_parameters(6) = rhoa
             droplet_parameters(7) = dt
 
+            call start_phase(measurement_id_particle_estimation_call)
             call estimate( droplet_parameters, rt_zeroes )
+            call end_phase(measurement_id_particle_estimation_call)
 
+            call start_phase(measurement_id_particle_estimation_checks)
             if     ((rt_zeroes(1)<0) &
                .OR. (rt_zeroes(2)<0) &
                .OR. (rt_zeroes(1)>1.0e-2)) & !These last 2 are very specific to pi chamber
@@ -3319,11 +3322,15 @@ CONTAINS
                 rt_zeroes(2) = part%Tp
 
             end if
+            call end_phase(measurement_id_particle_estimation_checks)
 
             !Get the critical radius based on old temp
+            call start_phase(measurement_id_particle_estimation_cr)
             part%rc = crit_radius(part%m_s,part%kappa_s,part%Tp)
+            call end_phase(measurement_id_particle_estimation_cr)
 
             !Count if activated/deactivated
+            call start_phase(measurement_id_particle_estimation_assignment)
             if (part%radius > part%rc .AND. rt_zeroes(1) < part%rc) then
                 denum = denum + 1
 
@@ -3337,6 +3344,7 @@ CONTAINS
                 !Reset the activation lifetime
                 part%actres = 0.0
             endif
+            call end_phase(measurement_id_particle_estimation_assignment)
 
             part%radius = rt_zeroes(1)
             part%Tp     = rt_zeroes(2)
