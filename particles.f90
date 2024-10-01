@@ -61,6 +61,16 @@ module particles
   !2D droplet statistics
   real, allocatable :: LWP(:,:),surf_precip(:,:)
 
+  !Pre-computed radii for identifying the critical radius during a droplet
+  !update, evenly spaced in log-space.
+  !
+  !NOTE: It is strongly advised to use a power of two so the critical radius
+  !      calculation is fully vectorized, both in computing the values as
+  !      well as identifying the maxima.
+  !
+  integer, parameter :: NUMBER_RADIUS_STEPS=1024
+  real :: radval(NUMBER_RADIUS_STEPS)
+
   !REMEMBER: IF ADDING ANYTHING, MUST UPDATE MPI DATATYPE!
   type :: particle
     integer :: pidx,procidx,nbr_pidx,nbr_procidx
@@ -1834,6 +1844,9 @@ CONTAINS
 
       !Also assign the x,y,z max and mins to track particles leaving
       call set_bounds
+
+      !Initialize the radius table used by crit_radius().
+      call setup_radval()
 
       !Set up the path for the trajectory files
       if (itrajout) then
@@ -5525,6 +5538,18 @@ CONTAINS
       return
    END subroutine
 
+  subroutine setup_radval()
+      integer :: i
+      real    :: radstart,radend,dr
+
+      radstart = -8
+      radend   = -3
+      dr       = (radstart-radend)/NUMBER_RADIUS_STEPS
+
+      do i = 1, NUMBER_RADIUS_STEPS
+          radval(i) = 10**(radstart - (i-1)*dr)
+      end do
+  end subroutine setup_radval
 
   function crit_radius(m_s,kappa_s,Tf)
     use pars
@@ -5532,32 +5557,19 @@ CONTAINS
     implicit none
 
     integer :: i,maxidx(1)
-    integer, parameter :: N=1000
     real :: m_s,kappa_s,Tf
-    real :: radval(N),SS(N)
-    real :: radstart,radend,dr
+    real :: SS(NUMBER_RADIUS_STEPS)
     real :: crit_radius
-    real :: firstterm,secterm
 
-    radstart = -8
-    radend = -3
-    dr = (radstart-radend)/N
-
-    do i=1,N
-
-      radval(i) = 10**(radstart - (i-1)*dr)
-
-      firstterm = 2*Mw*Gam/Ru/rhow/radval(i)/Tf
-      secterm =kappa_s*m_s/(rhos*pi2*2.0/3.0*radval(i)**3)
-
-      SS(i) = exp( 2*Mw*Gam/Ru/rhow/radval(i)/Tf - kappa_s*m_s/(rhos*pi2*2.0/3.0*radval(i)**3))
-
+    !NOTE: we don't compute the exponent since it is significantly slower than
+    !      not and does not change the location of the maxima.
+    do i=1,NUMBER_RADIUS_STEPS
+        SS(i) = 2*Mw*Gam/Ru/rhow/Tf/radval(i) - kappa_s*m_s/(rhos*pi2*2.0/3.0*radval(i)**3)
     end do
 
     maxidx = maxloc(SS)
 
     crit_radius = radval(maxidx(1))
-
 
   end function crit_radius
 
