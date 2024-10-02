@@ -216,12 +216,12 @@ c
       end do
 
       if (myid==0) then
-       write(*,*) 'time,tnumpart:',time,tnumpart
-       write(*,'(a15,3e15.6)') 'radmin,radmax:',time,radmin,radmax
-       write(*,'(a15,3e15.6)') 'tempmin,tempmax:',time,tempmin,tempmax
-       write(*,'(a15,3e15.6)') 'qmin,qmax:',time,qmin,qmax
-       write(*,'(a15,3e15.6)') 'time,radavg:',time,radavg
-       write(*,'(a15,e15.6,3i)'),'time,100,impos:',time,tnum100,tnumimpos
+      write(*,*) 'time,tnumpart:',time,tnumpart
+      write(*,'(a15,3e15.6)') 'radmin,radmax:',time,radmin,radmax
+      write(*,'(a15,3e15.6)') 'tempmin,tempmax:',time,tempmin,tempmax
+      write(*,'(a15,3e15.6)') 'qmin,qmax:',time,qmin,qmax
+      write(*,'(a15,3e15.6)') 'time,radavg:',time,radavg
+      write(*,'(a15,e15.6,3i)'),'time,100,impos:',time,tnum100,tnumimpos
       !if (myid==0) write(*,*), 'time,actnum',time,tactnum
       !if (myid==0) write(*,*), 'time,denum',time,tdenum
       end if
@@ -8603,10 +8603,10 @@ c
       r4 = 0.0
       r5 = 0.0
 
-      allocate(p_base(nnz),
-     +         rho_base(nnz),
-     +         T_base(nnz),
-     +         theta_base(nnz))
+      allocate(p_base(0:nnz+1),
+     +         rho_base(0:nnz+1),
+     +         T_base(0:nnz+1),
+     +         theta_base(0:nnz+1))
       p_base = 0.0
       rho_base = 0.0
       T_base = 0.0
@@ -10905,7 +10905,7 @@ c
       real :: func_T_base,func_p_base,func_rho_base
 
       if (iexner.eq.1) then
-         do iz=1,nnz 
+         do iz=0,nnz+1
             theta_base(iz) = T_surf
             T_base(iz) = func_T_base(T_surf,zz(iz))
             p_base(iz) = func_p_base(surf_p,T_surf,zz(iz))
