@@ -6,6 +6,10 @@ case1
 *.mod
 *.o
 benchmark_approximation.x
+droplet_approximation/data/*.data
+droplet_approximation/notebooks/foo.data
+droplet_approximation/notebooks/foo.xlsx
+droplet_approximation/notebooks/test.xlsx
 lesmpi.a
 mach.file
 test_cases/*/cou.mp.*.out

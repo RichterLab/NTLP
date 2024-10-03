@@ -1,3 +1,9 @@
+!
+! NOTE: This module was generated from mlp_4layer-b=1024-lr=1e-3_halvingschedule-l2reg=1e-6.pth on 2024/10/02 at 23:00:29.
+!       Do not modify this directly!  Update the module generator's template and
+!       regenerate this file!
+!
+
 module droplet_model
 
     ! Module containing a model of droplet size and temperature using a 4-layer
@@ -89,6 +95,11 @@ module droplet_model
     !      effectively read-only and can be shared across threads.  This is
     !      straight forward to implement though it was not necessary for the
     !      initial implementation.
+    !
+    !   6. Single precision floating point is used throughout the module as it
+    !      has been deemed to produce an acceptable level of accuracy for the
+    !      radius and temperature parameters.  The input and output arrays
+    !      must be real*4.
     !
     ! NOTE: This file was automatically generated from the the MLP's training
     !       code!  Do not modify this unless you really know what you're doing!
