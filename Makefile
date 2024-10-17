@@ -63,12 +63,12 @@ DEBUG_FLAGS += -check all,noarg_temp_created
 # Exit with a SIGFPE whenever a floating point exception (FPE) is detected.
 # This is useful for identifying precisely where an invalid value (infinities
 # and NaNs) are introduced.
-#DEBUG_FLAGS += -fpe0
+DEBUG_FLAGS += -fpe0
 
 # Initialize floating point values, both scalars and arrays, with signalling
 # NaNs.  Combined with exiting on FPEs this makes it trivial to identify the use
 # of uninitialized floating point values.
-#DEBUG_FLAGS += -init=arrays -init=snan
+DEBUG_FLAGS += -init=arrays -init=snan
 
 else # DEBUG == no
 
