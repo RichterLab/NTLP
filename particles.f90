@@ -3398,7 +3398,7 @@ CONTAINS
       tnumimpos = intbuf_rec(8)
       tnumdrop_center = intbuf_rec(9)
 
-      tnum_destroy_accum = tnum_destroy
+      tnum_destroy_accum = tnum_destroy_accum + tnum_destroy
 
       
       !Compute sums of real quantities
