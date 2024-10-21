@@ -2947,7 +2947,7 @@ CONTAINS
 
       call particle_coupling_exchange
 
-      call particle_stats
+      call particle_stats_OLD
 
  
       !Finally, now that coupling and statistics arrays are filled, 
@@ -3476,7 +3476,7 @@ CONTAINS
       call end_phase(measurement_id_particle_coupling)
 
       call start_phase(measurement_id_particle_stats)
-      call particle_stats
+      call particle_stats_OLD
       call end_phase(measurement_id_particle_stats)
 
       !Finally, now that coupling and statistics arrays are filled, 
@@ -3791,7 +3791,7 @@ CONTAINS
    
   end subroutine destroy_particle
 
-  subroutine particle_stats
+  subroutine particle_stats_OLD
       use pars
       use con_stats
       use con_data
@@ -3850,6 +3850,110 @@ CONTAINS
 
       part => part%next
       end do
+
+  end subroutine particle_stats_OLD
+
+  subroutine particle_stats
+      use pars
+      use con_stats
+      use con_data
+      implicit none
+      include 'mpif.h'
+
+      integer :: iz,ipt,jpt,kpt
+      integer :: ierr
+      real :: rhop,pi
+      
+      integer,parameter :: num1 = 2  !Number of 1-dimensional particle statistics
+
+      integer :: partcount_tmp(maxnz)
+
+      real :: statsvec1(maxnz,num1)
+
+      statsvec1 = 0.0
+      partcount_tmp = 0.0
+      radmean = 0.0
+
+
+      !For each particle, add its attribute to a running sum of the stats of interest at the correct z-location
+      part => first_particle
+      do while (associated(part))     
+
+      kpt = minloc(z,1,mask=(z.gt.part%xp(3))) - 1
+
+      pi   = 4.0*atan(1.0)
+      rhop = (part%m_s+4.0/3.0*pi*part%radius**3*rhow)/(4.0/3.0*pi*part%radius**3)
+
+      partcount_tmp(kpt) = partcount_tmp(kpt) + 1
+
+      radmean(kpt) = radmean(kpt) + part%radius
+
+      !partcount_t(kpt,jpt,ipt) = partcount_t(kpt,jpt,ipt) + 1.0
+     ! 
+     ! !Get su mean, mean-squared of particle velocities at each level
+     ! upwp_t(kpt,jpt,ipt) = upwp_t(kpt,jpt,ipt) + part%vp(1)*part%vp(3)
+     ! do i = 1,3
+     ! vpsum_t(kpt,jpt,ipt,i) = vpsum_t(kpt,jpt,ipt,i) + part%vp(i)
+     ! vpsqrsum_t(kpt,jpt,ipt,i)=vpsqrsum_t(kpt,jpt,ipt,i)+part%vp(i)**2
+!
+!      ufsum_t(kpt,jpt,ipt,i) = ufsum_t(kpt,jpt,ipt,i) + part%uf(i)
+!      ufsqrsum_t(kpt,jpt,ipt,i)=ufsqrsum_t(kpt,jpt,ipt,i)+part%uf(i)**2
+!      end do
+!
+!      Tpsum_t(kpt,jpt,ipt) = Tpsum_t(kpt,jpt,ipt) + part%Tp
+!      Tpsqrsum_t(kpt,jpt,ipt) = Tpsqrsum_t(kpt,jpt,ipt) + part%Tp**2
+!
+!      Tfsum_t(kpt,jpt,ipt) = Tfsum_t(kpt,jpt,ipt) + part%Tf
+!
+!      qfsum_t(kpt,jpt,ipt) = qfsum_t(kpt,jpt,ipt) + part%qinf
+!
+!      wpTpsum_t(kpt,jpt,ipt) = wpTpsum_t(kpt,jpt,ipt) + part%Tp*part%vp(3)
+!
+!
+!      radsum_t(kpt,jpt,ipt) = radsum_t(kpt,jpt,ipt) + part%radius 
+!
+!      rad2sum_t(kpt,jpt,ipt) = rad2sum_t(kpt,jpt,ipt) + part%radius**2  
+!
+!      multcount_t(kpt,jpt,ipt) = multcount_t(kpt,jpt,ipt) + real(part%mult)
+!
+!      mwsum_t(kpt,jpt,ipt) = mwsum_t(kpt,jpt,ipt) + real(part%mult)*(rhow*4.0/3.0*pi*part%radius**3)
+!
+!      qstarsum_t(kpt,jpt,ipt) = qstarsum_t(kpt,jpt,ipt) + part%qstar
+!
+!      LWP(ipt,jpt) = LWP(ipt,jpt) + real(part%mult)*(rhow*4.0/3.0*pi*part%radius**3)
+
+      part => part%next
+      end do
+
+
+      !Now sum across processors
+      do iz=1,maxnz
+
+         statsvec1(iz,1) = partcount_tmp(iz)
+         statsvec1(iz,2) = radmean(iz)
+
+      end do
+
+      call mpi_allreduce(mpi_in_place,statsvec1,maxnz*num1,mpi_double_precision,mpi_sum,mpi_comm_world,ierr)
+
+!      if (myid.eq.0) then
+!	 call mpi_reduce(MPI_IN_PLACE,statsvec1,maxnz*num1,MPI_DOUBLE_PRECISION,MPI_SUM,0,MPI_COMM_WORLD,ierr)
+!      else
+!	 call mpi_reduce(statsvec1,statsvec1,maxnz*num1,MPI_DOUBLE_PRECISION,MPI_SUM,0,MPI_COMM_WORLD,ierr)
+!      end if
+
+     do iz=1,maxnz
+        partcount_tmp(iz) = statsvec1(iz,1)
+
+	if (partcount_tmp(iz).eq.0) then
+	   radmean(iz) = 0.0
+	else
+           radmean(iz) = statsvec1(iz,2)/real(partcount_tmp(iz))
+        end if
+
+     end do
+	 
+
 
   end subroutine particle_stats
 

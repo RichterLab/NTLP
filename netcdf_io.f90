@@ -35,6 +35,7 @@ integer :: Tpsrc_vid,TEpsrc_vid,Hpsrc_vid
 integer :: Tpmean_vid,Tpmsqr_vid
 integer :: Tfmean_vid,qfmean_vid
 integer :: radmean_vid,rad2mean_vid
+integer :: radmean_OLD_vid
 integer :: qstarm_vid
 integer :: Nc_vid,ql_vid,radsrc_vid
 integer :: rho_base_vid,p_base_vid,T_base_vid,theta_base_vid
@@ -328,6 +329,9 @@ subroutine netcdf_init
       call netcdf_check( nf90_def_var(ncid,"qfmean",NF90_REAL, dimids_zu,qfmean_vid) )
       call netcdf_check( nf90_put_att(ncid,qfmean_vid,"title","Horiz. avg. fluid qv at particle") )
 
+      call netcdf_check( nf90_def_var(ncid,"radmean_OLD",NF90_REAL, dimids_zu,radmean_OLD_vid) )
+      call netcdf_check( nf90_put_att(ncid,radmean_OLD_vid,"title","Horiz. avg. particle radius") )
+
       call netcdf_check( nf90_def_var(ncid,"radmean",NF90_REAL, dimids_zu,radmean_vid) )
       call netcdf_check( nf90_put_att(ncid,radmean_vid,"title","Horiz. avg. particle radius") )
 
@@ -474,6 +478,7 @@ subroutine netcdf_res
       call netcdf_check( nf90_inq_varid(ncid,"Tpmsqr",Tpmsqr_vid) )
       call netcdf_check( nf90_inq_varid(ncid,"Tfmean",Tfmean_vid) )
       call netcdf_check( nf90_inq_varid(ncid,"qfmean",qfmean_vid) )
+      call netcdf_check( nf90_inq_varid(ncid,"radmean_OLD",radmean_OLD_vid) )
       call netcdf_check( nf90_inq_varid(ncid,"radmean",radmean_vid) )
       call netcdf_check( nf90_inq_varid(ncid,"rad2mean",rad2mean_vid) )
       call netcdf_check( nf90_inq_varid(ncid,"qstarm",qstarm_vid) )
@@ -616,6 +621,7 @@ subroutine write_his_netcdf
       call netcdf_check( nf90_put_var(ncid,Tpmsqr_vid,real(Tpmsqr(1:nnz)),start=(/1, his_counter/)) )
       call netcdf_check( nf90_put_var(ncid,Tfmean_vid,real(Tfmean(1:nnz)),start=(/1, his_counter/)) )
       call netcdf_check( nf90_put_var(ncid,qfmean_vid,real(qfmean(1:nnz)),start=(/1, his_counter/)) )
+      call netcdf_check( nf90_put_var(ncid,radmean_OLD_vid,real(radmean_OLD(1:nnz)),start=(/1, his_counter/)) )
       call netcdf_check( nf90_put_var(ncid,radmean_vid,real(radmean(1:nnz)),start=(/1, his_counter/)) )
       call netcdf_check( nf90_put_var(ncid,rad2mean_vid,real(rad2mean(1:nnz)),start=(/1, his_counter/)) )
       call netcdf_check( nf90_put_var(ncid,qstarm_vid,real(qstarm(1:nnz)),start=(/1, his_counter/)) )

@@ -293,6 +293,11 @@ c
       endif
       if(istage .eq. 1)then
         call xy_stats
+
+        !call start_phase(measurement_id_particle_stats)
+        call particle_stats
+        !call end_phase(measurement_id_particle_stats)
+
         call tke_budget
         do iscl=1,nscl
         call Tvar_budget(iscl)
@@ -7665,7 +7670,7 @@ c
          Tfmean(iz) = 0.0
          qfmean(iz) = 0.0
          wpTpm(iz) = 0.0
-         radmean(iz) = 0.0
+         radmean_OLD(iz) = 0.0
          rad2mean(iz) = 0.0
          multmean(iz) = 0.0
          mwmean(iz) = 0.0
@@ -7690,7 +7695,7 @@ c
          Tfmean(iz) = stat(iz,24)/stat(iz,11)
          qfmean(iz) = stat(iz,25)/stat(iz,11)
          wpTpm(iz) = stat(iz,26)/stat(iz,11)-(Tpmean(iz)*vp3mean(iz))
-         radmean(iz) = stat(iz,28)/stat(iz,11) 
+         radmean_OLD(iz) = stat(iz,28)/stat(iz,11) 
          rad2mean(iz)= stat(iz,29)/stat(iz,11)
          multmean(iz) = stat(iz,30)/stat(iz,11)
          mwmean(iz) = stat(iz,31)/stat(iz,11)

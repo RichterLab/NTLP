@@ -276,7 +276,7 @@ c ----------------------------------------------------------------------
      +           Tv_tran(maxnz,nscl),Tv_prod(maxnz,nscl),
      +           Tv_diss(maxnz,nscl),
      +           Tv_part1(maxnz,nscl),Tv_part2(maxnz),
-     +           radmean(maxnz),rad2mean(maxnz),
+     +           radmean_OLD(maxnz),radmean(maxnz),rad2mean(maxnz),
      +           multmean(maxnz),mwmean(maxnz), 
      +           Nc(maxnz),ql(maxnz),  
      +           Hpsrc(maxnz),TEpsrc(maxnz),
@@ -323,7 +323,7 @@ c ----------------------------------------------------------------------
      +           wpTpm(:),Tpsrc(:),
      +           Tv_tran(:,:),Tv_prod(:,:),Tv_diss(:,:),
      +           Tv_part1(:,:),Tv_part2(:),
-     +           radmean(:),rad2mean(:),
+     +           radmean_OLD(:),radmean(:),rad2mean(:),
      +           multmean(:),mwmean(:),
      +           Nc(:),ql(:), 
      +           Hpsrc(:), TEpsrc(:),
@@ -421,6 +421,7 @@ c
              Tv_diss => c_s%Tv_diss  ; isize = isize + size(Tv_diss)
              Tv_part1 => c_s%Tv_part1  ; isize = isize + size(Tv_part1)
              Tv_part2 => c_s%Tv_part2  ; isize = isize + size(Tv_part2)
+      radmean_OLD => c_s%radmean_OLD ;isize = isize + size(radmean_OLD)
              radmean => c_s%radmean  ; isize = isize + size(radmean)
              rad2mean => c_s%rad2mean  ; isize = isize + size(rad2mean)
              multmean => c_s%multmean ; isize = isize + size(multmean)
