@@ -2161,6 +2161,9 @@ CONTAINS
       part%sigm_s = 0.0
       part%numact = 0.0
 
+      !Critical radius, computed based on initial temp
+      part%rc = crit_radius(part%m_s,part%kappa_s,part%Tp) 
+
       
   end subroutine create_particle
 
@@ -3147,7 +3150,7 @@ CONTAINS
                end if
 
                !Get the critical radius based on old temp
-               part%rc = crit_radius(part%m_s,part%kappa_s,part%Tp) 
+               !part%rc = crit_radius(part%m_s,part%kappa_s,part%Tp) 
 
                !Count if activated/deactivated
                if (part%radius > part%rc .AND. part%radius*rt_zeroes(1) < part%rc) then
