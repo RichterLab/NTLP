@@ -294,9 +294,9 @@ c
       if(istage .eq. 1)then
         call xy_stats
 
-        !call start_phase(measurement_id_particle_stats)
-        call particle_stats
-        !call end_phase(measurement_id_particle_stats)
+        call start_phase(measurement_id_particle_stats)
+        call particle_xy_stats
+        call end_phase(measurement_id_particle_stats)
 
         call tke_budget
         do iscl=1,nscl
@@ -7089,7 +7089,6 @@ c
 	 mhis     = (floor(time/ihst) .ne. 
      +              floor((time+dt)/ihst))
       endif
-       mtrans = mhis
 
       if (i_viz .lt. 0) then
          msave_v = .false.
@@ -7413,7 +7412,7 @@ c ------- indices for indexing array stat(.,.)
 c         js = number of non-scalar stats
 c         ns = number of scalar stats
 c
-      integer, parameter :: js = 43, ns = 5, nstat = js + ns*nscl
+      integer, parameter :: js = 20, ns = 5, nstat = js + ns*nscl
       real :: stat(1:nnz,nstat)
 
       integer :: ix,iy,iz,izm1,izp1,izp2,m1,m2,m3,m4,m5,i,l
@@ -7434,38 +7433,15 @@ c          stat(.,8) = sgs e at zw = eavg
 c          stat(.,9) = resolved uw at zw = uwle
 c          stat(.,10) = resolved vw at zw = vwle
 c          stat(.,11) = particle number in each cell 
-c          stat(.,12) = vpsum(1) 
-c          stat(.,13) = vpsum(2) 
-c          stat(.,14) = vpsum(3) 
-c          stat(.,15) = vpsqrsum(1) 
-c          stat(.,16) = vpsqrsum(2) 
-c          stat(.,17) = vpsqrsum(3) 
-c          stat(.,18) = partsrc(1) 
-c          stat(.,19) = partsrc(2) 
-c          stat(.,20) = partsrc(3) 
-c          stat(.,21) = upwp - up'*wp'
-c          stat(.,22) = Tpsum
-c          stat(.,23) = Tpsqrsum
-c          stat(.,24) = Tfsum
-c          stat(.,25) = qfsum
-c          stat(.,26) = wpTpsum
-c          stat(.,27) = Tpsrc
-c          stat(.,28) = radsum
-c          stat(.,29) = rad2sum
-c          stat(.,30) = mass_p_sum
-c          stat(.,31) = mass_w_sum
-c          stat(.,32) = Hpsrc
-c          stat(.,33) = TEpsrc
-c          stat(.,34) = qstarsum
-c          stat(.,35) = relative humidity
-c          stat(.,36) = temperature (NOT potential temp)
-c          stat(.,37) = RH^2
-c          stat(.,38) = ufsum(1) 
-c          stat(.,39) = ufsum(2) 
-c          stat(.,40) = ufsum(3) 
-c          stat(.,41) = ufsqrsum(1) 
-c          stat(.,42) = ufsqrsum(2) 
-c          stat(.,43) = ufsqrsum(3) 
+c          stat(.,12) = partsrc(1) 
+c          stat(.,13) = partsrc(2) 
+c          stat(.,14) = partsrc(3) 
+c          stat(.,15) = Tpsrc
+c          stat(.,16) = Hpsrc
+c          stat(.,17) = TEpsrc
+c          stat(.,18) = relative humidity
+c          stat(.,19) = temperature (NOT potential temp)
+c          stat(.,20) = RH^2
 c          stat(.,m1) = resolved scalar flux wt at zw = wtle
 c          stat(.,m2) = resolved scalar flux ut at zw = utle
 c          stat(.,m3) = resolved scalar flux vt at zw = vtle
@@ -7529,29 +7505,12 @@ c
      +              0.5*((v(ix,iy,iz)-vxym(iz))+
      +                   (v(ix,iy,izp1)-vxym(izp1)))
          stat(iz,11) = stat(iz,11) + partcount(ix,iy,iz)
-         stat(iz,12) = stat(iz,12) + vpsum(ix,iy,iz,1)
-         stat(iz,13) = stat(iz,13) + vpsum(ix,iy,iz,2)
-         stat(iz,14) = stat(iz,14) + vpsum(ix,iy,iz,3)
-         stat(iz,15) = stat(iz,15) + vpsqrsum(ix,iy,iz,1)
-         stat(iz,16) = stat(iz,16) + vpsqrsum(ix,iy,iz,2)
-         stat(iz,17) = stat(iz,17) + vpsqrsum(ix,iy,iz,3)
-         stat(iz,18) = stat(iz,18) + partsrc(ix,iy,iz,1)
-         stat(iz,19) = stat(iz,19) + partsrc(ix,iy,iz,2)
-         stat(iz,20) = stat(iz,20) + partsrc(ix,iy,iz,3)
-         stat(iz,21) = stat(iz,21) + upwp(ix,iy,iz)
-         stat(iz,22) = stat(iz,22) + Tpsum(ix,iy,iz)
-         stat(iz,23) = stat(iz,23) + Tpsqrsum(ix,iy,iz)
-         stat(iz,24) = stat(iz,24) + Tfsum(ix,iy,iz)
-         stat(iz,25) = stat(iz,25) + qfsum(ix,iy,iz)
-         stat(iz,26) = stat(iz,26) + wpTpsum(ix,iy,iz)
-         stat(iz,27) = stat(iz,27) + partTsrc(ix,iy,iz)
-         stat(iz,28) = stat(iz,28) + radsum(ix,iy,iz) 
-         stat(iz,29) = stat(iz,29) + rad2sum(ix,iy,iz) 
-         stat(iz,30) = stat(iz,30) + multcount(ix,iy,iz)
-         stat(iz,31) = stat(iz,31) + mwsum(ix,iy,iz)
-         stat(iz,32) = stat(iz,32) + partHsrc(ix,iy,iz)
-         stat(iz,33) = stat(iz,33) + partTEsrc(ix,iy,iz)
-         stat(iz,34) = stat(iz,34) + qstarsum(ix,iy,iz)
+         stat(iz,12) = stat(iz,12) + partsrc(ix,iy,iz,1)
+         stat(iz,13) = stat(iz,13) + partsrc(ix,iy,iz,2)
+         stat(iz,14) = stat(iz,14) + partsrc(ix,iy,iz,3)
+         stat(iz,15) = stat(iz,15) + partTsrc(ix,iy,iz)
+         stat(iz,16) = stat(iz,16) + partHsrc(ix,iy,iz)
+         stat(iz,17) = stat(iz,17) + partTEsrc(ix,iy,iz)
 
          if (iexner .eq. 1) then
          Ttmp = t(ix,iy,1,iz)*
@@ -7563,16 +7522,10 @@ c
          RHtmp = Ttmp*
      +   t(ix,iy,2,iz)*Ru/Mw/mod_magnus(Ttmp)*rhoa*100.0
 
-         stat(iz,35) = stat(iz,35) + RHtmp
-         stat(iz,36) = stat(iz,36) + Ttmp
-         stat(iz,37) = stat(iz,37) + RHtmp**2
+         stat(iz,18) = stat(iz,18) + RHtmp
+         stat(iz,19) = stat(iz,19) + Ttmp
+         stat(iz,20) = stat(iz,20) + RHtmp**2
 
-         stat(iz,38) = stat(iz,38) + ufsum(ix,iy,iz,1)
-         stat(iz,39) = stat(iz,39) + ufsum(ix,iy,iz,2)
-         stat(iz,40) = stat(iz,40) + ufsum(ix,iy,iz,3)
-         stat(iz,41) = stat(iz,41) + ufsqrsum(ix,iy,iz,1)
-         stat(iz,42) = stat(iz,42) + ufsqrsum(ix,iy,iz,2)
-         stat(iz,43) = stat(iz,43) + ufsqrsum(ix,iy,iz,3)
       enddo
       enddo
 
@@ -7658,74 +7611,23 @@ c
 
       if (stat(iz,11).eq.0) then
          zconc(iz) = 0.0
-         vp1mean(iz) = 0.0
-         vp2mean(iz) = 0.0
-         vp3mean(iz) = 0.0
-         vp1msqr(iz) = 0.0
-         vp2msqr(iz) = 0.0
-         vp3msqr(iz) = 0.0
-         upwpm(iz) = 0.0
-         Tpmean(iz) = 0.0
-         Tpmsqr(iz) = 0.0
-         Tfmean(iz) = 0.0
-         qfmean(iz) = 0.0
-         wpTpm(iz) = 0.0
-         radmean_OLD(iz) = 0.0
-         rad2mean(iz) = 0.0
-         multmean(iz) = 0.0
-         mwmean(iz) = 0.0
-         qstarm(iz) = 0.0
-         uf1mean(iz) = 0.0
-         uf2mean(iz) = 0.0
-         uf3mean(iz) = 0.0
-         uf1msqr(iz) = 0.0
-         uf2msqr(iz) = 0.0
-         uf3msqr(iz) = 0.0
       else
          zconc(iz)  = stat(iz,11)/xl/yl/dzw(iz)
-         vp1mean(iz) = stat(iz,12)/stat(iz,11)
-         vp2mean(iz) = stat(iz,13)/stat(iz,11)
-         vp3mean(iz) = stat(iz,14)/stat(iz,11)
-         vp1msqr(iz) = stat(iz,15)/stat(iz,11)-vp1mean(iz)**2
-         vp2msqr(iz) = stat(iz,16)/stat(iz,11)-vp2mean(iz)**2
-         vp3msqr(iz) = stat(iz,17)/stat(iz,11)-vp3mean(iz)**2
-         upwpm(iz) = stat(iz,21)/stat(iz,11)-(vp1mean(iz)*vp3mean(iz))
-         Tpmean(iz) = stat(iz,22)/stat(iz,11)
-         Tpmsqr(iz) = stat(iz,23)/stat(iz,11)-Tpmean(iz)**2
-         Tfmean(iz) = stat(iz,24)/stat(iz,11)
-         qfmean(iz) = stat(iz,25)/stat(iz,11)
-         wpTpm(iz) = stat(iz,26)/stat(iz,11)-(Tpmean(iz)*vp3mean(iz))
-         radmean_OLD(iz) = stat(iz,28)/stat(iz,11) 
-         rad2mean(iz)= stat(iz,29)/stat(iz,11)
-         multmean(iz) = stat(iz,30)/stat(iz,11)
-         mwmean(iz) = stat(iz,31)/stat(iz,11)
-         qstarm(iz) = stat(iz,34)/stat(iz,11)
-         uf1mean(iz) = stat(iz,38)/stat(iz,11)
-         uf2mean(iz) = stat(iz,39)/stat(iz,11)
-         uf3mean(iz) = stat(iz,40)/stat(iz,11)
-         uf1msqr(iz) = stat(iz,41)/stat(iz,11)-uf1mean(iz)**2
-         uf2msqr(iz) = stat(iz,42)/stat(iz,11)-uf2mean(iz)**2
-         uf3msqr(iz) = stat(iz,43)/stat(iz,11)-uf3mean(iz)**2
       end if
          
          
-      m1src(iz) = stat(iz,18)*fnxy
-      m2src(iz) = stat(iz,19)*fnxy
-      m3src(iz) = stat(iz,20)*fnxy
+      m1src(iz) = stat(iz,12)*fnxy
+      m2src(iz) = stat(iz,13)*fnxy
+      m3src(iz) = stat(iz,14)*fnxy
       uw_tot(iz) = uwle(iz) + uwsb(iz)
       vw_tot(iz) = vwle(iz) + vwsb(iz)
-      Tpsrc(iz) = stat(iz,27)*fnxy
-      Nc(iz) = stat(iz,30)/xl/yl/dzw(iz)
-      ql(iz) = stat(iz,31)/xl/yl/dzw(iz)/rhoa
-      Hpsrc(iz) = stat(iz,32)*fnxy
-      TEpsrc(iz) = stat(iz,33)*fnxy
-      RHxym(iz) = stat(iz,35)*fnxy
-      tempxym(iz) = stat(iz,36)*fnxy
-      RHmsqr(iz) = stat(iz,37)*fnxy
+      Tpsrc(iz) = stat(iz,15)*fnxy
+      Hpsrc(iz) = stat(iz,16)*fnxy
+      TEpsrc(iz) = stat(iz,17)*fnxy
+      RHxym(iz) = stat(iz,18)*fnxy
+      tempxym(iz) = stat(iz,19)*fnxy
+      RHmsqr(iz) = stat(iz,20)*fnxy
 
-
-      !Doesn't need averaging if basing radiation source on average ql:
-      radtend(iz) = radsrc(iz)
 
 
 c
@@ -8661,46 +8563,6 @@ c
       partcount = 0.0
       allocate(partcount_t(0:nnz+1,iys:iye,mxs:mxe))
       partcount_t = 0.0
-      allocate(upwp_t(0:nnz+1,iys:iye,mxs:mxe))
-      upwp_t = 0.0
-      allocate(upwp(nnx,iys:iye,izs-1:ize+1))
-      upwp = 0.0
-      allocate(vpsum(nnx,iys:iye,izs-1:ize+1,1:3))
-      vpsum = 0.0
-      allocate(vpsum_t(0:nnz+1,iys:iye,mxs:mxe,1:3))
-      vpsum_t = 0.0
-      allocate(vpsqrsum(nnx,iys:iye,izs-1:ize+1,1:3))
-      vpsqrsum = 0.0
-      allocate(vpsqrsum_t(0:nnz+1,iys:iye,mxs:mxe,1:3))
-      vpsqrsum_t = 0.0
-      allocate(ufsum(nnx,iys:iye,izs-1:ize+1,1:3))
-      ufsum = 0.0
-      allocate(ufsum_t(0:nnz+1,iys:iye,mxs:mxe,1:3))
-      ufsum_t = 0.0
-      allocate(ufsqrsum(nnx,iys:iye,izs-1:ize+1,1:3))
-      ufsqrsum = 0.0
-      allocate(ufsqrsum_t(0:nnz+1,iys:iye,mxs:mxe,1:3))
-      ufsqrsum_t = 0.0
-      allocate(Tpsum(nnx,iys:iye,izs-1:ize+1))
-      Tpsum = 0.0
-      allocate(Tpsum_t(0:nnz+1,iys:iye,mxs:mxe))
-      Tpsum_t = 0.0
-      allocate(Tpsqrsum(nnx,iys:iye,izs-1:ize+1))
-      Tpsqrsum = 0.0
-      allocate(Tpsqrsum_t(0:nnz+1,iys:iye,mxs:mxe))
-      Tpsqrsum_t = 0.0
-      allocate(Tfsum(nnx,iys:iye,izs-1:ize+1))
-      Tfsum = 0.0
-      allocate(Tfsum_t(0:nnz+1,iys:iye,mxs:mxe))
-      Tfsum_t = 0.0
-      allocate(qfsum(nnx,iys:iye,izs-1:ize+1))
-      qfsum = 0.0
-      allocate(qfsum_t(0:nnz+1,iys:iye,mxs:mxe))
-      qfsum_t = 0.0
-      allocate(wpTpsum(nnx,iys:iye,izs-1:ize+1))
-      wpTpsum = 0.0
-      allocate(wpTpsum_t(0:nnz+1,iys:iye,mxs:mxe))
-      wpTpsum_t = 0.0
       allocate(partsrc(nnx,iys:iye,izs-1:ize+1,1:3))
       partsrc = 0.0
       allocate(partsrc_t(0:nnz+1,iys:iye+1,mxs:mxe+1,1:3))
@@ -8709,22 +8571,6 @@ c
       partTsrc = 0.0
       allocate(partTsrc_t(0:nnz+1,iys:iye+1,mxs:mxe+1))
       partTsrc_t = 0.0
-      allocate(radsum(nnx,iys:iye,izs-1:ize+1))
-      radsum = 0.0
-      allocate(radsum_t(0:nnz+1,iys:iye,mxs:mxe)) 
-      radsum_t = 0.0
-      allocate(rad2sum(nnx,iys:iye,izs-1:ize+1)) 
-      rad2sum = 0.0
-      allocate(rad2sum_t(0:nnz+1,iys:iye,mxs:mxe))
-      rad2sum_t = 0.0
-      allocate(multcount(nnx,iys:iye,izs-1:ize+1)) 
-      multcount = 0.0
-      allocate(multcount_t(0:nnz+1,iys:iye,mxs:mxe)) 
-      multcount_t = 0.0
-      allocate(mwsum(nnx,iys:iye,izs-1:ize+1)) 
-      mwsum = 0.0
-      allocate(mwsum_t(0:nnz+1,iys:iye,mxs:mxe)) 
-      mwsum_t = 0.0
       allocate(partHsrc(nnx,iys:iye,izs-1:ize+1))
       partHsrc = 0.0
       allocate(partHsrc_t(0:nnz+1,iys:iye+1,mxs:mxe+1))
@@ -8733,10 +8579,6 @@ c
       partTEsrc = 0.0
       allocate(partTEsrc_t(0:nnz+1,iys:iye+1,mxs:mxe+1))
       partTEsrc_t = 0.0
-      allocate(qstarsum(nnx,iys:iye,izs-1:ize+1)) 
-      qstarsum = 0.0
-      allocate(qstarsum_t(0:nnz+1,iys:iye,mxs:mxe)) 
-      qstarsum_t = 0.0
 
       allocate(LWP(mxs:mxe,iys:iye))
       LWP = 0.0

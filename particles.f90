@@ -11,22 +11,7 @@ module particles
   real, allocatable :: partHsrc(:,:,:),partHsrc_t(:,:,:)
   real, allocatable :: partTEsrc(:,:,:),partTEsrc_t(:,:,:)
   real, allocatable :: partcount_t(:,:,:),partsrc_t(:,:,:,:)
-  real, allocatable :: vpsum_t(:,:,:,:),vpsqrsum_t(:,:,:,:)
-  real, allocatable :: ufsum_t(:,:,:,:),ufsqrsum_t(:,:,:,:)
-  real, allocatable :: upwp_t(:,:,:),upwp(:,:,:)
   real, allocatable :: partcount(:,:,:),partsrc(:,:,:,:)
-  real, allocatable :: vpsum(:,:,:,:),vpsqrsum(:,:,:,:)
-  real, allocatable :: ufsum(:,:,:,:),ufsqrsum(:,:,:,:)
-  real, allocatable :: Tpsum(:,:,:),Tpsum_t(:,:,:)
-  real, allocatable :: Tpsqrsum(:,:,:),Tpsqrsum_t(:,:,:)
-  real, allocatable :: Tfsum(:,:,:),Tfsum_t(:,:,:)
-  real, allocatable :: qfsum(:,:,:),qfsum_t(:,:,:)
-  real, allocatable :: wpTpsum(:,:,:),wpTpsum_t(:,:,:)
-  real, allocatable :: radsum(:,:,:),radsum_t(:,:,:)
-  real, allocatable :: rad2sum(:,:,:),rad2sum_t(:,:,:)
-  real, allocatable :: multcount(:,:,:),multcount_t(:,:,:) 
-  real, allocatable :: mwsum(:,:,:),mwsum_t(:,:,:)
-  real, allocatable :: qstarsum(:,:,:),qstarsum_t(:,:,:)
 
   !--- SFS velocity calculation ---------
   real, allocatable :: sigm_s(:,:,:),sigm_sdx(:,:,:),sigm_sdy(:,:,:)
@@ -43,7 +28,7 @@ module particles
   integer :: num100=0, numimpos=0
   integer :: tnum100, tnumimpos
   integer :: denum, actnum, tdenum, tactnum
-  integer :: num_destroy=0,tnum_destroy=0
+  integer :: num_destroy=0,tnum_destroy=0,tnum_destroy_accum=0
   integer :: tot_reintro=0
 
   real :: Rep_avg,part_grav(3)
@@ -2772,25 +2757,10 @@ CONTAINS
 
 
       partcount_t = 0.0
-      vpsum_t = 0.0
-      ufsum_t = 0.0
-      upwp_t = 0.0
-      vpsqrsum_t = 0.0
-      ufsqrsum_t = 0.0
-      Tpsum_t = 0.0
-      Tfsum_t = 0.0
-      qfsum_t = 0.0
-      radsum_t = 0.0  
-      rad2sum_t = 0.0  
-      multcount_t = 0.0
-      mwsum_t = 0.0
-      Tpsqrsum_t = 0.0
-      wpTpsum_t = 0.0
       myRep_avg = 0.0
       mylwc_sum = 0.0
       myphiw_sum = 0.0
       myphiv_sum = 0.0
-      qstarsum_t = 0.0 
       LWP = 0.0
 
       t_s = mpi_wtime()
@@ -2978,118 +2948,10 @@ CONTAINS
                      mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid, &
                      ncpu_s,numprocs)
 
-      call ztox_trans(mwsum_t(0:nnz+1,iys:iye,mxs:mxe), &
-                     mwsum(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,mxs, &
-                     mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid, &
-                     ncpu_s,numprocs)
-
-      !Try only calling these when the history data is being written:
-      if(mtrans  .and. istage .eq. 3) then
-      call ztox_trans(upwp_t(0:nnz+1,iys:iye,mxs:mxe), &
-                     upwp(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,mxs, &
-                     mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid, &
-                     ncpu_s,numprocs)
-
-      call ztox_trans(vpsum_t(0:nnz+1,iys:iye,mxs:mxe,1), &
-                     vpsum(1:nnx,iys:iye,izs-1:ize+1,1),nnx,nnz,mxs, &
-                     mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid, &
-                     ncpu_s,numprocs)
-      call ztox_trans(vpsum_t(0:nnz+1,iys:iye,mxs:mxe,2), &
-                     vpsum(1:nnx,iys:iye,izs-1:ize+1,2),nnx,nnz,mxs, &
-                     mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid, &
-                     ncpu_s,numprocs)
-      call ztox_trans(vpsum_t(0:nnz+1,iys:iye,mxs:mxe,3), &
-                     vpsum(1:nnx,iys:iye,izs-1:ize+1,3),nnx,nnz,mxs, &
-                     mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid, &
-                     ncpu_s,numprocs)
-
-      call ztox_trans(vpsqrsum_t(0:nnz+1,iys:iye,mxs:mxe,1), &
-                     vpsqrsum(1:nnx,iys:iye,izs-1:ize+1,1),nnx,nnz,mxs, &
-                     mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid, &
-                     ncpu_s,numprocs)
-      call ztox_trans(vpsqrsum_t(0:nnz+1,iys:iye,mxs:mxe,2), &
-                     vpsqrsum(1:nnx,iys:iye,izs-1:ize+1,2),nnx,nnz,mxs, &
-                     mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid, &
-                     ncpu_s,numprocs)
-      call ztox_trans(vpsqrsum_t(0:nnz+1,iys:iye,mxs:mxe,3), &
-                     vpsqrsum(1:nnx,iys:iye,izs-1:ize+1,3),nnx,nnz,mxs, &
-                     mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid, &
-                     ncpu_s,numprocs)
-
-      call ztox_trans(ufsum_t(0:nnz+1,iys:iye,mxs:mxe,1), &
-                     ufsum(1:nnx,iys:iye,izs-1:ize+1,1),nnx,nnz,mxs, &
-                     mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid, &
-                     ncpu_s,numprocs)
-      call ztox_trans(ufsum_t(0:nnz+1,iys:iye,mxs:mxe,2), &
-                     ufsum(1:nnx,iys:iye,izs-1:ize+1,2),nnx,nnz,mxs, &
-                     mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid, &
-                     ncpu_s,numprocs)
-      call ztox_trans(ufsum_t(0:nnz+1,iys:iye,mxs:mxe,3), &
-                     ufsum(1:nnx,iys:iye,izs-1:ize+1,3),nnx,nnz,mxs, &
-                     mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid, &
-                     ncpu_s,numprocs)
-
-      call ztox_trans(ufsqrsum_t(0:nnz+1,iys:iye,mxs:mxe,1), &
-                     ufsqrsum(1:nnx,iys:iye,izs-1:ize+1,1),nnx,nnz,mxs, &
-                     mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid, &
-                     ncpu_s,numprocs)
-      call ztox_trans(ufsqrsum_t(0:nnz+1,iys:iye,mxs:mxe,2), &
-                     ufsqrsum(1:nnx,iys:iye,izs-1:ize+1,2),nnx,nnz,mxs, &
-                     mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid, &
-                     ncpu_s,numprocs)
-      call ztox_trans(ufsqrsum_t(0:nnz+1,iys:iye,mxs:mxe,3), &
-                     ufsqrsum(1:nnx,iys:iye,izs-1:ize+1,3),nnx,nnz,mxs, &
-                     mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid, &
-                     ncpu_s,numprocs)
-
-      call ztox_trans(Tpsum_t(0:nnz+1,iys:iye,mxs:mxe), &
-                     Tpsum(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,mxs, &
-                     mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid, &
-                     ncpu_s,numprocs)
-      call ztox_trans(Tpsqrsum_t(0:nnz+1,iys:iye,mxs:mxe), &
-                     Tpsqrsum(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,mxs, &
-                     mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid, &
-                     ncpu_s,numprocs)
-      call ztox_trans(Tfsum_t(0:nnz+1,iys:iye,mxs:mxe), &
-                     Tfsum(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,mxs, &
-                     mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid, &
-                     ncpu_s,numprocs)
-      call ztox_trans(qfsum_t(0:nnz+1,iys:iye,mxs:mxe), &
-                     qfsum(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,mxs, &
-                     mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid, &
-                     ncpu_s,numprocs)
-      call ztox_trans(wpTpsum_t(0:nnz+1,iys:iye,mxs:mxe), &
-                     wpTpsum(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,mxs, &
-                     mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid, &
-                     ncpu_s,numprocs)
-
       call ztox_trans(partcount_t(0:nnz+1,iys:iye,mxs:mxe), &
                      partcount(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,mxs, &
                      mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid, &
                      ncpu_s,numprocs)
-
-      call ztox_trans(radsum_t(0:nnz+1,iys:iye,mxs:mxe), &
-                     radsum(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,mxs, &
-                     mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid, &
-                     ncpu_s,numprocs)
-
-      call ztox_trans(rad2sum_t(0:nnz+1,iys:iye,mxs:mxe), &
-                     rad2sum(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,mxs, &
-                     mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid, &
-                     ncpu_s,numprocs) 
-
-      call ztox_trans(multcount_t(0:nnz+1,iys:iye,mxs:mxe), &
-                     multcount(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,mxs, &
-                     mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid, &
-                     ncpu_s,numprocs)
-
-
-      call ztox_trans(qstarsum_t(0:nnz+1,iys:iye,mxs:mxe), &
-                     qstarsum(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,mxs, &
-                     mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid, &
-                     ncpu_s,numprocs)
-
-      end if
 
 
       !t_s = mpi_wtime
@@ -3167,31 +3029,11 @@ CONTAINS
       call end_phase(measurement_id_particle_fill_ext)
 
       partcount_t = 0.0
-      vpsum_t = 0.0
-      ufsum_t = 0.0
-      upwp_t = 0.0
-      vpsqrsum_t = 0.0
-      ufsqrsum_t = 0.0
-      Tpsum_t = 0.0
-      Tfsum_t = 0.0
-      qfsum_t = 0.0
-      radsum_t = 0.0
-      rad2sum_t = 0.0
-      multcount_t = 0.0
-      mwsum_t = 0.0
-      Tpsqrsum_t = 0.0
-      wpTpsum_t = 0.0
       myRep_avg = 0.0
       mylwc_sum = 0.0
       myphiw_sum = 0.0
       myphiv_sum = 0.0
-      qstarsum_t = 0.0
       LWP = 0.0
-
-      !partsrc_t = 0.0
-      !partTsrc_t = 0.0
-      !partHsrc_t = 0.0
-      !partTEsrc_t = 0.0
 
       pflux = 0.0
       pmassflux = 0.0
@@ -3199,8 +3041,6 @@ CONTAINS
 
       denum = 0
       actnum = 0
-      !num100 = 0
-      !numimpos = 0
       num_destroy = 0
 
       call start_phase(measurement_id_particle_loop)
@@ -3508,119 +3348,11 @@ CONTAINS
                      mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid, &
                      ncpu_s,numprocs)
 
-      call ztox_trans(mwsum_t(0:nnz+1,iys:iye,mxs:mxe), &
-                     mwsum(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,mxs, &
-                     mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid, &
-                     ncpu_s,numprocs)
-
       call ztox_trans(partcount_t(0:nnz+1,iys:iye,mxs:mxe), &
                      partcount(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,mxs, &
                      mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid, &
                      ncpu_s,numprocs)
 
-      call ztox_trans(multcount_t(0:nnz+1,iys:iye,mxs:mxe), &
-                     multcount(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,mxs, &
-                     mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid, &
-                     ncpu_s,numprocs)
-
-      call ztox_trans(radsum_t(0:nnz+1,iys:iye,mxs:mxe), &
-                     radsum(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,mxs, &
-                     mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid, &
-                     ncpu_s,numprocs)
-
-
-
-      !Try only calling these when the history data is being written:
-      if(mtrans) then
-      call ztox_trans(upwp_t(0:nnz+1,iys:iye,mxs:mxe), &
-                     upwp(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,mxs, &
-                     mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid, &
-                     ncpu_s,numprocs)
-
-      call ztox_trans(vpsum_t(0:nnz+1,iys:iye,mxs:mxe,1), &
-                     vpsum(1:nnx,iys:iye,izs-1:ize+1,1),nnx,nnz,mxs, &
-                     mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid, &
-                     ncpu_s,numprocs)
-      call ztox_trans(vpsum_t(0:nnz+1,iys:iye,mxs:mxe,2), &
-                     vpsum(1:nnx,iys:iye,izs-1:ize+1,2),nnx,nnz,mxs, &
-                     mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid, &
-                     ncpu_s,numprocs)
-      call ztox_trans(vpsum_t(0:nnz+1,iys:iye,mxs:mxe,3), &
-                     vpsum(1:nnx,iys:iye,izs-1:ize+1,3),nnx,nnz,mxs, &
-                     mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid, &
-                     ncpu_s,numprocs)
-
-      call ztox_trans(vpsqrsum_t(0:nnz+1,iys:iye,mxs:mxe,1), &
-                     vpsqrsum(1:nnx,iys:iye,izs-1:ize+1,1),nnx,nnz,mxs, &
-                     mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid, &
-                     ncpu_s,numprocs) 
-      call ztox_trans(vpsqrsum_t(0:nnz+1,iys:iye,mxs:mxe,2), &
-                     vpsqrsum(1:nnx,iys:iye,izs-1:ize+1,2),nnx,nnz,mxs, &
-                     mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid, &
-                     ncpu_s,numprocs)
-      call ztox_trans(vpsqrsum_t(0:nnz+1,iys:iye,mxs:mxe,3), &
-                     vpsqrsum(1:nnx,iys:iye,izs-1:ize+1,3),nnx,nnz,mxs, &
-                     mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid, &
-                     ncpu_s,numprocs)
-
-      call ztox_trans(ufsum_t(0:nnz+1,iys:iye,mxs:mxe,1), &
-                     ufsum(1:nnx,iys:iye,izs-1:ize+1,1),nnx,nnz,mxs, &
-                     mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid, &
-                     ncpu_s,numprocs)
-      call ztox_trans(ufsum_t(0:nnz+1,iys:iye,mxs:mxe,2), &
-                     ufsum(1:nnx,iys:iye,izs-1:ize+1,2),nnx,nnz,mxs, &
-                     mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid, &
-                     ncpu_s,numprocs)
-      call ztox_trans(ufsum_t(0:nnz+1,iys:iye,mxs:mxe,3), &
-                     ufsum(1:nnx,iys:iye,izs-1:ize+1,3),nnx,nnz,mxs, &
-                     mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid, &
-                     ncpu_s,numprocs)
-
-      call ztox_trans(ufsqrsum_t(0:nnz+1,iys:iye,mxs:mxe,1), &
-                     ufsqrsum(1:nnx,iys:iye,izs-1:ize+1,1),nnx,nnz,mxs, &
-                     mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid, &
-                     ncpu_s,numprocs) 
-      call ztox_trans(ufsqrsum_t(0:nnz+1,iys:iye,mxs:mxe,2), &
-                     ufsqrsum(1:nnx,iys:iye,izs-1:ize+1,2),nnx,nnz,mxs, &
-                     mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid, &
-                     ncpu_s,numprocs)
-      call ztox_trans(ufsqrsum_t(0:nnz+1,iys:iye,mxs:mxe,3), &
-                     ufsqrsum(1:nnx,iys:iye,izs-1:ize+1,3),nnx,nnz,mxs, &
-                     mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid, &
-                     ncpu_s,numprocs)
-
-      call ztox_trans(Tpsum_t(0:nnz+1,iys:iye,mxs:mxe), &
-                     Tpsum(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,mxs, &
-                     mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid, &
-                     ncpu_s,numprocs)
-      call ztox_trans(Tpsqrsum_t(0:nnz+1,iys:iye,mxs:mxe), &
-                     Tpsqrsum(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,mxs, &
-                     mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid, &
-                     ncpu_s,numprocs)
-      call ztox_trans(Tfsum_t(0:nnz+1,iys:iye,mxs:mxe), & 
-                     Tfsum(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,mxs, &
-                     mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid, &
-                     ncpu_s,numprocs)
-      call ztox_trans(qfsum_t(0:nnz+1,iys:iye,mxs:mxe), &
-                     qfsum(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,mxs, &
-                     mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid, &
-                     ncpu_s,numprocs)
-      call ztox_trans(wpTpsum_t(0:nnz+1,iys:iye,mxs:mxe), &
-                     wpTpsum(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,mxs, &
-                     mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid, &
-                     ncpu_s,numprocs)
-
-      call ztox_trans(rad2sum_t(0:nnz+1,iys:iye,mxs:mxe), &
-                     rad2sum(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,mxs, &
-                     mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid, &
-                     ncpu_s,numprocs)
-
-      call ztox_trans(qstarsum_t(0:nnz+1,iys:iye,mxs:mxe), &
-                     qstarsum(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,mxs, &
-                     mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid, &
-                     ncpu_s,numprocs)
-
-      end if
       call end_phase(measurement_id_particle_ztox)
 
       call start_phase(measurement_id_particle_stats)
@@ -3694,6 +3426,8 @@ CONTAINS
       tnum100 = intbuf_rec(7)
       tnumimpos = intbuf_rec(8)
       tnumdrop_center = intbuf_rec(9)
+
+      tnum_destroy_accum = tnum_destroy
 
       
       !Compute sums of real quantities
@@ -3810,42 +3544,9 @@ CONTAINS
 
       rhop = (part%m_s+4.0/3.0*pi*part%radius**3*rhow)/(4.0/3.0*pi*part%radius**3)
 
-      !Takes in ipt,jpt,kpt as the node to the "bottom left" of the particle
-      !(i.e. the node in the negative direction for x,y,z)
-      !and computes quantities needed to get particle statistics
 
       partcount_t(kpt,jpt,ipt) = partcount_t(kpt,jpt,ipt) + 1.0
       
-      !Get su mean, mean-squared of particle velocities at each level
-      upwp_t(kpt,jpt,ipt) = upwp_t(kpt,jpt,ipt) + part%vp(1)*part%vp(3)
-      do i = 1,3
-      vpsum_t(kpt,jpt,ipt,i) = vpsum_t(kpt,jpt,ipt,i) + part%vp(i)
-      vpsqrsum_t(kpt,jpt,ipt,i)=vpsqrsum_t(kpt,jpt,ipt,i)+part%vp(i)**2
-
-      ufsum_t(kpt,jpt,ipt,i) = ufsum_t(kpt,jpt,ipt,i) + part%uf(i)
-      ufsqrsum_t(kpt,jpt,ipt,i)=ufsqrsum_t(kpt,jpt,ipt,i)+part%uf(i)**2
-      end do
-
-      Tpsum_t(kpt,jpt,ipt) = Tpsum_t(kpt,jpt,ipt) + part%Tp
-      Tpsqrsum_t(kpt,jpt,ipt) = Tpsqrsum_t(kpt,jpt,ipt) + part%Tp**2
-
-      Tfsum_t(kpt,jpt,ipt) = Tfsum_t(kpt,jpt,ipt) + part%Tf
-
-      qfsum_t(kpt,jpt,ipt) = qfsum_t(kpt,jpt,ipt) + part%qinf
-
-      wpTpsum_t(kpt,jpt,ipt) = wpTpsum_t(kpt,jpt,ipt) + part%Tp*part%vp(3)
-
-
-      radsum_t(kpt,jpt,ipt) = radsum_t(kpt,jpt,ipt) + part%radius 
-
-      rad2sum_t(kpt,jpt,ipt) = rad2sum_t(kpt,jpt,ipt) + part%radius**2  
-
-      multcount_t(kpt,jpt,ipt) = multcount_t(kpt,jpt,ipt) + real(part%mult)
-
-      mwsum_t(kpt,jpt,ipt) = mwsum_t(kpt,jpt,ipt) + real(part%mult)*(rhow*4.0/3.0*pi*part%radius**3)
-
-      qstarsum_t(kpt,jpt,ipt) = qstarsum_t(kpt,jpt,ipt) + part%qstar
-
       LWP(ipt,jpt) = LWP(ipt,jpt) + real(part%mult)*(rhow*4.0/3.0*pi*part%radius**3)
 
       part => part%next
@@ -3853,7 +3554,7 @@ CONTAINS
 
   end subroutine particle_stats_OLD
 
-  subroutine particle_stats
+  subroutine particle_xy_stats
       use pars
       use con_stats
       use con_data
@@ -3862,9 +3563,9 @@ CONTAINS
 
       integer :: iz,ipt,jpt,kpt
       integer :: ierr
-      real :: rhop,pi
+      real :: rhop,pi,rhoa,func_rho_base
       
-      integer,parameter :: num1 = 2  !Number of 1-dimensional particle statistics
+      integer,parameter :: num1 = 24  !Number of 1-dimensional particle statistics
 
       integer :: partcount_tmp(maxnz)
 
@@ -3872,7 +3573,31 @@ CONTAINS
 
       statsvec1 = 0.0
       partcount_tmp = 0.0
+
+      vp1mean = 0.0
+      vp2mean = 0.0
+      vp3mean = 0.0
+      vp1msqr = 0.0
+      vp2msqr = 0.0
+      vp3msqr = 0.0
+      upwpm = 0.0
+      Tpmean = 0.0
+      Tpmsqr = 0.0
+      Tfmean = 0.0
+      qfmean = 0.0
+      wpTpm = 0.0
       radmean = 0.0
+      rad2mean = 0.0
+      multmean = 0.0
+      mwmean = 0.0
+      qstarm = 0.0
+      uf1mean = 0.0
+      uf2mean = 0.0
+      uf3mean = 0.0
+      uf1msqr = 0.0
+      uf2msqr = 0.0
+      uf3msqr = 0.0
+
 
 
       !For each particle, add its attribute to a running sum of the stats of interest at the correct z-location
@@ -3886,41 +3611,41 @@ CONTAINS
 
       partcount_tmp(kpt) = partcount_tmp(kpt) + 1
 
-      radmean(kpt) = radmean(kpt) + part%radius
+      vp1mean(kpt) = vp1mean(kpt) + part%vp(1)
+      vp2mean(kpt) = vp2mean(kpt) + part%vp(2)
+      vp3mean(kpt) = vp3mean(kpt) + part%vp(3)
 
-      !partcount_t(kpt,jpt,ipt) = partcount_t(kpt,jpt,ipt) + 1.0
-     ! 
-     ! !Get su mean, mean-squared of particle velocities at each level
-     ! upwp_t(kpt,jpt,ipt) = upwp_t(kpt,jpt,ipt) + part%vp(1)*part%vp(3)
-     ! do i = 1,3
-     ! vpsum_t(kpt,jpt,ipt,i) = vpsum_t(kpt,jpt,ipt,i) + part%vp(i)
-     ! vpsqrsum_t(kpt,jpt,ipt,i)=vpsqrsum_t(kpt,jpt,ipt,i)+part%vp(i)**2
-!
-!      ufsum_t(kpt,jpt,ipt,i) = ufsum_t(kpt,jpt,ipt,i) + part%uf(i)
-!      ufsqrsum_t(kpt,jpt,ipt,i)=ufsqrsum_t(kpt,jpt,ipt,i)+part%uf(i)**2
-!      end do
-!
-!      Tpsum_t(kpt,jpt,ipt) = Tpsum_t(kpt,jpt,ipt) + part%Tp
-!      Tpsqrsum_t(kpt,jpt,ipt) = Tpsqrsum_t(kpt,jpt,ipt) + part%Tp**2
-!
-!      Tfsum_t(kpt,jpt,ipt) = Tfsum_t(kpt,jpt,ipt) + part%Tf
-!
-!      qfsum_t(kpt,jpt,ipt) = qfsum_t(kpt,jpt,ipt) + part%qinf
-!
-!      wpTpsum_t(kpt,jpt,ipt) = wpTpsum_t(kpt,jpt,ipt) + part%Tp*part%vp(3)
-!
-!
-!      radsum_t(kpt,jpt,ipt) = radsum_t(kpt,jpt,ipt) + part%radius 
-!
-!      rad2sum_t(kpt,jpt,ipt) = rad2sum_t(kpt,jpt,ipt) + part%radius**2  
-!
-!      multcount_t(kpt,jpt,ipt) = multcount_t(kpt,jpt,ipt) + real(part%mult)
-!
-!      mwsum_t(kpt,jpt,ipt) = mwsum_t(kpt,jpt,ipt) + real(part%mult)*(rhow*4.0/3.0*pi*part%radius**3)
-!
-!      qstarsum_t(kpt,jpt,ipt) = qstarsum_t(kpt,jpt,ipt) + part%qstar
-!
-!      LWP(ipt,jpt) = LWP(ipt,jpt) + real(part%mult)*(rhow*4.0/3.0*pi*part%radius**3)
+      vp1msqr(kpt) = vp1msqr(kpt) + part%vp(1)**2
+      vp2msqr(kpt) = vp2msqr(kpt) + part%vp(2)**2
+      vp3msqr(kpt) = vp3msqr(kpt) + part%vp(3)**2
+
+      upwpm(kpt) = upwpm(kpt) + part%vp(1)*part%vp(3)
+
+      uf1mean(kpt) = uf1mean(kpt) + part%uf(1)
+      uf2mean(kpt) = uf2mean(kpt) + part%uf(2)
+      uf3mean(kpt) = uf3mean(kpt) + part%uf(3)
+
+      uf1msqr(kpt) = uf1msqr(kpt) + part%uf(1)**2
+      uf2msqr(kpt) = uf2msqr(kpt) + part%uf(2)**2
+      uf3msqr(kpt) = uf3msqr(kpt) + part%uf(3)**2
+
+      Tpmean(kpt) = Tpmean(kpt) + part%Tp
+      Tpmsqr(kpt) = Tpmsqr(kpt) + part%Tp**2
+      Tfmean(kpt) = Tfmean(kpt) + part%Tf
+
+      radmean(kpt) = radmean(kpt) + part%radius
+      rad2mean(kpt) = rad2mean(kpt) + part%radius**2
+
+      qfmean(kpt) = qfmean(kpt) + part%qinf
+
+      wpTpm(kpt) = wpTpm(kpt) + part%Tp*part%vp(3)
+
+      multmean(kpt) = multmean(kpt) + real(part%mult)
+
+      mwmean(kpt) = mwmean(kpt) + real(part%mult)*(rhow*4.0/3.0*pi*part%radius**3)
+
+      qstarm(kpt) = qstarm(kpt) + part%qstar
+
 
       part => part%next
       end do
@@ -3930,32 +3655,121 @@ CONTAINS
       do iz=1,maxnz
 
          statsvec1(iz,1) = partcount_tmp(iz)
-         statsvec1(iz,2) = radmean(iz)
+
+	 statsvec1(iz,2) = vp1mean(iz)
+	 statsvec1(iz,3) = vp2mean(iz)
+	 statsvec1(iz,4) = vp3mean(iz)
+	 statsvec1(iz,5) = vp1msqr(iz)
+	 statsvec1(iz,6) = vp2msqr(iz)
+	 statsvec1(iz,7) = vp3msqr(iz)
+	 statsvec1(iz,8) = upwpm(iz)
+	 statsvec1(iz,9) = uf1mean(iz)
+	 statsvec1(iz,10) = uf2mean(iz)
+	 statsvec1(iz,11) = uf3mean(iz)
+	 statsvec1(iz,12) = uf1msqr(iz)
+	 statsvec1(iz,13) = uf2msqr(iz)
+	 statsvec1(iz,14) = uf3msqr(iz)
+	 statsvec1(iz,15) = Tpmean(iz)
+	 statsvec1(iz,16) = Tpmsqr(iz)
+	 statsvec1(iz,17) = Tfmean(iz)
+	 statsvec1(iz,18) = radmean(iz)
+	 statsvec1(iz,19) = rad2mean(iz)
+	 statsvec1(iz,20) = qfmean(iz)
+	 statsvec1(iz,21) = wpTpm(iz)
+	 statsvec1(iz,22) = multmean(iz)
+	 statsvec1(iz,23) = mwmean(iz)
+	 statsvec1(iz,24) = qstarm(iz)
 
       end do
 
       call mpi_allreduce(mpi_in_place,statsvec1,maxnz*num1,mpi_double_precision,mpi_sum,mpi_comm_world,ierr)
 
-!      if (myid.eq.0) then
-!	 call mpi_reduce(MPI_IN_PLACE,statsvec1,maxnz*num1,MPI_DOUBLE_PRECISION,MPI_SUM,0,MPI_COMM_WORLD,ierr)
-!      else
-!	 call mpi_reduce(statsvec1,statsvec1,maxnz*num1,MPI_DOUBLE_PRECISION,MPI_SUM,0,MPI_COMM_WORLD,ierr)
-!      end if
-
      do iz=1,maxnz
         partcount_tmp(iz) = statsvec1(iz,1)
 
-	if (partcount_tmp(iz).eq.0) then
-	   radmean(iz) = 0.0
-	else
-           radmean(iz) = statsvec1(iz,2)/real(partcount_tmp(iz))
+
+        !Set the density based on whether to take base state into account
+        if (iexner .eq. 1) then
+           rhoa = func_rho_base(surf_p,tsfcc(1),zz(iz))
+        else
+           rhoa = surf_rho
         end if
+
+
+	!First compute some that are based on the sums:
+	Nc(iz) = statsvec1(iz,22)/xl/yl/dzw(iz)
+	ql(iz) = statsvec1(iz,23)/xl/yl/dzw(iz)/rhoa
+	radtend(iz) = radsrc(iz)
+
+	!Then compute those based on averages:
+	if (partcount_tmp(iz).eq.0) then
+           vp1mean(iz) = 0.0
+           vp2mean(iz) = 0.0
+           vp3mean(iz) = 0.0
+           vp1msqr(iz) = 0.0
+           vp2msqr(iz) = 0.0
+           vp3msqr(iz) = 0.0
+           upwpm(iz) = 0.0
+           Tpmean(iz) = 0.0
+           Tpmsqr(iz) = 0.0
+           Tfmean(iz) = 0.0
+           qfmean(iz) = 0.0
+           wpTpm(iz) = 0.0
+           radmean(iz) = 0.0
+           rad2mean(iz) = 0.0
+           multmean(iz) = 0.0
+           mwmean(iz) = 0.0
+           qstarm(iz) = 0.0
+           uf1mean(iz) = 0.0
+           uf2mean(iz) = 0.0
+           uf3mean(iz) = 0.0
+           uf1msqr(iz) = 0.0
+           uf2msqr(iz) = 0.0
+           uf3msqr(iz) = 0.0
+	else
+           vp1mean(iz) = statsvec1(iz,2)/real(partcount_tmp(iz))
+           vp2mean(iz) = statsvec1(iz,3)/real(partcount_tmp(iz))
+           vp3mean(iz) = statsvec1(iz,4)/real(partcount_tmp(iz))
+
+	   vp1msqr(iz) = statsvec1(iz,5)/real(partcount_tmp(iz)) - vp1mean(iz)**2
+	   vp2msqr(iz) = statsvec1(iz,6)/real(partcount_tmp(iz)) - vp2mean(iz)**2
+	   vp3msqr(iz) = statsvec1(iz,7)/real(partcount_tmp(iz)) - vp3mean(iz)**2
+
+	   upwpm(iz) = statsvec1(iz,8)/real(partcount_tmp(iz)) - (vp1mean(iz)*vp3mean(iz))
+
+	   uf1mean(iz) = statsvec1(iz,9)/real(partcount_tmp(iz))
+	   uf2mean(iz) = statsvec1(iz,10)/real(partcount_tmp(iz))
+	   uf3mean(iz) = statsvec1(iz,11)/real(partcount_tmp(iz))
+
+	   uf1msqr(iz) = statsvec1(iz,12)/real(partcount_tmp(iz)) - uf1mean(iz)**2
+	   uf2msqr(iz) = statsvec1(iz,13)/real(partcount_tmp(iz)) - uf2mean(iz)**2
+	   uf3msqr(iz) = statsvec1(iz,14)/real(partcount_tmp(iz)) - uf3mean(iz)**2
+	   
+	   Tpmean(iz) = statsvec1(iz,15)/real(partcount_tmp(iz))
+	   Tpmsqr(iz) = statsvec1(iz,16)/real(partcount_tmp(iz)) - Tpmean(iz)**2
+	   Tfmean(iz) = statsvec1(iz,17)/real(partcount_tmp(iz))
+
+           radmean(iz) = statsvec1(iz,18)/real(partcount_tmp(iz))
+	   rad2mean(iz) = statsvec1(iz,19)/real(partcount_tmp(iz))
+
+	   qfmean(iz) = statsvec1(iz,20)/real(partcount_tmp(iz))
+
+	   wpTpm(iz) = statsvec1(iz,21)/real(partcount_tmp(iz))
+
+	   multmean(iz) = statsvec1(iz,22)/real(partcount_tmp(iz))
+
+	   mwmean(iz) = statsvec1(iz,23)/real(partcount_tmp(iz))
+
+	   qstarm(iz) = statsvec1(iz,24)/real(partcount_tmp(iz))
+
+        end if
+
 
      end do
 	 
 
 
-  end subroutine particle_stats
+  end subroutine particle_xy_stats
 
   subroutine particle_write_traj
    use con_data

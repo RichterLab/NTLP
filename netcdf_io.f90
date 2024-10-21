@@ -35,7 +35,6 @@ integer :: Tpsrc_vid,TEpsrc_vid,Hpsrc_vid
 integer :: Tpmean_vid,Tpmsqr_vid
 integer :: Tfmean_vid,qfmean_vid
 integer :: radmean_vid,rad2mean_vid
-integer :: radmean_OLD_vid
 integer :: qstarm_vid
 integer :: Nc_vid,ql_vid,radsrc_vid
 integer :: rho_base_vid,p_base_vid,T_base_vid,theta_base_vid
@@ -121,7 +120,7 @@ subroutine netcdf_init
       call netcdf_check( nf90_put_att(ncid,tnumaerosol_vid,"title","Total number of aerosols defined by r<rc") )
 
       call netcdf_check( nf90_def_var(ncid, "tnum_destroy", NF90_REAL, dimids,tnum_destroy_vid) )
-      call netcdf_check( nf90_put_att(ncid,tnum_destroy_vid,"title","Particles killed this time step") )
+      call netcdf_check( nf90_put_att(ncid,tnum_destroy_vid,"title","Particles killed since last write") )
 
       call netcdf_check( nf90_def_var(ncid, "tdenum", NF90_REAL, dimids,tdenum_vid) )
       call netcdf_check( nf90_put_att(ncid,tdenum_vid,"title","Number of particles deactivated") )
@@ -329,9 +328,6 @@ subroutine netcdf_init
       call netcdf_check( nf90_def_var(ncid,"qfmean",NF90_REAL, dimids_zu,qfmean_vid) )
       call netcdf_check( nf90_put_att(ncid,qfmean_vid,"title","Horiz. avg. fluid qv at particle") )
 
-      call netcdf_check( nf90_def_var(ncid,"radmean_OLD",NF90_REAL, dimids_zu,radmean_OLD_vid) )
-      call netcdf_check( nf90_put_att(ncid,radmean_OLD_vid,"title","Horiz. avg. particle radius") )
-
       call netcdf_check( nf90_def_var(ncid,"radmean",NF90_REAL, dimids_zu,radmean_vid) )
       call netcdf_check( nf90_put_att(ncid,radmean_vid,"title","Horiz. avg. particle radius") )
 
@@ -478,7 +474,6 @@ subroutine netcdf_res
       call netcdf_check( nf90_inq_varid(ncid,"Tpmsqr",Tpmsqr_vid) )
       call netcdf_check( nf90_inq_varid(ncid,"Tfmean",Tfmean_vid) )
       call netcdf_check( nf90_inq_varid(ncid,"qfmean",qfmean_vid) )
-      call netcdf_check( nf90_inq_varid(ncid,"radmean_OLD",radmean_OLD_vid) )
       call netcdf_check( nf90_inq_varid(ncid,"radmean",radmean_vid) )
       call netcdf_check( nf90_inq_varid(ncid,"rad2mean",rad2mean_vid) )
       call netcdf_check( nf90_inq_varid(ncid,"qstarm",qstarm_vid) )
@@ -520,7 +515,7 @@ subroutine write_his_netcdf
       call netcdf_check( nf90_put_var(ncid, tnumpart_vid, real(tnumpart),start=(/his_counter/)) )
       call netcdf_check( nf90_put_var(ncid, tnumdrop_vid, real(tnumdrop),start=(/his_counter/)) )
       call netcdf_check( nf90_put_var(ncid, tnumaerosol_vid, real(tnumaerosol),start=(/his_counter/)) )
-      call netcdf_check( nf90_put_var(ncid, tnum_destroy_vid, real(tnum_destroy),start=(/his_counter/)) )
+      call netcdf_check( nf90_put_var(ncid, tnum_destroy_vid, real(tnum_destroy_accum),start=(/his_counter/)) )
       call netcdf_check( nf90_put_var(ncid, tdenum_vid, real(tdenum),start=(/his_counter/)) )
       call netcdf_check( nf90_put_var(ncid, tactnum_vid, real(tactnum),start=(/his_counter/)) )
       call netcdf_check( nf90_put_var(ncid, tnum100_vid, real(tnum100),start=(/his_counter/)) )
@@ -621,7 +616,6 @@ subroutine write_his_netcdf
       call netcdf_check( nf90_put_var(ncid,Tpmsqr_vid,real(Tpmsqr(1:nnz)),start=(/1, his_counter/)) )
       call netcdf_check( nf90_put_var(ncid,Tfmean_vid,real(Tfmean(1:nnz)),start=(/1, his_counter/)) )
       call netcdf_check( nf90_put_var(ncid,qfmean_vid,real(qfmean(1:nnz)),start=(/1, his_counter/)) )
-      call netcdf_check( nf90_put_var(ncid,radmean_OLD_vid,real(radmean_OLD(1:nnz)),start=(/1, his_counter/)) )
       call netcdf_check( nf90_put_var(ncid,radmean_vid,real(radmean(1:nnz)),start=(/1, his_counter/)) )
       call netcdf_check( nf90_put_var(ncid,rad2mean_vid,real(rad2mean(1:nnz)),start=(/1, his_counter/)) )
       call netcdf_check( nf90_put_var(ncid,qstarm_vid,real(qstarm(1:nnz)),start=(/1, his_counter/)) )
@@ -638,6 +632,7 @@ subroutine write_his_netcdf
 
       num100 = 0
       numimpos = 0
+      tnum_destroy = 0
       his_counter = his_counter + 1
 
 end subroutine write_his_netcdf
