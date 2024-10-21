@@ -10,8 +10,8 @@ module particles
   real, allocatable :: partTsrc(:,:,:),partTsrc_t(:,:,:)
   real, allocatable :: partHsrc(:,:,:),partHsrc_t(:,:,:)
   real, allocatable :: partTEsrc(:,:,:),partTEsrc_t(:,:,:)
-  real, allocatable :: partcount_t(:,:,:),partsrc_t(:,:,:,:)
-  real, allocatable :: partcount(:,:,:),partsrc(:,:,:,:)
+  real, allocatable :: partsrc(:,:,:,:),partsrc_t(:,:,:,:)
+  real, allocatable :: tauc_array(:,:,:)
 
   !--- SFS velocity calculation ---------
   real, allocatable :: sigm_s(:,:,:),sigm_sdx(:,:,:),sigm_sdy(:,:,:)
@@ -2756,7 +2756,7 @@ CONTAINS
       !if (myid==5) write(*,*) 'time fill_ext:',t_f-t_s
 
 
-      partcount_t = 0.0
+      tauc_array = 0.0
       myRep_avg = 0.0
       mylwc_sum = 0.0
       myphiw_sum = 0.0
@@ -2917,8 +2917,6 @@ CONTAINS
 
       call particle_coupling_exchange
 
-      call particle_stats_OLD
-
  
       !Finally, now that coupling and statistics arrays are filled, 
       !Transpose them back to align with the velocities:
@@ -2945,11 +2943,6 @@ CONTAINS
 
       call ztox_trans(partTEsrc_t(0:nnz+1,iys:iye,mxs:mxe), &
                      partTEsrc(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,mxs, &
-                     mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid, &
-                     ncpu_s,numprocs)
-
-      call ztox_trans(partcount_t(0:nnz+1,iys:iye,mxs:mxe), &
-                     partcount(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,mxs, &
                      mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid, &
                      ncpu_s,numprocs)
 
@@ -3028,7 +3021,7 @@ CONTAINS
       call fill_ext
       call end_phase(measurement_id_particle_fill_ext)
 
-      partcount_t = 0.0
+      tauc_array = 0.0
       myRep_avg = 0.0
       mylwc_sum = 0.0
       myphiw_sum = 0.0
@@ -3315,9 +3308,6 @@ CONTAINS
       call particle_coupling_exchange
       call end_phase(measurement_id_particle_coupling)
 
-      call start_phase(measurement_id_particle_stats)
-      call particle_stats_OLD
-      call end_phase(measurement_id_particle_stats)
 
       !Finally, now that coupling and statistics arrays are filled, 
       !Transpose them back to align with the velocities:
@@ -3345,11 +3335,6 @@ CONTAINS
 
       call ztox_trans(partTEsrc_t(0:nnz+1,iys:iye,mxs:mxe), &
                      partTEsrc(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,mxs, &
-                     mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid, &
-                     ncpu_s,numprocs)
-
-      call ztox_trans(partcount_t(0:nnz+1,iys:iye,mxs:mxe), &
-                     partcount(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,mxs, &
                      mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid, &
                      ncpu_s,numprocs)
 
@@ -3525,34 +3510,35 @@ CONTAINS
    
   end subroutine destroy_particle
 
-  subroutine particle_stats_OLD
-      use pars
-      use con_stats
-      use con_data
-      implicit none
-      integer :: i,ipt,jpt,kpt
-      real :: rhop,pi
-
-      part => first_particle
-      do while (associated(part))     
-
-      ipt = floor(part%xp(1)/dx) + 1
-      jpt = floor(part%xp(2)/dy) + 1
-      kpt = minloc(z,1,mask=(z.gt.part%xp(3))) - 1
-
-      pi   = 4.0*atan(1.0)
-
-      rhop = (part%m_s+4.0/3.0*pi*part%radius**3*rhow)/(4.0/3.0*pi*part%radius**3)
-
-
-      partcount_t(kpt,jpt,ipt) = partcount_t(kpt,jpt,ipt) + 1.0
-      
-      LWP(ipt,jpt) = LWP(ipt,jpt) + real(part%mult)*(rhow*4.0/3.0*pi*part%radius**3)
-
-      part => part%next
-      end do
-
-  end subroutine particle_stats_OLD
+!  subroutine particle_tauc
+!      use pars
+!      use con_stats
+!      use con_data
+!      implicit none
+!      integer :: i,ipt,jpt,kpt
+!      real :: denom_array(0:nnz+1,iys:iye,mxs:mxe)
+!
+!      tauc_array = 0.0
+!      denom_array = -10.0   !Want to find the maximum
+!
+!      part => first_particle
+!      do while (associated(part))     
+!
+!      ipt = floor(part%xp(1)/dx) + 1
+!      jpt = floor(part%xp(2)/dy) + 1
+!      kpt = minloc(z,1,mask=(z.gt.part%xp(3))) - 1
+!
+!      denom_array(kpt,jpt,ipt) = max(denom_array(kpt,jpt,ipt),part%radius
+!
+!
+!
+!      part => part%next
+!      end do
+!
+!      tauc_array(kpt,jpt,ipt) = 
+!         tauc_tmp = 1.0/(pi2*Dv*2.0*radmean(iz)*Nc(iz)+1.0e-10)
+!
+!  end subroutine particle_tauc
 
   subroutine particle_xy_stats
       use pars
@@ -3567,12 +3553,12 @@ CONTAINS
       
       integer,parameter :: num1 = 24  !Number of 1-dimensional particle statistics
 
-      integer :: partcount_tmp(maxnz)
+      integer :: partcount(maxnz)
 
       real :: statsvec1(maxnz,num1)
 
       statsvec1 = 0.0
-      partcount_tmp = 0.0
+      partcount = 0.0
 
       vp1mean = 0.0
       vp2mean = 0.0
@@ -3604,12 +3590,15 @@ CONTAINS
       part => first_particle
       do while (associated(part))     
 
+      
+      ipt = floor(part%xp(1)/dx) + 1
+      jpt = floor(part%xp(2)/dy) + 1
       kpt = minloc(z,1,mask=(z.gt.part%xp(3))) - 1
 
       pi   = 4.0*atan(1.0)
       rhop = (part%m_s+4.0/3.0*pi*part%radius**3*rhow)/(4.0/3.0*pi*part%radius**3)
 
-      partcount_tmp(kpt) = partcount_tmp(kpt) + 1
+      partcount(kpt) = partcount(kpt) + 1
 
       vp1mean(kpt) = vp1mean(kpt) + part%vp(1)
       vp2mean(kpt) = vp2mean(kpt) + part%vp(2)
@@ -3647,6 +3636,9 @@ CONTAINS
       qstarm(kpt) = qstarm(kpt) + part%qstar
 
 
+      !While we're at it, compute LWP
+      LWP(ipt,jpt) = LWP(ipt,jpt) + real(part%mult)*(rhow*4.0/3.0*pi*part%radius**3)
+
       part => part%next
       end do
 
@@ -3654,7 +3646,7 @@ CONTAINS
       !Now sum across processors
       do iz=1,maxnz
 
-         statsvec1(iz,1) = partcount_tmp(iz)
+         statsvec1(iz,1) = partcount(iz)
 
 	 statsvec1(iz,2) = vp1mean(iz)
 	 statsvec1(iz,3) = vp2mean(iz)
@@ -3685,7 +3677,7 @@ CONTAINS
       call mpi_allreduce(mpi_in_place,statsvec1,maxnz*num1,mpi_double_precision,mpi_sum,mpi_comm_world,ierr)
 
      do iz=1,maxnz
-        partcount_tmp(iz) = statsvec1(iz,1)
+        partcount(iz) = statsvec1(iz,1)
 
 
         !Set the density based on whether to take base state into account
@@ -3697,12 +3689,13 @@ CONTAINS
 
 
 	!First compute some that are based on the sums:
+	zconc(iz) = real(statsvec1(iz,1))/xl/yl/dzw(iz)
 	Nc(iz) = statsvec1(iz,22)/xl/yl/dzw(iz)
 	ql(iz) = statsvec1(iz,23)/xl/yl/dzw(iz)/rhoa
 	radtend(iz) = radsrc(iz)
 
 	!Then compute those based on averages:
-	if (partcount_tmp(iz).eq.0) then
+	if (partcount(iz).eq.0) then
            vp1mean(iz) = 0.0
            vp2mean(iz) = 0.0
            vp3mean(iz) = 0.0
@@ -3727,40 +3720,40 @@ CONTAINS
            uf2msqr(iz) = 0.0
            uf3msqr(iz) = 0.0
 	else
-           vp1mean(iz) = statsvec1(iz,2)/real(partcount_tmp(iz))
-           vp2mean(iz) = statsvec1(iz,3)/real(partcount_tmp(iz))
-           vp3mean(iz) = statsvec1(iz,4)/real(partcount_tmp(iz))
+           vp1mean(iz) = statsvec1(iz,2)/real(partcount(iz))
+           vp2mean(iz) = statsvec1(iz,3)/real(partcount(iz))
+           vp3mean(iz) = statsvec1(iz,4)/real(partcount(iz))
 
-	   vp1msqr(iz) = statsvec1(iz,5)/real(partcount_tmp(iz)) - vp1mean(iz)**2
-	   vp2msqr(iz) = statsvec1(iz,6)/real(partcount_tmp(iz)) - vp2mean(iz)**2
-	   vp3msqr(iz) = statsvec1(iz,7)/real(partcount_tmp(iz)) - vp3mean(iz)**2
+	   vp1msqr(iz) = statsvec1(iz,5)/real(partcount(iz)) - vp1mean(iz)**2
+	   vp2msqr(iz) = statsvec1(iz,6)/real(partcount(iz)) - vp2mean(iz)**2
+	   vp3msqr(iz) = statsvec1(iz,7)/real(partcount(iz)) - vp3mean(iz)**2
 
-	   upwpm(iz) = statsvec1(iz,8)/real(partcount_tmp(iz)) - (vp1mean(iz)*vp3mean(iz))
+	   upwpm(iz) = statsvec1(iz,8)/real(partcount(iz)) - (vp1mean(iz)*vp3mean(iz))
 
-	   uf1mean(iz) = statsvec1(iz,9)/real(partcount_tmp(iz))
-	   uf2mean(iz) = statsvec1(iz,10)/real(partcount_tmp(iz))
-	   uf3mean(iz) = statsvec1(iz,11)/real(partcount_tmp(iz))
+	   uf1mean(iz) = statsvec1(iz,9)/real(partcount(iz))
+	   uf2mean(iz) = statsvec1(iz,10)/real(partcount(iz))
+	   uf3mean(iz) = statsvec1(iz,11)/real(partcount(iz))
 
-	   uf1msqr(iz) = statsvec1(iz,12)/real(partcount_tmp(iz)) - uf1mean(iz)**2
-	   uf2msqr(iz) = statsvec1(iz,13)/real(partcount_tmp(iz)) - uf2mean(iz)**2
-	   uf3msqr(iz) = statsvec1(iz,14)/real(partcount_tmp(iz)) - uf3mean(iz)**2
+	   uf1msqr(iz) = statsvec1(iz,12)/real(partcount(iz)) - uf1mean(iz)**2
+	   uf2msqr(iz) = statsvec1(iz,13)/real(partcount(iz)) - uf2mean(iz)**2
+	   uf3msqr(iz) = statsvec1(iz,14)/real(partcount(iz)) - uf3mean(iz)**2
 	   
-	   Tpmean(iz) = statsvec1(iz,15)/real(partcount_tmp(iz))
-	   Tpmsqr(iz) = statsvec1(iz,16)/real(partcount_tmp(iz)) - Tpmean(iz)**2
-	   Tfmean(iz) = statsvec1(iz,17)/real(partcount_tmp(iz))
+	   Tpmean(iz) = statsvec1(iz,15)/real(partcount(iz))
+	   Tpmsqr(iz) = statsvec1(iz,16)/real(partcount(iz)) - Tpmean(iz)**2
+	   Tfmean(iz) = statsvec1(iz,17)/real(partcount(iz))
 
-           radmean(iz) = statsvec1(iz,18)/real(partcount_tmp(iz))
-	   rad2mean(iz) = statsvec1(iz,19)/real(partcount_tmp(iz))
+           radmean(iz) = statsvec1(iz,18)/real(partcount(iz))
+	   rad2mean(iz) = statsvec1(iz,19)/real(partcount(iz))
 
-	   qfmean(iz) = statsvec1(iz,20)/real(partcount_tmp(iz))
+	   qfmean(iz) = statsvec1(iz,20)/real(partcount(iz))
 
-	   wpTpm(iz) = statsvec1(iz,21)/real(partcount_tmp(iz))
+	   wpTpm(iz) = statsvec1(iz,21)/real(partcount(iz))
 
-	   multmean(iz) = statsvec1(iz,22)/real(partcount_tmp(iz))
+	   multmean(iz) = statsvec1(iz,22)/real(partcount(iz))
 
-	   mwmean(iz) = statsvec1(iz,23)/real(partcount_tmp(iz))
+	   mwmean(iz) = statsvec1(iz,23)/real(partcount(iz))
 
-	   qstarm(iz) = statsvec1(iz,24)/real(partcount_tmp(iz))
+	   qstarm(iz) = statsvec1(iz,24)/real(partcount(iz))
 
         end if
 

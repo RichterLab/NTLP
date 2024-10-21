@@ -7412,7 +7412,7 @@ c ------- indices for indexing array stat(.,.)
 c         js = number of non-scalar stats
 c         ns = number of scalar stats
 c
-      integer, parameter :: js = 20, ns = 5, nstat = js + ns*nscl
+      integer, parameter :: js = 19, ns = 5, nstat = js + ns*nscl
       real :: stat(1:nnz,nstat)
 
       integer :: ix,iy,iz,izm1,izp1,izp2,m1,m2,m3,m4,m5,i,l
@@ -7432,16 +7432,15 @@ c          stat(.,7) = sgs e at zu = engsbz
 c          stat(.,8) = sgs e at zw = eavg
 c          stat(.,9) = resolved uw at zw = uwle
 c          stat(.,10) = resolved vw at zw = vwle
-c          stat(.,11) = particle number in each cell 
-c          stat(.,12) = partsrc(1) 
-c          stat(.,13) = partsrc(2) 
-c          stat(.,14) = partsrc(3) 
-c          stat(.,15) = Tpsrc
-c          stat(.,16) = Hpsrc
-c          stat(.,17) = TEpsrc
-c          stat(.,18) = relative humidity
-c          stat(.,19) = temperature (NOT potential temp)
-c          stat(.,20) = RH^2
+c          stat(.,11) = partsrc(1) 
+c          stat(.,12) = partsrc(2) 
+c          stat(.,13) = partsrc(3) 
+c          stat(.,14) = Tpsrc
+c          stat(.,15) = Hpsrc
+c          stat(.,16) = TEpsrc
+c          stat(.,17) = relative humidity
+c          stat(.,18) = temperature (NOT potential temp)
+c          stat(.,19) = RH^2
 c          stat(.,m1) = resolved scalar flux wt at zw = wtle
 c          stat(.,m2) = resolved scalar flux ut at zw = utle
 c          stat(.,m3) = resolved scalar flux vt at zw = vtle
@@ -7504,13 +7503,12 @@ c
          stat(iz,10) = stat(iz,10) + (w(ix,iy,iz)-wxym(iz))*
      +              0.5*((v(ix,iy,iz)-vxym(iz))+
      +                   (v(ix,iy,izp1)-vxym(izp1)))
-         stat(iz,11) = stat(iz,11) + partcount(ix,iy,iz)
-         stat(iz,12) = stat(iz,12) + partsrc(ix,iy,iz,1)
-         stat(iz,13) = stat(iz,13) + partsrc(ix,iy,iz,2)
-         stat(iz,14) = stat(iz,14) + partsrc(ix,iy,iz,3)
-         stat(iz,15) = stat(iz,15) + partTsrc(ix,iy,iz)
-         stat(iz,16) = stat(iz,16) + partHsrc(ix,iy,iz)
-         stat(iz,17) = stat(iz,17) + partTEsrc(ix,iy,iz)
+         stat(iz,11) = stat(iz,11) + partsrc(ix,iy,iz,1)
+         stat(iz,12) = stat(iz,12) + partsrc(ix,iy,iz,2)
+         stat(iz,13) = stat(iz,13) + partsrc(ix,iy,iz,3)
+         stat(iz,14) = stat(iz,14) + partTsrc(ix,iy,iz)
+         stat(iz,15) = stat(iz,15) + partHsrc(ix,iy,iz)
+         stat(iz,16) = stat(iz,16) + partTEsrc(ix,iy,iz)
 
          if (iexner .eq. 1) then
          Ttmp = t(ix,iy,1,iz)*
@@ -7522,9 +7520,9 @@ c
          RHtmp = Ttmp*
      +   t(ix,iy,2,iz)*Ru/Mw/mod_magnus(Ttmp)*rhoa*100.0
 
-         stat(iz,18) = stat(iz,18) + RHtmp
-         stat(iz,19) = stat(iz,19) + Ttmp
-         stat(iz,20) = stat(iz,20) + RHtmp**2
+         stat(iz,17) = stat(iz,17) + RHtmp
+         stat(iz,18) = stat(iz,18) + Ttmp
+         stat(iz,19) = stat(iz,19) + RHtmp**2
 
       enddo
       enddo
@@ -7609,12 +7607,6 @@ c
       uwle(iz)   = stat(iz,9)*fnxy
       vwle(iz)   = stat(iz,10)*fnxy
 
-      if (stat(iz,11).eq.0) then
-         zconc(iz) = 0.0
-      else
-         zconc(iz)  = stat(iz,11)/xl/yl/dzw(iz)
-      end if
-         
          
       m1src(iz) = stat(iz,12)*fnxy
       m2src(iz) = stat(iz,13)*fnxy
@@ -8559,10 +8551,8 @@ c
       T_t = 0.0
       T2_t = 0.0
 
-      allocate(partcount(nnx,iys:iye,izs-1:ize+1))
-      partcount = 0.0
-      allocate(partcount_t(0:nnz+1,iys:iye,mxs:mxe))
-      partcount_t = 0.0
+      allocate(tauc_array(0:nnz+1,iys:iye,mxs:mxe))
+      tauc_array = 0.0
       allocate(partsrc(nnx,iys:iye,izs-1:ize+1,1:3))
       partsrc = 0.0
       allocate(partsrc_t(0:nnz+1,iys:iye+1,mxs:mxe+1,1:3))
@@ -9021,7 +9011,6 @@ c
                !temp_z(6,i,j) = partsrc(i,j,k,1)
                !temp_z(7,i,j) = partsrc(i,j,k,2)
                !temp_z(8,i,j) = partsrc(i,j,k,3)
-               !temp_z(9,i,j) = partcount(i,j,k)/dx/dy/dzw(k)
             enddo
             enddo
 #if defined(SWAP)
@@ -9063,7 +9052,6 @@ c
                !temp_y(6,i,k) = partsrc(i,j,k,1)
                !temp_y(7,i,k) = partsrc(i,j,k,2)
                !temp_y(8,i,k) = partsrc(i,j,k,3)
-               !temp_y(9,i,k) = partcount(i,j,k)/dx/dy/dzw(k)
             enddo
             enddo
 #if defined(SWAP)
@@ -9109,7 +9097,6 @@ c
               !buf_send(6,j,k) = partsrc(i,j,k,1)
               !buf_send(7,j,k) = partsrc(i,j,k,2)
               !buf_send(8,j,k) = partsrc(i,j,k,3)
-              !buf_send(9,j,k) = partcount(i,j,k)/dx/dy/dzw(k)
             enddo
             enddo
             if(myid .ne. iss) then
