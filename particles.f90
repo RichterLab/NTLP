@@ -2,7 +2,7 @@ module particles
   integer :: rproc,trproc,tproc,tlproc,lproc,blproc,bproc,brproc
   integer :: pr_r,pl_r,pt_r,pb_r,ptr_r,ptl_r,pbl_r,pbr_r
   integer :: pr_s,pl_s,pt_s,pb_s,ptr_s,ptl_s,pbl_s,pbr_s
-  real :: ymin,ymax,zmin,zmax,xmax,xmin
+  real :: ymin,ymax,zmin,zmax,xmax,xmin,tauc_min
   real, allocatable :: uext(:,:,:), vext(:,:,:), wext(:,:,:)
   real, allocatable :: u_t(:,:,:), v_t(:,:,:), w_t(:,:,:)
   real, allocatable :: Text(:,:,:),T_t(:,:,:)
@@ -11,7 +11,6 @@ module particles
   real, allocatable :: partHsrc(:,:,:),partHsrc_t(:,:,:)
   real, allocatable :: partTEsrc(:,:,:),partTEsrc_t(:,:,:)
   real, allocatable :: partsrc(:,:,:,:),partsrc_t(:,:,:,:)
-  real, allocatable :: tauc_array(:,:,:)
 
   !--- SFS velocity calculation ---------
   real, allocatable :: sigm_s(:,:,:),sigm_sdx(:,:,:),sigm_sdy(:,:,:)
@@ -2756,7 +2755,6 @@ CONTAINS
       !if (myid==5) write(*,*) 'time fill_ext:',t_f-t_s
 
 
-      tauc_array = 0.0
       myRep_avg = 0.0
       mylwc_sum = 0.0
       myphiw_sum = 0.0
@@ -3021,7 +3019,6 @@ CONTAINS
       call fill_ext
       call end_phase(measurement_id_particle_fill_ext)
 
-      tauc_array = 0.0
       myRep_avg = 0.0
       mylwc_sum = 0.0
       myphiw_sum = 0.0
@@ -3118,14 +3115,6 @@ CONTAINS
                 rt_start(2) = 1.0
                end if
 
-	       if (part%xp(3) .gt. 100.0) then
-		  
-               part%rc = crit_radius(part%m_s,part%kappa_s,part%Tp) 
-	       part%radius = guess
-	       part%Tp = part%Tf
-
-               else
-
                call gauss_newton_2d(part%vp,dt_taup0,rhoa,rt_start, rt_zeroes,flag)
 
                if (flag==1) then
@@ -3140,9 +3129,7 @@ CONTAINS
                   .OR. (rt_zeroes(1)*part%radius<0) &
                   .OR. isnan(rt_zeroes(2)) &
                   .OR. (rt_zeroes(2)<0) &
-                  .OR. (rt_zeroes(1)*part%radius>1.0e-2)) & !These last 2 are very specific to pi chamber
-                  !.OR. (rt_zeroes(2)*part%Tp > Tbot(1)*1.1)  &
-                  !.OR. (rt_zeroes(2)*part%Tp < Ttop(1)*0.9)) &
+                  .OR. (rt_zeroes(1)*part%radius>1.0e-2)) & 
                then
 
                ! write(*,'(a30,14e15.6)') 'WARNING: CONVERGENCE',  &
@@ -3183,7 +3170,6 @@ CONTAINS
                part%radius = rt_zeroes(1)*part%radius
                part%Tp = rt_zeroes(2)*part%Tp
 
-               endif
         end if
 
          if (part%radius .gt. 1.0e-2) then
@@ -3510,35 +3496,57 @@ CONTAINS
    
   end subroutine destroy_particle
 
-!  subroutine particle_tauc
-!      use pars
-!      use con_stats
-!      use con_data
-!      implicit none
-!      integer :: i,ipt,jpt,kpt
-!      real :: denom_array(0:nnz+1,iys:iye,mxs:mxe)
-!
-!      tauc_array = 0.0
-!      denom_array = -10.0   !Want to find the maximum
-!
-!      part => first_particle
-!      do while (associated(part))     
-!
-!      ipt = floor(part%xp(1)/dx) + 1
-!      jpt = floor(part%xp(2)/dy) + 1
-!      kpt = minloc(z,1,mask=(z.gt.part%xp(3))) - 1
-!
-!      denom_array(kpt,jpt,ipt) = max(denom_array(kpt,jpt,ipt),part%radius
-!
-!
-!
-!      part => part%next
-!      end do
-!
-!      tauc_array(kpt,jpt,ipt) = 
-!         tauc_tmp = 1.0/(pi2*Dv*2.0*radmean(iz)*Nc(iz)+1.0e-10)
-!
-!  end subroutine particle_tauc
+  subroutine calc_tauc_min
+      use pars
+      use con_stats
+      use con_data
+      implicit none
+      integer :: ipt,jpt,kpt
+      integer :: ix,iy,iz
+      real :: radavg_tmp,denom,Nc_tmp
+      real :: radius_array(mxs:mxe,iys:iye,1:nnz)
+      real :: Nc_array(mxs:mxe,iys:iye,1:nnz)
+      integer :: num_array(mxs:mxe,iys:iye,1:nnz)
+
+      radius_array = 0.0
+      Nc_array = 0.0
+      num_array = 0
+      tauc_min = 1.0e10
+
+      part => first_particle
+      do while (associated(part))     
+
+      ipt = floor(part%xp(1)/dx) + 1
+      jpt = floor(part%xp(2)/dy) + 1
+      kpt = minloc(z,1,mask=(z.gt.part%xp(3))) - 1
+
+      radius_array(ipt,jpt,kpt) = radius_array(ipt,jpt,kpt) + part%radius
+      num_array(ipt,jpt,kpt) = num_array(ipt,jpt,kpt) + 1
+      Nc_array(ipt,jpt,kpt) = Nc_array(ipt,jpt,kpt) + part%mult
+
+      part => part%next
+      end do
+
+      !Now loop over all grid points
+      do iz=1,nnz
+      do iy=iys,iye
+      do ix=mxs,mxe
+
+	 if (num_array(ix,iy,iz).ne.0) then
+	    radavg_tmp = radius_array(ix,iy,iz)/real(num_array(ix,iy,iz))
+	    Nc_tmp = Nc_array(ix,iy,iz)/(dx*dy*dzw(iz))
+            denom = pi2*(nuf/Sc)*2.0*radavg_tmp*Nc_tmp
+
+	    tauc_min = min(1.0/(denom + 1.0e-10),tauc_min)
+
+         end if
+
+      end do
+      end do
+      end do
+
+
+  end subroutine calc_tauc_min
 
   subroutine particle_xy_stats
       use pars

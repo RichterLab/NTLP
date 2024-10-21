@@ -623,7 +623,6 @@ c
       use con_stats
       use particles
 
-      real :: tauc,Dv,tauc_tmp
 c
 
       ucfl = umax
@@ -679,33 +678,23 @@ c
          endif
       endif
 
+      if (icouple.eq.1 .or.
+     +    iTcouple.eq.1 .or.
+     +    iHcouple.eq.1) then
 
-      !Now need to check time step against cloud timescale tau_c
-      !Using horizontal average Nc and diameter -- could use local
-      Dv = nuf/Sc  !Diffusivity of vapor in air
+          call calc_tauc_min
 
-      tauc = 5.0
-      do iz=1,nnz
-         
-         tauc_tmp = 1.0/(pi2*Dv*2.0*radmean(iz)*Nc(iz)+1.0e-10)
-
-
-         if (.not. isnan(tauc_tmp)) then
-            tauc = min(tauc,tauc_tmp)
-         end if
-
-
-      end do
-
-      if (tauc/15.0 .lt. dt_new) then
-            dt_new = tauc/15.0
+      if (tauc_min .lt. dt_new) then
+            dt_new = tauc_min
             if (l_root) then
-            write(6,6210) dt_new, dt_cfl, tauc
+            write(6,6210) dt_new, dt_cfl, tauc_min
  6210       format(' 6210 cfl time step too large for droplets',/,
      +      '   tauc time step = ',e15.6,
      +      ' cfl time step = ',e15.6,' tauc = ',e15.6)
             end if
       end if
+
+      end if  !Particle coupling
       
 
       end if  !ifix_dt .eq. 0
@@ -8551,8 +8540,7 @@ c
       T_t = 0.0
       T2_t = 0.0
 
-      allocate(tauc_array(0:nnz+1,iys:iye,mxs:mxe))
-      tauc_array = 0.0
+      !Column-oriented array to calculate max. droplet relaxation time
       allocate(partsrc(nnx,iys:iye,izs-1:ize+1,1:3))
       partsrc = 0.0
       allocate(partsrc_t(0:nnz+1,iys:iye+1,mxs:mxe+1,1:3))
