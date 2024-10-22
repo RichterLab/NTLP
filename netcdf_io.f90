@@ -632,6 +632,7 @@ subroutine write_his_netcdf
 
       num100 = 0
       numimpos = 0
+
       tnum_destroy_accum = 0
       his_counter = his_counter + 1
 

@@ -2762,7 +2762,6 @@ CONTAINS
       mylwc_sum = 0.0
       myphiw_sum = 0.0
       myphiv_sum = 0.0
-      LWP = 0.0
 
       t_s = mpi_wtime()
 
@@ -3026,7 +3025,6 @@ CONTAINS
       mylwc_sum = 0.0
       myphiw_sum = 0.0
       myphiv_sum = 0.0
-      LWP = 0.0
 
       pflux = 0.0
       pmassflux = 0.0
@@ -3504,7 +3502,9 @@ CONTAINS
       use con_stats
       use con_data
       implicit none
-      integer :: ipt,jpt,kpt
+      include 'mpif.h'
+
+      integer :: ipt,jpt,kpt,ierr
       integer :: ix,iy,iz
       real :: radavg_tmp,denom,Nc_tmp
       real :: radius_array(mxs:mxe,iys:iye,1:nnz)
@@ -3548,6 +3548,12 @@ CONTAINS
       end do
       end do
 
+      !Fudge factor, since it's not exactly tauc_min that restricts
+      !Want to make as large as possible with stability
+      tauc_min = tauc_min*5.0
+
+      call mpi_allreduce(mpi_in_place,tauc_min,1,mpi_double_precision,mpi_min,mpi_comm_world,ierr)
+
 
   end subroutine calc_tauc_min
 
@@ -3564,7 +3570,7 @@ CONTAINS
       
       integer,parameter :: num1 = 24  !Number of 1-dimensional particle statistics
 
-      integer :: partcount(maxnz)
+      real :: partcount(maxnz)
 
       real :: statsvec1(maxnz,num1)
 
@@ -3594,6 +3600,7 @@ CONTAINS
       uf1msqr = 0.0
       uf2msqr = 0.0
       uf3msqr = 0.0
+      LWP = 0.0
 
 
 
@@ -3609,7 +3616,7 @@ CONTAINS
       pi   = 4.0*atan(1.0)
       rhop = (part%m_s+4.0/3.0*pi*part%radius**3*rhow)/(4.0/3.0*pi*part%radius**3)
 
-      partcount(kpt) = partcount(kpt) + 1
+      partcount(kpt) = partcount(kpt) + 1.0
 
       vp1mean(kpt) = vp1mean(kpt) + part%vp(1)
       vp2mean(kpt) = vp2mean(kpt) + part%vp(2)
@@ -3706,7 +3713,7 @@ CONTAINS
 	radtend(iz) = radsrc(iz)
 
 	!Then compute those based on averages:
-	if (partcount(iz).eq.0) then
+	if (int(nint(partcount(iz))).eq.0) then
            vp1mean(iz) = 0.0
            vp2mean(iz) = 0.0
            vp3mean(iz) = 0.0
@@ -3731,40 +3738,40 @@ CONTAINS
            uf2msqr(iz) = 0.0
            uf3msqr(iz) = 0.0
 	else
-           vp1mean(iz) = statsvec1(iz,2)/real(partcount(iz))
-           vp2mean(iz) = statsvec1(iz,3)/real(partcount(iz))
-           vp3mean(iz) = statsvec1(iz,4)/real(partcount(iz))
+           vp1mean(iz) = statsvec1(iz,2)/partcount(iz)
+           vp2mean(iz) = statsvec1(iz,3)/partcount(iz)
+           vp3mean(iz) = statsvec1(iz,4)/partcount(iz)
 
-	   vp1msqr(iz) = statsvec1(iz,5)/real(partcount(iz)) - vp1mean(iz)**2
-	   vp2msqr(iz) = statsvec1(iz,6)/real(partcount(iz)) - vp2mean(iz)**2
-	   vp3msqr(iz) = statsvec1(iz,7)/real(partcount(iz)) - vp3mean(iz)**2
+	   vp1msqr(iz) = statsvec1(iz,5)/partcount(iz) - vp1mean(iz)**2
+	   vp2msqr(iz) = statsvec1(iz,6)/partcount(iz) - vp2mean(iz)**2
+	   vp3msqr(iz) = statsvec1(iz,7)/partcount(iz) - vp3mean(iz)**2
 
-	   upwpm(iz) = statsvec1(iz,8)/real(partcount(iz)) - (vp1mean(iz)*vp3mean(iz))
+	   upwpm(iz) = statsvec1(iz,8)/partcount(iz) - (vp1mean(iz)*vp3mean(iz))
 
-	   uf1mean(iz) = statsvec1(iz,9)/real(partcount(iz))
-	   uf2mean(iz) = statsvec1(iz,10)/real(partcount(iz))
-	   uf3mean(iz) = statsvec1(iz,11)/real(partcount(iz))
+	   uf1mean(iz) = statsvec1(iz,9)/partcount(iz)
+	   uf2mean(iz) = statsvec1(iz,10)/partcount(iz)
+	   uf3mean(iz) = statsvec1(iz,11)/partcount(iz)
 
-	   uf1msqr(iz) = statsvec1(iz,12)/real(partcount(iz)) - uf1mean(iz)**2
-	   uf2msqr(iz) = statsvec1(iz,13)/real(partcount(iz)) - uf2mean(iz)**2
-	   uf3msqr(iz) = statsvec1(iz,14)/real(partcount(iz)) - uf3mean(iz)**2
+	   uf1msqr(iz) = statsvec1(iz,12)/partcount(iz) - uf1mean(iz)**2
+	   uf2msqr(iz) = statsvec1(iz,13)/partcount(iz) - uf2mean(iz)**2
+	   uf3msqr(iz) = statsvec1(iz,14)/partcount(iz) - uf3mean(iz)**2
 	   
-	   Tpmean(iz) = statsvec1(iz,15)/real(partcount(iz))
-	   Tpmsqr(iz) = statsvec1(iz,16)/real(partcount(iz)) - Tpmean(iz)**2
-	   Tfmean(iz) = statsvec1(iz,17)/real(partcount(iz))
+	   Tpmean(iz) = statsvec1(iz,15)/partcount(iz)
+	   Tpmsqr(iz) = statsvec1(iz,16)/partcount(iz) - Tpmean(iz)**2
+	   Tfmean(iz) = statsvec1(iz,17)/partcount(iz)
 
-           radmean(iz) = statsvec1(iz,18)/real(partcount(iz))
-	   rad2mean(iz) = statsvec1(iz,19)/real(partcount(iz))
+           radmean(iz) = statsvec1(iz,18)/partcount(iz)
+	   rad2mean(iz) = statsvec1(iz,19)/partcount(iz)
 
-	   qfmean(iz) = statsvec1(iz,20)/real(partcount(iz))
+	   qfmean(iz) = statsvec1(iz,20)/partcount(iz)
 
-	   wpTpm(iz) = statsvec1(iz,21)/real(partcount(iz))
+	   wpTpm(iz) = statsvec1(iz,21)/partcount(iz)
 
-	   multmean(iz) = statsvec1(iz,22)/real(partcount(iz))
+	   multmean(iz) = statsvec1(iz,22)/partcount(iz)
 
-	   mwmean(iz) = statsvec1(iz,23)/real(partcount(iz))
+	   mwmean(iz) = statsvec1(iz,23)/partcount(iz)
 
-	   qstarm(iz) = statsvec1(iz,24)/real(partcount(iz))
+	   qstarm(iz) = statsvec1(iz,24)/partcount(iz)
 
         end if
 
