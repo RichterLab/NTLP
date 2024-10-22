@@ -14,7 +14,6 @@ integer :: tnumdrop_vid,tnumaerosol_vid
 integer :: Swall_vid
 integer :: meanRH_vid,varRH_vid
 integer :: radavg_vid,radmsqr_vid
-integer :: radavg_center_vid,radmsqr_center_vid
 integer :: tdenum_vid,tactnum_vid,tnumimpos_vid,tnum100_vid
 integer :: zw_vid,zw_dimid
 integer :: uxym_vid,vxym_vid,wxym_vid,txym_vid,RHxym_vid,tempxym_vid,exym_vid,RHmsqr_vid
@@ -43,6 +42,7 @@ integer :: radhist_vid,reshist_vid,radhistdeath_vid
 integer :: actresbins_vid,actreshist_vid
 integer :: acttodeathbins_vid,acttodeathhist_vid
 integer :: numactbins_vid,numacthist_vid
+integer :: twmass_vid,tpmass_vid,tpvol_vid
 
 !Viz:
 integer :: time_viz_dimid,viz_nx_dimid,viz_ny_dimid,viz_nzu_dimid,viz_nzw_dimid
@@ -164,11 +164,14 @@ subroutine netcdf_init
       call netcdf_check( nf90_def_var(ncid, "radmsqr", NF90_REAL, dimids,radmsqr_vid) )
       call netcdf_check( nf90_put_att(ncid,radmsqr_vid,"title","Mean-squared radius of activated droplets") )
 
-      call netcdf_check( nf90_def_var(ncid, "radavg_center", NF90_REAL, dimids,radavg_center_vid) )
-      call netcdf_check( nf90_put_att(ncid,radavg_center_vid,"title","Mean radius of activated droplets only in domain interior") )
+      call netcdf_check( nf90_def_var(ncid, "twmass", NF90_REAL, dimids,twmass_vid) )
+      call netcdf_check( nf90_put_att(ncid,twmass_vid,"title","Total liquid water mass in particles") )
 
-      call netcdf_check( nf90_def_var(ncid, "radmsqr_center", NF90_REAL, dimids,radmsqr_center_vid) )
-      call netcdf_check( nf90_put_att(ncid,radmsqr_center_vid,"title","Mean-squared radius of activated droplets only in domain interior") )
+      call netcdf_check( nf90_def_var(ncid, "tpmass", NF90_REAL, dimids,tpmass_vid) )
+      call netcdf_check( nf90_put_att(ncid,tpmass_vid,"title","Total particle mass, including water and solute") )
+
+      call netcdf_check( nf90_def_var(ncid, "tpvol", NF90_REAL, dimids,tpvol_vid) )
+      call netcdf_check( nf90_put_att(ncid,tpvol_vid,"title","Total particle volume") )
 
 
 !!! Profiles
@@ -417,8 +420,9 @@ subroutine netcdf_res
       call netcdf_check( nf90_inq_varid(ncid,"varRH",varRH_vid) )
       call netcdf_check( nf90_inq_varid(ncid,"radavg",radavg_vid) )
       call netcdf_check( nf90_inq_varid(ncid,"radmsqr",radmsqr_vid) )
-      call netcdf_check( nf90_inq_varid(ncid,"radavg_center",radavg_center_vid) )
-      call netcdf_check( nf90_inq_varid(ncid,"radmsqr_center",radmsqr_center_vid) )
+      call netcdf_check( nf90_inq_varid(ncid,"twmass",twmass_vid) )
+      call netcdf_check( nf90_inq_varid(ncid,"tpmass",tpmass_vid) )
+      call netcdf_check( nf90_inq_varid(ncid,"tpvol",tpvol_vid) )
 
 
 !!! Profiles
@@ -530,8 +534,9 @@ subroutine write_his_netcdf
       call netcdf_check( nf90_put_var(ncid, varRH_vid, real(varRH),start=(/his_counter/)) )
       call netcdf_check( nf90_put_var(ncid, radavg_vid, real(radavg),start=(/his_counter/)) )
       call netcdf_check( nf90_put_var(ncid, radmsqr_vid, real(radmsqr),start=(/his_counter/)) )
-      call netcdf_check( nf90_put_var(ncid, radavg_center_vid, real(radavg_center),start=(/his_counter/)) )
-      call netcdf_check( nf90_put_var(ncid, radmsqr_center_vid, real(radmsqr_center),start=(/his_counter/)) )
+      call netcdf_check( nf90_put_var(ncid, twmass_vid, real(twmass),start=(/his_counter/)) )
+      call netcdf_check( nf90_put_var(ncid, tpmass_vid, real(tpmass),start=(/his_counter/)) )
+      call netcdf_check( nf90_put_var(ncid, tpvol_vid, real(tpvol),start=(/his_counter/)) )
 
       call netcdf_check( nf90_put_var(ncid,uxym_vid,real(uxym(1:nnz)),start=(/1, his_counter/)) )
       call netcdf_check( nf90_put_var(ncid,vxym_vid,real(vxym(1:nnz)),start=(/1, his_counter/)) )

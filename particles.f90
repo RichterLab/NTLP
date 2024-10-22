@@ -32,7 +32,7 @@ module particles
 
   real :: Rep_avg,part_grav(3)
   real :: radavg,radmin,radmax,radmsqr,tempmin,tempmax,qmin,qmax
-  real :: radavg_center,radmsqr_center
+  real :: twmass,tpmass,tpvol
   real :: vp_init(3),Tp_init,radius_init,radius_std,kappas_init,kappas_std
   real :: pdf_factor,pdf_prob
   integer*8 :: mult_init,mult_factor,mult_a,mult_c
@@ -40,8 +40,6 @@ module particles
   real,parameter :: Cvv=1463.0
   real,parameter :: Cpv = 1952.0
   real,parameter :: Cva = 717.04
-
-  real :: avgres=0,tavgres=0
 
   integer, parameter :: histbins = 512
   real :: hist_rad(histbins+2)
@@ -2741,14 +2739,12 @@ CONTAINS
       real :: pi
       real :: denom,dtl,sigma
       integer :: ix,iy,iz
-      real :: Rep,diff(3),diffnorm,corrfac,myRep_avg
+      real :: Rep,diff(3),diffnorm,corrfac,Volp
       real :: xtmp(3),vtmp(3),Tptmp,radiustmp
       real :: Nup,Shp,rhop,taup_i,estar,einf
-      real :: mylwc_sum,myphiw_sum,myphiv_sum,Volp      
       real :: Eff_C,Eff_S
       real :: t_s,t_f,t_s1,t_f1
       real :: mod_magnus,exner,func_p_base,rhoa,func_rho_base
-
 
       !First fill extended velocity field for interpolation
       !t_s = mpi_wtime()
@@ -2757,11 +2753,6 @@ CONTAINS
       !call mpi_barrier(mpi_comm_world,ierr)
       !if (myid==5) write(*,*) 'time fill_ext:',t_f-t_s
 
-
-      myRep_avg = 0.0
-      mylwc_sum = 0.0
-      myphiw_sum = 0.0
-      myphiv_sum = 0.0
 
       t_s = mpi_wtime()
 
@@ -2819,11 +2810,7 @@ CONTAINS
          rhop = (part%m_s+Volp*rhow)/Volp
          taup_i = 18.0*rhoa*nuf/rhop/(2.0*part%radius)**2 
 
-         myRep_avg = myRep_avg + Rep
          corrfac = (1.0 + 0.15*Rep**(0.687))
-         mylwc_sum = mylwc_sum + Volp*rhop*real(part%mult)
-         myphiw_sum = myphiw_sum + Volp*rhow
-         myphiv_sum = myphiv_sum + Volp
 
 
          !Compute Nusselt number for particle:
@@ -2962,20 +2949,6 @@ CONTAINS
       !t_s = mpi_wtime()
       !Compute total number of particles
       call mpi_allreduce(numpart,tnumpart,1,mpi_integer,mpi_sum,mpi_comm_world,ierr)
-      !Compute average particle Reynolds number
-      call mpi_allreduce(myRep_avg,Rep_avg,1,mpi_real8,mpi_sum,mpi_comm_world,ierr)
-
-      Rep_avg = Rep_avg/tnumpart
-
-      call mpi_allreduce(mylwc_sum,lwc,1,mpi_real8,mpi_sum,mpi_comm_world,ierr)
-
-      call mpi_allreduce(myphiw_sum,phiw,1,mpi_real8,mpi_sum,mpi_comm_world,ierr)
-
-      call mpi_allreduce(myphiv_sum,phiv,1,mpi_real8,mpi_sum,mpi_comm_world,ierr)
-
-      
-      phiw = phiw/xl/yl/zl/surf_rho  !This is only an approximation when considering base-state rho(z)
-      phiv = phiv/xl/yl/zl
 
       !call mpi_barrier(mpi_comm_world,ierr)
       !t_f = mpi_wtime()
@@ -2992,18 +2965,11 @@ CONTAINS
       include 'mpif.h'
 
       integer :: ierr,fluxloc,fluxloci
-      real :: tmpbuf(9),tmpbuf_rec(9)
-      integer :: intbuf(9),intbuf_rec(9)
-      integer :: numdrop_center,tnumdrop_center
-      real :: myradavg,myradmax,myradmin,mytempmax,mytempmin
-      real :: myradavg_center,myradmsqr_center
-      real :: myradmsqr
-      real :: myqmin,myqmax
       real :: denom,dtl,sigma
       integer :: ix,iy,iz,im,flag,mflag
-      real :: Rep,diff(3),diffnorm,corrfac,myRep_avg
+      real :: Rep,diff(3),diffnorm,corrfac
       real :: Nup,Shp,rhop,taup_i,estar,einf,rhoa,func_rho_base
-      real :: mylwc_sum,myphiw_sum,myphiv_sum,Volp
+      real :: Volp
       real :: Eff_C,Eff_S
       real :: t_s,t_f,t_s1,t_f1
       real :: rt_start(2)
@@ -3021,11 +2987,6 @@ CONTAINS
       call fill_ext
       call end_phase(measurement_id_particle_fill_ext)
 
-      myRep_avg = 0.0
-      mylwc_sum = 0.0
-      myphiw_sum = 0.0
-      myphiv_sum = 0.0
-
       pflux = 0.0
       pmassflux = 0.0
       penegflux = 0.0
@@ -3033,6 +2994,7 @@ CONTAINS
       denum = 0
       actnum = 0
       num_destroy = 0
+
 
       call start_phase(measurement_id_particle_loop)
       !loop over the linked list of particles
@@ -3190,11 +3152,7 @@ CONTAINS
          diffnorm = sqrt(diff(1)**2 + diff(2)**2 + diff(3)**2)
          Rep = 2.0*part%radius*diffnorm/nuf
 
-         myRep_avg = myRep_avg + Rep
          corrfac = (1.0 + 0.15*Rep**(0.687))
-         mylwc_sum = mylwc_sum + Volp*rhop*real(part%mult)
-         myphiw_sum = myphiw_sum + Volp*rhow
-         myphiv_sum = myphiv_sum + Volp
 
          !Compute Nusselt number for particle:
          !Ranz-Marshall relation
@@ -3327,142 +3285,23 @@ CONTAINS
 
       call end_phase(measurement_id_particle_ztox)
 
+
       call start_phase(measurement_id_particle_stats)
       !Get particle count:
       numpart = 0
-      numdrop = 0
-      numdrop_center = 0
-      numaerosol = 0
-
-      myradavg = 0.0
-      myradmsqr = 0.0
-      myradavg_center = 0.0
-      myradmsqr_center = 0.0
-      myradmin=1000.0
-      myradmax = 0.0
-      mytempmin = 1000.0
-      mytempmax = 0.0
-      myqmin = 1000.0
-      myqmax = 0.0
 
       part => first_particle
       do while (associated(part))
       numpart = numpart + 1
 
-      myradavg = myradavg + part%radius
-      myradmsqr = myradmsqr + part%radius**2
-
-     !Want to get droplet statistics only in the interior
-     if (part%xp(3) .gt. 0.25*zl .AND. part%xp(3) .lt. 0.75*zl) then
-        myradavg_center = myradavg_center + part%radius
-        myradmsqr_center = myradmsqr_center + part%radius**2
-        numdrop_center = numdrop_center + 1
-     end if
-
-      if (part%radius .gt. part%rc) then
-         numdrop = numdrop + 1
-      else
-         numaerosol = numaerosol + 1
-      end if
-
-      if (part%radius .gt. myradmax) myradmax = part%radius
-      if (part%radius .lt. myradmin) myradmin = part%radius
-      if (part%Tp .gt. mytempmax) mytempmax = part%Tp
-      if (part%Tp .lt. mytempmin) mytempmin = part%Tp
-      if (part%qstar .gt. myqmax) myqmax = part%qinf
-      if (part%qstar .lt. myqmin) myqmin = part%qinf
-
       part => part%next
       end do
 
 
-      !Compute sums of integer quantities
-      intbuf(1) = numpart
-      intbuf(2) = numdrop
-      intbuf(3) = numaerosol
-      intbuf(4) = denum
-      intbuf(5) = actnum
-      intbuf(6) = num_destroy
-      intbuf(7) = num100
-      intbuf(8) = numimpos
-      intbuf(9) = numdrop_center
+      call mpi_allreduce(numpart,tnumpart,1,mpi_integer,mpi_sum,mpi_comm_world,ierr)
 
-      call mpi_allreduce(intbuf,intbuf_rec,9,mpi_integer,mpi_sum,mpi_comm_world,ierr)
-
-      tnumpart = intbuf_rec(1)
-      tnumdrop = intbuf_rec(2)
-      tnumaerosol = intbuf_rec(3)
-      tdenum = intbuf_rec(4)
-      tactnum = intbuf_rec(5)
-      tnum_destroy = intbuf_rec(6)
-      tnum100 = intbuf_rec(7)
-      tnumimpos = intbuf_rec(8)
-      tnumdrop_center = intbuf_rec(9)
-
-      tnum_destroy_accum = tnum_destroy_accum + tnum_destroy
 
       
-      !Compute sums of real quantities
-
-      tmpbuf(1) = myRep_avg
-      tmpbuf(2) = mylwc_sum
-      tmpbuf(3) = myphiw_sum
-      tmpbuf(4) = myphiv_sum
-      tmpbuf(5) = myradavg
-      tmpbuf(6) = myradmsqr
-      tmpbuf(7) = avgres
-      tmpbuf(8) = myradavg_center
-      tmpbuf(9) = myradmsqr_center
-
-      call mpi_allreduce(tmpbuf,tmpbuf_rec,9,mpi_real8,mpi_sum,mpi_comm_world,ierr)
-
-      Rep_avg = tmpbuf_rec(1)
-      lwc = tmpbuf_rec(2)
-      phiw = tmpbuf_rec(3)
-      phiv = tmpbuf_rec(4)
-      radavg = tmpbuf_rec(5)
-      radmsqr = tmpbuf_rec(6)
-      tavgres = tmpbuf_rec(7)
-      radavg_center = tmpbuf_rec(8)
-      radmsqr_center = tmpbuf_rec(9)
-
-
-
-      phiw = phiw/xl/yl/zl/surf_rho  !This is only an approximation when considering base-state rho(z)
-      phiv = phiv/xl/yl/zl
-      if (tnumpart.eq.0) then
-         Rep_avg = 0.0
-         radavg = 0.0
-         radmsqr = 0.0
-      else
-         Rep_avg = Rep_avg/tnumpart
-         radavg = radavg/tnumpart
-         radmsqr = radmsqr/tnumpart
-      end if
-      
-      if (tnum_destroy.eq.0) then
-         tavgres = 0.0
-      else
-         tavgres = tavgres/tnum_destroy
-      end if
- 
-      if (tnumdrop_center.eq.0) then
-         radavg_center = 0.0
-         radmsqr_center = 0.0
-      else
-         radavg_center = radavg_center/tnumdrop_center
-         radmsqr_center = radmsqr_center/tnumdrop_center
-      end if
-
-      !Min and max radius
-      call mpi_allreduce(myradmin,radmin,1,mpi_real8,mpi_min,mpi_comm_world,ierr)
-      call mpi_allreduce(myradmax,radmax,1,mpi_real8,mpi_max,mpi_comm_world,ierr)
-
-      call mpi_allreduce(mytempmin,tempmin,1,mpi_real8,mpi_min,mpi_comm_world,ierr)
-      call mpi_allreduce(mytempmax,tempmax,1,mpi_real8,mpi_max,mpi_comm_world,ierr)
-
-      call mpi_allreduce(myqmin,qmin,1,mpi_real8,mpi_min,mpi_comm_world,ierr)
-      call mpi_allreduce(myqmax,qmax,1,mpi_real8,mpi_min,mpi_comm_world,ierr)
 
       call end_phase(measurement_id_particle_stats)
 
@@ -3568,12 +3407,157 @@ CONTAINS
       integer :: ierr
       real :: rhop,pi,rhoa,func_rho_base
       
+      integer,parameter :: num0_int=8,num0_real=6,num0_max=3,num0_min=3  !Number of 0-dimensional particle statistics
       integer,parameter :: num1 = 24  !Number of 1-dimensional particle statistics
 
       real :: partcount(maxnz)
-
       real :: statsvec1(maxnz,num1)
+      integer :: statsvec0_int(num0_int)
+      real :: statsvec0_real(num0_real),statsvec0_max(num0_max),statsvec0_min(num0_min)
 
+      real :: myradavg,myradmsqr,myradmax,myradmin,mytempmin,mytempmax,myqmin,myqmax
+      real :: myRep_avg,Rep,diff(3),diffnorm,Volp
+      real :: mywmass,mypmass,mypvol
+
+
+      !!!! 0th order stats
+
+      statsvec0_real = 0.0
+      statsvec0_max = 0.0
+      statsvec0_min = 0.0
+      statsvec0_int = 0
+
+      numpart = 0
+      numdrop = 0
+      numaerosol = 0
+
+      myradavg = 0.0
+      myradmsqr = 0.0
+      myradmin = 1000.0
+      myradmax = 0.0
+      mytempmin = 1000.0
+      mytempmax = 0.0
+      myqmin = 1000.0
+      myqmax = 0.0
+      myRep_avg = 0.0
+      mywmass = 0.0
+      mypmass = 0.0
+      mypvol = 0.0
+
+      part => first_particle
+      do while (associated(part))
+         numpart = numpart + 1
+	 
+         if (part%radius .gt. part%rc) then
+            numdrop = numdrop + 1
+         else
+            numaerosol = numaerosol + 1
+         end if
+
+	 myradavg = myradavg + part%radius
+         myradmsqr = myradmsqr + part%radius**2
+
+	 myradmax = max(myradmax,part%radius)
+	 myradmin = min(myradmin,part%radius)
+	 mytempmax = max(mytempmax,part%Tp)
+	 mytempmin = min(mytempmin,part%Tp)
+	 myqmax = max(myqmax,part%qinf)
+	 myqmin = max(myqmin,part%qinf)
+
+
+	 Volp = pi2*2.0/3.0*part%radius**3
+         rhop = (part%m_s+Volp*rhow)/Volp
+         diff(1:3) = part%vp - part%uf
+         diffnorm = sqrt(diff(1)**2 + diff(2)**2 + diff(3)**2)
+         Rep = 2.0*part%radius*diffnorm/nuf
+         myRep_avg = myRep_avg + Rep
+
+	 mywmass = mywmass + Volp*rhow
+	 mypmass = mypmass + Volp*rhop
+	 mypvol = mypvol + Volp
+
+	 part => part%next
+      end do
+
+      !Compute sums of integer quantities
+      statsvec0_int(1) = numpart
+      statsvec0_int(2) = numdrop
+      statsvec0_int(3) = numaerosol
+      statsvec0_int(4) = denum
+      statsvec0_int(5) = actnum
+      statsvec0_int(6) = num_destroy
+      statsvec0_int(7) = num100
+      statsvec0_int(8) = numimpos
+
+      call mpi_allreduce(mpi_in_place,statsvec0_int,num0_int,mpi_integer,mpi_sum,mpi_comm_world,ierr)
+
+      tnumpart = statsvec0_int(1)
+      tnumdrop = statsvec0_int(2)
+      tnumaerosol = statsvec0_int(3)
+      tdenum = statsvec0_int(4)
+      tactnum = statsvec0_int(5)
+      tnum_destroy = statsvec0_int(6)
+      tnum100 = statsvec0_int(7)
+      tnumimpos = statsvec0_int(8)
+
+      tnum_destroy_accum = tnum_destroy_accum + tnum_destroy
+
+
+      !Compute sums of real quantities
+      statsvec0_real(1) = myRep_avg
+      statsvec0_real(2) = mywmass
+      statsvec0_real(3) = mypmass
+      statsvec0_real(4) = mypvol
+      statsvec0_real(5) = myradavg
+      statsvec0_real(6) = myradmsqr
+
+      call mpi_allreduce(mpi_in_place,statsvec0_real,num0_real,mpi_real8,mpi_sum,mpi_comm_world,ierr)
+
+      Rep_avg = statsvec0_real(1)
+      twmass = statsvec0_real(2)
+      tpmass = statsvec0_real(3)
+      tpvol = statsvec0_real(4)
+      radavg = statsvec0_real(5)
+      radmsqr = statsvec0_real(6)
+
+
+      if (tnumpart.eq.0) then
+         Rep_avg = 0.0
+         radavg = 0.0
+         radmsqr = 0.0
+      else
+         Rep_avg = Rep_avg/tnumpart
+         radavg = radavg/tnumpart
+         radmsqr = radmsqr/tnumpart
+      end if
+      
+      !Compute maxes
+      statsvec0_max(1) = myradmax
+      statsvec0_max(2) = mytempmax
+      statsvec0_max(3) = myqmax
+
+      call mpi_allreduce(mpi_in_place,statsvec0_max,num0_max,mpi_real8,mpi_max,mpi_comm_world,ierr)
+
+      radmax = statsvec0_max(1)
+      tempmax = statsvec0_max(2)
+      qmax = statsvec0_max(3)
+ 
+
+      !Compute mins
+      statsvec0_min(1) = myradmin
+      statsvec0_min(2) = mytempmin
+      statsvec0_min(3) = myqmin
+
+      call mpi_allreduce(mpi_in_place,statsvec0_min,num0_min,mpi_real8,mpi_min,mpi_comm_world,ierr)
+
+      radmin = statsvec0_min(1)
+      tempmin = statsvec0_min(2)
+      qmin = statsvec0_min(3)
+
+
+
+
+      !!!! 1st order stats
       statsvec1 = 0.0
       partcount = 0.0
 
