@@ -146,6 +146,9 @@ c
          !Call dns_vis even when doing LES since vis_m needs to be initialized with something
          call dns_vis
          call get_max
+
+	 !Calculate these at startup, so history file has particle ICs
+         call particle_xy_stats
       else
 
          igrdr = 3
@@ -222,14 +225,8 @@ c
       write(*,'(a15,3e15.6)') 'qmin,qmax:',time,qmin,qmax
       write(*,'(a15,3e15.6)') 'time,radavg:',time,radavg
       write(*,'(a15,e15.6,3i)'),'time,100,impos:',time,tnum100,tnumimpos
-      !if (myid==0) write(*,*), 'time,actnum',time,tactnum
-      !if (myid==0) write(*,*), 'time,denum',time,tdenum
       end if
 
-!      if ( (nnz/2 .le. ize) .and. (nnz/2 .ge. izs)) then
-!         write(*,'(a7,i,3e15.6)') 'T,q:',myid,time,
-!     +   t(nnx/2,iys,1,nnz/2),t(nnx/2,iys,2,nnz/2)
-!      end if
 
 
       if(it .ge. new_vis .and. ivis0 .eq. 1) then
@@ -294,10 +291,6 @@ c
       if(istage .eq. 1)then
         call xy_stats
 
-        call start_phase(measurement_id_particle_stats)
-        call particle_xy_stats
-        call end_phase(measurement_id_particle_stats)
-
         call tke_budget
         do iscl=1,nscl
         call Tvar_budget(iscl)
@@ -320,19 +313,12 @@ c
       if(l_root) then
          if (inetcdf .eq. 1) then
            call start_phase(measurement_id_io_history)
-           if(mhis  .and. istage .eq. 1) then
+           if((mhis .or. it.eq.0)  .and. istage .eq. 1) then
               call open_his_netcdf
               call write_his_netcdf
               call close_his_netcdf
 	   endif
            call end_phase(measurement_id_io_history)
-
-         else
-            call start_phase(measurement_id_io_history)
-            if(mhis  .and. istage .eq. 1)  call write_his(itop)
-            if(mhis  .and. istage .eq. 1 .and. mtape) call close_his
-            call end_phase(measurement_id_io_history)
-
          end if
       endif
 
@@ -349,7 +335,7 @@ c
 c
 c ------------ save viz files
 c
-      if(msave_v .and. istage .eq. 1) then
+      if((msave_v .or. it.eq.0) .and. istage .eq. 1) then
          call start_phase(measurement_id_io_viz)
          if (iviznetcdf) then
             call open_viz_netcdf
@@ -371,7 +357,7 @@ c
       endif
 
 
-      if(mhis  .and. istage .eq. 1) then
+      if((mhis .or. it.eq.0)  .and. istage .eq. 1) then
           call start_phase(measurement_id_io_histograms)
           call open_histog_netcdf
           call write_histograms
@@ -417,19 +403,6 @@ c
          end if
 
 
-      call start_phase(measurement_id_io_histograms)
-      if(l_root) then
-         if (inetcdf .eq. 1) then
-           if(mhis  .and. istage .eq. 1 .and. mtape)  then
-              !call close_histog_netcdf
-           endif
-         else
-            if(mhis  .and. istage .eq. 1 .and. mtape) then
-              call close_histograms
-            end if
-         end if
-      endif
-      call end_phase(measurement_id_io_histograms)
 c
  8999 continue
 
@@ -476,6 +449,10 @@ c
       end if
 
       if (mhis) then
+         call start_phase(measurement_id_particle_stats)
+         call particle_xy_stats
+         call end_phase(measurement_id_particle_stats)
+
          call start_phase(measurement_id_io_histograms)
          call radius_histogram
          call end_phase(measurement_id_io_histograms)

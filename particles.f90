@@ -2160,7 +2160,11 @@ CONTAINS
       part%numact = 0.0
 
       !Critical radius, computed based on initial temp
-      part%rc = crit_radius(part%m_s,part%kappa_s,part%Tp) 
+      if (ievap.eq.1) then
+         part%rc = crit_radius(part%m_s,part%kappa_s,part%Tp) 
+      else
+         part%rc = 0.0
+      end if
 
       
   end subroutine create_particle
