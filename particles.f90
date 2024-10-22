@@ -2729,6 +2729,7 @@ CONTAINS
   end subroutine particle_bcs_periodic
 
   subroutine particle_update_rk3(istage)
+      !NOTE: THIS SHOULD STILL WORK AT ITS CORE, BUT HAS NOT BEEN UPDATED IN A WHILE
       use pars
       use con_data
       use con_stats
@@ -2746,28 +2747,16 @@ CONTAINS
       real :: t_s,t_f,t_s1,t_f1
       real :: mod_magnus,exner,func_p_base,rhoa,func_rho_base
 
-      !First fill extended velocity field for interpolation
-      !t_s = mpi_wtime()
       call fill_ext 
-      !t_f = mpi_wtime()
-      !call mpi_barrier(mpi_comm_world,ierr)
-      !if (myid==5) write(*,*) 'time fill_ext:',t_f-t_s
-
-
-      t_s = mpi_wtime()
 
 
       !If you want, you can have the particles calculate nearest neighbor
       !Brute is there for checking, but WAY slower
       if (ineighbor) then
-      !t_s = mpi_wtime()
 
       call particle_neighbor_search_kd
       !call particle_neighbor_search_brute
 
-      !call mpi_barrier(mpi_comm_world,ierr)
-      !t_f = mpi_wtime()
-      !if (myid==5) write(*,*) 'time neighbor:', t_f - t_s
       end if
 
 
@@ -2863,44 +2852,20 @@ CONTAINS
       end do
 
 
-
-      !t_f1 = mpi_wtime()
-      !write(*,*) 'proc,loop time: ',myid,t_f1-t_s
-      call mpi_barrier(mpi_comm_world,ierr)
-      t_f = mpi_wtime()
-      if (myid==5) write(*,*) 'time loop:', t_f-t_s
-
-      !Enforce nonperiodic bcs (either elastic or destroying particles)
-      !t_s = mpi_wtime()
       call particle_bcs_nonperiodic
-      !call mpi_barrier(mpi_comm_world,ierr)
-      !t_f = mpi_wtime()
-      !if (myid==5) write(*,*) 'time bc_non:', t_f - t_s
 
       !Check to see if particles left processor
       !If they did, remove from one list and add to another
-      t_s = mpi_wtime()
       call particle_exchange
-      call mpi_barrier(mpi_comm_world,ierr)
-      t_f = mpi_wtime()
-      if (myid==5) write(*,*) 'time exchg:', t_f - t_s
 
       !Now enforce periodic bcs 
       !just updates x,y locations if over xl,yl or under 0
-      !t_s = mpi_wtime()
       call particle_bcs_periodic
-      !call mpi_barrier(mpi_comm_world,ierr)
-      !t_f = mpi_wtime()
-      !if (myid==5) write(*,*) 'time bc_per:', t_f - t_s
 
 
       !Now that particles are in their updated position, 
       !compute their contribution to the momentum coupling:
-      !t_s = mpi_wtime()
       call particle_coupling_update
-      !call mpi_barrier(mpi_comm_world,ierr)
-      !t_f = mpi_wtime()
-      !if (myid==5) write(*,*) 'time cpl: ', t_f - t_s
 
       call particle_coupling_exchange
 
@@ -2934,7 +2899,6 @@ CONTAINS
                      ncpu_s,numprocs)
 
 
-      !t_s = mpi_wtime
       !Get particle count:
       numpart = 0
       part => first_particle
@@ -2942,17 +2906,9 @@ CONTAINS
       numpart = numpart + 1
       part => part%next
       end do
-      !call mpi_barrier(mpi_comm_world,ierr)
-      !t_f = mpi_wtime()
-      !if (myid==5) write(*,*) 'time numpart: ', t_f - t_s
  
-      !t_s = mpi_wtime()
-      !Compute total number of particles
       call mpi_allreduce(numpart,tnumpart,1,mpi_integer,mpi_sum,mpi_comm_world,ierr)
 
-      !call mpi_barrier(mpi_comm_world,ierr)
-      !t_f = mpi_wtime()
-      !if (myid==5) write(*,*) 'time mpi_allreduce: ', t_f - t_s
 
   end subroutine particle_update_rk3
 
