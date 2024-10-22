@@ -147,8 +147,6 @@ c
          call dns_vis
          call get_max
 
-	 !Calculate these at startup, so history file has particle ICs
-         call particle_xy_stats
       else
 
          igrdr = 3
@@ -193,9 +191,10 @@ c
       write(*,*) 'Starting time loop'
       write(*,*) 'it,time = ',it,time
       end if
-      if (it == 1) numpart = 0
+
       part => first_particle
       do while (associated(part))
+
       if (part%pidx == 1 .and. part%procidx == 0) then
       write(*,'(a7,4e15.6)') 'xp1:  ',time,part%xp(1:3)
       write(*,'(a7,4e15.6)') 'vp1:  ',time,part%vp(1:3)
@@ -210,12 +209,9 @@ c
       write(*,'(a7,2e15.6)') 'res1:',time,part%res
       write(*,'(a7,e15.6,i)') 'mult1:',time,part%mult
       write(*,'(a7,2e15.6)') 'rc1:',time,part%rc
-
       end if
 
       part => part%next
-
-      if (it == 1) numpart = numpart + 1
       end do
 
       if (myid==0) then
@@ -290,7 +286,6 @@ c
       endif
       if(istage .eq. 1)then
         call xy_stats
-
         call tke_budget
         do iscl=1,nscl
         call Tvar_budget(iscl)
@@ -299,7 +294,6 @@ c
         call pbltop(itop)
       endif
       call end_phase(measurement_id_eddy_viscosity_and_bcs)
-
 
 c
 c ------------ save history files
@@ -313,7 +307,7 @@ c
       if(l_root) then
          if (inetcdf .eq. 1) then
            call start_phase(measurement_id_io_history)
-           if((mhis .or. it.eq.0)  .and. istage .eq. 1) then
+           if((mhis .or. it.eq.1) .and. istage .eq. 1) then
               call open_his_netcdf
               call write_his_netcdf
               call close_his_netcdf
@@ -321,6 +315,32 @@ c
            call end_phase(measurement_id_io_history)
          end if
       endif
+
+c
+c ------------ save histogram files
+c
+      if((mhis .or. it.eq.1)  .and. istage .eq. 1) then
+          call start_phase(measurement_id_io_histograms)
+          call open_histog_netcdf
+          call write_histograms
+          call close_histog_netcdf
+          call end_phase(measurement_id_io_histograms)
+      end if
+
+c
+c ------------ save viz files
+c
+      if((msave_v .or. it.eq.1) .and. istage .eq. 1) then
+         call start_phase(measurement_id_io_viz)
+         if (iviznetcdf) then
+            call open_viz_netcdf
+            call write_viz_netcdf
+            call close_viz_netcdf
+         end if
+         call end_phase(measurement_id_io_viz)
+      endif
+
+
 
 c
 c ------------ save velocity field
@@ -332,20 +352,6 @@ c
          call end_phase(measurement_id_io_particles)
       endif
 
-c
-c ------------ save viz files
-c
-      if((msave_v .or. it.eq.0) .and. istage .eq. 1) then
-         call start_phase(measurement_id_io_viz)
-         if (iviznetcdf) then
-            call open_viz_netcdf
-            call write_viz_netcdf
-            call close_viz_netcdf
-         else
-            call save_viz
-         end if
-         call end_phase(measurement_id_io_viz)
-      endif
 
 c
 c ------------ save pressure field
@@ -356,14 +362,6 @@ c
          call end_phase(measurement_id_io_pressure)
       endif
 
-
-      if((mhis .or. it.eq.0)  .and. istage .eq. 1) then
-          call start_phase(measurement_id_io_histograms)
-          call open_histog_netcdf
-          call write_histograms
-          call close_histog_netcdf
-          call end_phase(measurement_id_io_histograms)
-      end if
 
 c
 c --------- get rhs for all equations
@@ -401,6 +399,9 @@ c
          call particle_update_rk3(istage)
          call end_phase(measurement_id_particle_solver)
          end if
+
+
+
 
 
 c
@@ -448,10 +449,15 @@ c
          call end_phase(measurement_id_particle_reintro)
       end if
 
+
+      !After dust settles, calculate particle stats
+      call start_phase(measurement_id_particle_stats)
+      call particle_xy_stats
+      call end_phase(measurement_id_particle_stats)
+
+
+      !Calculate the histogram, save the particle trajectories
       if (mhis) then
-         call start_phase(measurement_id_particle_stats)
-         call particle_xy_stats
-         call end_phase(measurement_id_particle_stats)
 
          call start_phase(measurement_id_io_histograms)
          call radius_histogram
@@ -463,6 +469,7 @@ c
          end if
          call end_phase(measurement_id_io_traj)
       end if
+
 
 #ifdef TECIO
       if (mod(it,200) .eq. 0) then
@@ -3954,6 +3961,7 @@ c
          do ix=1,nnx
             r3(ix,iy,iz) = r3(ix,iy,iz) - r3_sum(iz)
             w(ix,iy,iz)  = w(ix,iy,iz) + dtgama*r3(ix,iy,iz)
+
          enddo
          enddo
       enddo
@@ -7044,7 +7052,6 @@ c
       it=it+1
 c
       dt    = dt_new
-      dtg   = dt
       mnout = (mod(it,imean).eq.0).or. (it.eq.1)
       mtape = (mod(it,itape).eq.0)
       micut = (mod(it,itcut).eq.0)
