@@ -3463,7 +3463,6 @@ CONTAINS
       tnumimpos = statsvec0_int(8)
 
       tnum_destroy_accum = tnum_destroy_accum + tnum_destroy
-      if (myid.eq.0) write(*,*) 'DHR1:',tnum_destroy,tnum_destroy_accum
 
 
       !Compute sums of real quantities

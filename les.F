@@ -7582,18 +7582,17 @@ c
       uwle(iz)   = stat(iz,9)*fnxy
       vwle(iz)   = stat(iz,10)*fnxy
 
-         
-      m1src(iz) = stat(iz,12)*fnxy
-      m2src(iz) = stat(iz,13)*fnxy
-      m3src(iz) = stat(iz,14)*fnxy
+      m1src(iz) = stat(iz,11)*fnxy
+      m2src(iz) = stat(iz,12)*fnxy
+      m3src(iz) = stat(iz,13)*fnxy
       uw_tot(iz) = uwle(iz) + uwsb(iz)
       vw_tot(iz) = vwle(iz) + vwsb(iz)
-      Tpsrc(iz) = stat(iz,15)*fnxy
-      Hpsrc(iz) = stat(iz,16)*fnxy
-      TEpsrc(iz) = stat(iz,17)*fnxy
-      RHxym(iz) = stat(iz,18)*fnxy
-      tempxym(iz) = stat(iz,19)*fnxy
-      RHmsqr(iz) = stat(iz,20)*fnxy
+      Tpsrc(iz) = stat(iz,14)*fnxy
+      Hpsrc(iz) = stat(iz,15)*fnxy
+      TEpsrc(iz) = stat(iz,16)*fnxy
+      RHxym(iz) = stat(iz,17)*fnxy
+      tempxym(iz) = stat(iz,18)*fnxy
+      RHmsqr(iz) = stat(iz,19)*fnxy
 
 
 
