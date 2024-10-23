@@ -167,12 +167,14 @@ c     ----------------------------------------------------------------------
       !Integers
       type con_i
       sequence
-      integer :: his_counter,histog_counter,viz_counter,itn,it
+      integer :: his_counter,histog_counter,viz_counter,itn,it,
+     + tnum_destroy_accum
       end type con_i
 
       type(con_i), target :: c_i
       integer, pointer :: 
-     + his_counter,histog_counter,viz_counter,itn,it
+     + his_counter,histog_counter,viz_counter,itn,it,
+     + tnum_destroy_accum
        
    
       contains
@@ -232,6 +234,7 @@ c
       viz_counter    => c_i%viz_counter
       itn            => c_i%itn
       it             => c_i%it
+      tnum_destroy_accum   => c_i%tnum_destroy_accum
 
       end subroutine fill_ci
       end module con_data

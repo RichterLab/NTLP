@@ -146,7 +146,9 @@ c
          !Call dns_vis even when doing LES since vis_m needs to be initialized with something
          call dns_vis
          call get_max
-
+	 
+	 !Call to populate the particle statistics with ICs
+         call particle_xy_stats
       else
 
          igrdr = 3

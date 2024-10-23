@@ -24,10 +24,10 @@ module particles
   integer :: numdrop,tnumdrop
   integer :: numaerosol,tnumaerosol
   integer :: iseed
+  integer :: tnum100=0,tnumimpos=0
   integer :: num100=0, numimpos=0
-  integer :: tnum100, tnumimpos
   integer :: denum, actnum, tdenum, tactnum
-  integer :: num_destroy=0,tnum_destroy=0,tnum_destroy_accum=0
+  integer :: num_destroy=0,tnum_destroy=0
   integer :: tot_reintro=0
 
   real :: Rep_avg,part_grav(3)
@@ -2954,6 +2954,8 @@ CONTAINS
       denum = 0
       actnum = 0
       num_destroy = 0
+      num100 = 0
+      numimpos = 0
 
 
       call start_phase(measurement_id_particle_loop)
@@ -3461,6 +3463,7 @@ CONTAINS
       tnumimpos = statsvec0_int(8)
 
       tnum_destroy_accum = tnum_destroy_accum + tnum_destroy
+      if (myid.eq.0) write(*,*) 'DHR1:',tnum_destroy,tnum_destroy_accum
 
 
       !Compute sums of real quantities

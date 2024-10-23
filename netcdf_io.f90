@@ -129,10 +129,10 @@ subroutine netcdf_init
       call netcdf_check( nf90_put_att(ncid,tactnum_vid,"title","Number of particles activated") )
 
       call netcdf_check( nf90_def_var(ncid, "tnum100", NF90_REAL, dimids,tnum100_vid) )
-      call netcdf_check( nf90_put_att(ncid,tnum100_vid,"title","Number of particles which did not converge Gauss-Newton solver since last history file write") )
+      call netcdf_check( nf90_put_att(ncid,tnum100_vid,"title","Number of particles which did not converge Gauss-Newton solver this time step") )
 
       call netcdf_check( nf90_def_var(ncid, "tnumimpos", NF90_REAL, dimids,tnumimpos_vid) )
-      call netcdf_check( nf90_put_att(ncid,tnumimpos_vid,"title","Number of particles which did not converge BOTH implicit solvers since last history file write") )
+      call netcdf_check( nf90_put_att(ncid,tnumimpos_vid,"title","Number of particles which did not converge BOTH implicit solvers this time step") )
 
       call netcdf_check( nf90_def_var(ncid, "tot_reintro", NF90_REAL, dimids,tot_reintro_vid) )
       call netcdf_check( nf90_put_att(ncid,tot_reintro_vid,"title","Particles introduced this time step") )
@@ -633,11 +633,8 @@ subroutine write_his_netcdf
       call netcdf_check( nf90_put_var(ncid,T_base_vid,real(T_base(1:nnz)),start=(/1, his_counter/)) )
       call netcdf_check( nf90_put_var(ncid,theta_base_vid,real(theta_base(1:nnz)),start=(/1, his_counter/)) )
 
+
       !Reset some cumulative quantities
-
-      num100 = 0
-      numimpos = 0
-
       tnum_destroy_accum = 0
       his_counter = his_counter + 1
 
