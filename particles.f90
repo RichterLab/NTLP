@@ -1107,7 +1107,6 @@ CONTAINS
 
       !Now that coupling and statistics arrays are filled, 
       !Transpose them back to align with the velocities:
-      call start_phase(measurement_id_particle_ztox)
       call ztox_trans(partsrc_t(0:nnz+1,iys:iye,mxs:mxe,1), &
                      partsrc(1:nnx,iys:iye,izs-1:ize+1,1),nnx,nnz,mxs, &
                      mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid, &
@@ -1134,7 +1133,6 @@ CONTAINS
                      mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid, &
                      ncpu_s,numprocs)
 
-      call end_phase(measurement_id_particle_ztox)
 
 
   end subroutine particle_coupling_exchange
