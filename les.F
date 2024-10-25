@@ -421,6 +421,13 @@ c
 
       end if
 
+      !Do the two-way coupling. Shouldn't include SFS,reintro, or coalescence
+      !since these don't represent transfer between phases
+      call start_phase(measurement_id_particle_coupling)
+      call particle_coupling_update
+      call particle_coupling_exchange
+      call end_phase(measurement_id_particle_coupling)
+
       !Call coalescence outside of RK loop since it's not appropriate as
       !part of RK scheme
       if (icoalesce) then

@@ -68,6 +68,7 @@ module particles
     real :: Tprhs_L,Tf,radius,radrhs,qinf,qstar,dist
     real :: res,m_s,kappa_s,rc,actres,numact
     real :: u_sub(3),sigm_s
+    real :: vp_old(3),Tp_old,radius_old
     integer*8 :: mult
     type(particle), pointer :: prev,next
   end type particle
@@ -1055,6 +1056,7 @@ CONTAINS
       use pars
       use con_data
       use con_stats
+      use profiling
       implicit none
       include 'mpif.h'
       real :: ctbuf_s(nnz+2,1:iye-iys+2,6),cbbuf_r(nnz+2,1:iye-iys+2,6)
@@ -1103,6 +1105,38 @@ CONTAINS
       partTEsrc_t(0:nnz+1,iys,mxs:mxe) = partTEsrc_t(0:nnz+1,iys,mxs:mxe) + clbuf_r(1:nnz+2,1:mxe-mxs+1,6)
 
 
+      !Now that coupling and statistics arrays are filled, 
+      !Transpose them back to align with the velocities:
+      call start_phase(measurement_id_particle_ztox)
+      call ztox_trans(partsrc_t(0:nnz+1,iys:iye,mxs:mxe,1), &
+                     partsrc(1:nnx,iys:iye,izs-1:ize+1,1),nnx,nnz,mxs, &
+                     mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid, &
+                     ncpu_s,numprocs)
+      call ztox_trans(partsrc_t(0:nnz+1,iys:iye,mxs:mxe,2), &
+                     partsrc(1:nnx,iys:iye,izs-1:ize+1,2),nnx,nnz,mxs, &
+                     mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid, &
+                     ncpu_s,numprocs)
+      call ztox_trans(partsrc_t(0:nnz+1,iys:iye,mxs:mxe,3), &
+                     partsrc(1:nnx,iys:iye,izs-1:ize+1,3),nnx,nnz,mxs, &
+                     mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid, &
+                     ncpu_s,numprocs)
+      call ztox_trans(partTsrc_t(0:nnz+1,iys:iye,mxs:mxe), &
+                     partTsrc(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,mxs, &
+                     mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid, &
+                     ncpu_s,numprocs)
+      call ztox_trans(partHsrc_t(0:nnz+1,iys:iye,mxs:mxe), &
+                     partHsrc(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,mxs, &
+                     mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid, &
+                     ncpu_s,numprocs)
+
+      call ztox_trans(partTEsrc_t(0:nnz+1,iys:iye,mxs:mxe), &
+                     partTEsrc(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,mxs, &
+                     mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid, &
+                     ncpu_s,numprocs)
+
+      call end_phase(measurement_id_particle_ztox)
+
+
   end subroutine particle_coupling_exchange
 
   subroutine particle_coupling_update
@@ -1113,6 +1147,7 @@ CONTAINS
   include 'mpif.h'
   real :: wtx,wty,wtz,wtt,dV
   real :: rhop,taup_i,partmass,rhoa,func_rho_base
+  real :: vrhs(3),radrhs,Tprhs_L,Tprhs_s
   real :: xv,yv,zv
   real :: ctbuf_s(nnz+2,1:iye-iys+2,6),cbbuf_r(nnz+2,1:iye-iys+2,6)
   real :: crbuf_s(nnz+2,1:mxe-mxs+1,6),clbuf_r(nnz+2,1:mxe-mxs+1,6)
@@ -1137,6 +1172,13 @@ CONTAINS
   jpt = floor(part%xp(2)/dy) + 1
   kpt = minloc(zz,1,mask=(zz.gt.part%xp(3))) - 2
   kwpt = minloc(z,1,mask=(z.gt.part%xp(3))) - 1
+
+
+  !Calculate locally based on new minus old
+  vrhs(1:3) = (part%vp(1:3)-part%vp_old(1:3))/dt 
+  radrhs = (part%radius-part%radius_old)/dt
+  Tprhs_L = 3.0*Lv/Cpp/part%radius*radrhs
+  Tprhs_s = (part%Tp-part%Tp_old)/dt - Tprhs_L
 
 
   !Add contribution to each of the 8 surrounding nodes:
@@ -1184,26 +1226,26 @@ CONTAINS
 
       !drag momentum coupling
       partsrc_t(iz,iy,ix,1:3) = &
-          partsrc_t(iz,iy,ix,1:3) - partmass/rhoa*(part%vrhs(1:3)-part_grav(1:3))*wtt/dV*real(part%mult)
+          partsrc_t(iz,iy,ix,1:3) - partmass/rhoa*(vrhs(1:3)-part_grav(1:3))*wtt/dV*real(part%mult)
 
       !vapor momentum coupling
       partsrc_t(iz,iy,ix,1:3) = &
-          partsrc_t(iz,iy,ix,1:3) - rhow/rhoa*pi2*2*part%radius**2*part%radrhs*part%vp(1:3)*wtt/dV*real(part%mult)
+          partsrc_t(iz,iy,ix,1:3) - rhow/rhoa*pi2*2*part%radius**2*radrhs*part%vp(1:3)*wtt/dV*real(part%mult)
      endif
 
      if (iTcouple == 1) then
       partTsrc_t(iz,iy,ix) = &
-          partTsrc_t(iz,iy,ix) - (part%Tprhs_s*6.0*rhow/rhop/CpaCpp/taup_i*(pi2/2.0)*part%radius*nuf)*wtt/dV*real(part%mult)
+          partTsrc_t(iz,iy,ix) - (Tprhs_s*6.0*rhow/rhop/CpaCpp/taup_i*(pi2/2.0)*part%radius*nuf)*wtt/dV*real(part%mult)
      endif
 
      if (iHcouple == 1) then
       partHsrc_t(iz,iy,ix) = &
-          partHsrc_t(iz,iy,ix) - rhow/rhoa*pi2*2*part%radius**2*part%radrhs*wtt/dV*real(part%mult)
+          partHsrc_t(iz,iy,ix) - rhow/rhoa*pi2*2*part%radius**2*radrhs*wtt/dV*real(part%mult)
 
 
       partTEsrc_t(iz,iy,ix) = &
-          partTEsrc_t(iz,iy,ix) - rhow/rhoa*pi2*2*part%radius**2*part%radrhs*Cpv/Cpa*part%Tp*wtt/dV*real(part%mult) + &
-              rhow/rhoa*pi2*2*part%radius**2*part%radrhs*Cpv/Cpa*part%Tf*wtt/dV*real(part%mult)
+          partTEsrc_t(iz,iy,ix) - rhow/rhoa*pi2*2*part%radius**2*radrhs*Cpv/Cpa*part%Tp*wtt/dV*real(part%mult) + &
+              rhow/rhoa*pi2*2*part%radius**2*radrhs*Cpv/Cpa*part%Tf*wtt/dV*real(part%mult)
 
      endif
 
@@ -1830,7 +1872,7 @@ CONTAINS
       !Set up MPI datatypes for sending particle information
       !MUST UPDATE IF THINGS ARE ADDED/REMOVED FROM PARTICLE STRUCTURE
 
-      num_reals = 6*3+16
+      num_reals = 6*3+21
       num_integers = 4
       num_longs = 3
       
@@ -2134,11 +2176,15 @@ CONTAINS
   
       part%xp(1:3) = xp(1:3)
       part%vp(1:3) = vp(1:3)
+      part%vp_old = part%vp
       part%Tp = Tp
+      part%Tp_old = part%Tp
       part%radius = rad_init
+      part%radius_old = part%radius
       part%uf(1:3) = vp(1:3)
       part%qinf = tsfcc(2)
       part%qstar = 0.008
+      part%dist = 0.0
       part%Tf = Tp
       part%xrhs(1:3) = 0.0
       part%vrhs(1:3) = 0.0 
@@ -2154,7 +2200,6 @@ CONTAINS
       part%actres = 0.0
       part%m_s = m_s
       part%kappa_s = kappa_s
-      part%dist = 0.0
       part%u_sub(1:3) = 0.0
       part%sigm_s = 0.0
       part%numact = 0.0
@@ -2751,6 +2796,7 @@ CONTAINS
       real :: t_s,t_f,t_s1,t_f1
       real :: mod_magnus,exner,func_p_base,rhoa,func_rho_base
 
+
       call fill_ext 
 
 
@@ -2767,6 +2813,13 @@ CONTAINS
       !Loop over the linked list of particles:
       part => first_particle
       do while (associated(part))     
+
+         if (istage.eq.1) then
+            part%vp_old(1:3) = part%vp(1:3)
+       	    part%Tp_old = part%Tp
+            part%radius_old = part%radius
+         end if
+
          !First, interpolate to get the fluid velocity part%uf(1:3):
          if (ilin .eq. 1) then
             call uf_interp_lin   !Use trilinear interpolation
@@ -2786,8 +2839,6 @@ CONTAINS
 
 
          if (it .LE. 1 ) then 
-            !part%xrhs(1:3) = part%vp(1:3)
-            !part%xp(1:3) = xtmp(1:3) + dt*gama(istage)*part%xrhs(1:3)
             part%vp(1:3) = part%uf
             part%Tp = part%Tf
          endif
@@ -2867,42 +2918,6 @@ CONTAINS
       call particle_bcs_periodic
 
 
-      !Now that particles are in their updated position, 
-      !compute their contribution to the momentum coupling:
-      call particle_coupling_update
-
-      call particle_coupling_exchange
-
- 
-      !Finally, now that coupling and statistics arrays are filled, 
-      !Transpose them back to align with the velocities:
-      call ztox_trans(partsrc_t(0:nnz+1,iys:iye,mxs:mxe,1), &
-                     partsrc(1:nnx,iys:iye,izs-1:ize+1,1),nnx,nnz,mxs, &
-                     mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid, &
-                     ncpu_s,numprocs)
-      call ztox_trans(partsrc_t(0:nnz+1,iys:iye,mxs:mxe,2), &
-                     partsrc(1:nnx,iys:iye,izs-1:ize+1,2),nnx,nnz,mxs, &
-                     mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid, &
-                     ncpu_s,numprocs)
-      call ztox_trans(partsrc_t(0:nnz+1,iys:iye,mxs:mxe,3), &
-                     partsrc(1:nnx,iys:iye,izs-1:ize+1,3),nnx,nnz,mxs, &
-                     mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid, &
-                     ncpu_s,numprocs)
-      call ztox_trans(partTsrc_t(0:nnz+1,iys:iye,mxs:mxe), &
-                     partTsrc(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,mxs, &
-                     mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid, &
-                     ncpu_s,numprocs)
-      call ztox_trans(partHsrc_t(0:nnz+1,iys:iye,mxs:mxe), &
-                     partHsrc(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,mxs, &
-                     mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid, &
-                     ncpu_s,numprocs)
-
-      call ztox_trans(partTEsrc_t(0:nnz+1,iys:iye,mxs:mxe), &
-                     partTEsrc(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,mxs, &
-                     mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid, &
-                     ncpu_s,numprocs)
-
-
       !Get particle count:
       numpart = 0
       part => first_particle
@@ -2938,7 +2953,6 @@ CONTAINS
       real :: tmp_coeff
       real :: xp3i
       real :: mod_magnus,exner,func_p_base
-      real :: rad_i,Tp_i,vp_i(3),mp_i,rhop_i
 
 
 
@@ -2962,6 +2976,11 @@ CONTAINS
       !loop over the linked list of particles
       part => first_particle
       do while (associated(part))
+
+	 !Store original values for two-way coupling
+         part%vp_old(1:3) = part%vp(1:3)
+         part%Tp_old = part%Tp
+         part%radius_old = part%radius
 
 
         !First, interpolate to get the fluid velocity part%uf(1:3):
@@ -3006,12 +3025,8 @@ CONTAINS
 
         xp3i = part%xp(3)   !Store this to do flux calculation
 
-        !Store these to compute the feedback terms
-        rad_i = part%radius
-        Tp_i = part%Tp
-        vp_i(1:3) = part%vp(1:3)
-        mp_i = Volp*rhop
-        rhop_i = rhop
+
+	!Now start updating particle position, velocity, temperature, radius
 
         !implicitly calculates next velocity and position
         part%xp(1:3) = part%xp(1:3) + dt*part%vp(1:3)
@@ -3095,60 +3110,29 @@ CONTAINS
                part%radius = rt_zeroes(1)*part%radius
                part%Tp = rt_zeroes(2)*part%Tp
 
-        end if
+       else !! Evaporation is turned off
 
-         if (part%radius .gt. 1.0e-2) then
-         write(*,'(a30,12e15.6)') 'WARNING: BIG DROPLET',  &
-         part%radius,part%qinf,part%Tp,part%Tf,part%xp(3), &
-         part%kappa_s,part%m_s,part%vp(1),part%vp(2),part%vp(3), &
-         part%res,part%sigm_s
-         end if
+
+            !Compute Nusselt number for particle:
+            !Ranz-Marshall relation
+            Nup = 2.0 + 0.6*Rep**(1.0/2.0)*Pra**(1.0/3.0)
+
+            !Update the temperature directly using BE:
+            tmp_coeff = Nup/3.0/Pra*CpaCpp*rhop/rhow*taup_i
+            part%Tp = (part%Tp + tmp_coeff*dt*part%Tf)/(1+dt*tmp_coeff)
+
+       end if 
 
 
          !New volume and particle density
          Volp = pi2*2.0/3.0*part%radius**3
          rhop = (part%m_s+Volp*rhow)/Volp
 
-         !Intermediate Values
-         diff(1:3) = part%vp - part%uf
-         diffnorm = sqrt(diff(1)**2 + diff(2)**2 + diff(3)**2)
-         Rep = 2.0*part%radius*diffnorm/nuf
-
-         corrfac = (1.0 + 0.15*Rep**(0.687))
-
-         !Compute Nusselt number for particle:
-         !Ranz-Marshall relation
-         Nup = 2.0 + 0.6*Rep**(1.0/2.0)*Pra**(1.0/3.0)
-         Shp = 2.0 + 0.6*Rep**(1.0/2.0)*Sc**(1.0/3.0)
-
-         !Mass Transfer calculations
          einf = mod_magnus(part%Tf)
 
-         Eff_C = 2.0*Mw*Gam/(Ru*rhow*part%radius*part%Tp)
-         Eff_S = part%kappa_s*part%m_s*rhow/rhos/(Volp*rhop-part%m_s)
-         estar = einf*exp(Mw*Lv/Ru*(1.0/part%Tf-1.0/part%Tp)+Eff_C-Eff_S)
-         part%qstar = Mw/Ru*estar/part%Tp/rhoa
+	 !Compute just to have for statistics
+	 part%qstar = (Mw/(Ru*part%Tp*rhoa))*einf*exp(((Lv*Mw/Ru)*((1./part%Tf) - (1./part%Tp))) + ((2.*Mw*Gam)/(Ru*rhow*part%radius*part%Tp)) - ((part%kappa_s*part%m_s*rhow/rhos)/(Volp*rhop-part%m_s)))
 
-        if (ievap .EQ. 1) then
-            !part%radrhs = Shp/9.0/Sc*rhop/rhow*part%radius*taup_i*(part%qinf-part%qstar) !assumes qinf=rhov/rhoa rather than rhov/rhom
-            part%radrhs = (part%radius-rad_i)/dt
-        else
-
-            part%radrhs = 0.0
-            part%rc = 0.0
-
-            !Also update the temperature directly using BE:
-            tmp_coeff = Nup/3.0/Pra*CpaCpp*rhop/rhow*taup_i
-            part%Tp = (part%Tp + tmp_coeff*dt*part%Tf)/(1+dt*tmp_coeff)
-        end if
-
-        !part%Tprhs_s = -Nup/3.0/Pra*CpaCpp*rhop/rhow*taup_i*(part%Tp-part%Tf)
-        part%Tprhs_L = 3.0*Lv/Cpp/part%radius*part%radrhs
-        part%Tprhs_s = (part%Tp-Tp_i)/dt - part%Tprhs_L
-
-        part%xrhs(1:3) = part%vp(1:3)
-        !part%vrhs(1:3) = corrfac*taup_i*(part%uf(1:3)-part%vp(1:3)) + part_grav(1:3)
-        part%vrhs(1:3) = (part%vp(1:3)-vp_i(1:3))/dt
 
         part%res = part%res + dt
         part%actres = part%actres + dt
@@ -3209,44 +3193,6 @@ CONTAINS
       call particle_bcs_periodic
       call end_phase(measurement_id_particle_bcs)
 
-      call start_phase(measurement_id_particle_coupling)
-      call particle_coupling_update
-
-      call particle_coupling_exchange
-      call end_phase(measurement_id_particle_coupling)
-
-
-      !Finally, now that coupling and statistics arrays are filled, 
-      !Transpose them back to align with the velocities:
-      call start_phase(measurement_id_particle_ztox)
-      call ztox_trans(partsrc_t(0:nnz+1,iys:iye,mxs:mxe,1), &
-                     partsrc(1:nnx,iys:iye,izs-1:ize+1,1),nnx,nnz,mxs, &
-                     mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid, &
-                     ncpu_s,numprocs)
-      call ztox_trans(partsrc_t(0:nnz+1,iys:iye,mxs:mxe,2), &
-                     partsrc(1:nnx,iys:iye,izs-1:ize+1,2),nnx,nnz,mxs, &
-                     mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid, &
-                     ncpu_s,numprocs)
-      call ztox_trans(partsrc_t(0:nnz+1,iys:iye,mxs:mxe,3), &
-                     partsrc(1:nnx,iys:iye,izs-1:ize+1,3),nnx,nnz,mxs, &
-                     mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid, &
-                     ncpu_s,numprocs)
-      call ztox_trans(partTsrc_t(0:nnz+1,iys:iye,mxs:mxe), &
-                     partTsrc(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,mxs, &
-                     mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid, &
-                     ncpu_s,numprocs)
-      call ztox_trans(partHsrc_t(0:nnz+1,iys:iye,mxs:mxe), &
-                     partHsrc(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,mxs, &
-                     mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid, &
-                     ncpu_s,numprocs)
-
-      call ztox_trans(partTEsrc_t(0:nnz+1,iys:iye,mxs:mxe), &
-                     partTEsrc(1:nnx,iys:iye,izs-1:ize+1),nnx,nnz,mxs, &
-                     mxe,mx_s,mx_e,iys,iye,izs,ize,iz_s,iz_e,myid, &
-                     ncpu_s,numprocs)
-
-      call end_phase(measurement_id_particle_ztox)
-
 
       call start_phase(measurement_id_particle_stats)
       !Get particle count:
@@ -3261,10 +3207,6 @@ CONTAINS
 
 
       call mpi_allreduce(numpart,tnumpart,1,mpi_integer,mpi_sum,mpi_comm_world,ierr)
-
-
-      
-
       call end_phase(measurement_id_particle_stats)
 
 
