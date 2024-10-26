@@ -1615,15 +1615,15 @@ c
 
 
 
-!         !Add particle momentum coupling
-!         if (icouple == 1) then
-!         r1(ix,iy,iz) = r1(ix,iy,iz) + partsrc(ix,iy,iz,1)
-!         r2(ix,iy,iz) = r2(ix,iy,iz) + partsrc(ix,iy,iz,2)
-!         !Note: partsrc(3,ix,iy,iz) is located at u,v-locations
-!         !Interpolate to w-location:
-!         r3(ix,iy,iz) = r3(ix,iy,iz) + (weit*partsrc(ix,iy,izp1,3)+
-!     +                  weit1*partsrc(ix,iy,iz,3))
-!         end if
+         !Add particle momentum coupling
+         if (icouple == 1) then
+         r1(ix,iy,iz) = r1(ix,iy,iz) + partsrc(ix,iy,iz,1)
+         r2(ix,iy,iz) = r2(ix,iy,iz) + partsrc(ix,iy,iz,2)
+         !Note: partsrc(3,ix,iy,iz) is located at u,v-locations
+         !Interpolate to w-location:
+         r3(ix,iy,iz) = r3(ix,iy,iz) + (weit*partsrc(ix,iy,izp1,3)+
+     +                  weit1*partsrc(ix,iy,iz,3))
+         end if
 
       enddo
       enddo

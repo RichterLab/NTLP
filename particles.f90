@@ -1265,24 +1265,14 @@ CONTAINS
     implicit none
     include 'mpif.h'
 
-    integer :: ix,iy,iz,izm1,izp1
-    real :: weit,weit1,exner,func_p_base
+    integer :: ix,iy,iz
+    real :: exner,func_p_base
 
 
     do iz=izs,ize
-      izm1 = iz - 1
-      izp1 = iz + 1
-      weit  = dzw(iz)/(dzw(iz) + dzw(izp1))
-      weit1 = 1.0 - weit
 
       do iy=iys,iye
       do ix=1,nnx
-
-       if (icouple.eq.1) then
-          u(ix,iy,iz) = u(ix,iy,iz) + dt*partsrc(ix,iy,iz,1)
-          v(ix,iy,iz) = v(ix,iy,iz) + dt*partsrc(ix,iy,iz,2)
-          w(ix,iy,iz) = w(ix,iy,iz) + dt*(weit*partsrc(ix,iy,izp1,3) + weit1*partsrc(ix,iy,iz,3))
-       end if
 
        if (iTcouple.eq.1) then
           if (iexner) then
