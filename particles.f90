@@ -1257,6 +1257,54 @@ CONTAINS
 
   end subroutine particle_coupling_update
 
+  subroutine apply_particle_coupling
+    use fields
+    use pars
+    use con_data
+    use con_stats
+    implicit none
+    include 'mpif.h'
+
+    integer :: ix,iy,iz,izm1,izp1
+    real :: weit,weit1,exner,func_p_base
+
+
+    do iz=izs,ize
+      izm1 = iz - 1
+      izp1 = iz + 1
+      weit  = dzw(iz)/(dzw(iz) + dzw(izp1))
+      weit1 = 1.0 - weit
+
+      do iy=iys,iye
+      do ix=1,nnx
+
+       if (icouple.eq.1) then
+          u(ix,iy,iz) = u(ix,iy,iz) + dt*partsrc(ix,iy,iz,1)
+          v(ix,iy,iz) = v(ix,iy,iz) + dt*partsrc(ix,iy,iz,2)
+          w(ix,iy,iz) = w(ix,iy,iz) + dt*(weit*partsrc(ix,iy,izp1,3) + weit1*partsrc(ix,iy,iz,3))
+       end if
+
+       if (iTcouple.eq.1) then
+          if (iexner) then
+             t(ix,iy,1,iz) = t(ix,iy,1,iz) + dt*(partTsrc(ix,iy,iz)/exner(surf_p,func_p_base(surf_p,tsfcc(1),zz(iz))))
+          else
+             t(ix,iy,1,iz) = t(ix,iy,1,iz) + dt*partTsrc(ix,iy,iz)
+          end if
+       end if
+
+       if (iHcouple.eq.1) then
+          t(ix,iy,1,iz) = t(ix,iy,1,iz) + dt*partTEsrc(ix,iy,iz)
+          t(ix,iy,2,iz) = t(ix,iy,2,iz) + dt*partHsrc(ix,iy,iz)
+       end if
+       
+
+      end do
+      end do
+    end do
+
+  end subroutine apply_particle_coupling
+
+
   subroutine assign_nbrs
         use pars
         include 'mpif.h'

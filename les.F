@@ -423,6 +423,7 @@ c
 
       !Do the two-way coupling. Shouldn't include SFS,reintro, or coalescence
       !since these don't represent transfer between phases
+
       call start_phase(measurement_id_particle_coupling)
       call particle_coupling_update
       call end_phase(measurement_id_particle_coupling)
@@ -430,6 +431,11 @@ c
       call start_phase(measurement_id_particle_coupling_exchange)
       call particle_coupling_exchange
       call end_phase(measurement_id_particle_coupling_exchange)
+
+      call start_phase(measurement_id_particle_coupling)
+      call apply_particle_coupling
+      call end_phase(measurement_id_particle_coupling)
+
 
       !Call coalescence outside of RK loop since it's not appropriate as
       !part of RK scheme
@@ -1609,15 +1615,15 @@ c
 
 
 
-         !Add particle momentum coupling
-         if (icouple == 1) then
-         r1(ix,iy,iz) = r1(ix,iy,iz) + partsrc(ix,iy,iz,1)
-         r2(ix,iy,iz) = r2(ix,iy,iz) + partsrc(ix,iy,iz,2)
-         !Note: partsrc(3,ix,iy,iz) is located at u,v-locations
-         !Interpolate to w-location:
-         r3(ix,iy,iz) = r3(ix,iy,iz) + (weit*partsrc(ix,iy,izp1,3)+
-     +                  weit1*partsrc(ix,iy,iz,3))
-         end if
+!         !Add particle momentum coupling
+!         if (icouple == 1) then
+!         r1(ix,iy,iz) = r1(ix,iy,iz) + partsrc(ix,iy,iz,1)
+!         r2(ix,iy,iz) = r2(ix,iy,iz) + partsrc(ix,iy,iz,2)
+!         !Note: partsrc(3,ix,iy,iz) is located at u,v-locations
+!         !Interpolate to w-location:
+!         r3(ix,iy,iz) = r3(ix,iy,iz) + (weit*partsrc(ix,iy,izp1,3)+
+!     +                  weit1*partsrc(ix,iy,iz,3))
+!         end if
 
       enddo
       enddo
@@ -2380,36 +2386,36 @@ c
 
 
 !---------add on the thermal coupling from the particles:
-      if (iscl == 1) then
-      if (iTcouple == 1) then
-      do iz=izs,ize
-         do iy=iys,iye
-         do ix=1,nnx
-          if (iexner) then
-          r4(ix,iy,1,iz) = r4(ix,iy,1,iz) + partTsrc(ix,iy,iz)/
-     +    exner(surf_p,func_p_base(surf_p,tsfcc(1),zz(iz)))
-          else
-             r4(ix,iy,1,iz) = r4(ix,iy,1,iz) + partTsrc(ix,iy,iz)
-          end if    
-         end do
-         end do
-      end do
-      end if
-      end if
-
-
-      if (iscl == 2) then
-      if (iHcouple == 1) then
-      do iz=izs,ize
-         do iy=iys,iye
-         do ix=1,nnx
-          r4(ix,iy,1,iz) = r4(ix,iy,1,iz) + partTEsrc(ix,iy,iz)
-          r4(ix,iy,2,iz) = r4(ix,iy,2,iz) + partHsrc(ix,iy,iz)
-         end do
-         end do
-      end do
-      end if
-      end if
+!      if (iscl == 1) then
+!      if (iTcouple == 1) then
+!      do iz=izs,ize
+!         do iy=iys,iye
+!         do ix=1,nnx
+!          if (iexner) then
+!          r4(ix,iy,1,iz) = r4(ix,iy,1,iz) + partTsrc(ix,iy,iz)/
+!     +    exner(surf_p,func_p_base(surf_p,tsfcc(1),zz(iz)))
+!          else
+!             r4(ix,iy,1,iz) = r4(ix,iy,1,iz) + partTsrc(ix,iy,iz)
+!          end if    
+!         end do
+!         end do
+!      end do
+!      end if
+!      end if
+!
+!
+!      if (iscl == 2) then
+!      if (iHcouple == 1) then
+!      do iz=izs,ize
+!         do iy=iys,iye
+!         do ix=1,nnx
+!          r4(ix,iy,1,iz) = r4(ix,iy,1,iz) + partTEsrc(ix,iy,iz)
+!          r4(ix,iy,2,iz) = r4(ix,iy,2,iz) + partHsrc(ix,iy,iz)
+!         end do
+!         end do
+!      end do
+!      end if
+!      end if
 
 
 !---------add on simple radiation scheme:
