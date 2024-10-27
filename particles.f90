@@ -1144,7 +1144,7 @@ CONTAINS
   implicit none
   include 'mpif.h'
   real :: wtx,wty,wtz,wtt,dV
-  real :: rhop,taup_i,partmass,rhoa,func_rho_base
+  real :: rhop,taup_i,partmass,rhoa,func_rho_base,func_p_base
   real :: vrhs(3),radrhs,Tprhs_L,Tprhs_s
   real :: xv,yv,zv
   real :: ctbuf_s(nnz+2,1:iye-iys+2,6),cbbuf_r(nnz+2,1:iye-iys+2,6)
@@ -1196,7 +1196,8 @@ CONTAINS
      wtt = wtx*wty*wtz
 
      if (iexner.eq.1) then
-        rhoa = func_rho_base(surf_p,tsfcc(1),part%xp(3))
+        !rhoa = func_rho_base(surf_p,tsfcc(1),part%xp(3))
+        rhoa = func_p_base(surf_p,tsfcc(1),part%xp(3))/Rd/part%Tf  !part%Tf has already been converted to temp from pot. temp
      else
         rhoa = surf_rho
      end if
@@ -2867,7 +2868,8 @@ CONTAINS
              !Compute using the base-state pressure at the particle height
              !Neglects any turbulence or other fluctuating pressure sources
              part%Tf = part%Tf*exner(surf_p,func_p_base(surf_p,tsfcc(1),part%xp(3)))
-             rhoa = func_rho_base(surf_p,tsfcc(1),part%xp(3))
+             !rhoa = func_rho_base(surf_p,tsfcc(1),part%xp(3))
+             rhoa = func_p_base(surf_p,tsfcc(1),part%xp(3))/Rd/part%Tf
          else
              rhoa = surf_rho
          end if
@@ -3035,7 +3037,8 @@ CONTAINS
            !Compute using the base-state pressure at the particle height
            !Neglects any turbulence or other fluctuating pressure sources
            part%Tf = part%Tf*exner(surf_p,func_p_base(surf_p,tsfcc(1),part%xp(3)))
-           rhoa = func_rho_base(surf_p,tsfcc(1),part%xp(3))
+           !rhoa = func_rho_base(surf_p,tsfcc(1),part%xp(3))
+           rhoa = func_p_base(surf_p,tsfcc(1),part%xp(3))/Rd/part%Tf
         else
            rhoa = surf_rho
         end if
@@ -3345,7 +3348,7 @@ CONTAINS
 
       integer :: iz,ipt,jpt,kpt
       integer :: ierr
-      real :: rhop,pi,rhoa,func_rho_base
+      real :: rhop,pi,rhoa,func_rho_base,func_p_base,exner
       
       integer,parameter :: num0_int=8,num0_real=6,num0_max=3,num0_min=3  !Number of 0-dimensional particle statistics
       integer,parameter :: num1 = 24  !Number of 1-dimensional particle statistics
@@ -3357,7 +3360,7 @@ CONTAINS
 
       real :: myradavg,myradmsqr,myradmax,myradmin,mytempmin,mytempmax,myqmin,myqmax
       real :: myRep_avg,Rep,diff(3),diffnorm,Volp
-      real :: mywmass,mypmass,mypvol
+      real :: mywmass,mypmass,mypvol,Ttmp
 
 
       !!!! 0th order stats
@@ -3624,7 +3627,9 @@ CONTAINS
 
         !Set the density based on whether to take base state into account
         if (iexner .eq. 1) then
-           rhoa = func_rho_base(surf_p,tsfcc(1),zz(iz))
+            Ttmp = txym(iz,1)*exner(surf_p,func_p_base(surf_p,tsfcc(1),zz(iz)))
+            !rhoa = func_rho_base(surf_p,tsfcc(1),zz(iz))
+	    rhoa = func_p_base(surf_p,tsfcc(1),zz(iz))/Rd/Ttmp
         else
            rhoa = surf_rho
         end if

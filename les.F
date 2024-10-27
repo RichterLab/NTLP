@@ -7383,13 +7383,6 @@ c
       izp1 = iz + 1
       izm1 = iz - 1
 
-      !Set the density based on whether to take base state into account
-      if (iexner .eq. 1) then
-         rhoa = func_rho_base(surf_p,tsfcc(1),zz(iz))
-      else
-         rhoa = surf_rho
-      end if
-
 
       do iy=iys,iye
       do ix=1,nnx
@@ -7421,11 +7414,15 @@ c
          stat(iz,16) = stat(iz,16) + partTEsrc(ix,iy,iz)
 
          if (iexner .eq. 1) then
-         Ttmp = t(ix,iy,1,iz)*
-     +   exner(surf_p,func_p_base(surf_p,tsfcc(1),zz(iz)))
+            Ttmp = t(ix,iy,1,iz)*
+     +      exner(surf_p,func_p_base(surf_p,tsfcc(1),zz(iz)))
+            !rhoa = func_rho_base(surf_p,tsfcc(1),zz(iz))
+	    rhoa = func_p_base(surf_p,tsfcc(1),zz(iz))/Rd/Ttmp
          else
-         Ttmp = t(ix,iy,1,iz)
+            Ttmp = t(ix,iy,1,iz)
+            rhoa = surf_rho
          end if
+
 
          RHtmp = Ttmp*
      +   t(ix,iy,2,iz)*Ru/Mw/mod_magnus(Ttmp)*rhoa*100.0
@@ -10478,7 +10475,7 @@ c
       include 'mpif.h'
 
       real :: LWP_tmp(nnz-1),LWP_rad(nnz-1)  !Have to calulate the integral from top down, then reverse ordering
-      real :: rhoa,func_rho_base
+      real :: rhoa,func_rho_base,Ttmp,exner,func_p_base
       integer :: iz,lc
 
       !Do trapezoidal integration from the TOP down:
@@ -10490,7 +10487,10 @@ c
          if (lc .eq. 1) then
 
          if (iexner.eq.1) then
-            rhoa = func_rho_base(surf_p,tsfcc(1),zz(iz))
+            Ttmp = txym(iz,1)*
+     +      exner(surf_p,func_p_base(surf_p,tsfcc(1),zz(iz)))
+            !rhoa = func_rho_base(surf_p,tsfcc(1),zz(iz))
+	    rhoa = func_p_base(surf_p,tsfcc(1),zz(iz))/Rd/txym(iz,1)
          else
             rhoa = surf_rho
          end if
@@ -10535,7 +10535,10 @@ c
       do iz=1,nnz
 
          if (iexner.eq.1) then
-            rhoa = func_rho_base(surf_p,tsfcc(1),zz(iz))
+            Ttmp = txym(iz,1)*
+     +      exner(surf_p,func_p_base(surf_p,tsfcc(1),zz(iz)))
+            !rhoa = func_rho_base(surf_p,tsfcc(1),zz(iz))
+	    rhoa = func_p_base(surf_p,tsfcc(1),zz(iz))/Rd/txym(iz,1)
          else
             rhoa = surf_rho
          end if

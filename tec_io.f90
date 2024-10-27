@@ -391,8 +391,9 @@ real :: Ttmp,mod_magnus,exner,func_p_base,rhoa,func_rho_base
   do iy=jmin,jmax
   do ix=1,nnx
 
-     rhoa = func_rho_base(surf_p,tsfcc(1),zz(iz))
+     !rhoa = func_rho_base(surf_p,tsfcc(1),zz(iz))
      Ttmp = tplt(ix,iy,iz)*exner(surf_p,func_p_base(surf_p,tsfcc(1),zz(iz)))
+     rhoa = func_p_base(surf_p,tsfcc(1),zz(iz))/Rd/Ttmp
      rhplt(ix,iy,iz) = Ttmp*qplt(ix,iy,iz)*Ru/Mw/mod_magnus(Ttmp)*rhoa*100.0
 
   end do
