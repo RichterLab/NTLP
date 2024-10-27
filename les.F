@@ -2385,39 +2385,6 @@ c
       enddo
 
 
-!---------add on the thermal coupling from the particles:
-!      if (iscl == 1) then
-!      if (iTcouple == 1) then
-!      do iz=izs,ize
-!         do iy=iys,iye
-!         do ix=1,nnx
-!          if (iexner) then
-!          r4(ix,iy,1,iz) = r4(ix,iy,1,iz) + partTsrc(ix,iy,iz)/
-!     +    exner(surf_p,func_p_base(surf_p,tsfcc(1),zz(iz)))
-!          else
-!             r4(ix,iy,1,iz) = r4(ix,iy,1,iz) + partTsrc(ix,iy,iz)
-!          end if    
-!         end do
-!         end do
-!      end do
-!      end if
-!      end if
-!
-!
-!      if (iscl == 2) then
-!      if (iHcouple == 1) then
-!      do iz=izs,ize
-!         do iy=iys,iye
-!         do ix=1,nnx
-!          r4(ix,iy,1,iz) = r4(ix,iy,1,iz) + partTEsrc(ix,iy,iz)
-!          r4(ix,iy,2,iz) = r4(ix,iy,2,iz) + partHsrc(ix,iy,iz)
-!         end do
-!         end do
-!      end do
-!      end if
-!      end if
-
-
 !---------add on simple radiation scheme:
       if (ilongwave == 1) then
       if (iscl == 1) then
@@ -2710,31 +2677,6 @@ c
          endif
       enddo
 
-!---------add on the thermal coupling from the particles:
-      if (iscl == 1) then 
-      if (iTcouple == 1) then
-      do iz=izs,ize
-         do iy=iys,iye
-         do ix=1,nnx
-          r4(ix,iy,1,iz) = r4(ix,iy,1,iz) + partTsrc(ix,iy,iz)
-         end do
-         end do
-      end do
-      end if
-      end if  
-
-      if (iscl == 2) then 
-      if (iHcouple == 1) then
-      do iz=izs,ize
-         do iy=iys,iye
-         do ix=1,nnx
-          r4(ix,iy,1,iz) = r4(ix,iy,1,iz) + partTEsrc(ix,iy,iz)
-          r4(ix,iy,2,iz) = r4(ix,iy,2,iz) + partHsrc(ix,iy,iz)
-         end do
-         end do
-      end do
-      end if
-      end if 
 
 !-----------add on the humidity wall sink 
 
@@ -3083,29 +3025,6 @@ c
       real sfc_flx(2+nscl)
       real upars(2)
 c
-
-          
-      !This was for the C-FOG setup
-      if (icase.eq.3) then
-      !! To change the lower surface temperature at some specified time
-      if (time .gt. 3600.0) then
-         tsfcc(1) = 282.0
-      else
-         tsfcc(1)  = 284.0
-      end if
-      end if
-
-      ! FATIMA ADV. CASE SETUP
-      if (icase.eq.6) then
-      if (time .gt. 3600.0) then
-         tsfcc(1) = 286.5
-         surf_rho = surf_p/Rd/tsfcc(1)
-      else
-         tsfcc(1) = 287.5
-         surf_rho = surf_p/Rd/tsfcc(1)
-      end if
-      end if 
-
 
       iz   = 1
       izm1 = iz - 1
@@ -7612,6 +7531,7 @@ c
 
 
 
+
 c
 c ------------ get scalar resolved fluxes and variances
 c
@@ -10721,11 +10641,37 @@ c
       use fields
       use pars
       use con_stats
+      use con_data
       implicit none
 
       integer :: iz
       real, intent(in) :: T_surf
       real :: func_T_base,func_p_base,func_rho_base
+
+          
+      !This was for the C-FOG setup
+      if (icase.eq.3) then
+      !! To change the lower surface temperature at some specified time
+      if (time .gt. 3600.0) then
+         tsfcc(1) = 282.0
+      else
+         tsfcc(1)  = 284.0
+      end if
+      end if
+
+
+      ! FATIMA ADV. CASE SETUP
+      if (icase.eq.6) then
+      if (time .gt. 3600.0) then
+         tsfcc(1) = 286.5
+         surf_rho = surf_p/Rd/tsfcc(1)
+      else
+         tsfcc(1) = 287.5
+         surf_rho = surf_p/Rd/tsfcc(1)
+      end if
+      end if 
+
+
 
       if (iexner.eq.1) then
          do iz=0,nnz+1

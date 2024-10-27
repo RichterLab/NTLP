@@ -502,6 +502,7 @@ subroutine write_his_netcdf
 
       implicit none
       real :: tmp(0:nnz),tmp_s(0:nnz,nscl)
+      integer :: iz
 
       write(*,'(a35,i)') 'WRITE HISTORY FILE, HIS_COUNTER = ',his_counter
 
