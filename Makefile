@@ -12,6 +12,10 @@ F90=ifort
 #   avx2    Optimize for Intel's AVX2 instruction set.  This is the most advanced
 #           optimization for Intel Haswell processors, or newer, and AMD's Epyc
 #           7001, 7002, and 7003 (Zen 1-3) processors.
+#   avx512  Optimizes for Intel's AVX-512 instruction set.  This allows for
+#           vector widths twice as large relative to provided by AVX2
+#           instructions.  Intel Skylake and AMD Epyc 7004 (Zen 4) processors or
+#           newer are required.
 #
 # NOTE: Specifying this incorrectly will, at best, result in degraded execution
 #       times and, at worst, result in crashes due to illegal instructions.
@@ -26,6 +30,9 @@ ARCH_FLAGS = -march=corei7-avx
 endif
 ifeq ($(ARCH), avx2)
 ARCH_FLAGS = -march=core-avx2
+endif
+ifeq ($(ARCH), avx512)
+ARCH_FLAGS = -march=skylake-avx512
 endif
 
 # Always used compilation flags:
@@ -42,6 +49,7 @@ endif
 #                     level of debugging support.
 #
 FLAGS=-i4 -r8 -assume byterecl $(ARCH_FLAGS) -fpp -traceback
+FLAGS += -g -ggdb -fvar-tracking -debug full
 
 # Are we building a debug build?  This enables options useful for debugging
 # the solver's behavior but are not desirable to unconditionally enable.
@@ -50,30 +58,35 @@ ifeq ($(DEBUG), yes)
 
 # Generate debugging information.  This is necessary for running the solver
 # under a debugger and can be useful for other tools (e.g. profilers).
-#
-# NOTE: This disables optimizations and enables run-time checks!
-#
 DEBUG_FLAGS = -g
 
 # Enable all compilation warnings except for when temporary arrays are created
 # when passing to a subroutine or Fortran.  Temporary arrays occur throughout
 # the code base and will be addressed at a later date.
+#
+# NOTE: This disables optimizations and enables run-time checks!
+#
 DEBUG_FLAGS += -check all,noarg_temp_created
 
 # Exit with a SIGFPE whenever a floating point exception (FPE) is detected.
 # This is useful for identifying precisely where an invalid value (infinities
 # and NaNs) are introduced.
-#DEBUG_FLAGS += -fpe0
+DEBUG_FLAGS += -fpe0
 
 # Initialize floating point values, both scalars and arrays, with signalling
 # NaNs.  Combined with exiting on FPEs this makes it trivial to identify the use
 # of uninitialized floating point values.
-#DEBUG_FLAGS += -init=arrays -init=snan
+DEBUG_FLAGS += -init=arrays -init=snan
+
+DEBUG_FLAGS += -O0
 
 else # DEBUG == no
 
 # Enable optimizations that are almost always beneficial.
 FLAGS += -O2
+
+# Compile the droplet model with full optimizations so we get vectorized code.
+MODEL_FLAGS += -O3
 
 endif
 
@@ -95,6 +108,14 @@ OUTPUTINC = -I$(NETCDFBASE)/include
 OUTPUTLIB = -L$(NETCDFBASE)/lib
 LINKOPTS  = -lnetcdf -lnetcdff
 
+# Are we profiling the code?  This enables basic block profiling which allows
+# most tools (e.g. gprof) to time subroutine/function calls as well as identify
+# expensive call paths.
+ifeq ($(PROFILE), yes)
+FLAGS    += -pg
+LINKOPTS += -pg
+endif
+
 # TecPlot output is only used when requested.
 TECPLOT ?= no
 TECFLAGS = -DTECIO
@@ -103,6 +124,7 @@ TECLINK  = -lm -lstdc++ -lgcc_eh
 
 SRC = data_structures.f90 \
       defs.F \
+      droplet_model.f90 \
       fft.f \
       kdtree.f90 \
       les.F \
@@ -113,6 +135,8 @@ SRC = data_structures.f90 \
 
 OBJS = $(addsuffix .o, $(basename $(SRC)))
 
+BENCHMARK_OBJS = $(addsuffix .o, $(basename $(BENCHMARK_SRC)))
+
 ifeq ($(TECPLOT), yes)
 FLAGS    += $(TECFLAGS)
 LINKOPTS += $(TECLINK) $(TECLIB)
@@ -120,6 +144,11 @@ endif
 
 lesmpi.a: $(OBJS)
 	$(FORTRAN) $^ -o $@  $(FLAGS) $(DEBUG_FLAGS) $(OUTPUTINC) $(OUTPUTLIB) $(LINKOPTS)
+
+# Apply the model compilation flags so we have finer-grained control on
+# generating optimized code.
+droplet_model.o: droplet_model.f90
+	$(FORTRAN) $(FLAGS) $(MODEL_FLAGS) $(DEBUG_FLAGS) -c $< $(OUTPUTINC) $(OUTPUTLIB)
 
 %.o: %.f
 	$(FORTRAN) $(FLAGS) $(DEBUG_FLAGS) -c $< $(OUTPUTINC) $(OUTPUTLIB)
@@ -132,7 +161,8 @@ lesmpi.a: $(OBJS)
 
 
 clean:
-	rm -f *.o *.mod lesmpi.a mach.file
+	rm -f *.o *.mod lesmpi.a  mach.file
+
 
 # Dependencies between the individual objects.
 les.o: defs.o measurement.o netcdf_io.o particles.o tec_io.o
@@ -140,3 +170,4 @@ measurement.o: data_structures.o
 particles.o: defs.o measurement.o
 netcdf_io.o: particles.o
 tec_io.o: particles.o
+
