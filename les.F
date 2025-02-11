@@ -413,10 +413,16 @@ c
       call humidity_control
       call end_phase(measurement_id_humidity)
 
-      if (ipart_method .eq. 2) then
+      if (ipart_method.eq.2) then
 
          call start_phase(measurement_id_particle_solver)
          call particle_update_BE
+         call end_phase(measurement_id_particle_solver)
+
+      elseif (ipart_method.eq.3) then
+
+         call start_phase(measurement_id_particle_solver)
+         call particle_update_ANN
          call end_phase(measurement_id_particle_solver)
 
       end if
