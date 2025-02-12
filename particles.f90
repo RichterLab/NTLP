@@ -3389,14 +3389,14 @@ CONTAINS
             droplet_parameters(6) = rhoa
             droplet_parameters(7) = dt
 
-	    droplet_parameters(4) = 290.0
-	    droplet_parameters(6) = 0.138965E-01
+	    !droplet_parameters(4) = 290.0
+	    !droplet_parameters(6) = 0.138965E-01
 
-	    write(*,'(a8,7e15.6)') 'DHR0:',droplet_parameters(1),droplet_parameters(2),droplet_parameters(3),droplet_parameters(4),droplet_parameters(5),droplet_parameters(6),droplet_parameters(7)
+	    !write(*,'(a8,7e15.6)') 'DHR0:',droplet_parameters(1),droplet_parameters(2),droplet_parameters(3),droplet_parameters(4),droplet_parameters(5),droplet_parameters(6),droplet_parameters(7)
 
             call estimate( droplet_parameters, rt_zeroes )
 
-	    write(*,'(a8,2e15.6)') 'DHR0.1:',rt_zeroes(1),rt_zeroes(2)
+	    !write(*,'(a8,2e15.6)') 'DHR0.1:',rt_zeroes(1),rt_zeroes(2)
 
             if (isnan(rt_zeroes(1)) &
                .OR. (rt_zeroes(1)<0) &
