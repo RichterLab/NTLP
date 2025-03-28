@@ -18,7 +18,13 @@ import sys
 import numpy as np
 from scipy.integrate import solve_ivp
 
-NUMBER_DROPLETS = 1024 * 1024
+import errno
+import os
+import signal
+import functools
+
+# Config constants
+NUMBER_DROPLETS = 1024*1024*5
 
 DROPLET_RADIUS_LOG_RANGE          = np.array( (-8, -3) )
 DROPLET_TEMPERATURE_RANGE         = np.array( (273, 310) )
@@ -40,34 +46,50 @@ def dydt( t, y, parameters ):
     rhoa = parameters[3, ...].astype( "float64" )
 
     rhow = np.float64( 1000 )
-    Cpp  = np.float64( 4190 )
+    rhos = np.float64( 2000 )
+    #Cpp  = np.float64( 4190 )  #CM1
+    Cpp  = np.float64( 4179 )  #NTLP
     Mw   = np.float64( 0.018015 )
     Ru   = np.float64( 8.3144 )
     Ms   = np.float64( 0.05844 )
     Gam  = np.float64( 7.28e-2 )
-    Ion  = np.float64( 2.0 )
-    Os   = np.float64( 1.093 )
+    #Ion  = np.float64( 2.0 )
+    #Os   = np.float64( 1.093 )
+    kap  = np.float64( 1.2 )
     Shp  = np.float64( 2 )
-    Sc   = np.float64( 0.61 )
-    Pra  = np.float64( 0.71 )
+    Sc   = np.float64( 0.615 )
+    Pra  = np.float64( 0.715 )
     Cpa  = np.float64( 1006.0 )
     nuf  = np.float64( 1.57e-5 )
     Lv   = np.float64( (25.0 - 0.02274*26)*10**5 )
     Nup  = np.float64( 2 )
 
-    einf = 611.2*np.exp(17.67*(Tf-273.15)/(Tf-29.65))
+    #einf = 611.2*np.exp(17.67*(Tf-273.15)/(Tf-29.65))  #CM1, Bolton (1980, MWR)
+    einf = 610.94*np.exp((17.6257*(Tf-273.15))/(243.04+(Tf-273.15)))  #NTLP
 
-    qinf = 0.75/rhoa*(einf*Mw/Ru/Tf)
-
-
-    qinf = RH/rhoa*(einf*Mw/Ru/Tf);
+    qinf = RH/rhoa*(einf*Mw/Ru/Tf)
 
     Volp = 4/3*np.pi*y[0]**3
     rhop = (m_s + Volp*rhow)/Volp
     taup = rhop*(2*y[0])**2/18/nuf/rhoa
 
 
-    qstar = einf*Mw/Ru/y[1]/rhoa*np.exp(Lv*Mw/Ru*(1/Tf - 1/y[1]) + 2*Mw*Gam/Ru/rhow/y[0]/y[1] - Ion*Os*m_s*(Mw/Ms)/(Volp*rhow))
+    #qstar = einf*Mw/Ru/y[1]/rhoa*np.exp(Lv*Mw/Ru*(1/Tf - 1/y[1]) + 2*Mw*Gam/Ru/rhow/y[0]/y[1] - Ion*Os*m_s*(Mw/Ms)/(Volp*rhow))
+    #exp_stuff = Lv*Mw/Ru*(1/Tf - 1/y[1]) + 2*Mw*Gam/Ru/rhow/y[0]/y[1] - (kap*m_s*rhow/rhos)/(Volp*rhow)
+    #print(f"exp_stuff = {exp_stuff:.17g}")
+    #qstar = einf*Mw/Ru/y[1]/rhoa*np.exp(exp_stuff)
+    term1 = Lv*Mw/Ru*(1/Tf - 1/y[1])
+    term2 = 2*Mw*Gam/Ru/rhow/y[0]/y[1]
+    term3 = (kap*m_s*rhow/rhos)/(Volp*rhow) # !!! Shouldn't this be Mw/Ms not density??
+    exp_stuff = term1 + term2  - term3
+    #if exp_stuff > 10.0:
+    #    print(f"exp_stuff = {exp_stuff:.17g}")
+    #    print(f"term1 = {term1:.17g}")
+    #    print(f"term2 = {term2:.17g}")
+    #    print(f"term3 = {term3:.17g}")
+    #    print(f"Volp = {Volp:.17g}")
+    qstar = einf*Mw/Ru/y[1]/rhoa*np.exp(exp_stuff)
+
 
     dy1dt = 1/9*Shp/Sc*rhop/rhow*y[0]/taup*(qinf - qstar)
     dy2dt = -1/3*Nup/Pra*Cpa/Cpp*rhop/rhow/taup*(y[1] - Tf) + 3*Lv/y[0]/Cpp*dy1dt
@@ -89,6 +111,7 @@ def solve_ivp_float32_outputs( dydt, t_span, y0, **kwargs ):
 
     return solution
 
+# Notice that this function is never called!
 def normalize_droplet_parameters( droplet_parameters ):
     """
     """
@@ -101,9 +124,10 @@ def normalize_droplet_parameters( droplet_parameters ):
     #       with the inner dimension representing a single droplet's parameters.
     #
 
+    # Grabs the last dimension of the array
     number_parameters = droplet_parameters.shape[-1]
 
-    if number_parameters != 2 and number_parameters != 6:
+    if number_parameters != 2 and number_parameters != 6: # Either just temp/radius or full model?
         raise ValueError( "Unknown number of parameters to normalize ({:d})!".format( number_parameters ) )
 
     normalized_droplet_parameters = np.empty_like( droplet_parameters )
@@ -221,6 +245,34 @@ def validate_output_parameters( input_parameters, output_parameters, integration
 
     return invalid_outputs
 
+
+class TimeoutError(Exception):
+    pass
+
+def timeout(seconds=10, error_message=os.strerror(errno.ETIME)):
+    def decorator(func):
+        def _handle_timeout(signum, frame):
+            raise TimeoutError(error_message)
+
+        @functools.wraps(func)
+        def wrapper(*args, **kwargs):
+            signal.signal(signal.SIGALRM, _handle_timeout)
+            signal.alarm(seconds)
+            try:
+                result = func(*args, **kwargs)
+            finally:
+                signal.alarm(0)
+            return result
+
+        return wrapper
+
+    return decorator
+
+@timeout(5)
+def timed_solve_ivp(*args, **kwargs):
+    return solve_ivp(*args, **kwargs)
+
+
 def create_droplet_batch( number_droplets ):
     """
     Creates a batch of random droplets.
@@ -245,31 +297,59 @@ def create_droplet_batch( number_droplets ):
 
     # XXX: move this
     import warnings
+    import time
 
     warnings.simplefilter( "error", RuntimeWarning )
 
     random_inputs     = scale_droplet_parameters( np.reshape( np.random.uniform( -1, 1, number_droplets*6 ),
                                                              (number_droplets, 6) ).astype( "float32" ) )
     random_outputs    = np.empty_like( random_inputs, shape=(number_droplets, 2) )
+
+
+
     integration_times = (10.0**np.random.uniform( -3.2, 1.1, number_droplets )).astype( "float32" )
+
+    # Hard code problematic values
 
     number_warnings = 0
 
     weird_inputs = { "evaluation_warning": [],
                      "failed_solve":       [],
-                     "invalid_inputs":     [] }
+                     "invalid_inputs":     [],
+                     "timeout_inputs":     [] }
     weird_outputs = { "radius_nonpositive":      [],
                       "temperature_nonpositive": [] }
 
     for droplet_index in np.arange( number_droplets ):
+        nudge_count = 0
         while True:
-            y0         = random_inputs[droplet_index, :2]
-            parameters = random_inputs[droplet_index, 2:]
-            t_final    = integration_times[droplet_index]
+            y0         = random_inputs[droplet_index, :2] # Radius, Temperature
+            parameters = random_inputs[droplet_index, 2:] # Environemntal Variables
+            t_final    = integration_times[droplet_index] # Time to integrate
+
+            #y0 = np.array([5.9981421145494096e-06, 277.07498168945312])
+            #parameters = np.array([3.8935551476971464e-22, 307.10308837890625, 0.7068866491317749, 0.93063300848007202])
+            #t_final = 10.0
+            # ^^ Presumably problematic hard-coded values
+
+            #print(f"t_final = {t_final:.17g}")
 
             try:
-                solution = solve_ivp( dydt, [0, t_final], y0, method="Radau", t_eval=[t_final], args=(parameters,) )
+                #print(f"droplet_index = ",droplet_index)
+                #print("y0 =  [" + ", ".join(f"{x:.17g}" for x in y0) + "]")
+                #print("parameters = [" + ", ".join(f"{x:.17g}" for x in parameters) + "]")
+                start_time = time.time()
 
+                solution = timed_solve_ivp( dydt, [0, t_final], y0, method="BDF", t_eval=[t_final], args=(parameters,) )
+
+                #solution = solve_ivp( dydt, [0, t_final], y0, method="Radau", t_eval=[t_final], args=(parameters,) )
+                end_time = time.time()
+                elapsed_time = end_time - start_time
+                #if elapsed_time > 1.0:
+                    #print(f"LONG TIME",elapsed_time,y0,parameters,t_final)
+                    #print(f"LONG TIME",elapsed_time)
+                    #print("LONG TIME 1, [" + ", ".join(f"{x:.17g}" for x in y0) + "]")
+                    #print("LONG TIME 2, [" + ", ".join(f"{x:.17g}" for x in parameters) + "]")
                 if solution.success:
                     random_outputs[droplet_index, 0] = solution.y[0][0]
                     random_outputs[droplet_index, 1] = solution.y[1][0]
@@ -293,9 +373,27 @@ def create_droplet_batch( number_droplets ):
                     weird_inputs["failed_solve"].append( [y0, parameters, t_final, solution.message] )
 
             except RuntimeWarning as e:
+                #print("Warning message:",e)
+                #print("RuntimeWarning:, [" + ", ".join(f"{x:.17g}" for x in y0) + "]")
                 weird_inputs["evaluation_warning"].append( [y0, parameters, t_final, str( e )] )
             except ValueError as e:
+                #print("ValueError:, [" + ", ".join(f"{x:.17g}" for x in y0) + "]")
                 weird_inputs["invalid_inputs"].append( [y0, parameters, t_final, str( e )] )
+            except TimeoutError as e:
+                #print("TimeoutError:, [" + ", ".join(f"{x:.17g}" for x in y0) + "]")
+                weird_inputs["timeout_inputs"].append( [y0, parameters, t_final, str( e )] )
+                nudge_count += 1
+                if (nudge_count < 3):
+                    # Try again with slightly different values up to three times
+                    #print("OLD m_s", random_inputs[droplet_index, :][2])
+                    random_inputs[droplet_index, :][2] *= 1.0 + (0.0001*np.random.choice([-1,1]))# nudge value slightly
+                    #print("NEW m_s", random_inputs[droplet_index, :][2])
+                    continue
+                nudge_count = 0
+                # Otherwise, completely reroll
+
+            # What if we did the same for long runtimes.
+            # Reroll the dice but only slightly. Thoughts?
 
             # We failed to create acceptable parameters.  Reroll the dice for
             # this droplet and try again.
@@ -428,6 +526,7 @@ def create_training_file( file_name, number_droplets, weird_file_name=None, user
     with open( file_name, "wb" ) as output_fp:
         # XXX: factor this into a private function
         for batch_index in range( number_batches ):
+            print(f"Currently at {batch_index*BATCH_SIZE}")
 
             if batch_index != (number_batches - 1):
                 batch_size = BATCH_SIZE
