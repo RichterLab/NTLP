@@ -10,16 +10,14 @@ GENERATOR=./generate_training_data.py
 # Number of cores on the local system.  This ignores hardware threads that share
 # a core.  Enumerate the "CPU" resource instead of "CORE" if hardware threads
 # are desired.
-#NUMBER_SYSTEM_CORES=`(lscpu -p=CORE 2>/dev/null || echo 1) | grep -v ^# | sort -u | wc -l`
-NUMBER_SYSTEM_CORES=32
+NUMBER_SYSTEM_CORES=`(lscpu -p=CORE 2>/dev/null || echo 1) | grep -v ^# | sort -u | wc -l`
 
 # Prefix of the files generated.  This can include paths so data are generated
 # in a different directory.
-OUTPUT_PREFIX=./test
+OUTPUT_PREFIX=../data/time_log_spaced
 
 # Total number of training data files to create.
-#NUMBER_ITERATIONS=320
-NUMBER_ITERATIONS=1
+NUMBER_ITERATIONS=320
 
 # Number of files to create in parallel.  This should be no larger than the
 # number of cores on the system.
@@ -31,9 +29,12 @@ if [ ! -d ${OUTPUT_DIR} ]; then
     mkdir -p ${OUTPUT_DIR}
 fi
 
-
-    START_NUMBER=1
-    END_NUMBER=${NUMBER_SYSTEM_CORES}
+# Loop over all of the iterations and generate data in batches.
+ITERATION_NUMBER=0
+while [ ${ITERATION_NUMBER} -lt ${NUMBER_ITERATIONS} ]; do
+    START_NUMBER=${ITERATION_NUMBER}
+    ITERATION_NUMBER=`expr ${ITERATION_NUMBER} + ${NUMBER_JOBS}`
+    END_NUMBER=`expr ${ITERATION_NUMBER} - 1`
 
     for JOB_NUMBER in `seq -f %04g ${START_NUMBER} ${END_NUMBER}`; do
         OUTPUT_FILE_NAME=${OUTPUT_PREFIX}-${JOB_NUMBER}.data
@@ -43,7 +44,7 @@ fi
         ${GENERATOR} ${OUTPUT_FILE_NAME} &
     done
 
-#    # Wait for each of the generators to complete before going to the next
-#    # batch.
+    # Wait for each of the generators to complete before going to the next
+    # batch.
     wait
-#done
+done
