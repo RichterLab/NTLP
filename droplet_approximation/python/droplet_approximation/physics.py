@@ -156,9 +156,10 @@ def solve_ivp_float32_outputs( dydt, t_span, y0, **kwargs ):
     # Solve the ODE in the precision supplied by the caller.
     solution = solve_ivp( dydt, t_span, y0, **kwargs )
 
-    # Return the outputs as the requested precision.
-    solution.t = solution.t.astype( "float32" )
-    solution.y = solution.y.astype( "float32" )
+    # Return the outputs as the requested precision when a solution was found.
+    if solution.success:
+        solution.t = solution.t.astype( "float32" )
+        solution.y = solution.y.astype( "float32" )
 
     return solution
 
