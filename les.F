@@ -537,6 +537,8 @@ c           that we only report timings from a single rank and don't have its
 c           output jumbled with every other ranks'.
       call mpi_barrier(mpi_comm_world,ierr)
       if(l_root) call report_profile(6)
+      if(l_root) write(6,9999) numpart_processed
+ 9999 format('Particles processed: ',I0)
       call shutdown_profiling
 
       call mpi_finalize(ierr)

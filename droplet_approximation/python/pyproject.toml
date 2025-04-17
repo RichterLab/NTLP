@@ -1,0 +1,10 @@
+[project]
+name        = "droplet_approximation"
+version     = "0.1.0"
+description = "Droplet characteristics approximation tools"
+authors     = [{"name" = "Greg Thomsen"}]
+urls        = {"Homepage" = "https://github.com/RichterLab/NTLP"}
+
+[build-system]
+requires      = ["setuptools >= 64"]
+build-backend = "setuptools.build_meta"

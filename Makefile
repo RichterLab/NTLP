@@ -133,6 +133,8 @@ SRC = data_structures.f90 \
       particles.f90 \
       tec_io.f90
 
+BENCHMARK_SRC = benchmark_approximation.f90
+
 OBJS = $(addsuffix .o, $(basename $(SRC)))
 
 BENCHMARK_OBJS = $(addsuffix .o, $(basename $(BENCHMARK_SRC)))
@@ -161,8 +163,10 @@ droplet_model.o: droplet_model.f90
 
 
 clean:
-	rm -f *.o *.mod lesmpi.a  mach.file
+	rm -f *.o *.mod lesmpi.a benchmark_approximation.x mach.file
 
+benchmark_approximation.x: $(BENCHMARK_OBJS) measurement.o data_structures.o droplet_model.o
+	$(FORTRAN) $(FLAGS) $(DEBUG_FLAGS) $(MODEL_FLAGS) $(OUTPUTLIB) $(LINKOPTS) -o $@ $^
 
 # Dependencies between the individual objects.
 les.o: defs.o measurement.o netcdf_io.o particles.o tec_io.o
@@ -171,3 +175,4 @@ particles.o: defs.o measurement.o
 netcdf_io.o: particles.o
 tec_io.o: particles.o
 
+benchmark_approximation.o: measurement.o droplet_model.o
