@@ -1101,6 +1101,7 @@ contains
         measurement_id_particle_bcs                   = create_phase( "particle_bcs" )
         measurement_id_particle_exchange              = create_phase( "particle_exchange" )
         measurement_id_particle_coupling              = create_phase( "particle_coupling" )
+        measurement_id_particle_coupling_exchange     = create_phase( "particle_coupling_exchange" )
         measurement_id_particle_ztox                  = create_phase( "particle_ztox" )
         measurement_id_particle_stats                 = create_phase( "particle_stats" )
         measurement_id_setup                          = create_phase( "setup" )
@@ -1373,6 +1374,7 @@ contains
         measurement_id_particle_bcs                   = 0
         measurement_id_particle_exchange              = 0
         measurement_id_particle_coupling              = 0
+        measurement_id_particle_coupling_exchange     = 0
         measurement_id_particle_ztox                  = 0
         measurement_id_particle_stats                 = 0
         measurement_id_setup                          = 0
