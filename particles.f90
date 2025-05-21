@@ -3398,37 +3398,25 @@ CONTAINS
             droplet_parameters(2) = part%Tp
             droplet_parameters(3) = part%m_s
             droplet_parameters(4) = part%Tf
-            droplet_parameters(5) = part%qinf
+            droplet_parameters(5) = part%qinf/(Mw*mod_magnus(part%Tf)/Ru/part%Tf)
             droplet_parameters(6) = rhoa
             droplet_parameters(7) = dt
 
-	    !droplet_parameters(4) = 290.0
-	    !droplet_parameters(6) = 0.138965E-01
-
-	    !write(*,'(a8,7e15.6)') 'DHR0:',droplet_parameters(1),droplet_parameters(2),droplet_parameters(3),droplet_parameters(4),droplet_parameters(5),droplet_parameters(6),droplet_parameters(7)
-
             call estimate( droplet_parameters, rt_zeroes )
-
-	    !write(*,'(a8,2e15.6)') 'DHR0.1:',rt_zeroes(1),rt_zeroes(2)
 
             if (isnan(rt_zeroes(1)) &
                .OR. (rt_zeroes(1)<0) &
                .OR. isnan(rt_zeroes(2)) &
                .OR. (rt_zeroes(2)<0) &
                .OR. (rt_zeroes(1)>1.0e-2)) & 
-	       !.OR. (log10(part%radius).lt.RADIUS_LOG_RANGE(1)) .or. (log10(part%radius).gt.RADIUS_LOG_RANGE(2)) &
-               !.OR. (part%Tp.lt.TEMPERATURE_RANGE(1)) .or. (part%Tp.gt.TEMPERATURE_RANGE(2)) &
-               !.OR. (log10(part%m_s).lt.SALINITY_LOG_RANGE(1)) .or. (log10(part%m_s).gt.SALINITY_LOG_RANGE(2)) &
-               !.OR. (part%Tf.lt.AIR_TEMPERATURE_RANGE(1)) .or. (part%Tf.gt.AIR_TEMPERATURE_RANGE(2)) &
-               !.OR. (rhoa.lt.RHOA_RANGE(1)) .or. (rhoa.gt.RHOA_RANGE(2))) &
             then
 
 
                 numimpos = numimpos + 1  !How many have failed?
                 !If they failed (should be very small number), radius,
                 !temp remain unchanged
-                rt_zeroes(1) = 1.0
-                rt_zeroes(2) = part%Tf/part%Tp
+                rt_zeroes(1) = part%radius
+                rt_zeroes(2) = part%Tp
 
             end if
 
@@ -3436,13 +3424,13 @@ CONTAINS
             !part%rc = crit_radius(part%m_s,part%kappa_s,part%Tp) 
 
             !Count if activated/deactivated
-            if (part%radius > part%rc .AND. part%radius*rt_zeroes(1) < part%rc) then
+            if (part%radius > part%rc .AND. rt_zeroes(1) < part%rc) then
                 denum = denum + 1
 
                 !Also add activated lifetime to histogram
                 call add_histogram(bins_actres,hist_actres,histbins+2,part%actres,part%mult)
 
-            elseif (part%radius < part%rc .AND. part%radius*rt_zeroes(1) > part%rc) then
+            elseif (part%radius < part%rc .AND. rt_zeroes(1) > part%rc) then
                 actnum = actnum + 1
                 part%numact = part%numact + 1.0
 
