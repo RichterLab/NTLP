@@ -1,11 +1,24 @@
-#!/bin/sh
+#!/bin/bash
+
+#$ -M dcolange@nd.edu
+#$ -m n 
+#$ -pe mpi-64 64
+#$ -q *@@richter
+#$ -j y
+#$ -e ./logs/
+#$ -o ./logs/
 
 # Creates training data in parallel using N-many instances at a time.  Data are
 # created in separate files that can be concatenated after the fact
 # (e.g. cat *.data > combined.data).
 
+# This allows us to run locally installed python packages
+module unload python
+
 # Script that generates the training data.
 GENERATOR=./generate_training_data.py
+
+INDEX=$SGE_TASK_ID
 
 # Number of cores on the local system.  This ignores hardware threads that share
 # a core.  Enumerate the "CPU" resource instead of "CORE" if hardware threads
@@ -14,10 +27,9 @@ NUMBER_SYSTEM_CORES=`(lscpu -p=CORE 2>/dev/null || echo 1) | grep -v ^# | sort -
 
 # Prefix of the files generated.  This can include paths so data are generated
 # in a different directory.
-OUTPUT_PREFIX=../data/time_log_spaced
+OUTPUT_PREFIX=../data/tmp/data
 
 # Total number of training data files to create.
-NUMBER_ITERATIONS=320
 
 # Number of files to create in parallel.  This should be no larger than the
 # number of cores on the system.
@@ -29,22 +41,18 @@ if [ ! -d ${OUTPUT_DIR} ]; then
     mkdir -p ${OUTPUT_DIR}
 fi
 
-# Loop over all of the iterations and generate data in batches.
-ITERATION_NUMBER=0
-while [ ${ITERATION_NUMBER} -lt ${NUMBER_ITERATIONS} ]; do
-    START_NUMBER=${ITERATION_NUMBER}
-    ITERATION_NUMBER=`expr ${ITERATION_NUMBER} + ${NUMBER_JOBS}`
-    END_NUMBER=`expr ${ITERATION_NUMBER} - 1`
 
-    for JOB_NUMBER in `seq -f %04g ${START_NUMBER} ${END_NUMBER}`; do
-        OUTPUT_FILE_NAME=${OUTPUT_PREFIX}-${JOB_NUMBER}.data
 
-        #echo "Generating log data #${JOB_NUMBER}"
-        echo "Generating file ${OUTPUT_FILE_NAME}"
-        ${GENERATOR} ${OUTPUT_FILE_NAME} &
-    done
+START_NUMBER=1
+END_NUMBER=${NUMBER_SYSTEM_CORES}
 
-    # Wait for each of the generators to complete before going to the next
-    # batch.
-    wait
+for JOB_NUMBER in `seq -f %04g ${START_NUMBER} ${END_NUMBER}`; do
+    OUTPUT_FILE_NAME=${OUTPUT_PREFIX}-${INDEX}-${JOB_NUMBER}.data
+
+    #echo "Generating log data #${JOB_NUMBER}"
+    echo "Generating file ${OUTPUT_FILE_NAME}"
+    ${GENERATOR} ${OUTPUT_FILE_NAME} &
 done
+
+# Wait for each of the generators to complete before finishing
+wait
