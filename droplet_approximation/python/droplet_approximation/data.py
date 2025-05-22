@@ -8,6 +8,7 @@ from .physics import DROPLET_RADIUS_LOG_RANGE, \
                      DROPLET_AIR_TEMPERATURE_RANGE, \
                      DROPLET_RELATIVE_HUMIDITY_RANGE, \
                      DROPLET_RHOA_RANGE, \
+                     DROPLET_TIME_LOG_RANGE, \
                      TimeoutError, \
                      dydt, \
                      scale_droplet_parameters, \
@@ -100,7 +101,7 @@ def create_droplet_batch( number_droplets, linear_time_flag=False, number_evalua
 
     # We generate data for a time window that is slightly larger than what we're interested
     # in (logspace( -3, 1 )) so we can learn the endpoints.
-    TIME_RANGE = (10.0**-3.2, 10.0**1.1)
+    TIME_RANGE = (10.0**DROPLET_LOG_TIME_RANGE(0), 10.0**DROPLET_LOG_TIME_RANGE(1))
 
     integration_times = np.empty_like( random_inputs, shape=(number_droplets * number_evaluations) )
     if linear_time_flag:
@@ -243,6 +244,128 @@ def create_droplet_batch( number_droplets, linear_time_flag=False, number_evalua
 
     return random_inputs, random_outputs, integration_times, weird_inputs, weird_outputs
 
+def create_droplet_batch_jagged( number_droplets, number_samples ):
+    """
+    Creates a batch of random droplets. Generates number_samples of datapoints 
+    by randomly sampling logarithmically from a 8+DROPLET_TIME_RANGE(1) second 
+    integration of a droplet. One sample always occurs at t=0.
+
+    Takes arguments:
+
+      number_droplets - Number of droplets to integrate with solve_ivp.
+      number_samples  - Number of samples to take from each droplet.
+
+    Returns 4 values:
+
+      random_inputs     - Array, sized number_droplets x 6, containing the droplets
+                          radii, temperatures, salinity, air temperature, relative
+                          humidity, and rhoa.
+      random_outputs    - Array, sized number_droplets x 2, containing the droplets
+                          radii and temperatures.
+      integration_times - Array, sized number_droplets, containing the times corresponding
+                          to the associated random_inputs and random_outputs.
+      weird_indices     - List of indices into random_outputs indicating NaN
+                          values.  This will be empty when all outputs are valid.
+
+    """
+
+
+    warnings.simplefilter( "error", RuntimeWarning )
+
+    random_inputs     = scale_droplet_parameters( np.reshape( np.random.uniform( -1, 1, number_droplets*6 ),
+                                                             (number_droplets, 6) ).astype( "float32" ) )
+    droplet_inputs =    np.zeros( shape=( number_droplets, number_samples, 6) ).astype( "float32" )
+    random_outputs    = np.zeros( shape=( number_droplets, number_samples, 2) ).astype( "float32" )
+    integration_times = np.zeros( shape=( number_droplets, number_samples) ).astype( "float32" )
+
+
+
+    t_final = 15
+
+    # Hard code problematic values
+
+    number_warnings = 0
+
+    weird_inputs = { "evaluation_warning": [],
+                     "failed_solve":       [],
+                     "invalid_inputs":     [],
+                     "timeout_inputs":     [] }
+    weird_outputs = { "radius_nonpositive":      [],
+                      "temperature_nonpositive": [] }
+
+    time_span = (0,8+DROPLET_TIME_LOG_RANGE[1])
+    time_eval = np.linspace(0, 8+DROPLET_TIME_LOG_RANGE[1], 8192)
+
+
+    for droplet_index in np.arange( number_droplets ):
+        if droplet_index % (5*1024) == 0:
+            print("Currently at ", droplet_index)
+        nudge_count = 0
+        while True:
+            y0         = random_inputs[droplet_index, :2] # Radius, Temperature
+            parameters = random_inputs[droplet_index, 2:] # Environemntal Variables
+            try:
+                solution = timed_solve_ivp( dydt, time_span, y0, method="BDF", t_eval=time_eval, args=(parameters,) )
+
+
+                if solution.success:
+                    integration_times[droplet_index] = (10.0**np.random.uniform( DROPLET_TIME_LOG_RANGE[0], DROPLET_TIME_LOG_RANGE[1], number_samples)).astype( "float32" )
+                    integration_starts = 10.0**np.random.uniform(-4, np.log10(8), number_samples)
+                    integration_starts[0] = 0 # ensure that the very beginning is represented
+
+                    effective_integration_times = integration_starts + integration_times[droplet_index]
+
+                    droplet_inputs[droplet_index] = np.concatenate((np.stack((np.interp(integration_starts, solution.t, solution.y[0]), np.interp(integration_starts, solution.t, solution.y[1])), axis = -1), np.tile(parameters, (number_samples,1))), axis=1)
+                    
+                    random_outputs[droplet_index] = np.stack((np.interp(effective_integration_times, solution.t, solution.y[0]), np.interp(effective_integration_times, solution.t, solution.y[1])), axis = -1)
+
+                    min_radius = min(solution.y[0])
+                    min_temperature = min(solution.y[1])
+
+                    if min_radius <= 0.0:
+                        weird_outputs["radius_nonpositive"].append( [y0, parameters, t_final, random_outputs[droplet_index, :]] )
+                    elif min_temperature <= 0.0:
+                        weird_outputs["temperature_nonpositive"].append( [y0, parameters, t_final, random_outputs[droplet_index, :]] )
+                    else:
+                        break
+                else:
+                    # Record the cases that fail to converge.
+                    weird_inputs["failed_solve"].append( [y0, parameters, t_final, solution.message] )
+
+            except RuntimeWarning as e:
+                print("Warning message:",e)
+                #print("RuntimeWarning:, [" + ", ".join(f"{x:.17g}" for x in y0) + "]")
+                weird_inputs["evaluation_warning"].append( [y0, parameters, t_final, str( e )] )
+            except ValueError as e:
+                print("ValueError:, [" + ", ".join(f"{x:.17g}" for x in y0) + "]")
+                weird_inputs["invalid_inputs"].append( [y0, parameters, t_final, str( e )] )
+            except TimeoutError as e:
+                print("TimeoutError:, [" + ", ".join(f"{x:.17g}" for x in y0) + "]")
+                weird_inputs["timeout_inputs"].append( [y0, parameters, t_final, str( e )] )
+                nudge_count += 1
+                if (nudge_count < 3):
+                    random_inputs[droplet_index, :][2] *= 1.0 + (0.0001*np.random.choice([-1,1]))# nudge value slightly
+                    #print("NEW m_s", random_inputs[droplet_index, :][2])
+                    continue
+                nudge_count = 0
+                # Otherwise, completely reroll
+
+
+            # We failed to create acceptable parameters.  Reroll the dice for
+            # this droplet and try again.
+            random_inputs[droplet_index, :] = scale_droplet_parameters(
+                np.random.uniform( -1, 1, 6 ).astype( "float32" ) )
+
+
+    random_outputs = random_outputs.reshape( number_droplets*number_samples, -1)
+    droplet_inputs = droplet_inputs.reshape( number_droplets*number_samples, -1)
+    integration_times = integration_times.reshape( number_droplets*number_samples)
+
+
+    # Warn users if there were strange droplets.  XXX
+
+    return droplet_inputs, random_outputs, integration_times, weird_inputs, weird_outputs
+
 def merge_weird_parameters( parameters_1, parameters_2 ):
     """
     Merge two dictionaries of lists into a separate copy containing the
@@ -359,7 +482,8 @@ def write_weird_parameters_to_spreadsheet( file_name, weird_inputs, weird_output
             filtered_df = pd.DataFrame( weird_things_listified, columns=columns )
             filtered_df.to_excel( writer, sheet_name=sheet_name, index=False )
 
-def create_training_file( file_name, number_droplets, weird_file_name=None, user_batch_size=None ):
+
+def create_training_file( file_name, number_droplets, number_samples=1, weird_file_name=None, user_batch_size=None ):
     """
     Generates random droplet parameters, both inputs and their corresponding
     ODE outputs, and writes them as fixed-size binary records to a file.  This
@@ -387,18 +511,14 @@ def create_training_file( file_name, number_droplets, weird_file_name=None, user
       file_name       - Path to the file to write the droplet parameters.  This
                         is overwritten if it exists.
       number_droplets - The number of droplets to generate.
+      number_samples  - Number of data points to sample from each droplet. If
+                        its greater than one, switch to jagged_generate_training_data
       weird_file_name - Optional path to write any weird parameters encountered
                         during batch generation.  If specified an Excel spreadsheet
                         file is written, otherwise weird parameters are silently
                         ignored.
       user_batch_size - Optional batch size specifying the number of parameters
-                        to generate at once.  If omitted, defaults to a "small"
-                        number of parameters that balances memory footprint,
-                        time to generate, and file write size.  This does not
-                        need to evenly divide number_droplets.
-
-    Returns nothing.
-
+                        to generate at once.  If omitted, 
     """
 
     # Balance the time it takes to generate a single batch vs the efficiency of
@@ -436,14 +556,15 @@ def create_training_file( file_name, number_droplets, weird_file_name=None, user
              outputs,
              times,
              batch_weird_inputs,
-             batch_weird_outputs) = create_droplet_batch( batch_size )
+             batch_weird_outputs) = create_droplet_batch( batch_size ) if number_samples == 1 else create_droplet_batch_jagged( batch_size, number_samples )
+
 
             # Track the weirdness for post-mortem analysis.
             weird_inputs  = merge_weird_parameters( weird_inputs, batch_weird_inputs )
             weird_outputs = merge_weird_parameters( weird_outputs, batch_weird_outputs )
 
             inputs_outputs = np.hstack( (inputs,
-                                         times.reshape( (batch_size, 1) ),
+                                         times.reshape( (batch_size*number_samples, 1) ),
                                          outputs) )
 
             # Serialize the array
@@ -453,6 +574,7 @@ def create_training_file( file_name, number_droplets, weird_file_name=None, user
         write_weird_parameters_to_spreadsheet( weird_file_name,
                                                weird_inputs,
                                                weird_outputs )
+
 
 def read_training_file( file_name ):
     """

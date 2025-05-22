@@ -18,6 +18,7 @@ DROPLET_SALINITY_LOG_RANGE      = np.array( (-22, -10) )
 DROPLET_AIR_TEMPERATURE_RANGE   = np.array( (273, 310) )
 DROPLET_RELATIVE_HUMIDITY_RANGE = np.array( (0.65, 1.1) )
 DROPLET_RHOA_RANGE              = np.array( (0.8, 1.2) )
+DROPLET_TIME_LOG_RANGE              = np.array( (-2.0, 1.0) )
 
 
 def dydt( t, y, parameters ):

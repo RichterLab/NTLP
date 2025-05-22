@@ -9,7 +9,7 @@ import sys
 
 from droplet_approximation.models import *
 
-number_epochs = 3
+number_epochs = 5
 
 def main( argv ):
     if len( argv ) != 4:

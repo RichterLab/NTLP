@@ -16,7 +16,17 @@
 module unload python
 
 # Script that generates the training data.
-GENERATOR=./generate_training_data.py
+echo "OUT:$1"
+if [ "$1" = "" ]; then
+	echo "Normal data generation selected..."
+	GENERATOR=./generate_training_data.py
+elif [ "$1" = "-j" ]; then
+	echo "Jagged data generation selected..."
+	GENERATOR=./generate_training_data_jagged.py
+else
+	echo "Usage $0 [<-j>]"
+	exit 1
+fi
 
 INDEX=$SGE_TASK_ID
 
