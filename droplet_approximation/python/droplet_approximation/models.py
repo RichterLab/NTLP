@@ -41,6 +41,9 @@ class SimpleNet( nn.Module ):
 
         return x
 
+def weighted_mse_loss(inputs, targets, weights):
+    return (weights * ((inputs - targets) ** 2)).mean()
+
 def train_model( model, criterion, optimizer, device, number_epochs, training_file ):
     """
     Trains the supplied model for one or more epochs using all of the droplet parameters
@@ -78,6 +81,10 @@ def train_model( model, criterion, optimizer, device, number_epochs, training_fi
     #
     input_parameters, output_parameters, integration_times = read_training_file( training_file )
 
+    weights = np.reciprocal(integration_times)
+    weights = np.stack((weights,weights), axis=-1)
+    weights = torch.from_numpy( weights ).to( device )
+
     BATCH_SIZE      = 1024
     MINI_BATCH_SIZE = 1024
 
@@ -111,6 +118,7 @@ def train_model( model, criterion, optimizer, device, number_epochs, training_fi
             inputs  = input_parameters[start_index:end_index, :]
             outputs = output_parameters[start_index:end_index, :]
             times   = integration_times[start_index:end_index]
+            current_weights = weights[start_index:end_index]
 
             # Normalize the inputs and outputs to [-1, 1].
             normalized_inputs  = normalize_droplet_parameters( inputs )
@@ -130,8 +138,8 @@ def train_model( model, criterion, optimizer, device, number_epochs, training_fi
             # Perform the forward pass.
             normalized_approximations = model( normalized_inputs )
 
-            # Estimate the loss.
-            loss = criterion( normalized_approximations, normalized_outputs )
+            # Estimate the loss - using weights if needed
+            loss = weighted_mse_loss( normalized_approximations, normalized_outputs, current_weights ) if criterion == weighted_mse_loss else criterion(normalized_approximations, normalized_outputs)
 
             # Backwards pass and optimization.
             loss.backward()
@@ -145,7 +153,7 @@ def train_model( model, criterion, optimizer, device, number_epochs, training_fi
                 print( "Epoch #{:d}, batch #{:d} loss: {:g}".format(
                     epoch_index + 1,
                     batch_index + 1,
-                    running_loss ) )
+                    running_loss ), flush=True )
                 loss_history.append( running_loss )
 
                 # Break out of the batch loop if we ever encounter an input
