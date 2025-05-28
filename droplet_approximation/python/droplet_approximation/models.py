@@ -9,6 +9,7 @@ from .physics import DROPLET_AIR_TEMPERATURE_RANGE, \
                      DROPLET_RHOA_RANGE, \
                      DROPLET_SALINITY_LOG_RANGE, \
                      DROPLET_TEMPERATURE_RANGE, \
+                     DROPLET_TIME_LOG_RANGE, \
                      normalize_droplet_parameters, \
                      scale_droplet_parameters
 
@@ -190,6 +191,171 @@ def train_model( model, criterion, optimizer, device, number_epochs, training_fi
             running_loss ) )
 
     return loss_history
+
+def train_model_sequentially( model, criterion, optimizer, device, number_epochs, training_file, iterations=1 ):
+    """
+    Trains the supplied model for one or more epochs using all of the droplet parameters
+    in an on-disk training file.  The parameters are read into memory once and then
+    randomly sampled each epoch.  Any weird parameters encountered in the training file
+    are logged and
+
+    Takes 6 arguments:
+
+      model         - PyTorch model to optimize.
+      criterion     - PyTorch loss object to use during optimization.
+      optimizer     - PyTorch optimizer associated with model.
+      device        - Device string indicating where the optimization is
+                      being performed.
+      number_epochs - Number of epochs to train model for.  All training
+                      data in training_file will be seen by the model
+                      this many times.
+      training_file - Path to the file containing training data created by
+                      create_training_file().
+
+    Returns 1 value:
+
+      loss_history - List of training losses, one per mini-batch during
+                     the training process.
+
+    """
+
+    #
+    # NOTE: This is inefficient and requires the entire training data set to reside in
+    #       RAM.  We could read chunks of the file on demand but that would require
+    #       a more sophisticated training loop that performs I/O in a separate thread
+    #       while the optimization process executes.
+    #
+    #       TL;DR Find a big machine to train on.
+    #
+    input_parameters, output_parameters, integration_times = read_training_file_sequentially( training_file, iterations)
+
+    output_parameters = output_parameters.reshape((input_parameters.shape[0]*iterations, 2)) # flatten second to last-dimension
+
+
+    weights = np.reciprocal(integration_times)
+    weights = np.stack((weights,weights), axis=-1)
+    weights = torch.from_numpy( weights ).to( device )
+
+    integration_times /= iterations
+
+
+    BATCH_SIZE      = 1024
+    MINI_BATCH_SIZE = 1024
+
+    #
+    # NOTE: This ignores parameters if the last batch isn't complete.
+    #
+    NUMBER_BATCHES  = input_parameters.shape[0] // BATCH_SIZE
+
+    # Track each mini-batch's training loss for analysis.
+    loss_history = []
+
+    batch_indices = np.arange( NUMBER_BATCHES )
+
+    for epoch_index in range( number_epochs ):
+        model.train()
+
+        # Reset our training loss.
+        running_loss = 0.0
+
+        # "Shuffle" our training data so each epoch sees it in a different
+        # order.  Note that we generate a permutation of batch indices so
+        # we don't actually rearrange the training data in memory and
+        # dramatically slow things down.
+        permuted_batch_indices = np.random.permutation( batch_indices )
+
+        for batch_index in range( NUMBER_BATCHES ):
+            start_index = permuted_batch_indices[batch_index] * BATCH_SIZE
+            end_index   = start_index + BATCH_SIZE
+
+            # Get the next batch of droplets.
+            inputs  = input_parameters[start_index:end_index, :]
+            outputs = output_parameters[start_index*iterations:end_index*iterations, :]
+            times   = integration_times[start_index:end_index]
+            current_weights = weights[start_index:end_index]
+
+            # Normalize the inputs and outputs to [-1, 1].
+            normalized_inputs  = normalize_droplet_parameters( inputs )
+            normalized_outputs = normalize_droplet_parameters( outputs )
+
+            # XXX: Need to rethink how we handle time as an input.  This is annoying
+            #      to have to stack a reshaped vector each time.
+            normalized_inputs = np.hstack( (normalized_inputs,
+                                            times.reshape( (BATCH_SIZE, 1) )) )
+
+
+            normalized_inputs  = torch.from_numpy( normalized_inputs ).to( device )
+            normalized_outputs = torch.from_numpy( normalized_outputs ).to( device )
+
+            background_inputs = normalized_inputs[..., 2:]
+
+            running_approximations = []
+
+            running_approximations.append(normalized_inputs[..., :2])
+
+            # Reset the parameter gradients.
+            optimizer.zero_grad()
+            for i in range(iterations):
+                normalized_inputs = torch.cat((running_approximations[-1], background_inputs), dim=-1)
+                running_approximations.append(model( normalized_inputs ))
+                
+            # Estimate the loss.
+            loss = [weighted_mse_loss( running_approximations[i], normalized_outputs[::i], current_weights ) for i in range(iterations)]/iterations # calculate average loss
+
+
+            # Backwards pass and optimization.
+            loss.backward()
+            optimizer.step()
+
+            running_loss += loss.item()
+
+            if batch_index > 0 and batch_index % MINI_BATCH_SIZE == 0:
+                running_loss /= MINI_BATCH_SIZE
+
+                print( "Epoch #{:d}, batch #{:d} loss: {:g}".format(
+                    epoch_index + 1,
+                    batch_index + 1,
+                    running_loss ), flush=True )
+                loss_history.append( running_loss )
+
+                # Break out of the batch loop if we ever encounter an input
+                # that causes the loss to spike.  Training data generation
+                # should produce good inputs and outputs though should something
+                # slip through we want to immediately stop training so we can
+                # understand what went wrong - there is no way to recover
+                # from a loss spike that is O(10) when our target loss is O(1e-4).
+                if running_loss > 10:
+                    print( "Crazy loss!" )
+                    print( inputs, outputs )
+                    break
+
+                running_loss = 0.0
+        else:
+            # We finished all of the batches.  Adjust the learning rate and
+            # go to the next epoch.
+            for parameter_group in optimizer.param_groups:
+                parameter_group["lr"] /= 2
+
+            continue
+
+        # We didn't complete all of the batches in this epoch.
+        break
+
+    # Handle the case where we didn't have enough data to complete a mini-batch.
+    if len( loss_history ) == 0:
+        running_loss /= number_epochs * NUMBER_BATCHES
+        loss_history.append( running_loss )
+
+        print( "Epoch #{:d}, batch #{:d} loss: {:g}".format(
+            number_epochs,
+            NUMBER_BATCHES,
+            running_loss ) )
+
+    return loss_history
+
+            
+
+
 
 def do_inference( input_parameters, times, model, device ):
     """
