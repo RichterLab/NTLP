@@ -8,7 +8,7 @@
 from .analysis import analyze_model_performance, \
                       analyze_model_iterative_performance, \
                       plot_droplet_size_temperature, \
-                      mse_score_model
+                      mse_score_models
 from .data import clean_training_data, \
                   create_droplet_batch, \
                   create_droplet_batch_jagged, \

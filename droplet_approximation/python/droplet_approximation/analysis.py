@@ -3,7 +3,7 @@ import numpy as np
 from scipy.integrate import solve_ivp
 
 from .data import create_droplet_batch, read_training_file
-from .models import do_inference
+from .models import do_inference, do_iterative_inference
 from .physics import dydt
 from .physics import timed_solve_ivp
 
@@ -168,7 +168,7 @@ def mse_score_models(models, file_name, device):
     number_droplets = len(input_parameters)
     number_batches = (number_droplets + BATCH_SIZE + 1) // BATCH_SIZE
 
-    running_losses = np.array(size=len(models),dtype=np.float64)
+    running_losses = np.zeros(len(models),dtype=np.float64)
     for batch_index in range( number_batches ):
         if batch_index != (number_batches - 1):
             batch_size = BATCH_SIZE
@@ -177,19 +177,18 @@ def mse_score_models(models, file_name, device):
         start_index = BATCH_SIZE*batch_index
         end_index = start_index + batch_size 
 
-        inputs = input_parameters[start_index, end_index]     
-        target_outputs = output_parameters[start_index, end_index]     
-        times = integration_times[start_index, end_index]     
-
-        for i in range(len(models)):
-            inferred_outputs = do_inference(inputs, times, models[i], device)
-            running_losses[i] += np.sum((inferred_outputs - target_outputs)**2)
+        inputs = input_parameters[start_index:end_index]     
+        target_outputs = output_parameters[start_index:end_index]     
+        times = integration_times[start_index:end_index]     
 
         # If this gets too large could average over batches, however
         # not all batches are the same size. Could multiply by
         # batch_size/BATCH_SIZE and then average by batch size if
         # need be
-        running_loss += np.sum((inferred_outputs - target_outputs)**2)
+        for i in range(len(models)):
+            inferred_outputs = do_inference(inputs, times, models[i], device)
+            running_losses[i] += np.sum((inferred_outputs - target_outputs)**2)
+
 
     return running_losses/number_droplets
 
