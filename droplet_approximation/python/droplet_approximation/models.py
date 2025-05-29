@@ -354,6 +354,47 @@ def train_model_sequentially( model, criterion, optimizer, device, number_epochs
     return loss_history
 
             
+def do_iterative_inference( initial_input_parameters, times, model, device ):
+    """
+    Estimates single droplet parameters iteratively using a specific model.  Model evaluation is
+    performed on the CPU
+
+    Evalutes iteratively, using the output time/radius for the (n-1)th time for the n-th time 
+    Takes 4 arguments:
+    
+      input_parameters - NumPy array, sized 1x6, containing the
+                         input parameters for a single droplet.  These are
+                         provided in their natural, physical ranges.
+      times            - Integration times to evaluate each droplet at.
+      model            - PyTorch model to use.
+      device           - XXX
+    
+    Returns 1 value:
+    
+      output_parameters - NumPy array, sized len(times) x 2, containing the
+                          estimated radius and temperature for the droplet
+                          at the specified integraition times.  These are in their
+                          natural physical ranges.
+
+    """
+
+    eval_model = model.to( device )
+    eval_model.eval()
+
+    scaled_input_parameters = normalize_droplet_parameters( initial_input_parameters )
+
+    background_input = scaled_input_parameters[2:]
+    dynamic_input = scaled_input_parameters[:2]
+
+    normalized_outputs = np.zeros((len(times),2))
+
+    for i in range(1, len(times)):
+      dt = times[i] - times[i-1]
+      normalized_input = np.hstack(( dynamic_input, background_input , dt )).astype( "float32" )
+      dynamic_input = eval_model( torch.from_numpy( normalized_input ).to( device ) ).to( "cpu" ).detach().numpy()
+      normalized_outputs[i] = dynamic_input
+
+    return scale_droplet_parameters( normalized_outputs )
 
 
 
