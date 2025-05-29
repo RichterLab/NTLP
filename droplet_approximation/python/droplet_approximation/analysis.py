@@ -2,7 +2,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 from scipy.integrate import solve_ivp
 
-from .data import create_droplet_batch
+from .data import create_droplet_batch, read_training_file
 from .models import do_inference
 from .physics import dydt
 from .physics import timed_solve_ivp

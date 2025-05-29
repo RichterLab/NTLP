@@ -101,7 +101,7 @@ def create_droplet_batch( number_droplets, linear_time_flag=False, number_evalua
 
     # We generate data for a time window that is slightly larger than what we're interested
     # in (logspace( -3, 1 )) so we can learn the endpoints.
-    TIME_RANGE = (10.0**DROPLET_LOG_TIME_RANGE(0), 10.0**DROPLET_LOG_TIME_RANGE(1))
+    TIME_RANGE = (10.0**DROPLET_TIME_LOG_RANGE[0], 10.0**DROPLET_TIME_LOG_RANGE[1])
 
     integration_times = np.empty_like( random_inputs, shape=(number_droplets * number_evaluations) )
     if linear_time_flag:

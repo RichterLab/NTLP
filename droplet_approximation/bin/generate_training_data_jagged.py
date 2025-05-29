@@ -11,8 +11,8 @@ import sys
 from droplet_approximation import create_training_file
 
 # XXX
-NUMBER_DROPLETS = 1024*1024
-NUMBER_SAMPLES = 8
+NUMBER_DROPLETS = 512*1024
+NUMBER_SAMPLES = 2
 
 def main( argv ):
     """

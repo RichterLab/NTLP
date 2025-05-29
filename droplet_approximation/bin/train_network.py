@@ -37,7 +37,7 @@ def main( argv ):
     #     leaning heavily on just a subset of weights)
     #
     model     = SimpleNet()
-    criterion = weighted_mse_loss
+    criterion = nn.MSELoss()
     optimizer = torch.optim.Adam( model.parameters(), lr=1e-3, weight_decay=1e-6 )
     
     # Move the model to the device we're training with.

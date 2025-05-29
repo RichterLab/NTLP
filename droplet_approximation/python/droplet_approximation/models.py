@@ -82,8 +82,8 @@ def train_model( model, criterion, optimizer, device, number_epochs, training_fi
     #
     input_parameters, output_parameters, integration_times = read_training_file( training_file )
 
-    weights = np.reciprocal(integration_times)
-    weights = np.stack((weights,weights), axis=-1)
+    weights = 10**((DROPLET_TIME_LOG_RANGE[0]+DROPLET_TIME_LOG_RANGE[1])/2.0)*np.reciprocal(integration_times) # normalizes the reciprocal logarithmically
+    weights = np.stack((weights,weights), axis=-1) # Temporarily increasing weighting on radius since its harder to learn
     weights = torch.from_numpy( weights ).to( device )
 
     BATCH_SIZE      = 1024
@@ -140,7 +140,7 @@ def train_model( model, criterion, optimizer, device, number_epochs, training_fi
             normalized_approximations = model( normalized_inputs )
 
             # Estimate the loss - using weights if needed
-            loss = weighted_mse_loss( normalized_approximations, normalized_outputs, current_weights ) if criterion == weighted_mse_loss else criterion(normalized_approximations, normalized_outputs)
+            loss = criterion(normalized_approximations, normalized_outputs)
 
             # Backwards pass and optimization.
             loss.backward()
@@ -188,7 +188,7 @@ def train_model( model, criterion, optimizer, device, number_epochs, training_fi
         print( "Epoch #{:d}, batch #{:d} loss: {:g}".format(
             number_epochs,
             NUMBER_BATCHES,
-            running_loss ) )
+            running_loss ), flush=True )
 
     return loss_history
 
@@ -227,7 +227,7 @@ def train_model_sequentially( model, criterion, optimizer, device, number_epochs
     #
     #       TL;DR Find a big machine to train on.
     #
-    input_parameters, output_parameters, integration_times = read_training_file_sequentially( training_file, iterations)
+    input_parameters, output_parameters, integration_times = read_training_file_sequential( training_file, iterations)
 
     output_parameters = output_parameters.reshape((input_parameters.shape[0]*iterations, 2)) # flatten second to last-dimension
 
@@ -235,9 +235,6 @@ def train_model_sequentially( model, criterion, optimizer, device, number_epochs
     weights = np.reciprocal(integration_times)
     weights = np.stack((weights,weights), axis=-1)
     weights = torch.from_numpy( weights ).to( device )
-
-    integration_times /= iterations
-
 
     BATCH_SIZE      = 1024
     MINI_BATCH_SIZE = 1024
@@ -300,7 +297,7 @@ def train_model_sequentially( model, criterion, optimizer, device, number_epochs
                 running_approximations.append(model( normalized_inputs ))
                 
             # Estimate the loss.
-            loss = [weighted_mse_loss( running_approximations[i], normalized_outputs[::i], current_weights ) for i in range(iterations)]/iterations # calculate average loss
+            loss = sum([weighted_mse_loss( running_approximations[i], normalized_outputs[::i], current_weights ) for i in range(iterations)])/iterations # calculate average loss
 
 
             # Backwards pass and optimization.
