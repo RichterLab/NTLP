@@ -145,19 +145,19 @@ def analyze_model_iterative_performance( model, input_parameters = None, dt = 0.
 
 
 
-def mse_score_model(model, file_name, device):
+def mse_score_models(models, file_name, device):
     """
     Calculates mean square error on a model for a dataset
 
     Takes 2 arguments:
 
-      model             - Model to be evaluated
+      models            - List of models to be evaluated
       file_name         - Path to training data
       device            - Device to perform calculation on
 
     Returns 1 values:
 
-      average_loss      - Numpy float64. Average MSE loss for dataset
+      average_losses    - Numpy float64 array. Average MSE loss for dataset for each model.
     """
 
     
@@ -168,7 +168,7 @@ def mse_score_model(model, file_name, device):
     number_droplets = len(input_parameters)
     number_batches = (number_droplets + BATCH_SIZE + 1) // BATCH_SIZE
 
-    running_loss = np.float64(0.0)
+    running_losses = np.array(size=len(models),dtype=np.float64)
     for batch_index in range( number_batches ):
         if batch_index != (number_batches - 1):
             batch_size = BATCH_SIZE
@@ -181,7 +181,9 @@ def mse_score_model(model, file_name, device):
         target_outputs = output_parameters[start_index, end_index]     
         times = integration_times[start_index, end_index]     
 
-        inferred_outputs = do_inference(inputs, times, model, device)
+        for i in range(len(models)):
+            inferred_outputs = do_inference(inputs, times, models[i], device)
+            running_losses[i] += np.sum((inferred_outputs - target_outputs)**2)
 
         # If this gets too large could average over batches, however
         # not all batches are the same size. Could multiply by
@@ -189,7 +191,7 @@ def mse_score_model(model, file_name, device):
         # need be
         running_loss += np.sum((inferred_outputs - target_outputs)**2)
 
-    return running_loss/number_droplets
+    return running_losses/number_droplets
 
 def plot_droplet_size_temperature( size_temperatures, times ):
     """
