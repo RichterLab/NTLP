@@ -71,6 +71,12 @@ module particles
   integer, parameter :: NUMBER_RADIUS_STEPS=1024
   real :: radval(NUMBER_RADIUS_STEPS)
 
+  real :: be_write_buffer (9,60000,64) ! ASSUMING 64 cores!!
+  integer :: be_write_buffer_index (64)
+  INTEGER :: be_dump_iu(64)
+
+  character(len=80) :: be_dump_filename
+
   !REMEMBER: IF ADDING ANYTHING, MUST UPDATE MPI DATATYPE!
   type :: particle
     integer :: pidx,procidx,nbr_pidx,nbr_procidx
@@ -1780,6 +1786,8 @@ CONTAINS
       include 'mpif.h' 
       integer :: values(8)
       integer :: idx,ierr
+      integer :: be_dump_istat
+      integer :: be_id_char
 
       !Create the seed for the random number generator:
       call date_and_time(VALUES=values)
@@ -1816,6 +1824,24 @@ CONTAINS
       partTEsrc = 0.0
       partTEsrc_t = 0.0
 
+      ! Open file to write be_buffers and initialize buffer indexes
+      if (iwritebe .eq. 1) then
+         be_write_buffer_index = 0
+         
+         do i=1,64
+            write(be_id_char,'(i4.4)') i
+            be_dump_filename = trim(adjustl(path_seed))//"be_dump_"//be_id_char//".data"
+            OPEN(newunit=be_dump_iu(i), file=be_dump_filename, status="REPLACE", form="UNFORMATTED", access="DIRECT", iostat=be_dump_istat)
+
+            if (be_buffer_istat .eq. 1) then
+               write(*,*) "ERROR: failed to open file ", be_dump_filename, " reverting to iwritebe=0"
+               iwritebe = 0
+
+               exit
+            endif
+         end do
+
+      endif
 
   end subroutine particle_init
 
@@ -3007,6 +3033,7 @@ CONTAINS
       real :: xp3i
       real :: mod_magnus,exner,func_p_base
 
+      integer :: successful_bdf_flag ! used for writing bdf values to buffer
 
 
       !First fill extended velocity field for interpolation
@@ -3023,6 +3050,13 @@ CONTAINS
       num_destroy = 0
       num100 = 0
       numimpos = 0
+
+      successful_bdf_flag = 0
+
+      ! If dumping be data, initialize buffer indexes
+      if (.iwritebe. .eq. 1) then
+           be_write_buffer_index = 0 
+      end if
 
 
       call start_phase(measurement_id_particle_loop)
@@ -3115,7 +3149,9 @@ CONTAINS
                num100 = num100+1
 
                call LV_solver(part%vp,dt_taup0,rhoa,rt_start, rt_zeroes,flag)
-
+               
+               else
+                  successful_bdf_flag = 1
                end if
 
                if ((flag == 1)  &
@@ -3130,7 +3166,8 @@ CONTAINS
                !part%radius,part%qinf,part%Tp,part%Tf,part%xp(3), &
                !part%kappa_s,part%m_s,part%vp(1),part%vp(2),part%vp(3), &
                !part%res,part%sigm_s,rt_zeroes(1),rt_zeroes(2)
-
+                
+                flag = 1
                 numimpos = numimpos + 1  !How many have failed?
                 !If they failed (should be very small number), radius,
                 !temp remain unchanged
@@ -3163,6 +3200,22 @@ CONTAINS
                !Redimensionalize
                part%radius = rt_zeroes(1)*part%radius
                part%Tp = rt_zeroes(2)*part%Tp
+
+               !Dump data if iwritebe and bdf ran successfully
+               if (iwritebe .eq. 1 .AND. successful_bdf_flag .eq. 1) then
+                  be_write_buffer(:,be_write_buffer_index(myid),myid) = (/
+                     part%radius_old,
+                     part%Tp_old,
+                     part%m_s,
+                     part%Tf,
+                     part%qinf/(Mw*mod_magnus(part%Tf)/Ru/part%Tf), ! formula for RH
+                     rhoa,
+                     dt,
+                     part%radius,
+                     part%Tp
+                  /)
+                  be_write_buffer_index(myid) = be_write_buffer_index(myid) + 1 
+               endif
 
        else !! Evaporation is turned off
 
@@ -3262,6 +3315,11 @@ CONTAINS
 
       call mpi_allreduce(numpart,tnumpart,1,mpi_integer,mpi_sum,mpi_comm_world,ierr)
       call end_phase(measurement_id_particle_stats)
+
+      ! Dump data to the myid file
+      if (iwritebe .eq. 1) then
+         write(be_dump_iu(myid)) be_write_buffer(:, 1:be_write_buffer_index(myid), myid)
+      endif
 
 
   end subroutine particle_update_BE
@@ -4023,6 +4081,10 @@ CONTAINS
 
    if (it .ge. itmax) then
       close(ntraj)
+      if (iwritebe .eq. 1) then
+         do i = 1,64
+            close(be_dump_iu(i))
+         end do
    end if
 
   end subroutine particle_write_traj
