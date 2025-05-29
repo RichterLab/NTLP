@@ -6,6 +6,52 @@ from .data import create_droplet_batch
 from .models import do_inference
 from .physics import dydt
 
+def mse_score_model(model, file_name, device):
+    """
+    Calculates mean square error on a model for a dataset
+
+    Takes 2 arguments:
+
+      model             - Model to be evaluated
+      file_name         - Path to training data
+      device            - Device to perform calculation on
+
+    Returns 1 values:
+
+      average_loss      - Numpy float64. Average MSE loss for dataset
+    """
+
+    
+    input_parameters, output_parameters, integration_times = read_training_file( file_name )
+
+    BATCH_SIZE = 1024*10
+
+    number_droplets = len(input_parameters)
+    number_batches = (number_droplets + BATCH_SIZE + 1) // BATCH_SIZE
+
+    running_loss = np.float64(0.0)
+    for batch_index in range( number_batches ):
+        if batch_index != (number_batches - 1):
+            batch_size = BATCH_SIZE
+        else:
+            batch_size = number_droplets % BATCH_SIZE
+        start_index = BATCH_SIZE*batch_index
+        end_index = start_index + batch_size 
+
+        inputs = input_parameters[start_index, end_index]     
+        target_outputs = output_parameters[start_index, end_index]     
+        times = integration_times[start_index, end_index]     
+
+        inferred_outputs = do_inference(inputs, times, model, device)
+
+        # If this gets too large could average over batches, however
+        # not all batches are the same size. Could multiply by
+        # batch_size/BATCH_SIZE and then average by batch size if
+        # need be
+        running_loss += np.sum((inferred_outputs - target_outputs)**2)
+
+    return running_loss/number_droplets
+
 def plot_droplet_size_temperature( size_temperatures, times ):
     """
     Plots a droplet's size and temperature as a function of time.
