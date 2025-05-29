@@ -12,13 +12,26 @@ from scipy.integrate import solve_ivp
 # the small parameters (e.g. radius) as they won't contribute as much as
 # the big parameters (e.g. temperature).  As a result, we use log-scale
 # for the parameters that have a large dynamic range.
-DROPLET_RADIUS_LOG_RANGE        = np.array( (-8, -3) )
-DROPLET_TEMPERATURE_RANGE       = np.array( (273, 310) )
-DROPLET_SALINITY_LOG_RANGE      = np.array( (-22, -10) )
-DROPLET_AIR_TEMPERATURE_RANGE   = np.array( (273, 310) )
-DROPLET_RELATIVE_HUMIDITY_RANGE = np.array( (0.65, 1.1) )
-DROPLET_RHOA_RANGE              = np.array( (0.8, 1.2) )
-DROPLET_TIME_LOG_RANGE              = np.array( (-2.0, 1.0) )
+
+#LARGE RANGES
+
+#DROPLET_RADIUS_LOG_RANGE        = np.array( (-8, -3) )
+#DROPLET_TEMPERATURE_RANGE       = np.array( (273, 310) )
+#DROPLET_SALINITY_LOG_RANGE      = np.array( (-22, -10) )
+#DROPLET_AIR_TEMPERATURE_RANGE   = np.array( (273, 310) )
+#DROPLET_RELATIVE_HUMIDITY_RANGE = np.array( (0.65, 1.1) )
+#DROPLET_RHOA_RANGE              = np.array( (0.8, 1.2) )
+#DROPLET_TIME_LOG_RANGE              = np.array( (-2.0, 1.0) )
+
+# NARROW RANGES
+
+DROPLET_RADIUS_LOG_RANGE        = np.array( (-7.0, -4.2) )
+DROPLET_TEMPERATURE_RANGE       = np.array( (279, 305) )
+DROPLET_SALINITY_LOG_RANGE      = np.array( (-17.66, -17.65) )
+DROPLET_AIR_TEMPERATURE_RANGE   = np.array( (279, 305) )
+DROPLET_RELATIVE_HUMIDITY_RANGE = np.array( (0.85, 1.1) )
+DROPLET_RHOA_RANGE              = np.array( (0.99, 1.01) )
+DROPLET_TIME_LOG_RANGE              = np.array( (-2.0, 0.0) )
 
 
 def dydt( t, y, parameters ):
