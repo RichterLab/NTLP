@@ -49,7 +49,7 @@ endif
 #                     level of debugging support.
 #
 FLAGS=-i4 -r8 -assume byterecl $(ARCH_FLAGS) -fpp -traceback
-FLAGS += -g -ggdb -fvar-tracking -debug full
+#FLAGS += -g -ggdb -fvar-tracking -debug full
 
 # Are we building a debug build?  This enables options useful for debugging
 # the solver's behavior but are not desirable to unconditionally enable.
