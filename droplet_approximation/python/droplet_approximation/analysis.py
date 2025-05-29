@@ -5,7 +5,7 @@ from scipy.integrate import solve_ivp
 from .data import create_droplet_batch, read_training_file
 from .models import do_inference, do_iterative_inference
 from .physics import dydt
-from .physics import timed_solve_ivp
+from .physics import timed_solve_ivp, DROPLET_TIME_LOG_RANGE
 
 
 def analyze_model_iterative_performance( model, input_parameters = None, dt = 0.05, final_time=10.0, figure_size=None ):
@@ -73,9 +73,9 @@ def analyze_model_iterative_performance( model, input_parameters = None, dt = 0.
                                  "cpu" )
 
     # Compute the normalized RMSE across the entire time scale.
-    rmse_0 = np.sqrt( np.mean( (truth_output[:, 0] - model_output[:, 0])**2 ) ) / np.mean( truth_output[:, 0] ) 
-    rmse_1 = np.sqrt( np.mean( (truth_output[:, 1] - model_output[:, 1])**2 ) ) / np.mean( truth_output[:, 1] ) 
-    print( "NRMSE: {:g}%, {:g}%".format( rmse_0 * 100, rmse_1 * 100) )
+    #rmse_0 = np.sqrt( np.mean( (truth_output[:, 0] - model_output[:, 0])**2 ) ) / np.mean( truth_output[:, 0] ) 
+    #rmse_1 = np.sqrt( np.mean( (truth_output[:, 1] - model_output[:, 1])**2 ) ) / np.mean( truth_output[:, 1] ) 
+    #print( "NRMSE: {:g}%, {:g}%".format( rmse_0 * 100, rmse_1 * 100) )
     
     # Removed fined-grained (DNS vs. LES) analysis since dt is constant
     
@@ -145,7 +145,7 @@ def analyze_model_iterative_performance( model, input_parameters = None, dt = 0.
 
 
 
-def mse_score_models(models, file_name, device):
+def mse_score_models(models, file_name, device, weighted=False):
     """
     Calculates mean square error on a model for a dataset
 
@@ -162,6 +162,9 @@ def mse_score_models(models, file_name, device):
 
     
     input_parameters, output_parameters, integration_times = read_training_file( file_name )
+
+    weights = 10**((DROPLET_TIME_LOG_RANGE[0]+DROPLET_TIME_LOG_RANGE[1])/2.0)*np.reciprocal(integration_times) # normalizes the reciprocal logarithmically
+    weights = np.stack((weights,weights), axis=-1) # Temporarily increasing weighting on radius since its harder to learn
 
     BATCH_SIZE = 1024*10
 
@@ -180,6 +183,7 @@ def mse_score_models(models, file_name, device):
         inputs = input_parameters[start_index:end_index]     
         target_outputs = output_parameters[start_index:end_index]     
         times = integration_times[start_index:end_index]     
+        current_weights = weights[start_index:end_index]     
 
         # If this gets too large could average over batches, however
         # not all batches are the same size. Could multiply by
@@ -187,8 +191,10 @@ def mse_score_models(models, file_name, device):
         # need be
         for i in range(len(models)):
             inferred_outputs = do_inference(inputs, times, models[i], device)
-            running_losses[i] += np.sum((inferred_outputs - target_outputs)**2)
-
+            if (weighted):
+                running_losses[i] += np.sum((current_weights*(inferred_outputs - target_outputs))**2)
+            else:
+                running_losses[i] += np.sum((inferred_outputs - target_outputs)**2)
 
     return running_losses/number_droplets
 

@@ -2,7 +2,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 
-from .data import read_training_file
+from .data import read_training_file, read_training_file_sequential
 from .physics import DROPLET_AIR_TEMPERATURE_RANGE, \
                      DROPLET_RADIUS_LOG_RANGE, \
                      DROPLET_RELATIVE_HUMIDITY_RANGE, \
@@ -41,7 +41,6 @@ class SimpleNet( nn.Module ):
         x = self.fc4( x )
 
         return x
-
 def weighted_mse_loss(inputs, targets, weights):
     return (weights * ((inputs - targets) ** 2)).mean()
 
@@ -82,8 +81,8 @@ def train_model( model, criterion, optimizer, device, number_epochs, training_fi
     #
     input_parameters, output_parameters, integration_times = read_training_file( training_file )
 
-    weights = 10**((DROPLET_TIME_LOG_RANGE[0]+DROPLET_TIME_LOG_RANGE[1])/2.0)*np.reciprocal(integration_times) # normalizes the reciprocal logarithmically
-    weights = np.stack((weights,weights), axis=-1) # Temporarily increasing weighting on radius since its harder to learn
+    weights = np.reciprocal(integration_times)
+    weights = np.stack((weights,weights), axis=-1)
     weights = torch.from_numpy( weights ).to( device )
 
     BATCH_SIZE      = 1024
@@ -140,7 +139,7 @@ def train_model( model, criterion, optimizer, device, number_epochs, training_fi
             normalized_approximations = model( normalized_inputs )
 
             # Estimate the loss - using weights if needed
-            loss = criterion(normalized_approximations, normalized_outputs)
+            loss = weighted_mse_loss( normalized_approximations, normalized_outputs, current_weights ) if criterion == weighted_mse_loss else criterion(normalized_approximations, normalized_outputs)
 
             # Backwards pass and optimization.
             loss.backward()
@@ -188,11 +187,11 @@ def train_model( model, criterion, optimizer, device, number_epochs, training_fi
         print( "Epoch #{:d}, batch #{:d} loss: {:g}".format(
             number_epochs,
             NUMBER_BATCHES,
-            running_loss ), flush=True )
+            running_loss ) )
 
     return loss_history
 
-def train_model_sequentially( model, criterion, optimizer, device, number_epochs, training_file, iterations=1 ):
+def train_model_sequential( model, criterion, optimizer, device, number_epochs, training_file, iterations=1 ):
     """
     Trains the supplied model for one or more epochs using all of the droplet parameters
     in an on-disk training file.  The parameters are read into memory once and then
@@ -232,7 +231,7 @@ def train_model_sequentially( model, criterion, optimizer, device, number_epochs
     output_parameters = output_parameters.reshape((input_parameters.shape[0]*iterations, 2)) # flatten second to last-dimension
 
 
-    weights = np.reciprocal(integration_times)
+    weights = 10**((DROPLET_TIME_LOG_RANGE[1] + DROPLET_TIME_LOG_RANGE[0])/2.0)*np.reciprocal(integration_times)
     weights = np.stack((weights,weights), axis=-1)
     weights = torch.from_numpy( weights ).to( device )
 
@@ -297,7 +296,7 @@ def train_model_sequentially( model, criterion, optimizer, device, number_epochs
                 running_approximations.append(model( normalized_inputs ))
                 
             # Estimate the loss.
-            loss = sum([weighted_mse_loss( running_approximations[i], normalized_outputs[::i], current_weights ) for i in range(iterations)])/iterations # calculate average loss
+            loss = sum([criterion( running_approximations[i], normalized_outputs[i::iterations]) for i in range(iterations)])/iterations # calculate average loss
 
 
             # Backwards pass and optimization.
