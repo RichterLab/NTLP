@@ -73,9 +73,7 @@ module particles
 
   real :: be_write_buffer (9,60000,64) ! ASSUMING 64 cores!!
   integer :: be_write_buffer_index (64)
-  INTEGER :: be_dump_iu(64)
 
-  character(len=80) :: be_dump_filename
 
   !REMEMBER: IF ADDING ANYTHING, MUST UPDATE MPI DATATYPE!
   type :: particle
@@ -1786,8 +1784,10 @@ CONTAINS
       include 'mpif.h' 
       integer :: values(8)
       integer :: idx,ierr
-      integer :: be_dump_istat
+
+      integer :: be_dump_istat, be_dump_id, be_dump_iu
       integer :: be_id_char
+      character(len=80) :: be_dump_filename
 
       !Create the seed for the random number generator:
       call date_and_time(VALUES=values)
@@ -1827,20 +1827,19 @@ CONTAINS
       ! Open file to write be_buffers and initialize buffer indexes
       if (iwritebe .eq. 1) then
          be_write_buffer_index = 0
-         
-         do i=1,64
-            write(be_id_char,'(i4.4)') i
-            be_dump_filename = trim(adjustl(path_seed))//"be_dump_"//be_id_char//".data"
-            OPEN(newunit=be_dump_iu(i), file=be_dump_filename, status="REPLACE", form="UNFORMATTED", access="DIRECT", iostat=be_dump_istat)
+         be_dump_id = myid + 1
+         be_dump_iu = 300 + be_dump_id
 
-            if (be_buffer_istat .eq. 1) then
-               write(*,*) "ERROR: failed to open file ", be_dump_filename, " reverting to iwritebe=0"
-               iwritebe = 0
+         write(be_id_char,'(i4.4)') i
+         be_dump_filename = trim(adjustl(path_seed))//"be_dump_"//be_id_char//".data"
 
-               exit
-            endif
-         end do
+         OPEN(newunit=be_dump_iu(i), file=be_dump_filename, status="REPLACE", form="UNFORMATTED", access="DIRECT", iostat=be_dump_istat)
 
+         if (be_dump_istat .ne. 0) then
+            write(*,*) "ERROR: failed to open file ", be_dump_filename, " reverting to iwritebe=0"
+            iwritebe = 0
+            exit
+         endif
       endif
 
   end subroutine particle_init
@@ -3033,7 +3032,7 @@ CONTAINS
       real :: xp3i
       real :: mod_magnus,exner,func_p_base
 
-      integer :: successful_bdf_flag ! used for writing bdf values to buffer
+      integer :: successful_bdf_flag, be_dump_id, be_dump_iu ! used for writing bdf values to buffer
 
 
       !First fill extended velocity field for interpolation
@@ -3051,11 +3050,14 @@ CONTAINS
       num100 = 0
       numimpos = 0
 
-      successful_bdf_flag = 0
 
       ! If dumping be data, initialize buffer indexes
       if (.iwritebe. .eq. 1) then
-           be_write_buffer_index = 0 
+         be_dump_id = myid + 1
+         be_dump_iu + 300 + be_dump_id
+
+         be_write_buffer_index(be_dump_id) = 0
+         successful_bdf_flag = 0
       end if
 
 
@@ -3150,8 +3152,6 @@ CONTAINS
 
                call LV_solver(part%vp,dt_taup0,rhoa,rt_start, rt_zeroes,flag)
                
-               else
-                  successful_bdf_flag = 1
                end if
 
                if ((flag == 1)  &
@@ -3173,7 +3173,8 @@ CONTAINS
                 !temp remain unchanged
                 rt_zeroes(1) = 1.0
                 rt_zeroes(2) = part%Tf/part%Tp
-
+               else
+                  successful_bdf_flag = 1
 
                end if
 
@@ -3203,18 +3204,19 @@ CONTAINS
 
                !Dump data if iwritebe and bdf ran successfully
                if (iwritebe .eq. 1 .AND. successful_bdf_flag .eq. 1) then
-                  be_write_buffer(:,be_write_buffer_index(myid),myid) = (/
-                     part%radius_old,
-                     part%Tp_old,
-                     part%m_s,
-                     part%Tf,
-                     part%qinf/(Mw*mod_magnus(part%Tf)/Ru/part%Tf), ! formula for RH
-                     rhoa,
-                     dt,
-                     part%radius,
-                     part%Tp
-                  /)
-                  be_write_buffer_index(myid) = be_write_buffer_index(myid) + 1 
+                  be_dump_id = myid + 1   
+
+                  be_write_buffer_index(be_dump_id) = be_write_buffer_index(be_dump_id) + 1 
+
+                  be_write_buffer(1,be_write_buffer_index(be_dump_id),be_dump_id) = part%radius_old
+                  be_write_buffer(2,be_write_buffer_index(be_dump_id),be_dump_id) = part%Tp_old
+                  be_write_buffer(3,be_write_buffer_index(be_dump_id),be_dump_id) = part%m_s
+                  be_write_buffer(4,be_write_buffer_index(be_dump_id),be_dump_id) = part%Tf
+                  be_write_buffer(5,be_write_buffer_index(be_dump_id),be_dump_id) = part%qinf/(Mw*mod_magnus(part%Tf)/Ru/part%Tf) ! formula for RH
+                  be_write_buffer(6,be_write_buffer_index(be_dump_id),be_dump_id) = rhoa
+                  be_write_buffer(7,be_write_buffer_index(be_dump_id),be_dump_id) = dt
+                  be_write_buffer(8,be_write_buffer_index(be_dump_id),be_dump_id) = part%radius
+                  be_write_buffer(9,be_write_buffer_index(be_dump_id),be_dump_id) = part%Tp
                endif
 
        else !! Evaporation is turned off
@@ -3318,7 +3320,7 @@ CONTAINS
 
       ! Dump data to the myid file
       if (iwritebe .eq. 1) then
-         write(be_dump_iu(myid)) be_write_buffer(:, 1:be_write_buffer_index(myid), myid)
+         write(be_dump_iu) be_write_buffer(:, 1:be_write_buffer_index(be_dump_id), be_dump_id)
       endif
 
 
@@ -4068,6 +4070,8 @@ CONTAINS
    use pars
    implicit none
 
+   integer :: be_dump_iu
+
    
    part => first_particle
    do while (associated(part))
@@ -4082,9 +4086,9 @@ CONTAINS
    if (it .ge. itmax) then
       close(ntraj)
       if (iwritebe .eq. 1) then
-         do i = 1,64
-            close(be_dump_iu(i))
-         end do
+         be_dump_iu = 299 + myid
+         close(be_dump_iu)
+      end if
    end if
 
   end subroutine particle_write_traj
