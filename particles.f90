@@ -1786,7 +1786,7 @@ CONTAINS
       integer :: idx,ierr
 
       integer :: be_dump_istat, be_dump_id, be_dump_iu
-      integer :: be_id_char
+      character*4 :: be_id_char
       character(len=80) :: be_dump_filename
 
       !Create the seed for the random number generator:
@@ -1830,15 +1830,14 @@ CONTAINS
          be_dump_id = myid + 1
          be_dump_iu = 300 + be_dump_id
 
-         write(be_id_char,'(i4.4)') i
+         write(be_id_char,'(i4.4)') be_dump_id
          be_dump_filename = trim(adjustl(path_seed))//"be_dump_"//be_id_char//".data"
 
-         OPEN(newunit=be_dump_iu(i), file=be_dump_filename, status="REPLACE", form="UNFORMATTED", access="DIRECT", iostat=be_dump_istat)
+         OPEN(newunit=be_dump_iu, file=be_dump_filename, status="REPLACE", form="UNFORMATTED", access="DIRECT", iostat=be_dump_istat)
 
          if (be_dump_istat .ne. 0) then
             write(*,*) "ERROR: failed to open file ", be_dump_filename, " reverting to iwritebe=0"
             iwritebe = 0
-            exit
          endif
       endif
 
@@ -3052,9 +3051,9 @@ CONTAINS
 
 
       ! If dumping be data, initialize buffer indexes
-      if (.iwritebe. .eq. 1) then
+      if (iwritebe .eq. 1) then
          be_dump_id = myid + 1
-         be_dump_iu + 300 + be_dump_id
+         be_dump_iu = 300 + be_dump_id
 
          be_write_buffer_index(be_dump_id) = 0
          successful_bdf_flag = 0
