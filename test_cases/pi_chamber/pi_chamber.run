@@ -4,7 +4,7 @@ group_storage=/afs/crc.nd.edu/group/RichterLab
 
 #$ -M YOUR_EMAIL@nd.edu
 #$ -m n
-#$ -pe mpi-16 64
+#$ -pe mpi-64 64
 #$ -q *@@richter
 #$ -N test_case_pi_chamber
 #$ -j y

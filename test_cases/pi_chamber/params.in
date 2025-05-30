@@ -27,7 +27,7 @@ iHcouple=1  !iHcouple also controls TE couple
 ievap=1
 ineighbor=0
 icoalesce=0
-ipart_method=2   !1 = same RK3 as flow, 2 = backward Euler
+ipart_method=2   !1 = same RK3 as flow, 2 = backward Euler, 3 = MLP network
 ipartdiff = 0
 inewpart = 2  !1 = new particles have initial conditions defined below, random location in domain; 2 = same, but normal distributions of radius and kappa_s, given by radius_std and kappas_std; 3 = special setup for C-FOG and double lognormal of different type; 4 = crude sea spray setup
 icase = 1  !Special additions for certain cases. 0 = particles reflected at lower surface, 3 = setup for C-FOG, 4 = steady state LES sea spray setup
