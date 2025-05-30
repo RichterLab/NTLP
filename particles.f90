@@ -1831,12 +1831,12 @@ CONTAINS
          be_dump_iu = 300 + be_dump_id
 
          write(be_id_char,'(i4.4)') be_dump_id
-         be_dump_filename = trim(adjustl(path_seed))//"be_dump_"//be_id_char//".data"
+         be_dump_filename = trim(adjustl(path_seed))//"particle_traj/be_dump_"//be_id_char//".data"
 
-         OPEN(newunit=be_dump_iu, file=be_dump_filename, status="REPLACE", form="UNFORMATTED", access="DIRECT", iostat=be_dump_istat)
+         OPEN(unit=be_dump_iu, file=be_dump_filename, access="stream", status="REPLACE", action="WRITE", form="UNFORMATTED", iostat=be_dump_istat)
 
          if (be_dump_istat .ne. 0) then
-            write(*,*) "ERROR: failed to open file ", be_dump_filename, " reverting to iwritebe=0"
+            write(*,*) "ERROR: failed to open file ", be_dump_filename, " with status", be_dump_istat, "... reverting to iwritebe=0"
             iwritebe = 0
          endif
       endif
@@ -3318,7 +3318,11 @@ CONTAINS
       call end_phase(measurement_id_particle_stats)
 
       ! Dump data to the myid file
-      if (iwritebe .eq. 1) then
+      if (iwritebe .eq. 1 .and. be_write_buffer_index(be_dump_id) .gt. 0) then
+         if (myid .eq. 0) then
+                 write(*,*) "Writing at 0 with ", be_write_buffer_index(be_dump_id)
+                 write(*,*) "Sample", be_write_buffer(:, 1:2, be_dump_id)
+         endif
          write(be_dump_iu) be_write_buffer(:, 1:be_write_buffer_index(be_dump_id), be_dump_id)
       endif
 
@@ -4085,7 +4089,8 @@ CONTAINS
    if (it .ge. itmax) then
       close(ntraj)
       if (iwritebe .eq. 1) then
-         be_dump_iu = 299 + myid
+         write(*,*) "Closing be dump file"
+         be_dump_iu = 301 + myid
          close(be_dump_iu)
       end if
    end if
