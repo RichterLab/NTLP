@@ -349,7 +349,60 @@ def train_model_sequential( model, criterion, optimizer, device, number_epochs, 
 
     return loss_history
 
-            
+def do_iterative_inference_df( df, model, device ):
+    """
+    Estimates single droplet parameters iteratively using a specific model.  Model evaluation is
+    performed on the CPU
+
+    Evalutes iteratively, using the output time/radius for the (n-1)th time for the n-th time 
+    Takes 4 arguments:
+    
+      input_parameters - NumPy array, sized 1x6, containing the
+                         input parameters for a single droplet.  These are
+                         provided in their natural, physical ranges.
+      times            - Integration times to evaluate each droplet at.
+      model            - PyTorch model to use.
+      device           - XXX
+    
+    Returns 1 value:
+    
+      output_parameters - NumPy array, sized len(times) x 2, containing the
+                          estimated radius and temperature for the droplet
+                          at the specified integraition times.  These are in their
+                          natural physical ranges.
+
+    """
+
+    eval_model = model.to( device )
+    eval_model.eval()
+
+    normalized_data = df[["normalized input radius",
+                        "normalized input temperature",
+                        "normalized salinity",
+                        "normalized air temperature",
+                        "normalized relative humidity",
+                        "normalized air density",
+                        "time", 
+                        "normalized output radius",
+                        "normalized output temperature"]].to_numpy()
+
+    background_input = normalized_data[0, 2:]
+    dynamic_input = normalized_data[0, :2] 
+
+    normalized_outputs = np.zeros((len(normalized_data),2))
+
+    for i in range(1, len(normalized_data)):
+      dt = normalized_data[i, 6] - normalized_data[i-1, 6]
+
+      normalized_input = np.hstack(( dynamic_input, background_input , dt )).astype( "float32" )
+      normalized_outputs[i] = eval_model( torch.from_numpy( normalized_input ).to( device ) ).to( "cpu" ).detach().numpy()
+
+      dynamic_input = normalized_outputs[i]
+    
+      background_input = normalized_outputs[i, 2:]
+
+    return scale_droplet_parameters( normalized_outputs )
+  
 def do_iterative_inference( initial_input_parameters, times, model, device ):
     """
     Estimates single droplet parameters iteratively using a specific model.  Model evaluation is
@@ -423,7 +476,7 @@ def do_inference( input_parameters, times, model, device ):
 
     normalized_inputs = np.hstack( (normalize_droplet_parameters( input_parameters ),
                                     times.reshape( (-1, 1) )) ).astype( "float32" )
-    normalized_outputs = eval_model( torch.from_numpy( normalized_inputs ).to( device ) ).to( "cpu" ).detach().numpy()
+    normalized_outputs = eval_model( torch.from_numpy( normalized_inputs ).to( device ) ).to( device ).detach().numpy() # is this to(device) necessary?
 
     return scale_droplet_parameters( normalized_outputs )
 
@@ -991,3 +1044,49 @@ end subroutine estimate
 
         # Write out the end of the module.
         write_module_epilog( model_state, output_fp )
+
+def do_iterative_inference_particle_df( df, iterations, model, device ):
+    """
+    currently per particle
+    an output of zero flags no result
+    """
+    
+    eval_model = model.to( device )
+    eval_model.eval()
+
+    normalized_data = df[["normalized input radius",
+                        "normalized input temperature",
+                        "normalized salinity",
+                        "normalized air temperature",
+                        "normalized relative humidity",
+                        "normalized air density",
+                        "integration time"]].to_numpy()
+
+    dynamic_inputs = np.zeros(shape=(iterations,2)) 
+
+    buffer_index = 0
+
+    outputs = np.zeros((len(normalized_data),2))
+
+    # Populate
+    for i in range(iterations):
+        dynamic_inputs[i] = normalized_data[i, :2]
+        background_input = normalized_data[i, 2:]
+
+        normalized_inputs = np.hstack(( dynamic_inputs[:i+1], 
+                                     np.tile(background_input, (i+1, 1) ))).astype( "float32" )
+        dynamic_inputs[:i+1] = eval_model( torch.from_numpy( normalized_inputs ).to( device ) ).detach().numpy()
+
+    # Evaluate
+    for i in range(iterations, len(normalized_data)-1):
+        outputs[i - iterations] = dynamic_inputs[buffer_index]
+        dynamic_inputs[buffer_index] = normalized_data[i, :2]
+        buffer_index = (buffer_index + 1) % iterations
+
+        normalized_inputs = np.hstack(( dynamic_inputs, 
+                                     np.tile(background_input, (iterations, 1) ))).astype( "float32" )
+
+        dynamic_inputs = eval_model( torch.from_numpy( normalized_inputs ).to( device ) ).detach().numpy()
+        background_input = normalized_data[i, 2:]
+
+    return outputs

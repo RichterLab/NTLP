@@ -1,5 +1,6 @@
 import matplotlib.pyplot as plt
 import numpy as np
+import torch
 from scipy.integrate import solve_ivp
 
 from .data import create_droplet_batch, read_training_file
@@ -141,9 +142,6 @@ def analyze_model_iterative_performance( model, input_parameters = None, dt = 0.
     ax_h[1][1].set_xscale( "log" )
 
     fig_h.tight_layout()
-
-
-
 
 def mse_score_models(models, file_name, device, weighted=False):
     """

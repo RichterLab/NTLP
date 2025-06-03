@@ -15,6 +15,7 @@ from .data import clean_training_data, \
                   create_training_file, \
                   merge_weird_parameters, \
                   read_training_file, \
+                  read_NTLP_file, \
                   write_weird_parameters_to_spreadsheet
 from .models import SimpleNet, \
                     do_inference, \

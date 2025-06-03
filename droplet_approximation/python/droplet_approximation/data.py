@@ -1,6 +1,7 @@
 import warnings
 
 import numpy as np
+import pandas as pd
 
 from .physics import DROPLET_RADIUS_LOG_RANGE, \
                      DROPLET_TEMPERATURE_RANGE, \
@@ -891,6 +892,63 @@ def read_training_file_sequential( file_name, number_samples ):
 
     return inputs, outputs, times
 
+def normalize_NTLP_df( df ):
+    # Normalize inputs
+    df["normalized input radius"] = (np.log10(df["input radius"]) - np.mean( DROPLET_RADIUS_LOG_RANGE )) / (np.diff( DROPLET_RADIUS_LOG_RANGE)/2)
+    df["normalized input temperature"] = (df["input temperature"] - np.mean( DROPLET_TEMPERATURE_RANGE )) / (np.diff( DROPLET_TEMPERATURE_RANGE )/2)
+    df["normalized salinity"] = (np.log10(df["salinity"]) - np.mean( DROPLET_SALINITY_LOG_RANGE)) / (np.diff( DROPLET_SALINITY_LOG_RANGE)/2)
+    df["normalized air temperature"] = (df["air temperature"] - np.mean( DROPLET_AIR_TEMPERATURE_RANGE)) / (np.diff( DROPLET_AIR_TEMPERATURE_RANGE)/2)
+    df["normalized relative humidity"] = (df["relative humidity"] - np.mean( DROPLET_RELATIVE_HUMIDITY_RANGE)) / (np.diff( DROPLET_RELATIVE_HUMIDITY_RANGE)/2)
+    df["normalized air density"] = (df["air density"] - np.mean( DROPLET_RHOA_RANGE )) / (np.diff( DROPLET_RHOA_RANGE)/2)
+
+    # Normalize outputs
+    df["normalized output radius"] = (np.log10(df["output radius"]) - np.mean( DROPLET_RADIUS_LOG_RANGE )) / (np.diff( DROPLET_RADIUS_LOG_RANGE)/2)
+    df["normalized output temperature"] = (df["output temperature"] - np.mean( DROPLET_TEMPERATURE_RANGE )) / (np.diff( DROPLET_TEMPERATURE_RANGE )/2)
+
+def read_NTLP_file( file_name ):
+    """
+    Reads all of the fixed-size binary records from the path specified and returns
+    NumPy arrays containing input parameters, output parameters, integration
+    times and particle ids sorted into a dataframe.
+
+    Takes 1 arguments:
+
+      file_name - Path to the file to parse.
+
+    Returns 3 values:
+
+      inputs  - NumPy array, shaped number_droplets x 6, containing the input parameters.
+      outputs - NumPy array, shaped number_droplets x 2, containing the output parameters.
+      times   - NumPy array, shaped number_droplets x 1, containing the integration times.
+
+    """
+
+    #record_data_tyep = np.dtype([('parameters', np.float32, (6,)), ('times', np.float32), ('outputs', np.float32, (2,)), ('ids', np.int32)]) 
+    record_data_type = np.dtype([('particle id', np.int32),
+                                 ('be flag', np.int32),
+                                 ('time', np.float32),
+                                 ('input radius', np.float32),
+                                 ('input temperature', np.float32),
+                                 ('salinity', np.float32),
+                                 ('air temperature', np.float32),
+                                 ('relative humidity', np.float32),
+                                 ('air density', np.float32)])
+
+    inputs_outputs = np.fromfile( file_name, dtype=record_data_type )
+
+    df = pd.DataFrame(data=inputs_outputs,
+                      columns=record_data_type.names)
+    
+    df.sort_values(by=['particle id', 'time'], ascending=True, inplace=True)
+
+    # Calculate outputs and dt, set to 0 if be failed or new particle
+    calculate_output_flags = df["be flag"] * (df["particle id"].diff(periods = -1) == 0)   
+
+    df["integration time"] = -df["time"].diff(periods = -1) * calculate_output_flags
+    df["output radius"] = df["input radius"].shift(periods = -1) * calculate_output_flags
+    df["output temperature"] = df["input temperature"].shift(periods = -1) * calculate_output_flags
+
+    return df
 
 def read_training_file( file_name ):
     """
