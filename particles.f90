@@ -1788,7 +1788,6 @@ CONTAINS
 
       integer :: be_dump_istat, be_dump_id, be_dump_iu
       character*4 :: be_id_char
-      character*4 :: be_id_char
       character(len=80) :: be_dump_filename
 
       !Create the seed for the random number generator:
@@ -1836,14 +1835,10 @@ CONTAINS
 
          write(be_id_char,'(i4.4)') be_dump_id
          be_dump_filename = trim(adjustl(path_seed))//"particle_traj/be_dump_"//be_id_char//".data"
-         write(be_id_char,'(i4.4)') be_dump_id
-         be_dump_filename = trim(adjustl(path_seed))//"particle_traj/be_dump_"//be_id_char//".data"
 
-         OPEN(unit=be_dump_iu, file=be_dump_filename, access="stream", status="REPLACE", action="WRITE", form="UNFORMATTED", iostat=be_dump_istat)
          OPEN(unit=be_dump_iu, file=be_dump_filename, access="stream", status="REPLACE", action="WRITE", form="UNFORMATTED", iostat=be_dump_istat)
 
          if (be_dump_istat .ne. 0) then
-            write(*,*) "ERROR: failed to open file ", be_dump_filename, " with status", be_dump_istat, "... reverting to iwritebe=0"
             write(*,*) "ERROR: failed to open file ", be_dump_filename, " with status", be_dump_istat, "... reverting to iwritebe=0"
             iwritebe = 0
          endif
@@ -3061,9 +3056,7 @@ CONTAINS
 
       ! If dumping be data, initialize buffer indexes
       if (iwritebe .eq. 1) then
-      if (iwritebe .eq. 1) then
          be_dump_id = myid + 1
-         be_dump_iu = 300 + be_dump_id
          be_dump_iu = 300 + be_dump_id
 
          be_write_buffer_index(be_dump_id) = 0
@@ -3333,11 +3326,6 @@ CONTAINS
 
       ! Dump data to the myid file
       if (iwritebe .eq. 1 .and. be_write_buffer_index(be_dump_id) .gt. 0) then
-         if (myid .eq. 0) then
-                 write(*,*) "Writing at 0 with ", be_write_buffer_index(be_dump_id)
-                 write(*,*) "Corresponding numpart", numpart
-                 write(*,*) "Tnumpart", tnumpart
-         endif
          ! Annoying inefficient - rewrite later
          do i = 1,be_write_buffer_index(be_dump_id)
             write(be_dump_iu) be_int32_write_buffer(:, i, be_dump_id)
@@ -4144,8 +4132,6 @@ CONTAINS
    if (it .ge. itmax) then
       close(ntraj)
       if (iwritebe .eq. 1) then
-         write(*,*) "Closing be dump file"
-         be_dump_iu = 301 + myid
          write(*,*) "Closing be dump file"
          be_dump_iu = 301 + myid
          close(be_dump_iu)
