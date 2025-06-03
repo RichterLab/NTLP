@@ -71,7 +71,8 @@ module particles
   integer, parameter :: NUMBER_RADIUS_STEPS=1024
   real :: radval(NUMBER_RADIUS_STEPS)
 
-  real :: be_write_buffer (9,60000,64) ! ASSUMING 64 cores!!
+  integer(kind=4) :: be_int32_write_buffer (2,60000,64) ! ASSUMING 64 cores!!
+  real(kind=4) :: be_float32_write_buffer (7,60000,64) ! ASSUMING 64 cores and 60,000 max!!
   integer :: be_write_buffer_index (64)
 
 
@@ -1787,6 +1788,7 @@ CONTAINS
 
       integer :: be_dump_istat, be_dump_id, be_dump_iu
       character*4 :: be_id_char
+      character*4 :: be_id_char
       character(len=80) :: be_dump_filename
 
       !Create the seed for the random number generator:
@@ -1827,15 +1829,21 @@ CONTAINS
       ! Open file to write be_buffers and initialize buffer indexes
       if (iwritebe .eq. 1) then
          be_write_buffer_index = 0
+         be_float32_write_buffer = 0
+         be_int32_write_buffer = 0
          be_dump_id = myid + 1
          be_dump_iu = 300 + be_dump_id
 
          write(be_id_char,'(i4.4)') be_dump_id
          be_dump_filename = trim(adjustl(path_seed))//"particle_traj/be_dump_"//be_id_char//".data"
+         write(be_id_char,'(i4.4)') be_dump_id
+         be_dump_filename = trim(adjustl(path_seed))//"particle_traj/be_dump_"//be_id_char//".data"
 
+         OPEN(unit=be_dump_iu, file=be_dump_filename, access="stream", status="REPLACE", action="WRITE", form="UNFORMATTED", iostat=be_dump_istat)
          OPEN(unit=be_dump_iu, file=be_dump_filename, access="stream", status="REPLACE", action="WRITE", form="UNFORMATTED", iostat=be_dump_istat)
 
          if (be_dump_istat .ne. 0) then
+            write(*,*) "ERROR: failed to open file ", be_dump_filename, " with status", be_dump_istat, "... reverting to iwritebe=0"
             write(*,*) "ERROR: failed to open file ", be_dump_filename, " with status", be_dump_istat, "... reverting to iwritebe=0"
             iwritebe = 0
          endif
@@ -3031,7 +3039,8 @@ CONTAINS
       real :: xp3i
       real :: mod_magnus,exner,func_p_base
 
-      integer :: successful_bdf_flag, be_dump_id, be_dump_iu ! used for writing bdf values to buffer
+      integer :: i
+      integer :: successful_be_flag, be_dump_id, be_dump_iu ! used for writing bdf values to buffer
 
 
       !First fill extended velocity field for interpolation
@@ -3052,11 +3061,13 @@ CONTAINS
 
       ! If dumping be data, initialize buffer indexes
       if (iwritebe .eq. 1) then
+      if (iwritebe .eq. 1) then
          be_dump_id = myid + 1
+         be_dump_iu = 300 + be_dump_id
          be_dump_iu = 300 + be_dump_id
 
          be_write_buffer_index(be_dump_id) = 0
-         successful_bdf_flag = 0
+         i = 0
       end if
 
 
@@ -3064,14 +3075,31 @@ CONTAINS
       !loop over the linked list of particles
       part => first_particle
       do while (associated(part))
+         i = i + 1
 
 	 !Store original values for two-way coupling
          part%vp_old(1:3) = part%vp(1:3)
          part%Tp_old = part%Tp
          part%radius_old = part%radius
 
+         successful_be_flag = 0
+         
+      
+         if (iwritebe .eq. 1 .and. mod(part%pidx, 5) .eq. 0) then
+            be_write_buffer_index(be_dump_id) = be_write_buffer_index(be_dump_id) + 1 
 
-        !First, interpolate to get the fluid velocity part%uf(1:3):
+            be_int32_write_buffer(1,be_write_buffer_index(be_dump_id),be_dump_id) = 100*part%pidx + part%procidx
+
+            be_float32_write_buffer(1,be_write_buffer_index(be_dump_id),be_dump_id) = time
+            be_float32_write_buffer(2,be_write_buffer_index(be_dump_id),be_dump_id) = part%radius
+            be_float32_write_buffer(3,be_write_buffer_index(be_dump_id),be_dump_id) = part%Tp
+            be_float32_write_buffer(4,be_write_buffer_index(be_dump_id),be_dump_id) = part%m_s
+            be_float32_write_buffer(5,be_write_buffer_index(be_dump_id),be_dump_id) = part%Tf
+            be_float32_write_buffer(6,be_write_buffer_index(be_dump_id),be_dump_id) = part%qinf/(Mw*mod_magnus(part%Tf)/Ru/part%Tf) ! formula for RH
+            be_float32_write_buffer(7,be_write_buffer_index(be_dump_id),be_dump_id) = rhoa
+         endif                                                                                                                                      
+         
+       !First, interpolate to get the fluid velocity part%uf(1:3):
         if (ilin .eq. 1) then
            call uf_interp_lin   !Use trilinear interpolation
         else
@@ -3096,7 +3124,7 @@ CONTAINS
         if (part%qinf .lt. 0.0) then
           write(*,'(a30,2i,12e15.6)') 'WARNING: NEG QINF',  &
           part%pidx,part%procidx, &
-          part%radius,part%qinf,part%Tp,part%Tf,part%xp(3), &
+          part%radius,part%Tf,part%xp(3), &
           part%kappa_s,part%m_s,part%vp(1),part%vp(2),part%vp(3), &
           part%res,part%sigm_s
         end if
@@ -3173,7 +3201,7 @@ CONTAINS
                 rt_zeroes(1) = 1.0
                 rt_zeroes(2) = part%Tf/part%Tp
                else
-                  successful_bdf_flag = 1
+                  successful_be_flag = 1
 
                end if
 
@@ -3200,25 +3228,7 @@ CONTAINS
                !Redimensionalize
                part%radius = rt_zeroes(1)*part%radius
                part%Tp = rt_zeroes(2)*part%Tp
-
-               !Dump data if iwritebe and bdf ran successfully
-               if (iwritebe .eq. 1 .AND. successful_bdf_flag .eq. 1) then
-                  be_dump_id = myid + 1   
-
-                  be_write_buffer_index(be_dump_id) = be_write_buffer_index(be_dump_id) + 1 
-
-                  be_write_buffer(1,be_write_buffer_index(be_dump_id),be_dump_id) = part%radius_old
-                  be_write_buffer(2,be_write_buffer_index(be_dump_id),be_dump_id) = part%Tp_old
-                  be_write_buffer(3,be_write_buffer_index(be_dump_id),be_dump_id) = part%m_s
-                  be_write_buffer(4,be_write_buffer_index(be_dump_id),be_dump_id) = part%Tf
-                  be_write_buffer(5,be_write_buffer_index(be_dump_id),be_dump_id) = part%qinf/(Mw*mod_magnus(part%Tf)/Ru/part%Tf) ! formula for RH
-                  be_write_buffer(6,be_write_buffer_index(be_dump_id),be_dump_id) = rhoa
-                  be_write_buffer(7,be_write_buffer_index(be_dump_id),be_dump_id) = dt
-                  be_write_buffer(8,be_write_buffer_index(be_dump_id),be_dump_id) = part%radius
-                  be_write_buffer(9,be_write_buffer_index(be_dump_id),be_dump_id) = part%Tp
-               endif
-
-       else !! Evaporation is turned off
+      else !! Evaporation is turned off
 
 
             !Compute Nusselt number for particle:
@@ -3230,6 +3240,10 @@ CONTAINS
             part%Tp = (part%Tp + tmp_coeff*dt*part%Tf)/(1+dt*tmp_coeff)
 
        end if 
+
+       if (iwritebe .eq. 1 .and. mod(part%pidx, 5) .eq. 0) then
+            be_int32_write_buffer(2,be_write_buffer_index(be_dump_id),be_dump_id) = successful_be_flag
+       endif
 
 
          !New volume and particle density
@@ -3321,9 +3335,14 @@ CONTAINS
       if (iwritebe .eq. 1 .and. be_write_buffer_index(be_dump_id) .gt. 0) then
          if (myid .eq. 0) then
                  write(*,*) "Writing at 0 with ", be_write_buffer_index(be_dump_id)
-                 write(*,*) "Sample", be_write_buffer(:, 1:2, be_dump_id)
+                 write(*,*) "Corresponding numpart", numpart
+                 write(*,*) "Tnumpart", tnumpart
          endif
-         write(be_dump_iu) be_write_buffer(:, 1:be_write_buffer_index(be_dump_id), be_dump_id)
+         ! Annoying inefficient - rewrite later
+         do i = 1,be_write_buffer_index(be_dump_id)
+            write(be_dump_iu) be_int32_write_buffer(:, i, be_dump_id)
+            write(be_dump_iu) be_float32_write_buffer(:, i, be_dump_id)
+         enddo
       endif
 
 
@@ -3375,7 +3394,11 @@ CONTAINS
 	 !Store original values for two-way coupling
          part%vp_old(1:3) = part%vp(1:3)
          part%Tp_old = part%Tp
+         if (part%radius .gt. 2.62e-5) then
+            write(*,*) "OVERSIZED PARTICLE: ", part%radius, part%qinf, part%radius_old
+         endif
          part%radius_old = part%radius
+
 
 
         !First, interpolate to get the fluid velocity part%uf(1:3):
@@ -3465,7 +3488,39 @@ CONTAINS
             droplet_parameters(6) = rhoa
             droplet_parameters(7) = dt
 
-            call estimate( droplet_parameters, rt_zeroes )
+
+            if (part%radius .gt. 1.8e-7 .and. part%Tp .gt. 278.0 .and. droplet_parameters(5) .gt. 0.85) then
+               call estimate( droplet_parameters, rt_zeroes )
+            else
+               write(*,*) "Weird input radius/temperature/RH: ", part%radius_old, part%Tp_old, droplet_parameters(5)
+               rt_zeroes(1) = part%radius
+               rt_zeroes(2) = part%Tp
+               !if (part%radius .lt. 1.8e-7) then
+               !   part%radius = 1.8e-7
+               !endif 
+               !if (part%Tp .lt. 282.0) then
+               !   part%Tp = 282.0
+               !endif
+               !if (part%qinf .lt. 0.85) then
+               !   part%qinf = 0.85
+               !endif
+            end if
+
+            !if (rt_zeroes(0) .lt. 1.8e-7) then
+            !   write(*,*) "Bad output radius", rt_zeroes(0)
+            !   rt_zeroes(0) = 1.75e-7
+            if (rt_zeroes(1) .gt. 2.62e-5) then 
+               write(*,*) "Bad output radius", rt_zeroes(1), droplet_parameters
+               rt_zeroes(1) = part%radius
+            endif 
+            ! SEEMS TO BE THAT A HUGE PARTICLE IS SPAWNED, RUINING THE SIM
+            !if (rt_zeroes(1) .lt. 279.0) then
+            !   write(*,*) "Bad output temperature", rt_zeroes(1)
+            !   rt_zeroes(1) = 279.2
+            !elseif (rt_zeroes(1) .gt. 300.0) then
+            !   write(*,*) "Bad output temperature", rt_zeroes(1)
+            !   rt_zeroes(1) = 299.8
+            !endif
 
             if (isnan(rt_zeroes(1)) &
                .OR. (rt_zeroes(1)<0) &
@@ -4089,6 +4144,8 @@ CONTAINS
    if (it .ge. itmax) then
       close(ntraj)
       if (iwritebe .eq. 1) then
+         write(*,*) "Closing be dump file"
+         be_dump_iu = 301 + myid
          write(*,*) "Closing be dump file"
          be_dump_iu = 301 + myid
          close(be_dump_iu)
