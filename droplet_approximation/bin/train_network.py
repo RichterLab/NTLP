@@ -9,7 +9,7 @@ import sys
 
 from droplet_approximation.models import *
 
-number_epochs = 5
+number_epochs = 7
 
 def main( argv ):
     if len( argv ) != 4:
@@ -38,7 +38,7 @@ def main( argv ):
     #
     model     = SimpleNet()
     criterion = nn.MSELoss()
-    optimizer = torch.optim.Adam( model.parameters(), lr=1e-3, weight_decay=1e-6 )
+    optimizer = torch.optim.Adam( model.parameters(), lr=0.5e-3, weight_decay=1e-6 )
     
     # Move the model to the device we're training with.
     model = model.to( device )

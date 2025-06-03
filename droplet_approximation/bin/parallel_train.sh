@@ -13,11 +13,14 @@
 
 module unload python
 
+index=$SGE_TASK_ID
+
+batch_name="NTLP-pull"
+
 training_script="./train_network.py"
-tmp_data_dir="/scratch365/dcolange/pi_chamber/particle_traj/"
-data_file="../data/data-file-NTLP.data"
-network_file="../models/network-NTLP-2.pth"
-droplet_file="../models/droplet_model-NTLP-2.f90"
+data_file="../data/data-file.data"
+network_file="../models/network-${batch_name}-${index}.pth"
+droplet_file="../models/droplet_model-${batch_name}-${index}.f90"
 
 #rm $tmp_data_dir/*.dat
 #mv $tmp_data_dir/-p $tmp_data_dir/../tmp_unsure
