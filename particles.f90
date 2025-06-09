@@ -1792,12 +1792,17 @@ CONTAINS
 
       !Create the seed for the random number generator:
       call date_and_time(VALUES=values)
-      iseed = -(myid+values(8)+values(7)+values(6))
+      if (iseed_init .eq. 0) then
+          iseed = -(myid+values(8)+values(7)+values(6))
+      else
+          iseed = iseed_init + myid
+      endif
+      write(*,*) "Random seed is ", iseed
 
 
       numpart = tnumpart/numprocs
       if (myid == 0) then
-      numpart = numpart + MOD(tnumpart,numprocs)
+          numpart = numpart + MOD(tnumpart,numprocs)
       endif
 
 
@@ -3382,9 +3387,9 @@ CONTAINS
 	 !Store original values for two-way coupling
          part%vp_old(1:3) = part%vp(1:3)
          part%Tp_old = part%Tp
-         if (part%radius .gt. 2.62e-5) then
-            write(*,*) "OVERSIZED PARTICLE: ", part%radius, part%qinf, part%radius_old
-         endif
+         !if (part%radius .gt. 2.62e-5) then
+         !   write(*,*) "OVERSIZED PARTICLE: ", part%radius, part%qinf, part%radius_old
+         !endif
          part%radius_old = part%radius
 
 
@@ -3497,10 +3502,15 @@ CONTAINS
             !if (rt_zeroes(0) .lt. 1.8e-7) then
             !   write(*,*) "Bad output radius", rt_zeroes(0)
             !   rt_zeroes(0) = 1.75e-7
-            if (rt_zeroes(1) .gt. 2.62e-5) then 
-               write(*,*) "Bad output radius", rt_zeroes(1), droplet_parameters
-               rt_zeroes(1) = part%radius
-            endif 
+            ! Bound on the boundaries of training data (0.02% percentile)
+            !if (rt_zeroes(1) .gt. 5.5e-5 .or. rt_zeroes(1) .lt. 2.0e-7) then 
+            !   write(*,*) "Bounding radius", rt_zeroes(1), droplet_parameters
+            !   rt_zeroes(1) = part%radius
+            !endif 
+            !if (rt_zeroes(2) .gt. 298.9 .or. rt_zeroes(2) .lt. 284.9) then
+            !   write(*,*) "Bounding temperature ", rt_zeroes(2), droplet_parameters
+            !   rt_zeroes(2) = part%Tp
+            !endif
             ! SEEMS TO BE THAT A HUGE PARTICLE IS SPAWNED, RUINING THE SIM
             !if (rt_zeroes(1) .lt. 279.0) then
             !   write(*,*) "Bad output temperature", rt_zeroes(1)

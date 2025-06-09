@@ -11,7 +11,7 @@ c     ----------------------------------------------------------------------
      +     icouple,iTcouple,iHcouple,ievap,ifields,ilin,ineighbor,
      +     icoalesce,ipart_method,ipartdiff,isfs,iexner,ilongwave,
      +     inetcdf,iviznetcdf,ihumiditycontrol,ireintro,itrajout,
-     +     inewpart,ihurr,icase,ikernel,irestart, iwritebe
+     +     inewpart,ihurr,icase,ikernel,irestart, iwritebe, iseed_init
 
       real :: max_time
 c     

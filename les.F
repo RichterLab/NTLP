@@ -10729,7 +10729,7 @@ c
      +         ineighbor,icoalesce,ipart_method,inewpart,icase,
      +         ipartdiff,isfs,iexner,ilongwave,ihurr,
      +         inetcdf,iviznetcdf,ihumiditycontrol,ireintro,
-     +         itrajout, ikernel, iwritebe
+     +         itrajout, ikernel, iwritebe, iseed_init
 
 
       namelist /constants/ nuf, Cpa, Pra, Sc,
