@@ -11,16 +11,29 @@
 
 # make sure relavent libraries are installed (torch, matplotlib, scipy, numpy, etc)
 
-module unload python
+conda activate NTLP
 
 training_script="./train_network.py"
+cleaning_script="./clean_data.py"
 tmp_data_dir="/scratch365/dcolange/pi_chamber/particle_traj/"
-data_file="../data/data-file-NTLP.data"
-network_file="../models/network-NTLP-2.pth"
-droplet_file="../models/droplet_model-NTLP-2.f90"
+data_file="../data/data_file_NTLP_decoupled_400M.data"
+clean_data_file="../data/data_file_NTLP_decoupled_400M_stripped.data"
+network_file="../models/network_NTLP_decoupled_400M_weighted.pth"
+droplet_file="../models/droplet_model_NTLP_decoupled_400M_weighted.f90"
 
-#rm $tmp_data_dir/*.dat
-#mv $tmp_data_dir/-p $tmp_data_dir/../tmp_unsure
-#cat $tmp_data_dir/* > $data_file
+rm $tmp_data_dir/*.dat
+cat $tmp_data_dir/* > $data_file
 
-python3 ${training_script} ${data_file} ${network_file} ${droplet_file}
+python3 ${cleaning_script} ${data_file} ${clean_data_file}
+python3 ${training_script} ${clean_data_file} ${network_file} ${droplet_file}
+
+cp ${droplet_file} ../../droplet_model.f90
+cd ../../
+
+make ARCH=avx2
+
+cd test_cases/pi_chamber
+
+qsub pi_chamber.run
+
+# Todo automate cleaning of data
