@@ -43,8 +43,10 @@ module particles
 
   integer, parameter :: histbins = 512
   real :: hist_rad(histbins+2)
+  real :: hist_tp(histbins+2)
   real :: hist_raddeath(histbins+2)
   real :: bins_rad(histbins+2)
+  real :: bins_tp(histbins+2)
 
   real :: hist_res(histbins+2)
   real :: bins_res(histbins+2)
@@ -1922,8 +1924,10 @@ CONTAINS
 
       !Set up the histograms
       hist_rad = 0.0
+      hist_tp = 0.0
       hist_raddeath = 0.0
       bins_rad = 0.0
+      bins_tp = 0.0
       hist_res = 0.0
       bins_res = 0.0
       hist_actres = 0.0
@@ -1937,6 +1941,9 @@ CONTAINS
       !set_binsdata does logarithmic binning!
       !Radius histogram
       call set_binsdata(bins_rad,histbins+2,1.0e-8,1.0e-3)
+
+      !Tp histogram
+      call set_binsdata(bins_tp,histbins+2,275.0, 310.0)
 
       !Residence time histogram
       call set_binsdata(bins_res,histbins+2,1.0e-1,1.0e4)
@@ -2768,7 +2775,7 @@ CONTAINS
           !Also record the number of activations
           call add_histogram_integer(bins_numact,hist_numact,histbins+2,part%numact)
 
-          !Also record the size of the dead droplet
+          !Also record the size and temperature of the dead droplet
           call add_histogram(bins_rad,hist_raddeath,histbins+2,part%radius,part%mult)
 
 	  !Store the spatial location of this mass crossing the surface -- surface precipitation
@@ -3239,7 +3246,7 @@ CONTAINS
 
        end if 
 
-       if (iwritebe .eq. 1 .and. mod(part%pidx, 5) .eq. 0) then
+       if (iwritebe .eq. 1 .and. mod(part%pidx, 2) .eq. 0) then
             be_int32_write_buffer(2,be_write_buffer_index(be_dump_id),be_dump_id) = successful_be_flag
        endif
 
@@ -5366,17 +5373,19 @@ CONTAINS
 
   end subroutine add_histogram_integer
 
-  subroutine radius_histogram
+  subroutine radius_temperature_histogram
   implicit none
 
   hist_rad = 0.0
+  hist_tp = 0.0
   part => first_particle
   do while (associated(part))
      call add_histogram(bins_rad,hist_rad,histbins+2,part%radius,part%mult)
+     call add_histogram(bins_tp,hist_tp,histbins+2,part%tp,part%mult)
      part => part%next
   end do
 
-  end subroutine radius_histogram
+  end subroutine radius_temperature_histogram
 
    subroutine eigen_roots(a,m,rtr,rti)
    ! USES balanc,hqr

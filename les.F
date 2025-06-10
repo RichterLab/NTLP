@@ -484,7 +484,7 @@ c
       if (mhis) then
 
          call start_phase(measurement_id_io_histograms)
-         call radius_histogram
+         call radius_temperature_histogram
          call end_phase(measurement_id_io_histograms)
 
          call start_phase(measurement_id_io_traj)

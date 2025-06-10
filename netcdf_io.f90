@@ -38,7 +38,9 @@ integer :: qstarm_vid
 integer :: Nc_vid,ql_vid,radsrc_vid
 integer :: rho_base_vid,p_base_vid,T_base_vid,theta_base_vid
 integer :: radbins_vid,resbins_vid
+integer :: tpbins_vid
 integer :: radhist_vid,reshist_vid,radhistdeath_vid
+integer :: tphist_vid
 integer :: actresbins_vid,actreshist_vid
 integer :: acttodeathbins_vid,acttodeathhist_vid
 integer :: numactbins_vid,numacthist_vid
@@ -671,6 +673,9 @@ subroutine netcdf_init_histog
       call netcdf_check( nf90_def_var(ncid_histog,"radbins",NF90_DOUBLE,dimids_bins,radbins_vid) )
       call netcdf_check( nf90_put_att(ncid_histog,radbins_vid,"title","Bin centers of particle radii histogram") )
 
+      call netcdf_check( nf90_def_var(ncid_histog,"tpbins",NF90_DOUBLE,dimids_bins,tpbins_vid) )
+      call netcdf_check( nf90_put_att(ncid_histog,tpbins_vid,"title","Bin centers of particle temperature histogram") )
+
       call netcdf_check( nf90_def_var(ncid_histog,"resbins",NF90_DOUBLE,dimids_bins,resbins_vid) )
       call netcdf_check( nf90_put_att(ncid_histog,resbins_vid,"title","Bin centers of particle residence time histogram") )
 
@@ -687,6 +692,9 @@ subroutine netcdf_init_histog
 !!! Histograms
       call netcdf_check( nf90_def_var(ncid_histog, "radhist", NF90_REAL, dimids_t_bins,radhist_vid) )
       call netcdf_check( nf90_put_att(ncid_histog,radhist_vid,"title","Histogram of particle radius at snapshot") )
+
+      call netcdf_check( nf90_def_var(ncid_histog, "tphist", NF90_REAL, dimids_t_bins,tphist_vid) )
+      call netcdf_check( nf90_put_att(ncid_histog,tphist_vid,"title","Histogram of particle temperature at snapshot") )
 
       call netcdf_check( nf90_def_var(ncid_histog, "radhistdeath", NF90_REAL, dimids_t_bins,radhistdeath_vid) )
       call netcdf_check( nf90_put_att(ncid_histog,radhistdeath_vid,"title","Histogram of particle radius of those which died over past ihst") )
@@ -739,6 +747,7 @@ subroutine netcdf_res_histog
 
 !! Store the bin definitions
       call netcdf_check( nf90_inq_varid(ncid_histog,"radbins",radbins_vid) )
+      call netcdf_check( nf90_inq_varid(ncid_histog,"tpbins",tpbins_vid) )
       call netcdf_check( nf90_inq_varid(ncid_histog,"resbins",resbins_vid) )
       call netcdf_check( nf90_inq_varid(ncid_histog,"actresbins",actresbins_vid) )
       call netcdf_check( nf90_inq_varid(ncid_histog,"acttodeathbins",acttodeathbins_vid) )
@@ -746,6 +755,7 @@ subroutine netcdf_res_histog
 
 !!! Histograms
       call netcdf_check( nf90_inq_varid(ncid_histog, "radhist",radhist_vid) )
+      call netcdf_check( nf90_inq_varid(ncid_histog, "tphist",tphist_vid) )
       call netcdf_check( nf90_inq_varid(ncid_histog, "radhistdeath",radhistdeath_vid) )
       call netcdf_check( nf90_inq_varid(ncid_histog, "reshist",reshist_vid) )
       call netcdf_check( nf90_inq_varid(ncid_histog, "actreshist",actreshist_vid) )
@@ -770,6 +780,7 @@ subroutine write_histog_netcdf
       if (histog_counter == 1) then
 
       call netcdf_check( nf90_put_var(ncid_histog, radbins_vid, bins_rad,start=(/ 1 /)) )
+      call netcdf_check( nf90_put_var(ncid_histog, tpbins_vid, bins_tp,start=(/ 1 /)) )
       call netcdf_check( nf90_put_var(ncid_histog, resbins_vid, bins_res,start=(/ 1 /)) )
       call netcdf_check( nf90_put_var(ncid_histog, actresbins_vid, bins_actres,start=(/ 1 /)) )
       call netcdf_check( nf90_put_var(ncid_histog, acttodeathbins_vid, bins_acttodeath,start=(/ 1 /)) )
@@ -778,6 +789,7 @@ subroutine write_histog_netcdf
       end if
 
       call netcdf_check( nf90_put_var(ncid_histog, radhist_vid, real(hist_rad),start=(/1,histog_counter/)) )
+      call netcdf_check( nf90_put_var(ncid_histog, tphist_vid, real(hist_tp),start=(/1,histog_counter/)) )
       call netcdf_check( nf90_put_var(ncid_histog, radhistdeath_vid, real(hist_raddeath),start=(/1,histog_counter/)) )
       call netcdf_check( nf90_put_var(ncid_histog, reshist_vid, real(hist_res),start=(/1,histog_counter/)) )
       call netcdf_check( nf90_put_var(ncid_histog, actreshist_vid, real(hist_actres),start=(/1,histog_counter/)) )
@@ -1473,6 +1485,7 @@ integer :: iblnk
 integer :: num_entries
 
 real :: sumbuf_rad(histbins+2)
+real :: sumbuf_tp(histbins+2)
 real :: sumbuf_raddeath(histbins+2)
 real :: sumbuf_res(histbins+2)
 real :: sumbuf_actres(histbins+2)
@@ -1487,9 +1500,14 @@ character :: fformat*10, num*3
 
   num_entries = (histbins+2)
 
+
   !Radius PDF
   sumbuf_rad = hist_rad
   call mpi_reduce(sumbuf_rad,hist_rad,num_entries,mpi_real8,mpi_sum,0,mpi_comm_world,ierr)
+
+  !Tp PDF
+  sumbuf_tp = hist_tp
+  call mpi_reduce(sumbuf_rad,hist_tp,num_entries,mpi_real8,mpi_sum,0,mpi_comm_world,ierr)
 
   !Radius PDF at death
   sumbuf_raddeath = hist_raddeath
@@ -1526,6 +1544,7 @@ character :: fformat*10, num*3
   fformat = '('//num//'e15.6)'
 
   write(nrad,fformat),hist_rad(1:histbins+2)
+  write(nrad,fformat),hist_tp(1:histbins+2)
   write(nrad,fformat),hist_raddeath(1:histbins+2)
   write(nres,fformat),hist_res(1:histbins+2)
   write(nactres,fformat),hist_actres(1:histbins+2)
