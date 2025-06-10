@@ -2,7 +2,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 
-from .data import read_training_file, read_training_file_sequential
+from .data import read_training_file
 from .physics import DROPLET_AIR_TEMPERATURE_RANGE, \
                      DROPLET_RADIUS_LOG_RANGE, \
                      DROPLET_RELATIVE_HUMIDITY_RANGE, \
@@ -20,7 +20,7 @@ class SimpleNet( nn.Module ):
     it is faster than Gauss-Newton iterative solvers.
     """
 
-    def __init__( self):
+    def __init__( self ):
         super().__init__()
 
         #
@@ -41,8 +41,19 @@ class SimpleNet( nn.Module ):
         x = self.fc4( x )
 
         return x
-def weighted_mse_loss(inputs, targets, weights):
-    return (weights * ((inputs - targets) ** 2)).mean()
+
+def weighted_mse_loss( inputs, targets, weights ):
+    """
+    Calculates MSE error between inputs and targets with a weight for each difference
+
+    Takes 3 arguments:
+
+      inputs      - NumPy array of any size
+      targets     - NumPy array with shape matching inputs
+      weights     - NumPy array with same shape as inputs and targets with 
+                    coefficients for each difference
+    """
+    return ( weights * ( ( inputs - targets ) ** 2) ).mean()
 
 def train_model( model, criterion, optimizer, device, number_epochs, training_file ):
     """
@@ -191,218 +202,6 @@ def train_model( model, criterion, optimizer, device, number_epochs, training_fi
 
     return loss_history
 
-def train_model_sequential( model, criterion, optimizer, device, number_epochs, training_file, iterations=1 ):
-    """
-    Trains the supplied model for one or more epochs using all of the droplet parameters
-    in an on-disk training file.  The parameters are read into memory once and then
-    randomly sampled each epoch.  Any weird parameters encountered in the training file
-    are logged and
-
-    Takes 6 arguments:
-
-      model         - PyTorch model to optimize.
-      criterion     - PyTorch loss object to use during optimization.
-      optimizer     - PyTorch optimizer associated with model.
-      device        - Device string indicating where the optimization is
-                      being performed.
-      number_epochs - Number of epochs to train model for.  All training
-                      data in training_file will be seen by the model
-                      this many times.
-      training_file - Path to the file containing training data created by
-                      create_training_file().
-
-    Returns 1 value:
-
-      loss_history - List of training losses, one per mini-batch during
-                     the training process.
-
-    """
-
-    #
-    # NOTE: This is inefficient and requires the entire training data set to reside in
-    #       RAM.  We could read chunks of the file on demand but that would require
-    #       a more sophisticated training loop that performs I/O in a separate thread
-    #       while the optimization process executes.
-    #
-    #       TL;DR Find a big machine to train on.
-    #
-    input_parameters, output_parameters, integration_times = read_training_file_sequential( training_file, iterations)
-
-    output_parameters = output_parameters.reshape((input_parameters.shape[0]*iterations, 2)) # flatten second to last-dimension
-
-
-    weights = 10**((DROPLET_TIME_LOG_RANGE[1] + DROPLET_TIME_LOG_RANGE[0])/2.0)*np.reciprocal(integration_times)
-    weights = np.stack((weights,weights), axis=-1)
-    weights = torch.from_numpy( weights ).to( device )
-
-    BATCH_SIZE      = 1024
-    MINI_BATCH_SIZE = 1024
-
-    #
-    # NOTE: This ignores parameters if the last batch isn't complete.
-    #
-    NUMBER_BATCHES  = input_parameters.shape[0] // BATCH_SIZE
-
-    # Track each mini-batch's training loss for analysis.
-    loss_history = []
-
-    batch_indices = np.arange( NUMBER_BATCHES )
-
-    for epoch_index in range( number_epochs ):
-        model.train()
-
-        # Reset our training loss.
-        running_loss = 0.0
-
-        # "Shuffle" our training data so each epoch sees it in a different
-        # order.  Note that we generate a permutation of batch indices so
-        # we don't actually rearrange the training data in memory and
-        # dramatically slow things down.
-        permuted_batch_indices = np.random.permutation( batch_indices )
-
-        for batch_index in range( NUMBER_BATCHES ):
-            start_index = permuted_batch_indices[batch_index] * BATCH_SIZE
-            end_index   = start_index + BATCH_SIZE
-
-            # Get the next batch of droplets.
-            inputs  = input_parameters[start_index:end_index, :]
-            outputs = output_parameters[start_index*iterations:end_index*iterations, :]
-            times   = integration_times[start_index:end_index]
-            current_weights = weights[start_index:end_index]
-
-            # Normalize the inputs and outputs to [-1, 1].
-            normalized_inputs  = normalize_droplet_parameters( inputs )
-            normalized_outputs = normalize_droplet_parameters( outputs )
-
-            # XXX: Need to rethink how we handle time as an input.  This is annoying
-            #      to have to stack a reshaped vector each time.
-            normalized_inputs = np.hstack( (normalized_inputs,
-                                            times.reshape( (BATCH_SIZE, 1) )) )
-
-
-            normalized_inputs  = torch.from_numpy( normalized_inputs ).to( device )
-            normalized_outputs = torch.from_numpy( normalized_outputs ).to( device )
-
-            background_inputs = normalized_inputs[..., 2:]
-
-            running_approximations = []
-
-            running_approximations.append(normalized_inputs[..., :2])
-
-            # Reset the parameter gradients.
-            optimizer.zero_grad()
-            for i in range(iterations):
-                normalized_inputs = torch.cat((running_approximations[-1], background_inputs), dim=-1)
-                running_approximations.append(model( normalized_inputs ))
-                
-            # Estimate the loss.
-            loss = sum([criterion( running_approximations[i], normalized_outputs[i::iterations]) for i in range(iterations)])/iterations # calculate average loss
-
-
-            # Backwards pass and optimization.
-            loss.backward()
-            optimizer.step()
-
-            running_loss += loss.item()
-
-            if batch_index > 0 and batch_index % MINI_BATCH_SIZE == 0:
-                running_loss /= MINI_BATCH_SIZE
-
-                print( "Epoch #{:d}, batch #{:d} loss: {:g}".format(
-                    epoch_index + 1,
-                    batch_index + 1,
-                    running_loss ), flush=True )
-                loss_history.append( running_loss )
-
-                # Break out of the batch loop if we ever encounter an input
-                # that causes the loss to spike.  Training data generation
-                # should produce good inputs and outputs though should something
-                # slip through we want to immediately stop training so we can
-                # understand what went wrong - there is no way to recover
-                # from a loss spike that is O(10) when our target loss is O(1e-4).
-                if running_loss > 10:
-                    print( "Crazy loss!" )
-                    print( inputs, outputs )
-                    break
-
-                running_loss = 0.0
-        else:
-            # We finished all of the batches.  Adjust the learning rate and
-            # go to the next epoch.
-            for parameter_group in optimizer.param_groups:
-                parameter_group["lr"] /= 2
-
-            continue
-
-        # We didn't complete all of the batches in this epoch.
-        break
-
-    # Handle the case where we didn't have enough data to complete a mini-batch.
-    if len( loss_history ) == 0:
-        running_loss /= number_epochs * NUMBER_BATCHES
-        loss_history.append( running_loss )
-
-        print( "Epoch #{:d}, batch #{:d} loss: {:g}".format(
-            number_epochs,
-            NUMBER_BATCHES,
-            running_loss ) )
-
-    return loss_history
-
-def do_iterative_inference_df( df, model, device ):
-    """
-    Estimates single droplet parameters iteratively using a specific model.  Model evaluation is
-    performed on the CPU
-
-    Evalutes iteratively, using the output time/radius for the (n-1)th time for the n-th time 
-    Takes 4 arguments:
-    
-      input_parameters - NumPy array, sized 1x6, containing the
-                         input parameters for a single droplet.  These are
-                         provided in their natural, physical ranges.
-      times            - Integration times to evaluate each droplet at.
-      model            - PyTorch model to use.
-      device           - XXX
-    
-    Returns 1 value:
-    
-      output_parameters - NumPy array, sized len(times) x 2, containing the
-                          estimated radius and temperature for the droplet
-                          at the specified integraition times.  These are in their
-                          natural physical ranges.
-
-    """
-
-    eval_model = model.to( device )
-    eval_model.eval()
-
-    normalized_data = df[["normalized input radius",
-                        "normalized input temperature",
-                        "normalized salinity",
-                        "normalized air temperature",
-                        "normalized relative humidity",
-                        "normalized air density",
-                        "time", 
-                        "normalized output radius",
-                        "normalized output temperature"]].to_numpy()
-
-    background_input = normalized_data[0, 2:]
-    dynamic_input = normalized_data[0, :2] 
-
-    normalized_outputs = np.zeros((len(normalized_data),2))
-
-    for i in range(1, len(normalized_data)):
-      dt = normalized_data[i, 6] - normalized_data[i-1, 6]
-
-      normalized_input = np.hstack(( dynamic_input, background_input , dt )).astype( "float32" )
-      normalized_outputs[i] = eval_model( torch.from_numpy( normalized_input ).to( device ) ).to( "cpu" ).detach().numpy()
-
-      dynamic_input = normalized_outputs[i]
-    
-      background_input = normalized_outputs[i, 2:]
-
-    return scale_droplet_parameters( normalized_outputs )
-  
 def do_iterative_inference( initial_input_parameters, times, model, device ):
     """
     Estimates single droplet parameters iteratively using a specific model.  Model evaluation is
@@ -690,10 +489,10 @@ module droplet_model
     !
     real*4, parameter :: RADIUS_LOG_RANGE(2)      = [{radius_start:.1f}, {radius_end:.1f}]
     real*4, parameter :: TEMPERATURE_RANGE(2)     = [{temperature_start:.1f}, {temperature_end:.1f}]
-    real*4, parameter :: SALINITY_LOG_RANGE(2)    = [{salinity_start:.1f}, {salinity_end:.1f}]
+    real*4, parameter :: SALINITY_LOG_RANGE(2)    = [{salinity_start:.2f}, {salinity_end:.2f}]
     real*4, parameter :: AIR_TEMPERATURE_RANGE(2) = [{air_temperature_start:.1f}, {air_temperature_end:.1f}]
     real*4, parameter :: RH_RANGE(2)              = [{rh_start:.2f}, {rh_end:.2f}]
-    real*4, parameter :: RHOA_RANGE(2)            = [{rhoa_start:.1f}, {rhoa_end:.1f}]
+    real*4, parameter :: RHOA_RANGE(2)            = [{rhoa_start:.2f}, {rhoa_end:.2f}]
 
     real*4, parameter :: RADIUS_LOG_MEAN      = SUM( RADIUS_LOG_RANGE ) / 2
     real*4, parameter :: TEMPERATURE_MEAN     = SUM( TEMPERATURE_RANGE ) / 2
@@ -1045,10 +844,31 @@ end subroutine estimate
         # Write out the end of the module.
         write_module_epilog( model_state, output_fp )
 
-def do_iterative_inference_particle_df( df, iterations, model, device ):
+def do_iterative_inference_NTLP_data( df, iterations, model, device ):
     """
-    currently per particle
-    an output of zero flags no result
+    Estimates droplet parameters iteratively using a specific model.  Model evaluation is
+    performed on the CPU
+
+    Evalutes iteratively, using the output time/radius for the (n-1)th time for the n-th time. Background
+    parameters are tracked with the DataFrame for each time step. Evalutes for `iterations` steps for each
+    row of the dataframe.
+
+    Takes 4 arguments:
+    
+      df                  - normalized Pandas DataFrame from `read_NTLP_data` and
+                            `normalize_NTLP_data`.
+      iterations          - number of iterations to do per row of the data frame
+      model               - PyTorch model to use.
+      device              - device to evaluate on
+    
+    Returns 1 value:
+    
+      output_parameters   - NumPy array, sized len(df) x 2, containing the
+                            estimated radius and temperature for the droplet
+                            after `iteartions` time steps.  These are in their
+                            normalized in the range [-1,1]
+
+    
     """
     
     eval_model = model.to( device )
@@ -1062,11 +882,11 @@ def do_iterative_inference_particle_df( df, iterations, model, device ):
                         "normalized air density",
                         "integration time"]].to_numpy()
 
-    dynamic_inputs = np.zeros(shape=(iterations,2)) 
+    dynamic_inputs = np.zeros(shape=(iterations,2), dtype=np.float32) 
 
     buffer_index = 0
 
-    outputs = np.zeros((len(normalized_data),2))
+    outputs = np.zeros((len(normalized_data),2), dtype=np.float32)
 
     # Populate
     for i in range(iterations):

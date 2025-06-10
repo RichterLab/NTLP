@@ -1,29 +1,73 @@
+import multiprocessing
+
 import matplotlib.pyplot as plt
 import numpy as np
 import torch
 from scipy.integrate import solve_ivp
 
 from .data import create_droplet_batch, read_training_file
-from .models import do_inference, do_iterative_inference
-from .physics import dydt
-from .physics import timed_solve_ivp, DROPLET_TIME_LOG_RANGE
+from .models import do_inference, do_iterative_inference, do_iterative_inference_NTLP_data
+from .physics import dydt, scale_droplet_parameters
+from .physics import timed_solve_ivp, DROPLET_TIME_LOG_RANGE, normalize_droplet_parameters
 
+def parallel_analyze_model_iterative_performance_NTLP_data( model, df, iterations, device, cores=64 ):
+    """
+    Calculates the model output by integrating along with each particle's
+    background conditions for `iterations` time steps. Groups the dataset
+    by processor that spawned each particle and then pools these jobs
+    onto `cores` workers.
+    
+    Takes 4 arguments:
+    
+      model            - PyTorch model to compare against the ODEs.
+      input_parameters - Pandas DataFrame obtained from data.readNTLP
+      iterations       - Integer, number of time steps to iterate through
+                         for each input.
+      cores            - Integer, number of workers to parallelize across.
+    
+    Returns:
+      output           - NumPy array of output radii and temperatures
+                         after `iterations` time steps, shaped 2 x len(df) 
+    
+    """
+    print("Sorting data")
+    df.sort_values(by=['time', 'particle id', 'processor'], ascending=[True,True,True], inplace=True)
+    processor_groups = df.groupby("processor")
+
+    print("Integrating data")
+    inputs = [(dataset, iterations, model, device) for _,dataset in processor_groups]
+
+    with multiprocessing.Pool(processes=cores) as pool:
+        results = np.vstack(pool.starmap(do_iterative_inference_NTLP_data, inputs))
+    
+    # TODO trim
+
+    print("Scaling data")
+    scaled_results = scale_droplet_parameters(results)
+
+    return scaled_results
 
 def analyze_model_iterative_performance( model, input_parameters = None, dt = 0.05, final_time=10.0, figure_size=None ):
     """
     Creates a figure with four plots to qualitatively assess the supplied model's
-    performance on a single droplet's parameters.  For both the radius and
+    iterative performance on a single droplet's parameters. For both the radius and
     temperature variables the ODE outputs are plotted against the model's estimates.
     Additionally, the relative and absolute differences of each variable are
     plotted so fine-grained differences in the solutions can be reviewed.
-    
-    XXX: This should return the normalized RMSE for radius and temperature.
+
+    The model output is calculated iteratively. For instance, if `dt=0.5`, the model
+    output radius/temperature from the input parameters for `dt=0.5` will be used as 
+    the input to calculate the radius/temperature for `t=1` and so on.
     
     Takes 3 arguments:
     
       model            - PyTorch model to compare against the ODEs.
       input_parameters - Optional NumPy array of input parameters to evaluate performance
                          on.  If omitted, a random set of input parameters are sampled.
+                         The last four parameters will be fixed throughout the integration
+                         while the first two will be replace with the model output
+                         at each time step.
+      final_time       - Optional float fixing how long to integrate out to in seconds
       figure_size      - Optional sequence, of length 2, containing the width
                          and height of the figure created.  If omitted, defaults
                          to something big enough to comfortably assess a single
@@ -143,19 +187,26 @@ def analyze_model_iterative_performance( model, input_parameters = None, dt = 0.
 
     fig_h.tight_layout()
 
-def mse_score_models(models, file_name, device, weighted=False):
+def mse_score_models(models, file_name, device, weighted=False, normalized=False):
     """
-    Calculates mean square error on a model for a dataset
+    Calculates the mean square error on an array of models for a dataset
 
-    Takes 2 arguments:
+    Takes 5 arguments:
 
-      models            - List of models to be evaluated
-      file_name         - Path to training data
-      device            - Device to perform calculation on
+      models          - List of PyTorch models to be evaluated
+      file_name       - String, path to training data
+      device          - String, Device to perform model evaluation on
+      weighted        - Optional boolean, defaults to False, if True,
+                        weights MSE loss by the reciprocal of the
+                        integration time.
+      normalized      - Optional boolean, defaults to False, if True,
+                        normalizes droplet parameters before
+                        calculating MSE loss 
 
-    Returns 1 values:
+    Returns 1 value:
+      losses          - NumPy array, length # of models, MSE loss for
+                        each model on the provided data set.
 
-      average_losses    - Numpy float64 array. Average MSE loss for dataset for each model.
     """
 
     
@@ -169,7 +220,7 @@ def mse_score_models(models, file_name, device, weighted=False):
     number_droplets = len(input_parameters)
     number_batches = (number_droplets + BATCH_SIZE + 1) // BATCH_SIZE
 
-    running_losses = np.zeros(len(models),dtype=np.float64)
+    losses = np.zeros(len(models),dtype=np.float64)
     for batch_index in range( number_batches ):
         if batch_index != (number_batches - 1):
             batch_size = BATCH_SIZE
@@ -189,12 +240,18 @@ def mse_score_models(models, file_name, device, weighted=False):
         # need be
         for i in range(len(models)):
             inferred_outputs = do_inference(inputs, times, models[i], device)
-            if (weighted):
-                running_losses[i] += np.sum((current_weights*(inferred_outputs - target_outputs))**2)
+            if (normalized):
+                error = normalize_droplet_parameters(inferred_outputs) - normalize_droplet_parameters(target_outputs)
             else:
-                running_losses[i] += np.sum((inferred_outputs - target_outputs)**2)
+                error = inferred_outputs - target_outputs
+            if (weighted):
+                losses[i] += np.sum((current_weights*error)**2)
+            else:
+                losses[i] += np.sum(error**2)
 
-    return running_losses/number_droplets
+    losses /= number_droplets
+
+    return losses
 
 def plot_droplet_size_temperature( size_temperatures, times ):
     """

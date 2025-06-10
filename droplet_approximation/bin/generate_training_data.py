@@ -18,7 +18,7 @@ NUMBER_DROPLETS = 4*1024 * 1024
 #   8+DROPLET_TIME_LOG_RANGE(1) second integration of a droplet
 #   Meant generation fo data sets with small time ranges.
 
-NUMBER_SAMPLES = 1
+#NUMBER_SAMPLES = 1
 
 def main( argv ):
     """
@@ -34,7 +34,6 @@ def main( argv ):
 
     create_training_file( argv[1],
                           NUMBER_DROPLETS,
-                          NUMBER_SAMPLES,
                           weird_file_name=weird_file_name )
 
 
