@@ -3061,7 +3061,7 @@ CONTAINS
       real :: mod_magnus,exner,func_p_base
 
       integer :: i
-      integer :: successful_be_flag, be_dump_iu ! used for writing bdf values to buffer
+      integer :: failure_be_status, be_dump_iu ! used for writing bdf values to buffer
 
 
       !First fill extended velocity field for interpolation
@@ -3100,8 +3100,7 @@ CONTAINS
          part%Tp_old = part%Tp
          part%radius_old = part%radius
 
-         successful_be_flag = 0
-         
+         failure_be_status = 0
       
          if (iwritebe .eq. 1 .and. mod(part%pidx, 2) .eq. 0) then
             be_write_buffer_index = be_write_buffer_index + 1 
@@ -3211,15 +3210,27 @@ CONTAINS
                !part%radius,part%qinf,part%Tp,part%Tf,part%xp(3), &
                !part%kappa_s,part%m_s,part%vp(1),part%vp(2),part%vp(3), &
                !part%res,part%sigm_s,rt_zeroes(1),rt_zeroes(2)
-                
+
+                   if( flag == 1 ) then
+                       failure_be_status = 1
+                   else if( isnan( rt_zeroes(1) ) ) then
+                       failure_be_status = 2
+                   else if( rt_zeroes(1)*part%radius < 0 ) then
+                       failure_be_status = 3
+                   else if( isnan( rt_zeroes(2) ) ) then
+                       failure_be_status = 4
+                   else if( rt_zeroes(2) < 0 ) then
+                       failure_be_status = 5
+                   else if( rt_zeroes(1)*part%radius > 1.0e-2 ) then
+                       failure_be_status = 6
+                   end if
+
                 flag = 1
                 numimpos = numimpos + 1  !How many have failed?
                 !If they failed (should be very small number), radius,
                 !temp remain unchanged
                 rt_zeroes(1) = 1.0
                 rt_zeroes(2) = part%Tf/part%Tp
-               else
-                  successful_be_flag = 1
 
                end if
 
@@ -3260,7 +3271,7 @@ CONTAINS
        end if 
 
        if (iwritebe .eq. 1 .and. mod(part%pidx, 2) .eq. 0) then
-            be_int32_write_buffer(2,be_write_buffer_index) = successful_be_flag
+            be_int32_write_buffer(2,be_write_buffer_index) = failure_be_status
        endif
 
 

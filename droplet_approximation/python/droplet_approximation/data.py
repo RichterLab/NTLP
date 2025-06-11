@@ -524,12 +524,15 @@ def read_NTLP_data( file_name ):
     
     df.sort_values(by=['particle id', 'time'], ascending=True, inplace=True)
 
-    # Calculate outputs and dt, set to 0 if be failed or new particle
-    calculate_output_flags = df["be flag"] * (df["particle id"].diff(periods = -1) == 0)   
+    # Calculate outputs and dt, set to 0 if be failed or new particle.
+    #
+    # NOTE: Failed backward Euler is denoted as a non-zero value.
+    #
+    calculate_output_flags = (df["be flag"] == 0) * (df["particle id"].diff(periods = -1) == 0)
 
-    df["integration time"] = -df["time"].diff(periods = -1) * calculate_output_flags
-    df["output radius"] = df["input radius"].shift(periods = -1) * calculate_output_flags
-    df["output temperature"] = df["input temperature"].shift(periods = -1) * calculate_output_flags
+    df["integration time"]   = calculate_output_flags * -df["time"].diff(periods = -1)
+    df["output radius"]      = calculate_output_flags *  df["input radius"].shift(periods = -1)
+    df["output temperature"] = calculate_output_flags *  df["input temperature"].shift(periods = -1)
 
 
     return df
