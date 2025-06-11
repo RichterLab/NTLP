@@ -28,7 +28,7 @@ module particles
   integer :: num100=0, numimpos=0
   integer :: denum, actnum, tdenum, tactnum
   integer :: num_destroy=0,tnum_destroy=0
-  integer :: tot_reintro=0
+  integer :: tot_reintro=0,tot_reintro_accum=0
 
   real :: Rep_avg,part_grav(3)
   real :: radavg,radmin,radmax,radmsqr,tempmin,tempmax,qmin,qmax
@@ -2194,6 +2194,8 @@ CONTAINS
       write(*,*) 'proc',myid,'read in numpart:',myp
       if (myid==0) write(*,*) 'total number of particles read:',totalp
 
+      !XXX: update tnumpart?
+
   end subroutine read_part_res
 
   subroutine particle_reintro
@@ -2224,6 +2226,7 @@ CONTAINS
 
             my_reintro = nprime*(1./60.)*(10.**6.)*dt*4/numprocs*real(it_delay) !4m^3 (vol chamber)
             tot_reintro = my_reintro*numprocs
+            tot_reintro_accum = tot_reintro_accum + tot_reintro
 
             if (myid==0) write(*,*) 'time,tot_reintro:',time,tot_reintro
 
@@ -2693,6 +2696,7 @@ CONTAINS
 
        !Total number of droplets actually being introduced (potentially diff. from totdrops due to roundoff)
        tot_reintro = my_reintro*numprocs
+       tot_reintro_accum = tot_reintro_accum + tot_reintro
        if (myid==0) write(*,*) 'time,tot_reintro:',time,tot_reintro
 
 
@@ -3875,17 +3879,22 @@ CONTAINS
 
       call mpi_allreduce(mpi_in_place,statsvec0_int,num0_int,mpi_integer,mpi_sum,mpi_comm_world,ierr)
 
+      !
+      ! NOTE: tnumpart, tnumdrop, and tnumaerosol are current counts and not
+      !       deltas that were added this timestep.  We do not need to
+      !       accumulate them like the others.
+      !
       tnumpart = statsvec0_int(1)
       tnumdrop = statsvec0_int(2)
       tnumaerosol = statsvec0_int(3)
-      tdenum = statsvec0_int(4)
-      tactnum = statsvec0_int(5)
-      tnum_destroy = statsvec0_int(6)
-      tnum100 = statsvec0_int(7)
-      tnumimpos = statsvec0_int(8)
 
+      ! Accumulate deltas from the previous timestamp into our running sums.
       tnum_destroy_accum = tnum_destroy_accum + tnum_destroy
-
+      tdenum = tdenum + statsvec0_int(4)
+      tactnum = tactnum + statsvec0_int(5)
+      tnum_destroy = tnum_destroy + statsvec0_int(6)
+      tnum100 = tnum100 + statsvec0_int(7)
+      tnumimpos = tnumimpos + statsvec0_int(8)
 
       !Compute sums of real quantities
       statsvec0_real(1) = myRep_avg

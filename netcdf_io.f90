@@ -522,12 +522,12 @@ subroutine write_his_netcdf
       call netcdf_check( nf90_put_var(ncid, tnumpart_vid, real(tnumpart),start=(/his_counter/)) )
       call netcdf_check( nf90_put_var(ncid, tnumdrop_vid, real(tnumdrop),start=(/his_counter/)) )
       call netcdf_check( nf90_put_var(ncid, tnumaerosol_vid, real(tnumaerosol),start=(/his_counter/)) )
-      call netcdf_check( nf90_put_var(ncid, tnum_destroy_vid, real(tnum_destroy_accum),start=(/his_counter/)) )
+      call netcdf_check( nf90_put_var(ncid, tnum_destroy_vid, real(tnum_destroy),start=(/his_counter/)) )
       call netcdf_check( nf90_put_var(ncid, tdenum_vid, real(tdenum),start=(/his_counter/)) )
       call netcdf_check( nf90_put_var(ncid, tactnum_vid, real(tactnum),start=(/his_counter/)) )
       call netcdf_check( nf90_put_var(ncid, tnum100_vid, real(tnum100),start=(/his_counter/)) )
       call netcdf_check( nf90_put_var(ncid, tnumimpos_vid, real(tnumimpos),start=(/his_counter/)) )
-      call netcdf_check( nf90_put_var(ncid, tot_reintro_vid, real(tot_reintro),start=(/his_counter/)) )
+      call netcdf_check( nf90_put_var(ncid, tot_reintro_vid, real(tot_reintro_accum),start=(/his_counter/)) )
       call netcdf_check( nf90_put_var(ncid, Tsfc_vid, real(tsfcc(1)),start=(/his_counter/)) )
       call netcdf_check( nf90_put_var(ncid, qsfc_vid, real(tsfcc(2)),start=(/his_counter/)) )
       call netcdf_check( nf90_put_var(ncid, wtsfc_vid, real(wtsfc(1)),start=(/his_counter/)) )
@@ -638,7 +638,19 @@ subroutine write_his_netcdf
 
 
       !Reset some cumulative quantities
+      ! XXX: this is no longer effectively used
       tnum_destroy_accum = 0
+      tot_reintro_accum = 0
+      tnum_destroy = 0
+      tdenum = 0
+      tactnum = 0
+      tnum_destroy = 0
+      tnum100 = 0
+      tnumimpos = 0
+      tnumpart = 0
+      tnumdrop = 0
+      tnumaerosol = 0
+
       his_counter = his_counter + 1
 
 end subroutine write_his_netcdf
