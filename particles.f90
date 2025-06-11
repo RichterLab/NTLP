@@ -73,9 +73,24 @@ module particles
   integer, parameter :: NUMBER_RADIUS_STEPS=1024
   real :: radval(NUMBER_RADIUS_STEPS)
 
-  integer(kind=4) :: be_int32_write_buffer (2,60000,64) ! ASSUMING 64 cores!!
-  real(kind=4) :: be_float32_write_buffer (7,60000,64) ! ASSUMING 64 cores and 60,000 max!!
-  integer :: be_write_buffer_index (64)
+
+  integer, parameter :: NUMBER_BE_BUFFER_INT_32S = 2
+  ! [1] Particle index = pidx + (rank x numprocs)
+  ! [2] be_flag = 1 if BE converges, 0 otherwise
+  integer, parameter :: NUMBER_BE_BUFFER_FLOAT_32S = 7
+  ! [1] Particle radius
+  ! [2] Particle temperature
+  ! [3] Particle Salinity
+  ! [4] Ambient Temperature
+  ! [5] Relative Humidity
+  ! [6] Air Density
+  ! [7] Time
+  integer, parameter :: BE_BUFFER_LENGTH = 6000
+
+  integer(kind=4) :: be_int32_write_buffer (NUMBER_BE_BUFFER_INT_32S, BE_BUFFER_LENGTH)
+  real(kind=4) :: be_float32_write_buffer (NUMBER_BE_BUFFER_FLOAT_32S, BE_BUFFER_LENGTH)
+
+  integer :: be_write_buffer_index
 
 
   !REMEMBER: IF ADDING ANYTHING, MUST UPDATE MPI DATATYPE!
@@ -1788,7 +1803,7 @@ CONTAINS
       integer :: values(8)
       integer :: idx,ierr
 
-      integer :: be_dump_istat, be_dump_id, be_dump_iu
+      integer :: be_dump_istat, be_dump_iu
       character*4 :: be_id_char
       character(len=80) :: be_dump_filename
 
@@ -1837,10 +1852,9 @@ CONTAINS
          be_write_buffer_index = 0
          be_float32_write_buffer = 0
          be_int32_write_buffer = 0
-         be_dump_id = myid + 1
-         be_dump_iu = 300 + be_dump_id
+         be_dump_iu = 300 + myid 
 
-         write(be_id_char,'(i4.4)') be_dump_id
+         write(be_id_char,'(i4.4)') myid
          be_dump_filename = trim(adjustl(path_seed))//"particle_traj/be_dump_"//be_id_char//".data"
 
          OPEN(unit=be_dump_iu, file=be_dump_filename, access="stream", status="REPLACE", action="WRITE", form="UNFORMATTED", iostat=be_dump_istat)
@@ -3047,7 +3061,7 @@ CONTAINS
       real :: mod_magnus,exner,func_p_base
 
       integer :: i
-      integer :: successful_be_flag, be_dump_id, be_dump_iu ! used for writing bdf values to buffer
+      integer :: successful_be_flag, be_dump_iu ! used for writing bdf values to buffer
 
 
       !First fill extended velocity field for interpolation
@@ -3068,10 +3082,9 @@ CONTAINS
 
       ! If dumping be data, initialize buffer indexes
       if (iwritebe .eq. 1) then
-         be_dump_id = myid + 1
-         be_dump_iu = 300 + be_dump_id
+         be_dump_iu = 300 + myid 
 
-         be_write_buffer_index(be_dump_id) = 0
+         be_write_buffer_index = 0
          i = 0
       end if
 
@@ -3090,18 +3103,18 @@ CONTAINS
          successful_be_flag = 0
          
       
-         if (iwritebe .eq. 1 .and. mod(part%pidx, 5) .eq. 0) then
-            be_write_buffer_index(be_dump_id) = be_write_buffer_index(be_dump_id) + 1 
+         if (iwritebe .eq. 1 .and. mod(part%pidx, 2) .eq. 0) then
+            be_write_buffer_index = be_write_buffer_index + 1 
 
-            be_int32_write_buffer(1,be_write_buffer_index(be_dump_id),be_dump_id) = 100*part%pidx + part%procidx
+            be_int32_write_buffer(1,be_write_buffer_index) = numprocs*part%pidx + part%procidx
 
-            be_float32_write_buffer(1,be_write_buffer_index(be_dump_id),be_dump_id) = time
-            be_float32_write_buffer(2,be_write_buffer_index(be_dump_id),be_dump_id) = part%radius
-            be_float32_write_buffer(3,be_write_buffer_index(be_dump_id),be_dump_id) = part%Tp
-            be_float32_write_buffer(4,be_write_buffer_index(be_dump_id),be_dump_id) = part%m_s
-            be_float32_write_buffer(5,be_write_buffer_index(be_dump_id),be_dump_id) = part%Tf
-            be_float32_write_buffer(6,be_write_buffer_index(be_dump_id),be_dump_id) = part%qinf/(Mw*mod_magnus(part%Tf)/Ru/part%Tf) ! formula for RH
-            be_float32_write_buffer(7,be_write_buffer_index(be_dump_id),be_dump_id) = rhoa
+            be_float32_write_buffer(1,be_write_buffer_index) = time
+            be_float32_write_buffer(2,be_write_buffer_index) = part%radius
+            be_float32_write_buffer(3,be_write_buffer_index) = part%Tp
+            be_float32_write_buffer(4,be_write_buffer_index) = part%m_s
+            be_float32_write_buffer(5,be_write_buffer_index) = part%Tf
+            be_float32_write_buffer(6,be_write_buffer_index) = part%qinf/(Mw*mod_magnus(part%Tf)/Ru/part%Tf) ! formula for RH
+            be_float32_write_buffer(7,be_write_buffer_index) = rhoa
          endif                                                                                                                                      
          
        !First, interpolate to get the fluid velocity part%uf(1:3):
@@ -3247,7 +3260,7 @@ CONTAINS
        end if 
 
        if (iwritebe .eq. 1 .and. mod(part%pidx, 2) .eq. 0) then
-            be_int32_write_buffer(2,be_write_buffer_index(be_dump_id),be_dump_id) = successful_be_flag
+            be_int32_write_buffer(2,be_write_buffer_index) = successful_be_flag
        endif
 
 
@@ -3337,11 +3350,11 @@ CONTAINS
       call end_phase(measurement_id_particle_stats)
 
       ! Dump data to the myid file
-      if (iwritebe .eq. 1 .and. be_write_buffer_index(be_dump_id) .gt. 0) then
+      if (iwritebe .eq. 1 .and. be_write_buffer_index .gt. 0) then
          ! Annoying inefficient - rewrite later
-         do i = 1,be_write_buffer_index(be_dump_id)
-            write(be_dump_iu) be_int32_write_buffer(:, i, be_dump_id)
-            write(be_dump_iu) be_float32_write_buffer(:, i, be_dump_id)
+         do i = 1,be_write_buffer_index
+            write(be_dump_iu) be_int32_write_buffer(:, i)
+            write(be_dump_iu) be_float32_write_buffer(:, i)
          enddo
       endif
 
