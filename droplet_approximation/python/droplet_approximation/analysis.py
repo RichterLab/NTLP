@@ -212,15 +212,15 @@ def mse_score_models(models, file_name, device, weighted=False, normalized=False
     
     input_parameters, output_parameters, integration_times = read_training_file( file_name )
 
-    weights = 10**((DROPLET_TIME_LOG_RANGE[0]+DROPLET_TIME_LOG_RANGE[1])/2.0)*np.reciprocal(integration_times) # normalizes the reciprocal logarithmically
-    weights = np.stack((weights,weights), axis=-1) # Temporarily increasing weighting on radius since its harder to learn
+    weights = 10**( ( DROPLET_TIME_LOG_RANGE[0]+DROPLET_TIME_LOG_RANGE[1] ) / 2.0 ) * np.reciprocal( integration_times ) # normalizes the reciprocal logarithmically
+    weights = np.stack( ( weights, weights ), axis=-1 ) # Temporarily increasing weighting on radius since its harder to learn
 
     BATCH_SIZE = 1024*10
 
-    number_droplets = len(input_parameters)
-    number_batches = (number_droplets + BATCH_SIZE + 1) // BATCH_SIZE
+    number_droplets = len( input_parameters )
+    number_batches = ( number_droplets + BATCH_SIZE + 1 ) // BATCH_SIZE
 
-    losses = np.zeros(len(models),dtype=np.float64)
+    losses = np.zeros( shape=(len(models),2),dtype=np.float64)
     for batch_index in range( number_batches ):
         if batch_index != (number_batches - 1):
             batch_size = BATCH_SIZE
@@ -243,11 +243,11 @@ def mse_score_models(models, file_name, device, weighted=False, normalized=False
             if (normalized):
                 error = normalize_droplet_parameters(inferred_outputs) - normalize_droplet_parameters(target_outputs)
             else:
-                error = inferred_outputs - target_outputs
+                error = np.array([np.log10(inferred_outputs[:,0]/target_outputs[:,0]), inferred_outputs[:,1] - target_outputs[:,1]])
             if (weighted):
-                losses[i] += np.sum((current_weights*error)**2)
+                losses[i] += ((current_weights*error)**2).sum(axis=1)
             else:
-                losses[i] += np.sum(error**2)
+                losses[i] += (error**2).sum(axis=1)
 
     losses /= number_droplets
 
