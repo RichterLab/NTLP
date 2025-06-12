@@ -7,8 +7,6 @@ import numpy as np
 
 from droplet_approximation.data import *
 
-number_epochs = 7
-
 def main( argv ):
     if len( argv ) != 3:
         print("Usage: <input_path> <output_path>")
@@ -17,7 +15,7 @@ def main( argv ):
     be_dump_path = argv[1]
     data_save_path = argv[2]
 
-    df = read_NTLP_file(be_dump_path)
+    df = read_NTLP_data(be_dump_path)
 
     temperature_range = [df["input temperature"].quantile(0.00005),df["input temperature"].quantile(0.99995)]
     radius_range = [1.99e-7, df["input radius"].quantile(0.99995)]
