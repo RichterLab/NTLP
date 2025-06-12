@@ -3067,6 +3067,7 @@ CONTAINS
       integer :: i
       integer :: failure_be_status, be_dump_iu ! used for writing bdf values to buffer
 
+      logical :: keep_particle_flag
 
       !First fill extended velocity field for interpolation
       call start_phase(measurement_id_particle_fill_ext)
@@ -3106,7 +3107,18 @@ CONTAINS
 
          failure_be_status = 0
       
-         if (iwritebe .eq. 1 .and. mod(part%pidx, 2) .eq. 0) then
+         ! Keep every other particle.
+         !
+         ! NOTE: We have to be careful in selecting a subset of particles to
+         !       avoid introducing bias in the particles retained.  Filtering
+         !       out particles on every rank (via the local particle index) is
+         !       fine as they're randomly distributed through in this ranks
+         !       vertical volume.  Filtering particles by rank will result in
+         !       localized pockets of particles with gaps in between.
+         !
+         keep_particle_flag = (mod(part%pidx, 2) .eq. 0)
+
+         if (iwritebe .eq. 1 .and. keep_particle_flag ) then
             be_write_buffer_index = be_write_buffer_index + 1 
 
             be_int32_write_buffer(1,be_write_buffer_index) = numprocs*part%pidx + part%procidx
@@ -3274,7 +3286,7 @@ CONTAINS
 
        end if 
 
-       if (iwritebe .eq. 1 .and. mod(part%pidx, 2) .eq. 0) then
+       if (iwritebe .eq. 1 .and. keep_particle_flag) then
             be_int32_write_buffer(2,be_write_buffer_index) = failure_be_status
        endif
 
