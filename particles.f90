@@ -3105,34 +3105,7 @@ CONTAINS
          part%Tp_old = part%Tp
          part%radius_old = part%radius
 
-         failure_be_status = 0
-      
-         ! Keep every other particle.
-         !
-         ! NOTE: We have to be careful in selecting a subset of particles to
-         !       avoid introducing bias in the particles retained.  Filtering
-         !       out particles on every rank (via the local particle index) is
-         !       fine as they're randomly distributed through in this ranks
-         !       vertical volume.  Filtering particles by rank will result in
-         !       localized pockets of particles with gaps in between.
-         !
-         keep_particle_flag = (mod(part%pidx, iwritebe_proportion) .eq. 0)
-
-         if (iwritebe .eq. 1 .and. keep_particle_flag ) then
-            be_write_buffer_index = be_write_buffer_index + 1 
-
-            be_int32_write_buffer(1,be_write_buffer_index) = numprocs*part%pidx + part%procidx
-
-            be_float32_write_buffer(1,be_write_buffer_index) = time
-            be_float32_write_buffer(2,be_write_buffer_index) = part%radius
-            be_float32_write_buffer(3,be_write_buffer_index) = part%Tp
-            be_float32_write_buffer(4,be_write_buffer_index) = part%m_s
-            be_float32_write_buffer(5,be_write_buffer_index) = part%Tf
-            be_float32_write_buffer(6,be_write_buffer_index) = part%qinf/(Mw*mod_magnus(part%Tf)/Ru/part%Tf) ! formula for RH
-            be_float32_write_buffer(7,be_write_buffer_index) = rhoa
-         endif                                                                                                                                      
-         
-       !First, interpolate to get the fluid velocity part%uf(1:3):
+        !First, interpolate to get the fluid velocity part%uf(1:3):
         if (ilin .eq. 1) then
            call uf_interp_lin   !Use trilinear interpolation
         else
@@ -3176,7 +3149,34 @@ CONTAINS
         xp3i = part%xp(3)   !Store this to do flux calculation
 
 
-	!Now start updating particle position, velocity, temperature, radius
+        !Now start updating particle position, velocity, temperature, radius
+
+         failure_be_status = 0
+
+         ! Keep the portion of particles requested.
+         !
+         ! NOTE: We have to be careful in selecting a subset of particles to
+         !       avoid introducing bias in the particles retained.  Filtering
+         !       out particles on every rank (via the local particle index) is
+         !       fine as they're randomly distributed through in this ranks
+         !       vertical volume.  Filtering particles by rank will result in
+         !       localized pockets of particles with gaps in between.
+         !
+         keep_particle_flag = (mod(part%pidx, iwritebe_proportion) .eq. 0)
+
+         if (iwritebe .eq. 1 .and. keep_particle_flag ) then
+            be_write_buffer_index = be_write_buffer_index + 1
+
+            be_int32_write_buffer(1,be_write_buffer_index) = numprocs*part%pidx + part%procidx
+
+            be_float32_write_buffer(1,be_write_buffer_index) = time
+            be_float32_write_buffer(2,be_write_buffer_index) = part%radius
+            be_float32_write_buffer(3,be_write_buffer_index) = part%Tp
+            be_float32_write_buffer(4,be_write_buffer_index) = part%m_s
+            be_float32_write_buffer(5,be_write_buffer_index) = part%Tf
+            be_float32_write_buffer(6,be_write_buffer_index) = part%qinf/(Mw*mod_magnus(part%Tf)/Ru/part%Tf) ! formula for RH
+            be_float32_write_buffer(7,be_write_buffer_index) = rhoa
+         endif
 
         !implicitly calculates next velocity and position
         part%xp(1:3) = part%xp(1:3) + dt*part%vp(1:3)
