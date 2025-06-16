@@ -9,7 +9,9 @@ from .analysis import analyze_model_performance, \
                       analyze_model_iterative_performance, \
                       parallel_analyze_model_iterative_performance_NTLP_data, \
                       plot_droplet_size_temperature, \
-                      mse_score_models
+                      analyze_model_particle_performance, \
+                      standard_distance, \
+                      calculate_nrmse
 from .data import clean_training_data, \
                   create_droplet_batch, \
                   create_training_file, \
@@ -24,8 +26,7 @@ from .models import SimpleNet, \
                     generate_fortran_module, \
                     train_model, \
                     weighted_mse_loss, \
-                    do_iterative_inference, \
-                    do_iterative_inference_NTLP_data
+                    do_iterative_inference
 from .physics import DROPLET_AIR_TEMPERATURE_RANGE, \
                      DROPLET_RADIUS_LOG_RANGE, \
                      DROPLET_RELATIVE_HUMIDITY_RANGE, \

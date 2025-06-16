@@ -2,6 +2,8 @@ import numpy as np
 import torch
 import torch.nn as nn
 
+
+from scipy.integrate import solve_ivp
 from .data import read_training_file
 from .physics import DROPLET_AIR_TEMPERATURE_RANGE, \
                      DROPLET_RADIUS_LOG_RANGE, \
@@ -10,6 +12,7 @@ from .physics import DROPLET_AIR_TEMPERATURE_RANGE, \
                      DROPLET_SALINITY_LOG_RANGE, \
                      DROPLET_TEMPERATURE_RANGE, \
                      normalize_droplet_parameters, \
+                     dydt,\
                      scale_droplet_parameters
 
 class ResidualNet( nn.Module ):
@@ -102,6 +105,9 @@ def weighted_mse_loss( inputs, targets, weights ):
                     coefficients for each difference
     """
     return ( weights * ( ( inputs - targets ) ** 2) ).mean()
+
+
+
 
 def train_model( model, criterion, optimizer, device, number_epochs, training_file ):
     """
@@ -253,48 +259,48 @@ def train_model( model, criterion, optimizer, device, number_epochs, training_fi
 
     return loss_history
 
-def do_iterative_inference( initial_input_parameters, times, model, device ):
-    """
-    Estimates single droplet parameters iteratively using a specific model.  Model evaluation is
-    performed on the CPU
-
-    Evalutes iteratively, using the output time/radius for the (n-1)th time for the n-th time 
-    Takes 4 arguments:
-    
-      input_parameters - NumPy array, sized 1x6, containing the
-                         input parameters for a single droplet.  These are
-                         provided in their natural, physical ranges.
-      times            - Integration times to evaluate each droplet at.
-      model            - PyTorch model to use.
-      device           - XXX
-    
-    Returns 1 value:
-    
-      output_parameters - NumPy array, sized len(times) x 2, containing the
-                          estimated radius and temperature for the droplet
-                          at the specified integraition times.  These are in their
-                          natural physical ranges.
-
-    """
-
-    eval_model = model.to( device )
-    eval_model.eval()
-
-    scaled_input_parameters = normalize_droplet_parameters( initial_input_parameters )
-
-    background_input = scaled_input_parameters[2:]
-    dynamic_input = scaled_input_parameters[:2]
-
-    normalized_outputs = np.zeros((len(times),2))
-
-    for i in range(1, len(times)):
-      dt = times[i] - times[i-1]
-      normalized_input = np.hstack(( dynamic_input, background_input , dt )).astype( "float32" )
-      dynamic_input = eval_model( torch.from_numpy( normalized_input ).to( device ) ).to( "cpu" ).detach().numpy()
-      normalized_outputs[i] = dynamic_input
-
-    return scale_droplet_parameters( normalized_outputs )
-
+#def do_iterative_inference( initial_input_parameters, times, model, device ):
+#    """
+#    Estimates single droplet parameters iteratively using a specific model.  Model evaluation is
+#    performed on the CPU
+#
+#    Evalutes iteratively, using the output time/radius for the (n-1)th time for the n-th time 
+#    Takes 4 arguments:
+#    
+#      input_parameters - NumPy array, sized 1x6, containing the
+#                         input parameters for a single droplet.  These are
+#                         provided in their natural, physical ranges.
+#      times            - Integration times to evaluate each droplet at.
+#      model            - PyTorch model to use.
+#      device           - XXX
+#    
+#    Returns 1 value:
+#    
+#      output_parameters - NumPy array, sized len(times) x 2, containing the
+#                          estimated radius and temperature for the droplet
+#                          at the specified integraition times.  These are in their
+#                          natural physical ranges.
+#
+#    """
+#
+#    eval_model = model.to( device )
+#    eval_model.eval()
+#
+#    scaled_input_parameters = normalize_droplet_parameters( initial_input_parameters )
+#
+#    background_input = scaled_input_parameters[2:]
+#    dynamic_input = scaled_input_parameters[:2]
+#
+#    normalized_outputs = np.zeros((len(times),2))
+#
+#    for i in range(1, len(times)):
+#      dt = times[i] - times[i-1]
+#      normalized_input = np.hstack(( dynamic_input, background_input , dt )).astype( "float32" )
+#      dynamic_input = eval_model( torch.from_numpy( normalized_input ).to( device ) ).to( "cpu" ).detach().numpy()
+#      normalized_outputs[i] = dynamic_input
+#
+#    return scale_droplet_parameters( normalized_outputs )
+#
 
 
 def do_inference( input_parameters, times, model, device ):
@@ -895,29 +901,76 @@ end subroutine estimate
         # Write out the end of the module.
         write_module_epilog( model_state, output_fp )
 
-def do_iterative_inference_NTLP_data( df, iterations, model, device ):
+def do_iterative_bdf( input_parameters, times, device ):
     """
-    Estimates droplet parameters iteratively using a specific model.  Model evaluation is
-    performed on the CPU
+    Estimates a particle trajectory along given background inputs. Requires all inputs to be sorted
+    with respect to time.
 
     Evalutes iteratively, using the output time/radius for the (n-1)th time for the n-th time. Background
-    parameters are tracked with the DataFrame for each time step. Evalutes for `iterations` steps for each
-    row of the dataframe.
+    parameters are tracked with `input_parameters[2:]` for each time step. 
 
     Takes 4 arguments:
     
-      df                  - normalized Pandas DataFrame from `read_NTLP_data` and
-                            `normalize_NTLP_data`.
-      iterations          - number of iterations to do per row of the data frame
+      input_parameters    - NumPy array, sized number_time_steps x 6, containing the
+                            input parameters for a single particle in order by time.
+                            These are provided in their natural, physical ranges.
+      times               - NumPy array, shaped 1 x data length containing
+                                the time at each step.
       model               - PyTorch model to use.
       device              - device to evaluate on
     
-    Returns 1 value:
+    Writes 1 value:
     
       output_parameters   - NumPy array, sized len(df) x 2, containing the
-                            estimated radius and temperature for the droplet
-                            after `iteartions` time steps.  These are in their
-                            normalized in the range [-1,1]
+                            estimated trajectory of a particle integrated
+                            along its background parameters with the MLP
+                            in natural ranges. Does NOT calculate
+                            output for the last column so that the lengths
+                            of the input and output match
+
+    
+    """
+    
+
+    integration_times = np.diff(times)
+
+    outputs = np.zeros( ( len( input_parameters ), 2 ), dtype=np.float32 )
+
+    outputs[0] = input_parameters[0, :2]
+
+    # Evaluate
+    for i in range( 1, len( input_parameters ) ):
+        outputs[i] = solve_ivp( dydt, [0, integration_times[i - 1]], outputs[i - 1], method="BDF", t_eval=[integration_times[i-1]], args=(input_parameters[i-1, 2:],) ).y[:, 0]
+
+    return outputs
+
+#
+def do_iterative_inference( input_parameters, times, model, device ):
+    """
+    Estimates a particle trajectory along given background inputs. Requires all inputs to be sorted
+    with respect to time.
+
+    Evalutes iteratively, using the output time/radius for the (n-1)th time for the n-th time. Background
+    parameters are tracked with `input_parameters[2:]` for each time step. 
+
+    Takes 4 arguments:
+    
+      input_parameters    - NumPy array, sized number_time_steps x 6, containing the
+                            input parameters for a single particle in order by time.
+                            These are provided in their natural, physical ranges.
+      times               - NumPy array, shaped 1 x data length containing
+                                the time at each step.
+      model               - PyTorch model to use.
+      device              - device to evaluate on
+    
+    Writes 1 value:
+    
+      output_parameters   - NumPy array, sized len(df) x 2, containing the
+                            estimated trajectory of a particle integrated
+                            along its background parameters with the MLP
+                            in natural ranges. Does NOT calculate
+                            output for the last column so that the lengths
+                            of the input and output match
 
     
     """
@@ -925,39 +978,94 @@ def do_iterative_inference_NTLP_data( df, iterations, model, device ):
     eval_model = model.to( device )
     eval_model.eval()
 
-    normalized_data = df[["normalized input radius",
-                        "normalized input temperature",
-                        "normalized salinity",
-                        "normalized air temperature",
-                        "normalized relative humidity",
-                        "normalized air density",
-                        "integration time"]].to_numpy()
+    normalized_data = normalize_droplet_parameters( input_parameters )
+    integration_times = np.diff(times)
 
-    dynamic_inputs = np.zeros(shape=(iterations,2), dtype=np.float32) 
+    outputs = np.zeros( ( len( normalized_data ), 2 ), dtype=np.float32 )
 
-    buffer_index = 0
+    outputs[0] = normalized_data[0, :2]
 
-    outputs = np.zeros((len(normalized_data),2), dtype=np.float32)
-
-    # Populate
-    for i in range(iterations):
-        dynamic_inputs[i] = normalized_data[i, :2]
-        background_input = normalized_data[i, 2:]
-
-        normalized_inputs = np.hstack(( dynamic_inputs[:i+1], 
-                                     np.tile(background_input, (i+1, 1) ))).astype( "float32" )
-        dynamic_inputs[:i+1] = eval_model( torch.from_numpy( normalized_inputs ).to( device ) ).detach().numpy()
+    normalized_inputs = np.concat( ( outputs[0], 
+                                     normalized_data[0, 2:],
+                                     [ integration_times[0] ] ) ).astype( "float32" )
 
     # Evaluate
-    for i in range(iterations, len(normalized_data)-1):
-        outputs[i - iterations] = dynamic_inputs[buffer_index]
-        dynamic_inputs[buffer_index] = normalized_data[i, :2]
-        buffer_index = (buffer_index + 1) % iterations
+    for i in range( 1, len(normalized_data) ):
+        outputs[i] = eval_model( torch.from_numpy( normalized_inputs ).to( device ) ).detach().numpy()
 
-        normalized_inputs = np.hstack(( dynamic_inputs, 
-                                     np.tile(background_input, (iterations, 1) ))).astype( "float32" )
+        if i < len(normalized_data) - 1:
+            normalized_inputs = np.concat( ( outputs[i], 
+                                        normalized_data[i, 2:],
+                                        [integration_times[i]] ) ).astype( "float32" )
 
-        dynamic_inputs = eval_model( torch.from_numpy( normalized_inputs ).to( device ) ).detach().numpy()
-        background_input = normalized_data[i, 2:]
+    return scale_droplet_parameters( outputs )
 
-    return outputs
+#def do_iterative_inference_NTLP_data( df, iterations, model, device ):
+#    """
+#    Estimates droplet parameters iteratively using a specific model.  Model evaluation is
+#    performed on the CPU
+#
+#    Evalutes iteratively, using the output time/radius for the (n-1)th time for the n-th time. Background
+#    parameters are tracked with the DataFrame for each time step. Evalutes for `iterations` steps for each
+#    row of the dataframe.
+#
+#    Takes 4 arguments:
+#    
+#      df                  - normalized Pandas DataFrame from `read_NTLP_data` and
+#                            `normalize_NTLP_data`.
+#      iterations          - number of iterations to do per row of the data frame
+#      model               - PyTorch model to use.
+#      device              - device to evaluate on
+#    
+#    Writes 1 value:
+#    
+#      output_parameters   - NumPy array, sized len(df) x 2, containing the
+#                            estimated radius and temperature for the droplet
+#                            after `iteartions` time steps.  These are in their
+#                            normalized in the range [-1,1]
+#                            Stored on `df['mlp output radius']` and
+#                            `df['mlp output radius']`.
+#
+#    
+#    """
+#    
+#    eval_model = model.to( device )
+#    eval_model.eval()
+#
+#    normalized_data = df[["normalized input radius",
+#                        "normalized input temperature",
+#                        "normalized salinity",
+#                        "normalized air temperature",
+#                        "normalized relative humidity",
+#                        "normalized air density",
+#                        "integration time"]].to_numpy()
+#
+#    dynamic_inputs = np.zeros(shape=(iterations,2), dtype=np.float32) 
+#
+#    buffer_index = 0
+#
+#    outputs = np.zeros((len(normalized_data),2), dtype=np.float32)
+#
+#    # Populate
+#    for i in range(iterations):
+#        dynamic_inputs[i] = normalized_data[i, :2]
+#        background_input = normalized_data[i, 2:]
+#
+#        normalized_inputs = np.hstack(( dynamic_inputs[:i+1], 
+#                                     np.tile(background_input, (i+1, 1) ))).astype( "float32" )
+#        dynamic_inputs[:i+1] = eval_model( torch.from_numpy( normalized_inputs ).to( device ) ).detach().numpy()
+#
+#    # Evaluate
+#    for i in range(iterations, len(normalized_data)-1):
+#        outputs[i - iterations] = dynamic_inputs[buffer_index]
+#        dynamic_inputs[buffer_index] = normalized_data[i, :2]
+#        buffer_index = (buffer_index + 1) % iterations
+#
+#        normalized_inputs = np.hstack(( dynamic_inputs, 
+#                                     np.tile(background_input, (iterations, 1) ))).astype( "float32" )
+#
+#        dynamic_inputs = eval_model( torch.from_numpy( normalized_inputs ).to( device ) ).detach().numpy()
+#        background_input = normalized_data[i, 2:]
+#
+#    df["mlp output radius"] = outputs[:, 0]
+#    df["mlp output temperature"] = outputs[:, 1]

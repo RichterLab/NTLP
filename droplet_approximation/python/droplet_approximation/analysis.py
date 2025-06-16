@@ -6,7 +6,7 @@ import torch
 from scipy.integrate import solve_ivp
 
 from .data import create_droplet_batch, read_training_file
-from .models import do_inference, do_iterative_inference, do_iterative_inference_NTLP_data
+from .models import do_inference, do_iterative_inference
 from .physics import dydt, scale_droplet_parameters
 from .physics import timed_solve_ivp, DROPLET_TIME_LOG_RANGE, normalize_droplet_parameters
 
@@ -392,6 +392,170 @@ def analyze_model_performance( model, input_parameters=None, figure_size=None ):
 
     # Truth vs model predictions.
     ax_h[0][0].plot( t_eval, truth_output[:, 0], TRUTH_COLOR,
+                     t_eval, model_output[:, 0], MODEL_COLOR )
+    ax_h[0][1].plot( t_eval, truth_output[:, 1], TRUTH_COLOR,
+                     t_eval, model_output[:, 1], MODEL_COLOR )
+
+    # Relative difference between truth and model.
+    ax_h[1][0].plot( t_eval,
+                     np.abs( truth_output[:, 0] - model_output[:, 0] ) / truth_output[:, 0] * 100,
+                     color=RELATIVE_COLOR )
+    ax_h[1][0].tick_params( axis="y", labelcolor=RELATIVE_COLOR )
+    ax_h[1][1].plot( t_eval,
+                     np.abs( truth_output[:, 1] - model_output[:, 1] ) / truth_output[:, 1] * 100,
+                     color=RELATIVE_COLOR )
+    ax_h[1][1].tick_params( axis="y", labelcolor=RELATIVE_COLOR )
+
+    # Aboslute difference between truth and model.
+    ax_h_twin_radius = ax_h[1][0].twinx()
+    ax_h_twin_radius.plot( t_eval, np.abs( truth_output[:, 0] - model_output[:, 0] ), color=ABSOLUTE_COLOR )
+    ax_h_twin_radius.set_ylabel( "Absolute Difference (m)" )
+    ax_h_twin_radius.tick_params( axis="y", labelcolor=ABSOLUTE_COLOR )
+
+    ax_h_twin_temperature = ax_h[1][1].twinx()
+    ax_h_twin_temperature.plot( t_eval, np.abs( truth_output[:, 1] - model_output[:, 1] ), color=ABSOLUTE_COLOR )
+    ax_h_twin_temperature.set_ylabel( "Absolute Difference (K)" )
+    ax_h_twin_temperature.tick_params( axis="y", labelcolor=ABSOLUTE_COLOR )
+
+    # Label the comparison plots' lines.
+    ax_h[0][0].legend( ["Truth", "Model"] )
+    ax_h[0][1].legend( ["Truth", "Model"] )
+
+    # Label the columns of plots.
+    ax_h[0][0].set_title( "Radius" )
+    ax_h[0][1].set_title( "Temperature" )
+
+    ax_h[0][0].set_ylabel( "Radius (m)" )
+    ax_h[0][1].set_ylabel( "Temperature (K)" )
+    ax_h[1][0].set_ylabel( "Relative Difference (%)" )
+    ax_h[1][0].set_xlabel( "Time (s)" )
+    ax_h[1][1].set_ylabel( "Relative Difference (%)" )
+    ax_h[1][1].set_xlabel( "Time (s)" )
+
+    # Show time in log-scale as well as the droplets' radius.
+    ax_h[0][0].set_xscale( "log" )
+    ax_h[0][0].set_yscale( "log" )
+    ax_h[0][1].set_xscale( "log" )
+    ax_h[0][1].set_yscale( "log" )
+    ax_h[1][0].set_xscale( "log" )
+    ax_h[1][1].set_xscale( "log" )
+
+    fig_h.tight_layout()
+
+def standard_distance( truth_output, model_output ):
+    """
+    Calculates the "distance" between the `mlp` output and the true output
+    on a dataframe. Uses the absolute value of the difference between the log
+    of both output radii and the absolute value of the difference between the
+    two output temperatures. Requires a dataframe with the mlp output.
+
+    Takes 1 argument:
+      truth_output        - NumPy array, shaped number 2 x time steps containing:
+                                the backwards euler radius output at index 0
+                                the backwards euler temperature output at index 1
+      model_output        - NumPy array, shaped number 2 x time steps containing:
+                                the MLP radius output at index 0
+                                the MLP temperature output at index 1
+    
+    Returns:
+      NTLP_distance_data  - NumPy array, shaped data 2 x time steps containing:
+                                the absolute value of the difference of the 
+                                    log of the output radii at index 0
+                                the absolute value difference of 
+                                    of the output temperatures at index 1
+                                
+    """
+
+    return np.array([
+        np.abs( np.log10( model_output[:, 0] / truth_output[:, 0] ) ),
+        np.abs( model_output[:, 1] - truth_output[:, 1] )
+    ]).T
+
+def calculate_nrmse( truth_output, model_output, distance_function ):
+    distances = distance_function( truth_output, model_output )
+    return np.sqrt( np.mean( distances[:, 0]**2 ) ) / np.abs( np.mean( np.log10 ( truth_output[:, 0] ) ) ) + np.sqrt( np.mean( distances[:, 1]**2 ) ) / np.abs( np.mean( truth_output[:, 1] ) )
+
+def analyze_model_particle_performance( times, truth_output, model_output, distances, title_string = None, figure_size = None ):
+    """
+    Creates a figure with four plots to qualitatively assess the supplied model's
+    performance on a particular particle's trajectory from an NTLP dump. For both
+    the radius and temperature variables the ODE outputs are plotted against the 
+    model's estimates. 
+    
+
+    The NRMSE is calculated to assess overall model performance. Additionally, the 
+    relative and absolute differences of each variable are plotted so fine-grained 
+    differences in the solutions can be reviewed.
+
+    Requires a dataframe with both the mlp output and distance already calculated.
+
+    Takes 6 arguments:
+
+      model           - PyTorch model to compare against the ODEs.
+      times           - NumPy array, contains an array of the simulation
+                        times being analyzed 
+      truth_ouput     - NumPy array, shaped 2 x len( times ). Contains an
+                        array of the particle's actual radius and temperature
+                        at index 0 and 1 respectively.
+      model_output    - NumPy array, shaped 2 x len( times ). Contains an
+                        array of the particle's estimated radius and temperature
+                        at index 0 and 1 respectively.
+      distances       - NumPy array, shaped 2 x len( times ). Contains
+                        an array of the distance between the particle's true
+                        output and the MLP output.
+      title_string    - Optional string to append to plot title
+      figure_size     - Optional sequence, of length 2, containing the width
+                        and height of the figure created.  If omitted, defaults
+                        to something big enough to comfortably assess a single
+                        model's outputs.
+
+    Returns nothing.
+
+    """
+
+    # Default to something that fits a set of four plots (in a 2x2 grid) comfortably.
+    if figure_size is None:
+        figure_size = (9, 8)
+
+    # Specify the colors/styles in our plots.
+    TRUTH_COLOR    = "b"
+    MODEL_COLOR    = "r."
+    RELATIVE_COLOR = "darkmagenta"
+    ABSOLUTE_COLOR = "dodgerblue"
+
+    # Sort the dataframe by time
+    
+    t_eval = times
+    
+
+    # Compute the normalized RMSE across the entire time scale.
+    rmse_0 = np.sqrt( np.mean( distances[:, 0]**2 ) ) / np.abs( np.mean( np.log10 ( truth_output[:, 0] ) ) ) # TODO fix hard-coded log
+    rmse_1 = np.sqrt( np.mean( distances[:, 1]**2 ) ) / np.abs( np.mean( truth_output[:, 1] ) )
+
+
+    # Compute the normalized RMSE for different regions (DNS and LES) for
+    # finer-grained performance assessment.
+    #t_eval_mask = np.empty( (number_time_points, 4),
+    #                        dtype=np.bool_ )
+    #t_eval_mask[:, 0] = (t_eval  < 1e-2)
+    #t_eval_mask[:, 1] = (t_eval >= 1e-2) & (t_eval < 1e-1)
+    #t_eval_mask[:, 2] = (t_eval >= 1e-1) & (t_eval < 1e0)
+    #t_eval_mask[:, 3] = (t_eval >= 1e0)
+
+    #rmse_0 = np.empty( (4,), dtype=np.float32 )
+    #rmse_1 = np.empty( (4,), dtype=np.float32 )
+
+    #for scale_index in np.arange( t_eval_mask.shape[1] ):
+    #    rmse_0[scale_index] = np.sqrt( np.mean( (truth_output[t_eval_mask[:, scale_index], 0] - model_output[t_eval_mask[:, scale_index], 0])**2 ) ) / np.mean( truth_output[t_eval_mask[:, scale_index], 0] )
+    #    rmse_1[scale_index] = np.sqrt( np.mean( (truth_output[t_eval_mask[:, scale_index], 1] - model_output[t_eval_mask[:, scale_index], 1])**2 ) ) / np.mean( truth_output[t_eval_mask[:, scale_index], 1] )
+
+
+    # Create our figure and embed the parameters that were evaluated.
+    fig_h, ax_h = plt.subplots( 2, 2, figsize=figure_size )
+    fig_h.suptitle( "Droplet Size and Temperature\nRadius NRMSE={:g}%, Temperature NRMSE={:g}%\n{}".format( rmse_0 * 100, rmse_1 * 100, title_string) )
+
+    # Truth vs model predictions.
+    ax_h[0][0].plot( t_eval, truth_output[:, 0], TRUTH_COLOR, 
                      t_eval, model_output[:, 0], MODEL_COLOR )
     ax_h[0][1].plot( t_eval, truth_output[:, 1], TRUTH_COLOR,
                      t_eval, model_output[:, 1], MODEL_COLOR )
