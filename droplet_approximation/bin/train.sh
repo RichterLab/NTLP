@@ -14,26 +14,18 @@
 conda activate NTLP
 
 training_script="./train_network.py"
-cleaning_script="./clean_data.py"
-tmp_data_dir="/scratch365/dcolange/pi_chamber/particle_traj/"
-data_file="../data/data_file_NTLP_uncoupled_400M.parquet"
-clean_data_file="../data/data_file_NTLP_uncoupled_400M_stripped.data"
-network_file="../models/uncoupled_mse_checkpoints/network_NTLP_uncoupled_400M.pth"
-droplet_file="../models/uncoupled_mse_checkpoints/droplet_model_NTLP_uncoupled_400M.f90"
+#cleaning_script="./clean_data.py"
+#tmp_data_dir="/scratch365/dcolange/pi_chamber/particle_traj/"
+tmp_data_dir="../data/tmp"
+data_file="../data/data_file_box_coupled_400M_stripped.data"
+#clean_data_file="../data/data_file_NTLP_uncoupled_400M_stripped.data"
+network_file="../models/coupled_epoch_checkpoints/network_box_coupled_400M_l1.pth"
+droplet_file="../models/coupled_epoch_checkpoints/droplet_model_box_coupled_400M_l1.f90"
 
-#rm $tmp_data_dir/*.dat
 #cat $tmp_data_dir/* > $data_file
 
 #python3 ${cleaning_script} ${data_file} ${clean_data_file}
-python3 ${training_script} ${clean_data_file} ${network_file} ${droplet_file} -e
+#python3 ${training_script} ${clean_data_file} ${network_file} ${droplet_file} -e
+python3 ${training_script} ${data_file} ${network_file} ${droplet_file} -e
 
-cp ${droplet_file} ../../droplet_model.f90
-cd ../../
-
-make ARCH=avx2
-
-cd test_cases/pi_chamber
-
-qsub pi_chamber.run
-
-# Todo automate cleaning of data
+# Todo automate running data

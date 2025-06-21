@@ -42,7 +42,8 @@ def main( argv ):
     #     leaning heavily on just a subset of weights)
     #
     model     = SimpleNet()
-    criterion = nn.MSELoss()
+    criterion = nn.L1Loss()
+    #criterion = nn.MSELoss()
     optimizer = torch.optim.Adam( model.parameters(), lr=1.0e-3, weight_decay=1e-6 )
     
     # Move the model to the device we're training with.
@@ -64,9 +65,9 @@ def main( argv ):
                 i,
                 len( loss_history ) ) ) 
 
-            epoch_model_save_path = "_epoch_{:n}.pth".format( i ).join(
+            epoch_model_save_path = "_epoch_{:n}.pth".format( i + 1 ).join(
                 model_save_path.split(".pth") )
-            epoch_droplet_model_save_path = "_epoch_{:n}.f90".format( i ).join(
+            epoch_droplet_model_save_path = "_epoch_{:n}.f90".format( i + 1 ).join(
                 droplet_model_save_path.split(".f90") )
 
             torch.save( model.state_dict(), epoch_model_save_path )

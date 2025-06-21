@@ -11,7 +11,7 @@ import sys
 from droplet_approximation import create_training_file
 
 # XXX
-NUMBER_DROPLETS = 4*1024 * 1024
+NUMBER_DROPLETS = 1024*1536
 
 # If 1, generate data normally.
 # If > 1, will sample NUMBER_SAMPLES points logarithmically from a

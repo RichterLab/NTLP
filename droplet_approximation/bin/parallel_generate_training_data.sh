@@ -13,7 +13,8 @@
 # (e.g. cat *.data > combined.data).
 
 # This allows us to run locally installed python packages
-module unload python
+
+conda activate NTLP
 
 # Script that generates the training data.
 GENERATOR=./generate_training_data.py

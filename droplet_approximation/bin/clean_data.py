@@ -24,7 +24,10 @@ def main( argv ):
             (df["output temperature"] < temperature_range[1]) & 
             (df["input temperature"] > temperature_range[0]) & 
             (df["input temperature"] < temperature_range[1]) &
+            (df["output radius"] > radius_range[0]) & 
             (df["output radius"] < radius_range[1]) & 
+            (df["input radius"] > radius_range[0]) & 
+            (df["input radius"] < radius_range[1]) & 
             (df["air density"] == 1.0) & 
             (df["relative humidity"] < 5.0)][["input radius", "input temperature", "salinity", "air temperature", "relative humidity", "air density", "integration time", "output radius", "output temperature"]].to_numpy(dtype=np.float32)
 

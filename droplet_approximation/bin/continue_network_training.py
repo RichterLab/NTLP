@@ -14,7 +14,6 @@ configs = [[1,1.0e-8, True]]
 #        [3,0.4e-8, False],
 #        [3,0.4e-8, True]]
 #
-number_epochs = 3
 
 def main( argv ):
     if len( argv ) != 6:
@@ -49,8 +48,8 @@ def main( argv ):
     #
     model     = SimpleNet()
     model.load_state_dict(torch.load(model_load_path))
-    # criterion = nn.MSELoss()
-    criterion = weighted_mse_loss
+    criterion = nn.MSELoss()
+    #criterion = weighted_mse_loss
     if config[2]:
         optimizer = torch.optim.Adam( model.parameters(), lr=config[1], weight_decay=1.0e-6)
     else:
