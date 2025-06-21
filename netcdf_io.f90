@@ -1519,7 +1519,7 @@ character :: fformat*10, num*3
 
   !Tp PDF
   sumbuf_tp = hist_tp
-  call mpi_reduce(sumbuf_rad,hist_tp,num_entries,mpi_real8,mpi_sum,0,mpi_comm_world,ierr)
+  call mpi_reduce(sumbuf_tp,hist_tp,num_entries,mpi_real8,mpi_sum,0,mpi_comm_world,ierr)
 
   !Radius PDF at death
   sumbuf_raddeath = hist_raddeath
