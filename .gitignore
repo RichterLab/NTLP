@@ -5,6 +5,14 @@ case1
 *.sqlite
 *.mod
 *.o
+*.data
+*.pth
+droplet_model*.f90
+history*.nc
+histograms*.nc
+*.po*
+*.o*
+*.pyc
 benchmark_approximation.x
 droplet_approximation/data/*.data
 droplet_approximation/notebooks/foo.data
