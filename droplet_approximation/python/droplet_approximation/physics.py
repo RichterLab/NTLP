@@ -25,13 +25,13 @@ from scipy.integrate import solve_ivp
 
 # NARROW RANGES
 
-DROPLET_RADIUS_LOG_RANGE        = np.array( (-7.0, -4.2) )
-DROPLET_TEMPERATURE_RANGE       = np.array( (279, 305) )
+DROPLET_RADIUS_LOG_RANGE        = np.array( (-6.75, -4.25) )
+DROPLET_TEMPERATURE_RANGE       = np.array( (281, 300) )
 DROPLET_SALINITY_LOG_RANGE      = np.array( (-17.66, -17.65) )
-DROPLET_AIR_TEMPERATURE_RANGE   = np.array( (279, 305) )
-DROPLET_RELATIVE_HUMIDITY_RANGE = np.array( (0.85, 1.1) )
+DROPLET_AIR_TEMPERATURE_RANGE   = np.array( (281, 300) )
+DROPLET_RELATIVE_HUMIDITY_RANGE = np.array( (0.91, 1.09) )
 DROPLET_RHOA_RANGE              = np.array( (0.99, 1.01) )
-DROPLET_TIME_LOG_RANGE              = np.array( (-2.0, 0.0) )
+DROPLET_TIME_LOG_RANGE              = np.array( (-1.4,-0.75) )
 
 
 def dydt( t, y, parameters ):
