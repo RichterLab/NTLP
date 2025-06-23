@@ -41,7 +41,7 @@ def main( argv ):
     #     to encourage that (as well as having non-zero weights rather than
     #     leaning heavily on just a subset of weights)
     #
-    model     = SimpleNet()
+    model     = ResidualNet()
     criterion = nn.L1Loss()
     #criterion = nn.MSELoss()
     optimizer = torch.optim.Adam( model.parameters(), lr=1.0e-3, weight_decay=1e-6 )
