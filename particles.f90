@@ -3116,7 +3116,7 @@ CONTAINS
          !       vertical volume.  Filtering particles by rank will result in
          !       localized pockets of particles with gaps in between.
          !
-         keep_particle_flag = (mod(part%pidx, 2) .eq. 0)
+         keep_particle_flag = (mod(part%pidx, iwritebe_proportion) .eq. 0)
 
          if (iwritebe .eq. 1 .and. keep_particle_flag ) then
             be_write_buffer_index = be_write_buffer_index + 1 

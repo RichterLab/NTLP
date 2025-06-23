@@ -27,7 +27,7 @@ iHcouple=1  !iHcouple also controls TE couple
 ievap=1
 ineighbor=0
 icoalesce=0
-ipart_method=2   !1 = same RK3 as flow, 2 = backward Euler, 3 = MLP network
+ipart_method=3 !1 = same RK3 as flow, 2 = backward Euler, 3 = MLP ANN network, 4 = MLP ANN/BE performance evaluation
 ipartdiff = 0
 inewpart = 2  !1 = new particles have initial conditions defined below, random location in domain; 2 = same, but normal distributions of radius and kappa_s, given by radius_std and kappas_std; 3 = special setup for C-FOG and double lognormal of different type; 4 = crude sea spray setup
 icase = 1  !Special additions for certain cases. 0 = particles reflected at lower surface, 3 = setup for C-FOG, 4 = steady state LES sea spray setup
@@ -39,8 +39,9 @@ iviznetcdf = 1  !Set to 1 to slice viz files to netcdf format (WARNING: it's bee
 ihumiditycontrol = 0  !Adaptive humidity source/sink (used for Pi Chamber; subroutine humidity_control)
 ireintro=1   !Aerosol injection
 itrajout=1   !Write the particle trajectory files. Needs a directory within the scratch space, and each processor writes a file (requires postprocessing to stitch together)
-iwritebe=0   !Dump ALL input/output from backwards Euler into particles.data
-iseed_init=0 !0 for random seeding, any other number yields iseed_init + myid as the random seed for each processor
+iwritebe=0
+iwritebe_proportion=2 ! Writes 1/iwritebe_proportion of the particles to the trajectory. Bigger ==> smaller data dump.
+iseed_init=1
 /
 
 !Grid and domain parameters
