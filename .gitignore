@@ -22,3 +22,4 @@ lesmpi.a
 mach.file
 test_cases/*/cou.mp.*.out
 test_cases/*/test_case_*
+test_cases/pi_chamber/pi_chamber.run
