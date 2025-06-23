@@ -189,6 +189,7 @@ def analyze_model_iterative_performance( model, input_parameters = None, dt = 0.
 
 def mse_score_models(models, file_name, device, weighted=False, normalized=False):
     """
+    DEPRECIATED. Will be rewritten after merge with new methods writetn locally.
     Calculates the mean square error on an array of models for a dataset
 
     Takes 5 arguments:

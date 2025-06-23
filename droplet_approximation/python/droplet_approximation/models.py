@@ -9,9 +9,44 @@ from .physics import DROPLET_AIR_TEMPERATURE_RANGE, \
                      DROPLET_RHOA_RANGE, \
                      DROPLET_SALINITY_LOG_RANGE, \
                      DROPLET_TEMPERATURE_RANGE, \
-                     DROPLET_TIME_LOG_RANGE, \
                      normalize_droplet_parameters, \
                      scale_droplet_parameters
+
+class ResidualNet( nn.Module ):
+    """
+    4-layer multi-layer perceptron (MLP) with ReLU activations.  This aims to
+    balance parameter count vs computational efficiency so that inferencing with
+    it is faster than Gauss-Newton iterative solvers.
+
+    As opposed to the simple net, the residual net trains off the difference
+    between the input radius/temperature and output radius/temperature to improve
+    stability.
+    """
+
+    def __init__( self ):
+        super().__init__()
+
+        #
+        # NOTE: These sizes were chosen without any consideration other than creating
+        #       a small network (wrt parameter count) and should have good computational
+        #       efficiency (wrt memory alignment and cache lines).  No effort has been
+        #       spent to improve upon the initial guess.
+        #
+        self.fc1 = nn.Linear( 7, 32 )
+        self.fc2 = nn.Linear( 32, 32 )
+        self.fc3 = nn.Linear( 32, 32 )
+        self.fc4 = nn.Linear( 32, 2 )
+
+    def forward( self, x ):
+        out  = torch.relu( self.fc1( x ) )
+        out  = torch.relu( self.fc2( out ) )
+        out = torch.relu( self.fc3( out ) )
+        out = self.fc4( out )
+
+        out += x[..., 0:2]
+
+        return out
+
 
 class SimpleNet( nn.Module ):
     """
@@ -41,6 +76,19 @@ class SimpleNet( nn.Module ):
         x = self.fc4( x )
 
         return x
+
+def ode_residual(inputs, outputs, model):
+    drdt = torch.autograd.grad(outputs[:, 0], inputs, grad_outputs=torch.ones_like(outputs[:, 0]), create_graph=True)[0]
+    dTdt = torch.autograd.grad(outputs[:, 1], inputs, grad_outputs=torch.ones_like(outputs[:, 1]), create_graph=True)[0]
+
+    drdt *= np.diff(DROPLET_RADIUS_LOG_RANGE).astype(float) * ( 10 ** ((outputs[:, 0] * np.diff(DROPLET_RADIUS_LOG_RANGE).astype(float) / 2) + np.mean(DROPLET_RADIUS_LOG_RANGE).astype(float))) * 0.5 * np.log(10)
+    dTdt *= np.diff(DROPLET_TEMPERATURE_RANGE).astype(float) * 0.5
+
+    return [drdt, dTdt]
+
+    #target_ddt = dydt(0,
+    #                  scaled_inputs[:, :2],
+    #                  scaled_inputs[:, 2:])
 
 def weighted_mse_loss( inputs, targets, weights ):
     """
@@ -151,6 +199,7 @@ def train_model( model, criterion, optimizer, device, number_epochs, training_fi
 
             # Estimate the loss - using weights if needed
             loss = weighted_mse_loss( normalized_approximations, normalized_outputs, current_weights ) if criterion == weighted_mse_loss else criterion(normalized_approximations, normalized_outputs)
+        
 
             # Backwards pass and optimization.
             loss.backward()
@@ -165,6 +214,8 @@ def train_model( model, criterion, optimizer, device, number_epochs, training_fi
                     epoch_index + 1,
                     batch_index + 1,
                     running_loss ), flush=True )
+                print ( ( ( normalized_approximations - normalized_outputs ) ** 2).mean(axis = 0) ) 
+                print ( ( ( normalized_approximations - normalized_outputs ) ** 2).max(axis = 0) ) 
                 loss_history.append( running_loss )
 
                 # Break out of the batch loop if we ever encounter an input

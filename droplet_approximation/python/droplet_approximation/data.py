@@ -15,7 +15,7 @@ from .physics import DROPLET_RADIUS_LOG_RANGE, \
                      scale_droplet_parameters, \
                      timed_solve_ivp
 
-def create_droplet_batch( number_droplets, linear_time_flag=False, number_evaluations=1 ):
+def create_droplet_batch( number_droplets, linear_time_flag=False, number_evaluations=1, particle_temperature_distribution=None ):
     """
     Creates a batch of random droplets' input parameters, with t_final.  t_final is sampled
     from a slightly larger distribution than the anticipated use cases (spanning [1e-3, 1e1])
@@ -52,13 +52,18 @@ def create_droplet_batch( number_droplets, linear_time_flag=False, number_evalua
 
     Takes 3 arguments:
 
-      number_droplets    - Number of droplets to generate parameters for.
-      linear_time_flag   - Optional boolean specifying whether integration times should
-                           be sampled uniformly through the time range or log spaced.
-                           Defaults to False so that short term dynamics are captured.
-      number_evaluations - Optional number of integration times to evaluate each
-                           parameter at so that a temporal window can be learned.  If
-                           omitted defaults to a single point in time per parameter.
+      number_droplets                     - Number of droplets to generate parameters for.
+      linear_time_flag                    - Optional boolean specifying whether integration times should
+                                            be sampled uniformly through the time range or log spaced.
+                                            Defaults to False so that short term dynamics are captured.
+      number_evaluations                  - Optional number of integration times to evaluate each
+                                            parameter at so that a temporal window can be learned.  If
+                                            omitted defaults to a single point in time per parameter.
+      particle_temperature_distribution   - Optional tuple of two floats desribing the mean and location
+                                            for a normal distribution. This distribution will sample the
+                                            difference between particle temperature and air temperature.
+                                            If none, generate air temperature as usual.
+                        
 
     Returns 5 values:
 
@@ -85,6 +90,11 @@ def create_droplet_batch( number_droplets, linear_time_flag=False, number_evalua
     random_inputs     = np.empty( (number_droplets * number_evaluations, 6), dtype=np.float32 )
     random_inputs[::number_evaluations, :] = scale_droplet_parameters( np.reshape( np.random.uniform( -1, 1, number_droplets*6 ),
                                                                        (number_droplets, 6) ).astype( "float32" ) )
+
+    # Fix the particle temperature based on air temperature
+    if particle_temperature_distribution != None:
+        random_inputs[::number_evaluations, 1] = random_inputs[::number_evaluations, 3] + np.random.normal( loc = particle_temperature_distribution, scale = particle_temperature_distribution, size = number_droplets ) 
+
     # Duplicate each unique droplet parameter once for each evaluation.
     # This keeps them in parameter order.
     for droplet_index in np.arange( number_droplets ):
@@ -361,7 +371,7 @@ def write_weird_parameters_to_spreadsheet( file_name, weird_inputs, weird_output
             filtered_df = pd.DataFrame( weird_things_listified, columns=columns )
             filtered_df.to_excel( writer, sheet_name=sheet_name, index=False )
 
-def create_training_file( file_name, number_droplets, weird_file_name=None, user_batch_size=None ):
+def create_training_file( file_name, number_droplets, weird_file_name=None, user_batch_size=None, particle_temperature_distribution=None ):
     """
     Generates random droplet parameters, both inputs and their corresponding
     ODE outputs, and writes them as fixed-size binary records to a file.  This
@@ -386,15 +396,21 @@ def create_training_file( file_name, number_droplets, weird_file_name=None, user
 
     Takes 4 arguments:
 
-      file_name       - Path to the file to write the droplet parameters.  This
-                        is overwritten if it exists.
-      number_droplets - The number of droplets to generate.
-      weird_file_name - Optional path to write any weird parameters encountered
-                        during batch generation.  If specified an Excel spreadsheet
-                        file is written, otherwise weird parameters are silently
-                        ignored.
-      user_batch_size - Optional batch size specifying the number of parameters
-                        to generate at once.  If omitted, 
+      file_name                           - Path to the file to write the droplet parameters.  This
+                                            is overwritten if it exists.
+      number_droplets                     - The number of droplets to generate.
+      weird_file_name                     - Optional path to write any weird parameters encountered
+                                            during batch generation.  If specified an Excel spreadsheet
+                                            file is written, otherwise weird parameters are silently
+                                            ignored.
+      user_batch_size                     - Optional batch size specifying the number of parameters
+                                            to generate at once.  If omitted, 
+      particle_temperature_distribution   - Optional tuple of two floats desribing the mean and location
+                                            for a normal distribution. This distribution will sample the
+                                            difference between particle temperature and air temperature.
+                                            If none, generate air temperature as usual. Passed to
+                                            `create_droplet_batch`
+                        
     """
 
     # Balance the time it takes to generate a single batch vs the efficiency of
@@ -432,7 +448,7 @@ def create_training_file( file_name, number_droplets, weird_file_name=None, user
              outputs,
              times,
              batch_weird_inputs,
-             batch_weird_outputs) = create_droplet_batch( batch_size )
+             batch_weird_outputs) = create_droplet_batch( batch_size, particle_temperature_distribution=particle_temperature_distribution )
 
 
             # Track the weirdness for post-mortem analysis.

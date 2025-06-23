@@ -19,6 +19,7 @@ from .data import clean_training_data, \
                   normalize_NTLP_data, \
                   write_weird_parameters_to_spreadsheet
 from .models import SimpleNet, \
+                    ResidualNet, \
                     do_inference, \
                     generate_fortran_module, \
                     train_model, \

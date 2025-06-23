@@ -13,7 +13,7 @@ from scipy.integrate import solve_ivp
 # the big parameters (e.g. temperature).  As a result, we use log-scale
 # for the parameters that have a large dynamic range.
 
-#LARGE RANGES
+# End goal ranges
 
 #DROPLET_RADIUS_LOG_RANGE        = np.array( (-8, -3) )
 #DROPLET_TEMPERATURE_RANGE       = np.array( (273, 310) )
@@ -23,15 +23,16 @@ from scipy.integrate import solve_ivp
 #DROPLET_RHOA_RANGE              = np.array( (0.8, 1.2) )
 #DROPLET_TIME_LOG_RANGE              = np.array( (-2.0, 1.0) )
 
-# NARROW RANGES
+# NTLP Coupled Ranges (Radius might be unnecesarily large on the bottom end of the range)
 
-DROPLET_RADIUS_LOG_RANGE        = np.array( (-6.75, -4.25) )
-DROPLET_TEMPERATURE_RANGE       = np.array( (281, 300) )
+DROPLET_RADIUS_LOG_RANGE        = np.array( (-7.00, -4.25) )
+DROPLET_TEMPERATURE_RANGE       = np.array( (279, 301) )
 DROPLET_SALINITY_LOG_RANGE      = np.array( (-17.66, -17.65) )
-DROPLET_AIR_TEMPERATURE_RANGE   = np.array( (281, 300) )
+DROPLET_AIR_TEMPERATURE_RANGE   = np.array( (279, 301) )
 DROPLET_RELATIVE_HUMIDITY_RANGE = np.array( (0.91, 1.09) )
 DROPLET_RHOA_RANGE              = np.array( (0.99, 1.01) )
 DROPLET_TIME_LOG_RANGE              = np.array( (-1.4,-0.75) )
+
 
 
 def dydt( t, y, parameters ):
