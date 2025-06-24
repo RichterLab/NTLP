@@ -297,11 +297,11 @@ def train_model( model, criterion, optimizer, device, number_epochs, training_fi
 #
 #    normalized_outputs = np.zeros( (len( times ), 2) )
 #
-#    for i in range( 1, len( times ) ):
-#        dt                    = times[i] - times[i-1]
-#        normalized_input      = np.hstack( (dynamic_input, background_input , dt) ).astype( "float32" )
-#        dynamic_input         = eval_model( torch.from_numpy( normalized_input ).to( device ) ).to( "cpu" ).detach().numpy()
-#        normalized_outputs[i] = dynamic_input
+#    for iteration_index in range( 1, len( times ) ):
+#        dt                                  = times[iteration_index] - times[iteration_index-1]
+#        normalized_input                    = np.hstack( (dynamic_input, background_input , dt) ).astype( "float32" )
+#        dynamic_input                       = eval_model( torch.from_numpy( normalized_input ).to( device ) ).to( "cpu" ).detach().numpy()
+#        normalized_outputs[iteration_index] = dynamic_input
 #
 #    return scale_droplet_parameters( normalized_outputs )
 
@@ -934,20 +934,19 @@ def do_iterative_bdf( input_parameters, times ):
 
     integration_times = np.diff( times )
 
-    outputs = np.zeros( (len( input_parameters ), 2), dtype=np.float32 )
-
-    outputs[0] = input_parameters[0, :2]
+    output_parameters    = np.zeros( (len( input_parameters ), 2), dtype=np.float32 )
+    output_parameters[0] = input_parameters[0, :2]
 
     # Evaluate
-    for i in range( 1, len( input_parameters ) ):
-        outputs[i] = solve_ivp( dydt,
-                                [0, integration_times[i - 1]],
-                                outputs[i - 1],
-                                method="BDF",
-                                t_eval=[integration_times[i-1]],
-                                args=(input_parameters[i-1, 2:],) ).y[:, 0]
+    for time_index in range( 1, len( input_parameters ) ):
+        output_parameters[time_index] = solve_ivp( dydt,
+                                                   [0, integration_times[time_index - 1]],
+                                                   output_parameters[time_index - 1],
+                                                   method="BDF",
+                                                   t_eval=[integration_times[time_index-1]],
+                                                   args=(input_parameters[time_index-1, 2:],) ).y[:, 0]
 
-    return outputs
+    return output_parameters
 
 def do_iterative_inference( input_parameters, times, model, device ):
     """
@@ -985,9 +984,23 @@ def do_iterative_inference( input_parameters, times, model, device ):
     normalized_data   = normalize_droplet_parameters( input_parameters )
     integration_times = np.diff( times )
 
-    outputs = np.zeros( (len( normalized_data ), 2), dtype=np.float32 )
+    output_parameters = np.zeros( (len( normalized_data ), 2), dtype=np.float32 )
 
-    outputs[0] = normalized_data[0, :2]
+    output_parameters[0] = normalized_data[0, :2]
+    normalized_inputs    = np.concat( (output_parameters[0],
+                                       normalized_data[0, 2:],
+                                       [integration_times[0]] ) ).astype( "float32" )
+
+    # Evaluate
+    for time_index in range( 1, len( normalized_data ) ):
+        output_parameters[time_index] = eval_model( torch.from_numpy( normalized_inputs ).to( device ) ).detach().numpy()
+
+        if time_index < len( normalized_data ) - 1:
+            normalized_inputs = np.concat( (output_parameters[time_index],
+                                            normalized_data[time_index, 2:],
+                                            [integration_times[time_index]] ) ).astype( "float32" )
+
+    return scale_droplet_parameters( output_parameters )
 
 #def do_iterative_inference_NTLP_data( df, iterations, model, device ):
 #    """
@@ -1030,28 +1043,29 @@ def do_iterative_inference( input_parameters, times, model, device ):
 #                          "integration time"]].to_numpy()
 #
 #    dynamic_inputs = np.zeros( shape=(iterations, 2), dtype=np.float32 )
-#
 #    outputs = np.zeros( (len( normalized_data ), 2), dtype=np.float32 )
 #
 #    # Populate
-#    for i in range( iterations ):
-#        dynamic_inputs[i] = normalized_data[i, :2]
-#        background_input  = normalized_data[i, 2:]
+#    for iteration_index in range( iterations ):
+#        dynamic_inputs[iteration_index] = normalized_data[iteration_index, :2]
+#        background_input                = normalized_data[iteration_index, 2:]
 #
-#        normalized_inputs = np.hstack( (dynamic_inputs[:i+1],
-#                                        np.tile( background_input, (i+1, 1) )) ).astype( "float32" )
-#        dynamic_inputs[:i+1] = eval_model( torch.from_numpy( normalized_inputs ).to( device ) ).detach().numpy()
+#        normalized_inputs                  = np.hstack( (dynamic_inputs[:iteration_index+1],
+#                                                         np.tile( background_input,
+#                                                                  (iteration_index+1, 1) )) ).astype( "float32" )
+#        dynamic_inputs[:iteration_index+1] = eval_model( torch.from_numpy( normalized_inputs ).to( device ) ).detach().numpy()
 #
 #    # Evaluate
-#    for i in range( iterations, len( normalized_data ) - 1 ):
-#        outputs[i - iterations]      = dynamic_inputs[buffer_index]
-#        dynamic_inputs[buffer_index] = normalized_data[i, :2]
-#        buffer_index                 = (buffer_index + 1) % iterations
+#    for iteration_index in range( iterations, len( normalized_data ) - 1 ):
+#        outputs[iteration_index - iterations] = dynamic_inputs[buffer_index]
+#        dynamic_inputs[buffer_index]          = normalized_data[iteration_index, :2]
+#        buffer_index                          = (buffer_index + 1) % iterations
 #
 #        normalized_inputs = np.hstack( (dynamic_inputs,
-#                                        np.tile( background_input, (iterations, 1) )) ).astype( "float32" )
+#                                        np.tile( background_input,
+#                                                 (iterations, 1) )) ).astype( "float32" )
 #
 #        dynamic_inputs   = eval_model( torch.from_numpy( normalized_inputs ).to( device ) ).detach().numpy()
-#        background_input = normalized_data[i, 2:]
+#        background_input = normalized_data[iteration_index, 2:]
 #
 #    return outputs

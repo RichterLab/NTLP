@@ -241,8 +241,11 @@ def mse_score_models( models, file_name, device, weighted=False, normalized=Fals
         # not all batches are the same size. Could multiply by
         # batch_size/BATCH_SIZE and then average by batch size if
         # need be
-        for i in range( len( models ) ):
-            inferred_outputs = do_inference( inputs, times, models[i], device )
+        for model_index in range( len( models ) ):
+            inferred_outputs = do_inference( inputs,
+                                             times,
+                                             models[model_index],
+                                             device )
             if normalized:
                 error = (normalize_droplet_parameters( inferred_outputs ) -
                          normalize_droplet_parameters( target_outputs ))
@@ -251,9 +254,9 @@ def mse_score_models( models, file_name, device, weighted=False, normalized=Fals
                                              target_outputs[:, 0] ),
                                    inferred_outputs[:, 1] - target_outputs[:, 1]] )
             if weighted:
-                losses[i] += ((current_weights * error)**2).sum( axis=1 )
+                losses[model_index] += ((current_weights * error)**2).sum( axis=1 )
             else:
-                losses[i] += (error**2).sum( axis=1 )
+                losses[model_index] += (error**2).sum( axis=1 )
 
     losses /= number_droplets
 
