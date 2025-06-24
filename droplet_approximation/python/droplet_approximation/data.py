@@ -63,7 +63,7 @@ def create_droplet_batch( number_droplets, linear_time_flag=False, number_evalua
                                             for a normal distribution. This distribution will sample the
                                             difference between particle temperature and air temperature.
                                             If none, generate air temperature as usual.
-                        
+
 
     Returns 5 values:
 
@@ -93,7 +93,10 @@ def create_droplet_batch( number_droplets, linear_time_flag=False, number_evalua
 
     # Fix the particle temperature based on air temperature
     if particle_temperature_distribution != None:
-        random_inputs[::number_evaluations, 1] = random_inputs[::number_evaluations, 3] + np.random.normal( loc = particle_temperature_distribution, scale = particle_temperature_distribution, size = number_droplets ) 
+        random_inputs[::number_evaluations, 1] = (random_inputs[::number_evaluations, 3] +
+                                                  np.random.normal( loc=particle_temperature_distribution,
+                                                                    scale=particle_temperature_distribution,
+                                                                    size=number_droplets ))
 
     # Duplicate each unique droplet parameter once for each evaluation.
     # This keeps them in parameter order.
@@ -147,7 +150,8 @@ def create_droplet_batch( number_droplets, linear_time_flag=False, number_evalua
                 # to not go beyond the largest time we're allowed.
                 starting_exponent = np.log10( integration_times[start_index] )
                 integration_times[start_index:end_index] = 10.0**np.linspace( starting_exponent,
-                                                                              min( starting_exponent + TIME_WINDOW_SIZE, np.log10( TIME_RANGE[1] ) ),
+                                                                              min( starting_exponent + TIME_WINDOW_SIZE,
+                                                                                   np.log10( TIME_RANGE[1] ) ),
                                                                               number_evaluations )
 
     # We count the number of problematic parameters we encounter.  Additionally,
@@ -236,7 +240,7 @@ def create_droplet_batch( number_droplets, linear_time_flag=False, number_evalua
                 if nudge_count < 3:
                     # Adjust the salt content by 0.01% and see if that gets past
                     # whatever numerical issue the ODE solver has encountered.
-                    random_inputs[droplet_index, :][2] *= 1.0 + (0.0001*np.random.choice( [-1, 1] ))
+                    random_inputs[droplet_index, :][2] *= 1.0 + (0.0001 * np.random.choice( [-1, 1] ))
                     continue
                 else:
                     # Fall through and try a completely different set of parameters
@@ -404,13 +408,13 @@ def create_training_file( file_name, number_droplets, weird_file_name=None, user
                                             file is written, otherwise weird parameters are silently
                                             ignored.
       user_batch_size                     - Optional batch size specifying the number of parameters
-                                            to generate at once.  If omitted, 
+                                            to generate at once.  If omitted,
       particle_temperature_distribution   - Optional tuple of two floats desribing the mean and location
                                             for a normal distribution. This distribution will sample the
                                             difference between particle temperature and air temperature.
                                             If none, generate air temperature as usual. Passed to
                                             `create_droplet_batch`
-                        
+
     """
 
     # Balance the time it takes to generate a single batch vs the efficiency of
@@ -448,8 +452,8 @@ def create_training_file( file_name, number_droplets, weird_file_name=None, user
              outputs,
              times,
              batch_weird_inputs,
-             batch_weird_outputs) = create_droplet_batch( batch_size, particle_temperature_distribution=particle_temperature_distribution )
-
+             batch_weird_outputs) = create_droplet_batch( batch_size,
+                                                          particle_temperature_distribution=particle_temperature_distribution )
 
             # Track the weirdness for post-mortem analysis.
             weird_inputs  = merge_weird_parameters( weird_inputs, batch_weird_inputs )
@@ -473,32 +477,34 @@ def normalize_NTLP_data( df ):
     `read_NTLP_data`.
 
     Takes 1 argument:
+
       df  - Pandas DataFrame from `read_NTLP_data`.
 
     Returns nothing
     """
     # Normalize inputs
-    df["normalized input radius"] = (np.log10(df["input radius"]) - np.mean( DROPLET_RADIUS_LOG_RANGE )) / (np.diff( DROPLET_RADIUS_LOG_RANGE)/2)
+    df["normalized input radius"]      = (np.log10(df["input radius"]) - np.mean( DROPLET_RADIUS_LOG_RANGE )) / (np.diff( DROPLET_RADIUS_LOG_RANGE)/2)
     df["normalized input temperature"] = (df["input temperature"] - np.mean( DROPLET_TEMPERATURE_RANGE )) / (np.diff( DROPLET_TEMPERATURE_RANGE )/2)
-    df["normalized salinity"] = (np.log10(df["salinity"]) - np.mean( DROPLET_SALINITY_LOG_RANGE)) / (np.diff( DROPLET_SALINITY_LOG_RANGE)/2)
-    df["normalized air temperature"] = (df["air temperature"] - np.mean( DROPLET_AIR_TEMPERATURE_RANGE)) / (np.diff( DROPLET_AIR_TEMPERATURE_RANGE)/2)
+    df["normalized salinity"]          = (np.log10(df["salinity"]) - np.mean( DROPLET_SALINITY_LOG_RANGE)) / (np.diff( DROPLET_SALINITY_LOG_RANGE)/2)
+    df["normalized air temperature"]   = (df["air temperature"] - np.mean( DROPLET_AIR_TEMPERATURE_RANGE)) / (np.diff( DROPLET_AIR_TEMPERATURE_RANGE)/2)
     df["normalized relative humidity"] = (df["relative humidity"] - np.mean( DROPLET_RELATIVE_HUMIDITY_RANGE)) / (np.diff( DROPLET_RELATIVE_HUMIDITY_RANGE)/2)
-    df["normalized air density"] = (df["air density"] - np.mean( DROPLET_RHOA_RANGE )) / (np.diff( DROPLET_RHOA_RANGE)/2)
+    df["normalized air density"]       = (df["air density"] - np.mean( DROPLET_RHOA_RANGE )) / (np.diff( DROPLET_RHOA_RANGE)/2)
 
     # Normalize outputs
-    df["normalized output radius"] = (np.log10(df["output radius"]) - np.mean( DROPLET_RADIUS_LOG_RANGE )) / (np.diff( DROPLET_RADIUS_LOG_RANGE)/2)
+    df["normalized output radius"]      = (np.log10(df["output radius"]) - np.mean( DROPLET_RADIUS_LOG_RANGE )) / (np.diff( DROPLET_RADIUS_LOG_RANGE)/2)
     df["normalized output temperature"] = (df["output temperature"] - np.mean( DROPLET_TEMPERATURE_RANGE )) / (np.diff( DROPLET_TEMPERATURE_RANGE )/2)
 
 def read_NTLP_data( file_name ):
     """
     Reads all of the fixed-size binary records from the path specified and returns
     a pandas DataFrame containing the processed data.
-    
+
     Takes 1 argument:
+
       file_name           - String, path to NTLP dump
-    
+
     Returns 1 value:
-    
+
       df  - Pandas DataFrame containing:
         particle id         - integer, equals 100 x particle id + processor rank
         be flag             - integer flag, 0 if backwards euler failed to produce
@@ -520,36 +526,35 @@ def read_NTLP_data( file_name ):
 
     """
 
-    #record_data_tyep = np.dtype([('parameters', np.float32, (6,)), ('times', np.float32), ('outputs', np.float32, (2,)), ('ids', np.int32)]) 
-    record_data_type = np.dtype([('particle id', np.int32),
-                                 ('be flag', np.int32),
-                                 ('time', np.float32),
-                                 ('input radius', np.float32),
-                                 ('input temperature', np.float32),
-                                 ('salinity', np.float32),
-                                 ('air temperature', np.float32),
-                                 ('relative humidity', np.float32),
-                                 ('air density', np.float32)])
+    #record_data_tyep = np.dtype([('parameters', np.float32, (6,)), ('times', np.float32), ('outputs', np.float32, (2,)), ('ids', np.int32)])
+    record_data_type = np.dtype( [('particle id',       np.int32),
+                                  ('be flag',           np.int32),
+                                  ('time',              np.float32),
+                                  ('input radius',      np.float32),
+                                  ('input temperature', np.float32),
+                                  ('salinity',          np.float32),
+                                  ('air temperature',   np.float32),
+                                  ('relative humidity', np.float32),
+                                  ('air density',       np.float32)] )
 
     inputs_outputs = np.fromfile( file_name, dtype=record_data_type )
 
-    df = pd.DataFrame(data=inputs_outputs,
-                      columns=record_data_type.names)
+    df = pd.DataFrame( data=inputs_outputs,
+                       columns=record_data_type.names )
 
     df["processor"] = df["particle id"] % 100
-    
-    df.sort_values(by=['particle id', 'time'], ascending=True, inplace=True)
+
+    df.sort_values( by=['particle id', 'time'], ascending=True, inplace=True )
 
     # Calculate outputs and dt, set to 0 if be failed or new particle.
     #
     # NOTE: Failed backward Euler is denoted as a non-zero value.
     #
-    calculate_output_flags = (df["be flag"] == 0) * (df["particle id"].diff(periods = -1) == 0)
+    calculate_output_flags = (df["be flag"] == 0) * (df["particle id"].diff( periods=-1 ) == 0)
 
-    df["integration time"]   = calculate_output_flags * -df["time"].diff(periods = -1)
-    df["output radius"]      = calculate_output_flags *  df["input radius"].shift(periods = -1)
-    df["output temperature"] = calculate_output_flags *  df["input temperature"].shift(periods = -1)
-
+    df["integration time"]   = calculate_output_flags * -df["time"].diff( periods=-1 )
+    df["output radius"]      = calculate_output_flags *  df["input radius"].shift( periods=-1 )
+    df["output temperature"] = calculate_output_flags *  df["input temperature"].shift( periods=-1 )
 
     return df
 
