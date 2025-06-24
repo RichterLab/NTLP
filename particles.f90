@@ -3235,7 +3235,7 @@ CONTAINS
                        failure_be_status = 3
                    else if( isnan( rt_zeroes(2) ) ) then
                        failure_be_status = 4
-                   else if( rt_zeroes(2) < 0 ) then
+                   else if( rt_zeroes(2) < 273.15 ) then
                        failure_be_status = 5
                    else if( rt_zeroes(1)*part%radius > 1.0e-2 ) then
                        failure_be_status = 6
