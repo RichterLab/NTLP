@@ -506,7 +506,6 @@ def read_NTLP_data( file_name ):
 
     """
 
-    #record_data_tyep = np.dtype([("parameters", np.float32, (6,)), ("times", np.float32), ("outputs", np.float32, (2,)), ("ids", np.int32)])
     record_data_type = np.dtype( [("particle id",       np.int32),
                                   ("be flag",           np.int32),
                                   ("time",              np.float32),

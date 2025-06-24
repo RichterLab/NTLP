@@ -2,13 +2,12 @@ import multiprocessing
 
 import matplotlib.pyplot as plt
 import numpy as np
-import torch
 from scipy.integrate import solve_ivp
 
 from .data import create_droplet_batch, read_training_file
 from .models import do_inference, do_iterative_inference
 from .physics import dydt, scale_droplet_parameters
-from .physics import timed_solve_ivp, DROPLET_TIME_LOG_RANGE, normalize_droplet_parameters
+from .physics import DROPLET_TIME_LOG_RANGE, normalize_droplet_parameters
 
 def parallel_analyze_model_iterative_performance_NTLP_data( model, df, iterations, device, cores=64 ):
     """
@@ -125,11 +124,6 @@ def analyze_model_iterative_performance( model, input_parameters=None, dt=0.05, 
                                            t_eval,
                                            model,
                                            "cpu" )
-
-    # Compute the normalized RMSE across the entire time scale.
-    #rmse_0 = np.sqrt( np.mean( (truth_output[:, 0] - model_output[:, 0])**2 ) ) / np.mean( truth_output[:, 0] )
-    #rmse_1 = np.sqrt( np.mean( (truth_output[:, 1] - model_output[:, 1])**2 ) ) / np.mean( truth_output[:, 1] )
-    #print( "NRMSE: {:g}%, {:g}%".format( rmse_0 * 100, rmse_1 * 100) )
 
     # Removed fined-grained (DNS vs. LES) analysis since dt is constant
 
@@ -581,24 +575,6 @@ def analyze_model_particle_performance( times, truth_output, model_output, dista
     # Compute the normalized RMSE across the entire time scale.
     rmse_0 = np.sqrt( np.mean( distances[:, 0]**2 ) ) / np.abs( np.mean( np.log10( truth_output[:, 0] ) ) ) # TODO fix hard-coded log
     rmse_1 = np.sqrt( np.mean( distances[:, 1]**2 ) ) / np.abs( np.mean( truth_output[:, 1] ) )
-
-
-    # Compute the normalized RMSE for different regions (DNS and LES) for
-    # finer-grained performance assessment.
-    #t_eval_mask = np.empty( (number_time_points, 4),
-    #                        dtype=np.bool_ )
-    #t_eval_mask[:, 0] = (t_eval  < 1e-2)
-    #t_eval_mask[:, 1] = (t_eval >= 1e-2) & (t_eval < 1e-1)
-    #t_eval_mask[:, 2] = (t_eval >= 1e-1) & (t_eval < 1e0)
-    #t_eval_mask[:, 3] = (t_eval >= 1e0)
-
-    #rmse_0 = np.empty( (4,), dtype=np.float32 )
-    #rmse_1 = np.empty( (4,), dtype=np.float32 )
-
-    #for scale_index in np.arange( t_eval_mask.shape[1] ):
-    #    rmse_0[scale_index] = np.sqrt( np.mean( (truth_output[t_eval_mask[:, scale_index], 0] - model_output[t_eval_mask[:, scale_index], 0])**2 ) ) / np.mean( truth_output[t_eval_mask[:, scale_index], 0] )
-    #    rmse_1[scale_index] = np.sqrt( np.mean( (truth_output[t_eval_mask[:, scale_index], 1] - model_output[t_eval_mask[:, scale_index], 1])**2 ) ) / np.mean( truth_output[t_eval_mask[:, scale_index], 1] )
-
 
     # Create our figure and embed the parameters that were evaluated.
     fig_h, ax_h = plt.subplots( 2, 2, figsize=figure_size )
