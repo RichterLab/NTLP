@@ -901,9 +901,9 @@ end subroutine estimate
         # Write out the end of the module.
         write_module_epilog( model_state, output_fp )
 
-def do_iterative_bdf( input_parameters, times, device ):
+def do_iterative_bdf( input_parameters, times):
     """
-    Estimates a particle trajectory along given background inputs. Requires all inputs to be sorted
+    Evaluates a particle trajectory along given background inputs with bdf. Requires all inputs to be sorted
     with respect to time.
 
     Evalutes iteratively, using the output time/radius for the (n-1)th time for the n-th time. Background
@@ -916,14 +916,12 @@ def do_iterative_bdf( input_parameters, times, device ):
                             These are provided in their natural, physical ranges.
       times               - NumPy array, shaped 1 x data length containing
                                 the time at each step.
-      model               - PyTorch model to use.
-      device              - device to evaluate on
     
     Writes 1 value:
     
       output_parameters   - NumPy array, sized len(df) x 2, containing the
                             estimated trajectory of a particle integrated
-                            along its background parameters with the MLP
+                            along its background parameters with BDF 
                             in natural ranges. Does NOT calculate
                             output for the last column so that the lengths
                             of the input and output match

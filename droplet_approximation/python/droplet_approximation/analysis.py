@@ -12,6 +12,7 @@ from .physics import timed_solve_ivp, DROPLET_TIME_LOG_RANGE, normalize_droplet_
 
 def parallel_analyze_model_iterative_performance_NTLP_data( model, df, iterations, device, cores=64 ):
     """
+    NEEDS REWORKED - DO NOT USE
     Calculates the model output by integrating along with each particle's
     background conditions for `iterations` time steps. Groups the dataset
     by processor that spawned each particle and then pools these jobs
@@ -38,7 +39,7 @@ def parallel_analyze_model_iterative_performance_NTLP_data( model, df, iteration
     inputs = [(dataset, iterations, model, device) for _,dataset in processor_groups]
 
     with multiprocessing.Pool(processes=cores) as pool:
-        results = np.vstack(pool.starmap(do_iterative_inference_NTLP_data, inputs))
+        results = np.vstack(pool.starmap(do_iterative_inference, inputs))
     
     # TODO trim
 
@@ -475,7 +476,7 @@ def calculate_nrmse( truth_output, model_output, distance_function ):
     distances = distance_function( truth_output, model_output )
     return np.sqrt( np.mean( distances[:, 0]**2 ) ) / np.abs( np.mean( np.log10 ( truth_output[:, 0] ) ) ) + np.sqrt( np.mean( distances[:, 1]**2 ) ) / np.abs( np.mean( truth_output[:, 1] ) )
 
-def analyze_model_particle_performance( times, truth_output, model_output, distances, title_string = None, figure_size = None ):
+def analyze_model_particle_performance( times, truth_output, model_output, distances, title_string = None, figure_size = None, time_range=None ):
     """
     Creates a figure with four plots to qualitatively assess the supplied model's
     performance on a particular particle's trajectory from an NTLP dump. For both
@@ -556,9 +557,11 @@ def analyze_model_particle_performance( times, truth_output, model_output, dista
 
     # Truth vs model predictions.
     ax_h[0][0].plot( t_eval, truth_output[:, 0], TRUTH_COLOR, 
-                     t_eval, model_output[:, 0], MODEL_COLOR )
+                     t_eval, model_output[:, 0], MODEL_COLOR,
+                      ms=2 )
     ax_h[0][1].plot( t_eval, truth_output[:, 1], TRUTH_COLOR,
-                     t_eval, model_output[:, 1], MODEL_COLOR )
+                     t_eval, model_output[:, 1], MODEL_COLOR,
+                      ms=2 )
 
     # Relative difference between truth and model.
     ax_h[1][0].plot( t_eval,
@@ -603,5 +606,11 @@ def analyze_model_particle_performance( times, truth_output, model_output, dista
     ax_h[0][1].set_yscale( "log" )
     ax_h[1][0].set_xscale( "log" )
     ax_h[1][1].set_xscale( "log" )
+
+    if time_range != None:
+        ax_h[0][0].set_xlim(time_range)
+        ax_h[0][1].set_xlim(time_range)
+        ax_h[1][0].set_xlim(time_range)
+        ax_h[1][1].set_xlim(time_range)
 
     fig_h.tight_layout()
