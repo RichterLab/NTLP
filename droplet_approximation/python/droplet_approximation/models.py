@@ -20,9 +20,8 @@ class ResidualNet( nn.Module ):
     balance parameter count vs computational efficiency so that inferencing with
     it is faster than Gauss-Newton iterative solvers.
 
-    As opposed to the simple net, the residual net trains off the difference
-    between the input radius/temperature and output radius/temperature to improve
-    stability.
+    This residual network learns the delta between the input particle size and
+    temperature and the outputs, given the provided background conditions.
     """
 
     def __init__( self ):
@@ -99,14 +98,19 @@ def ode_residual( inputs, outputs, model ):
 
 def weighted_mse_loss( inputs, targets, weights ):
     """
-    Calculates MSE error between inputs and targets with a weight for each difference
+    Calculates MSE error between inputs and targets with a weight for each difference.
 
     Takes 3 arguments:
 
-      inputs      - NumPy array of any size
-      targets     - NumPy array with shape matching inputs
-      weights     - NumPy array with same shape as inputs and targets with
-                    coefficients for each difference
+      inputs      - Array of any size.
+      targets     - Array with shape matching inputs.
+      weights     - Array with same shape as inputs and targets with coefficients for
+                    each difference.
+
+    Returns 1 value:
+
+      loss - The weighted MSE error with the same shape as inputs.
+
     """
     return (weights * ((inputs - targets)**2)).mean()
 
@@ -265,9 +269,9 @@ def train_model( model, criterion, optimizer, device, number_epochs, training_fi
 #def do_iterative_inference( initial_input_parameters, times, model, device ):
 #    """
 #    Estimates single droplet parameters iteratively using a specific model.  Model evaluation is
-#    performed on the CPU
+#    performed on the CPU.
 #
-#    Evalutes iteratively, using the output time/radius for the (n-1)th time for the n-th time
+#    Evaluates iteratively, using the output time/radius for the (n-1)th time for the n-th time
 #
 #    Takes 4 arguments:
 #
@@ -276,7 +280,7 @@ def train_model( model, criterion, optimizer, device, number_epochs, training_fi
 #                         provided in their natural, physical ranges.
 #      times            - Integration times to evaluate each droplet at.
 #      model            - PyTorch model to use.
-#      device           - XXX
+#      device           - Device string to perform the evaluation on.
 #
 #    Returns 1 value:
 #
@@ -318,7 +322,7 @@ def do_inference( input_parameters, times, model, device ):
       times            - NumPy array, sized number_droplets, containing the integration
                          times to evaluate each droplet at.
       model            - PyTorch model to use.
-      device           - XXX
+      device           - Device string to perform the evaluation on.
 
     Returns 1 value:
 
@@ -346,8 +350,10 @@ def generate_fortran_module( model_name, model_state, output_path ):
     NOTE: This currently expects the supplied model state to represent a 4-layer
           MLP with a specific set weights/biases names.
 
-    Takes 2 arguments:
+    Takes 3 arguments:
 
+      model_name      - Name of the model to write in the generated module's comments
+                        so as to identify where the weights came from.
       model_state     - PyTorch model state dictionary for the model to expose.
       output_path     - File to write to.  If this exists it is overwritten.
 
@@ -905,32 +911,31 @@ end subroutine estimate
 
 def do_iterative_bdf( input_parameters, times ):
     """
-    Evaluates a particle trajectory along given background inputs with bdf. Requires all inputs to be sorted
-    with respect to time.
+    Evaluates a particle trajectory along given background inputs with
+    bdf. Requires all inputs to be sorted with respect to time.
 
-    Evalutes iteratively, using the output time/radius for the (n-1)th time for the n-th time. Background
-    parameters are tracked with `input_parameters[2:]` for each time step.
+    Evalutes iteratively, using the output time/radius for the (n-1)th time for
+    the n-th time. Background parameters are tracked with `input_parameters[2:]`
+    for each time step.
 
-    Takes 4 arguments:
+    Takes 2 arguments:
 
       input_parameters    - NumPy array, sized number_time_steps x 6, containing the
                             input parameters for a single particle in order by time.
                             These are provided in their natural, physical ranges.
       times               - NumPy array, shaped 1 x data length containing
-                                the time at each step.
+                            the time at each step.
 
-    Writes 1 value:
+    Returns 1 value:
 
-      output_parameters   - NumPy array, sized len(df) x 2, containing the
+      output_parameters   - NumPy array, sized len(input_parameters) x 2, containing the
                             estimated trajectory of a particle integrated
                             along its background parameters with BDF
                             in natural ranges. Does NOT calculate
                             output for the last column so that the lengths
                             of the input and output match
 
-
     """
-
 
     integration_times = np.diff( times )
 
@@ -950,31 +955,31 @@ def do_iterative_bdf( input_parameters, times ):
 
 def do_iterative_inference( input_parameters, times, model, device ):
     """
-    Estimates a particle trajectory along given background inputs. Requires all inputs to be sorted
-    with respect to time.
+    Estimates a particle trajectory along given background inputs. Requires all
+    inputs to be sorted with respect to time.
 
-    Evalutes iteratively, using the output time/radius for the (n-1)th time for the n-th time. Background
-    parameters are tracked with `input_parameters[2:]` for each time step.
+    Evaluates iteratively, using the output time/radius for the (n-1)th time for
+    the n-th time. Background parameters are tracked with `input_parameters[2:]`
+    for each time step.
 
     Takes 4 arguments:
 
       input_parameters    - NumPy array, sized number_time_steps x 6, containing the
                             input parameters for a single particle in order by time.
                             These are provided in their natural, physical ranges.
-      times               - NumPy array, shaped 1 x data length containing
-                                the time at each step.
+      times               - NumPy array, sized 1 x data length containing
+                            the time at each step.
       model               - PyTorch model to use.
-      device              - device to evaluate on
+      device              - Device string to evaluate on.
 
-    Writes 1 value:
+    Returns 1 value:
 
-      output_parameters   - NumPy array, sized len(df) x 2, containing the
-                            estimated trajectory of a particle integrated
-                            along its background parameters with the MLP
-                            in natural ranges. Does NOT calculate
-                            output for the last column so that the lengths
-                            of the input and output match
-
+      output_parameters   - NumPy array, sized len(input_parameters) x 2,
+                            containing the estimated trajectory of a particle
+                            integrated along its background parameters with the
+                            MLP in natural ranges.  Does NOT calculate output
+                            for the last column so that the lengths of the input
+                            and output match.
 
     """
 

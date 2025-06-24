@@ -12,23 +12,27 @@ from .physics import timed_solve_ivp, DROPLET_TIME_LOG_RANGE, normalize_droplet_
 
 def parallel_analyze_model_iterative_performance_NTLP_data( model, df, iterations, device, cores=64 ):
     """
-    NEEDS REWORKED - DO NOT USE
+    NEEDS TO BE REWORKED - DO NOT USE
+
     Calculates the model output by integrating along with each particle's
     background conditions for `iterations` time steps. Groups the dataset
     by processor that spawned each particle and then pools these jobs
     onto `cores` workers.
 
-    Takes 4 arguments:
+    Takes 5 arguments:
 
       model            - PyTorch model to compare against the ODEs.
-      input_parameters - Pandas DataFrame obtained from data.readNTLP
+      df               - Pandas DataFrame to evaluate particles from.
       iterations       - Integer, number of time steps to iterate through
                          for each input.
-      cores            - Integer, number of workers to parallelize across.
+      device           - Device to evaluate model on.
+      cores            - Integer, number of workers to parallelize across.  If omitted
+                         defaults to 64 cores.
 
-    Returns:
+    Returns 1 value:
+
       output           - NumPy array of output radii and temperatures
-                         after `iterations` time steps, shaped 2 x len(df)
+                         after `iterations` time steps, shaped 2 x len(df).
 
     """
 
@@ -61,7 +65,7 @@ def analyze_model_iterative_performance( model, input_parameters=None, dt=0.05, 
     output radius/temperature from the input parameters for `dt=0.5` will be used as
     the input to calculate the radius/temperature for `t=1` and so on.
 
-    Takes 3 arguments:
+    Takes 5 arguments:
 
       model            - PyTorch model to compare against the ODEs.
       input_parameters - Optional NumPy array of input parameters to evaluate performance
@@ -69,7 +73,10 @@ def analyze_model_iterative_performance( model, input_parameters=None, dt=0.05, 
                          The last four parameters will be fixed throughout the integration
                          while the first two will be replace with the model output
                          at each time step.
-      final_time       - Optional float fixing how long to integrate out to in seconds
+      dt               - Optional float specifying the timestep to evaluate successive
+                         particles at.  If omitted, defaults to 0.05 seconds.
+      final_time       - Optional float fixing how long to integrate out to in seconds.
+                         If omitted, defaults to 10 seconds.
       figure_size      - Optional sequence, of length 2, containing the width
                          and height of the figure created.  If omitted, defaults
                          to something big enough to comfortably assess a single
@@ -191,23 +198,26 @@ def analyze_model_iterative_performance( model, input_parameters=None, dt=0.05, 
 
 def mse_score_models( models, file_name, device, weighted=False, normalized=False ):
     """
-    DEPRECIATED. Will be rewritten after merge with new methods writetn locally.
-    Calculates the mean square error on an array of models for a dataset
+    DEPRECATED.
+
+    Will be rewritten after merge with new methods written locally.
+    Calculates the mean square error on an array of models for a dataset.
 
     Takes 5 arguments:
 
-      models          - List of PyTorch models to be evaluated
-      file_name       - String, path to training data
-      device          - String, Device to perform model evaluation on
+      models          - Sequence of PyTorch models to be evaluated.
+      file_name       - Path to training data.
+      device          - Device string to perform model evaluation on.
       weighted        - Optional boolean, defaults to False, if True,
                         weights MSE loss by the reciprocal of the
                         integration time.
       normalized      - Optional boolean, defaults to False, if True,
                         normalizes droplet parameters before
-                        calculating MSE loss
+                        calculating MSE loss.
 
     Returns 1 value:
-      losses          - NumPy array, length # of models, MSE loss for
+
+      losses          - NumPy array, length of models, MSE loss for
                         each model on the provided data set.
 
     """
@@ -461,27 +471,51 @@ def standard_distance( truth_output, model_output ):
     of both output radii and the absolute value of the difference between the
     two output temperatures. Requires a dataframe with the mlp output.
 
-    Takes 1 argument:
+    Takes 2 argumenst:
+
       truth_output        - NumPy array, shaped number 2 x time steps containing:
-                                the backwards euler radius output at index 0
-                                the backwards euler temperature output at index 1
+                            the backwards euler radius output at index 0
+                            the backwards euler temperature output at index 1
       model_output        - NumPy array, shaped number 2 x time steps containing:
-                                the MLP radius output at index 0
-                                the MLP temperature output at index 1
-    
-    Returns:
-      NTLP_distance_data  - NumPy array, shaped data 2 x time steps containing:
-                                the absolute value of the difference of the 
-                                    log of the output radii at index 0
-                                the absolute value difference of 
-                                    of the output temperatures at index 1
-                                
+                            the MLP radius output at index 0
+                            the MLP temperature output at index 1
+
+    Returns 1 value:
+
+      NTLP_distance_data  - NumPy array, shaped data 2 x time steps, containing
+                            the absolute value of the difference of the log of
+                            the output radii at index 0 the absolute value
+                            difference of of the output temperatures at index 1.
+
     """
 
     return np.array( [np.abs( np.log10( model_output[:, 0] / truth_output[:, 0] ) ),
                       np.abs( model_output[:, 1] - truth_output[:, 1] )] ).T
 
 def calculate_nrmse( truth_output, model_output, distance_function ):
+    """
+    Calculates the normalized root-mean squared error (NRMSE) between the
+    provided truth and model outputs using a user-supplied error function.
+    Returns the NRMSE across all observations (rows).
+
+    Takes 3 arguments:
+
+      truth_output      - NumPy array, sized number_observations x 2, containing
+                          the truth values for radii and temperatures.
+      model_output      - NumPy array, sized number_observations x 2, containing
+                          the model values for radii and temparatures.
+      distance_function - The distance function to compute the error between
+                          truth and model outputs.  Takes two arguments,
+                          truth_output and model_output, and returns a NumPy
+                          array, sized number_observations x 2, containing the
+                          error (distance) between the inputs.
+
+    Returns 2 values:
+
+      radii_nrmse        - NRMSE of the radii.
+      temperatures_nrmse - NRMSE of the temperatures.
+
+    """
 
     distances = distance_function( truth_output, model_output )
 
@@ -494,21 +528,19 @@ def analyze_model_particle_performance( times, truth_output, model_output, dista
     """
     Creates a figure with four plots to qualitatively assess the supplied model's
     performance on a particular particle's trajectory from an NTLP dump. For both
-    the radius and temperature variables the ODE outputs are plotted against the 
-    model's estimates. 
-    
+    the radius and temperature variables the ODE outputs are plotted against the
+    model's estimates.
 
-    The NRMSE is calculated to assess overall model performance. Additionally, the 
-    relative and absolute differences of each variable are plotted so fine-grained 
+    The NRMSE is calculated to assess overall model performance. Additionally, the
+    relative and absolute differences of each variable are plotted so fine-grained
     differences in the solutions can be reviewed.
 
     Requires a dataframe with both the mlp output and distance already calculated.
 
-    Takes 6 arguments:
+    Takes 7 arguments:
 
-      model           - PyTorch model to compare against the ODEs.
       times           - NumPy array, contains an array of the simulation
-                        times being analyzed 
+                        times being analyzed
       truth_ouput     - NumPy array, shaped 2 x len( times ). Contains an
                         array of the particle's actual radius and temperature
                         at index 0 and 1 respectively.
@@ -523,6 +555,9 @@ def analyze_model_particle_performance( times, truth_output, model_output, dista
                         and height of the figure created.  If omitted, defaults
                         to something big enough to comfortably assess a single
                         model's outputs.
+      time_range      - Optional sequence, of length 2, specifying the start and
+                        end time to display performance for.  If omitted, defaults
+                        to None and the times input is used for the X axis.
 
     Returns nothing.
 
