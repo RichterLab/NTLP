@@ -25,11 +25,11 @@ from scipy.integrate import solve_ivp
 
 # NTLP Coupled Ranges (Radius might be unnecesarily large on the bottom end of the range)
 
-DROPLET_RADIUS_LOG_RANGE        = np.array( (-7.00, -4.25) )
-DROPLET_TEMPERATURE_RANGE       = np.array( (279, 301) )
+DROPLET_RADIUS_LOG_RANGE        = np.array( (-6.75, -3.75) )
+DROPLET_TEMPERATURE_RANGE       = np.array( (284, 300) )
 DROPLET_SALINITY_LOG_RANGE      = np.array( (-17.66, -17.65) )
-DROPLET_AIR_TEMPERATURE_RANGE   = np.array( (279, 301) )
-DROPLET_RELATIVE_HUMIDITY_RANGE = np.array( (0.91, 1.09) )
+DROPLET_AIR_TEMPERATURE_RANGE   = np.array( (284, 300) )
+DROPLET_RELATIVE_HUMIDITY_RANGE = np.array( (1.00, 1.11 ) )
 DROPLET_RHOA_RANGE              = np.array( (0.99, 1.01) )
 DROPLET_TIME_LOG_RANGE              = np.array( (-1.4,-0.75) )
 
