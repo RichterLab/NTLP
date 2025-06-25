@@ -5,7 +5,7 @@ import pandas as pd
 
 from .physics import DROPLET_RADIUS_LOG_RANGE, \
                      DROPLET_TEMPERATURE_RANGE, \
-                     DROPLET_SALINITY_LOG_RANGE, \
+                     DROPLET_SALT_MASS_LOG_RANGE, \
                      DROPLET_AIR_TEMPERATURE_RANGE, \
                      DROPLET_RELATIVE_HUMIDITY_RANGE, \
                      DROPLET_RHOA_RANGE, \
@@ -65,7 +65,7 @@ def create_droplet_batch( number_droplets, number_evaluations=1, particle_temper
     Returns 5 values:
 
       random_inputs     - Array, sized number_droplets x 6, containing the droplets
-                          radii, temperatures, salinity, air temperature, relative
+                          radii, temperatures, salt mass, air temperature, relative
                           humidity, and rhoa.
       random_outputs    - Array, sized number_droplets x 2, containing the droplets
                           radii and temperatures.
@@ -239,122 +239,6 @@ def create_droplet_batch( number_droplets, number_evaluations=1, particle_temper
 
     return random_inputs, random_outputs, integration_times, weird_inputs, weird_outputs
 
-def merge_weird_parameters( parameters_1, parameters_2 ):
-    """
-    Merge two dictionaries of lists into a separate copy containing the
-    concatenated lists of both.  All list entries of the first dictionary
-    come before the first entry of the second dictionary when the first
-    has a non-empty list.
-
-    Takes 2 arguments:
-
-      parameters_1 - 1st dictionary of lists to merge.
-      parameters_2 - 2nd dictionary of lists to merge.
-
-    Returns 1 value:
-
-      merged_parameers - Dictionary containing the merged lists.
-
-    """
-
-    merged_parameters = parameters_1.copy()
-
-    for type_name, weird_things in parameters_2.items():
-        if type_name in merged_parameters:
-            merged_parameters[type_name].extend( weird_things )
-        else:
-            merged_parameters[type_name] = weird_things
-
-    return merged_parameters
-
-def write_weird_parameters_to_spreadsheet( file_name, weird_inputs, weird_outputs ):
-    """
-    Creates an Excel file containing one spreadsheet per type of weird inputs or
-    outputs.
-
-    See create_droplet_batch() for details on weird droplet inputs and outputs.
-
-    Takes 3 arguments:
-
-      file_name     - Path to the spreadsheet to create.  If it exists it is
-                      overwritten.
-      weird_inputs  - Dictionary of lists representing weird input droplet
-                      parameters.
-      weird_outputs - Dictionary of lists representing weird output droplet
-                      parameters.
-
-    Returns nothing.
-
-    """
-
-    # XXX: move this
-    import pandas as pd
-
-    # Open the file for writing, overwriting an existing file if necessary.
-    with pd.ExcelWriter( file_name ) as writer:
-
-        # Create a DataFrame for each category of input parameters weirdness.
-        for type_name, weird_things in weird_inputs.items():
-            sheet_name = "inputs-{:s}".format( type_name )
-
-            # Columns in the DataFrame.
-            columns = ["initial_radius",
-                       "initial_temperature",
-                       "salinity",
-                       "air_temperature",
-                       "relative_humidity",
-                       "rhoa",
-                       "t_final",
-                       "error"]
-
-            # Convert our list of lists of NumPy arrays to lists of lists
-            # so spreadsheet cells contain a single value.
-            weird_things_listified = []
-            for weird_thing in weird_things:
-                weird_thing_listified = []
-
-                weird_thing_listified.extend( weird_thing[0].tolist() )
-                weird_thing_listified.extend( weird_thing[1].tolist() )
-                weird_thing_listified.extend( weird_thing[2:] )
-
-                weird_things_listified.append( weird_thing_listified )
-
-            # Build a DataFrame and write it as a new sheet.
-            filtered_df = pd.DataFrame( weird_things_listified, columns=columns )
-            filtered_df.to_excel( writer, sheet_name=sheet_name, index=False )
-
-        # Create a DataFrame for each category of output parameters weirdness.
-        for type_name, weird_things in weird_outputs.items():
-            sheet_name = "outputs-{:s}".format( type_name )
-
-            # Columns in the DataFrame.
-            columns = ["initial_radius",
-                       "initial_temperature",
-                       "salinity",
-                       "air_temperature",
-                       "relative_humidity",
-                       "rhoa",
-                       "t_final",
-                       "radius",
-                       "temperature"]
-
-            # Convert our list of lists of NumPy arrays to lists of lists
-            # so spreadsheet cells contain a single value.
-            weird_things_listified = []
-            for weird_thing in weird_things:
-                weird_thing_listified = []
-
-                weird_thing_listified.extend( weird_thing[0].tolist() )
-                weird_thing_listified.extend( weird_thing[1].tolist() )
-                weird_thing_listified.append( weird_thing[2] )
-                weird_thing_listified.extend( weird_thing[3].tolist() )
-
-                weird_things_listified.append( weird_thing_listified )
-
-            # Build a DataFrame and write it as a new sheet.
-            filtered_df = pd.DataFrame( weird_things_listified, columns=columns )
-            filtered_df.to_excel( writer, sheet_name=sheet_name, index=False )
-
 def create_training_file( file_name, number_droplets, weird_file_name=None, user_batch_size=None, particle_temperature_distribution=None ):
     """
     Generates random droplet parameters, both inputs and their corresponding
@@ -368,7 +252,7 @@ def create_training_file( file_name, number_droplets, weird_file_name=None, user
 
       1. Input radius, in meters
       2. Input temperature, in Kelvin
-      3. Input salinity, aka the mass of disolved salt, in kilograms
+      3. Input salt mass, in kilograms
       4. Input air temperature, in Kelvin
       5. Input relative humidity, as a non-dimensional value with 100% humidity at 1.0
       6. Input rhoa, in non-dimensional units
@@ -451,6 +335,122 @@ def create_training_file( file_name, number_droplets, weird_file_name=None, user
                                                weird_inputs,
                                                weird_outputs )
 
+def merge_weird_parameters( parameters_1, parameters_2 ):
+    """
+    Merge two dictionaries of lists into a separate copy containing the
+    concatenated lists of both.  All list entries of the first dictionary
+    come before the first entry of the second dictionary when the first
+    has a non-empty list.
+
+    Takes 2 arguments:
+
+      parameters_1 - 1st dictionary of lists to merge.
+      parameters_2 - 2nd dictionary of lists to merge.
+
+    Returns 1 value:
+
+      merged_parameers - Dictionary containing the merged lists.
+
+    """
+
+    merged_parameters = parameters_1.copy()
+
+    for type_name, weird_things in parameters_2.items():
+        if type_name in merged_parameters:
+            merged_parameters[type_name].extend( weird_things )
+        else:
+            merged_parameters[type_name] = weird_things
+
+    return merged_parameters
+
+def write_weird_parameters_to_spreadsheet( file_name, weird_inputs, weird_outputs ):
+    """
+    Creates an Excel file containing one spreadsheet per type of weird inputs or
+    outputs.
+
+    See create_droplet_batch() for details on weird droplet inputs and outputs.
+
+    Takes 3 arguments:
+
+      file_name     - Path to the spreadsheet to create.  If it exists it is
+                      overwritten.
+      weird_inputs  - Dictionary of lists representing weird input droplet
+                      parameters.
+      weird_outputs - Dictionary of lists representing weird output droplet
+                      parameters.
+
+    Returns nothing.
+
+    """
+
+    # XXX: move this
+    import pandas as pd
+
+    # Open the file for writing, overwriting an existing file if necessary.
+    with pd.ExcelWriter( file_name ) as writer:
+
+        # Create a DataFrame for each category of input parameters weirdness.
+        for type_name, weird_things in weird_inputs.items():
+            sheet_name = "inputs-{:s}".format( type_name )
+
+            # Columns in the DataFrame.
+            columns = ["initial_radius",
+                       "initial_temperature",
+                       "salt_mass",
+                       "air_temperature",
+                       "relative_humidity",
+                       "rhoa",
+                       "t_final",
+                       "error"]
+
+            # Convert our list of lists of NumPy arrays to lists of lists
+            # so spreadsheet cells contain a single value.
+            weird_things_listified = []
+            for weird_thing in weird_things:
+                weird_thing_listified = []
+
+                weird_thing_listified.extend( weird_thing[0].tolist() )
+                weird_thing_listified.extend( weird_thing[1].tolist() )
+                weird_thing_listified.extend( weird_thing[2:] )
+
+                weird_things_listified.append( weird_thing_listified )
+
+            # Build a DataFrame and write it as a new sheet.
+            filtered_df = pd.DataFrame( weird_things_listified, columns=columns )
+            filtered_df.to_excel( writer, sheet_name=sheet_name, index=False )
+
+        # Create a DataFrame for each category of output parameters weirdness.
+        for type_name, weird_things in weird_outputs.items():
+            sheet_name = "outputs-{:s}".format( type_name )
+
+            # Columns in the DataFrame.
+            columns = ["initial_radius",
+                       "initial_temperature",
+                       "salt_mass",
+                       "air_temperature",
+                       "relative_humidity",
+                       "rhoa",
+                       "t_final",
+                       "radius",
+                       "temperature"]
+
+            # Convert our list of lists of NumPy arrays to lists of lists
+            # so spreadsheet cells contain a single value.
+            weird_things_listified = []
+            for weird_thing in weird_things:
+                weird_thing_listified = []
+
+                weird_thing_listified.extend( weird_thing[0].tolist() )
+                weird_thing_listified.extend( weird_thing[1].tolist() )
+                weird_thing_listified.append( weird_thing[2] )
+                weird_thing_listified.extend( weird_thing[3].tolist() )
+
+                weird_things_listified.append( weird_thing_listified )
+
+            # Build a DataFrame and write it as a new sheet.
+            filtered_df = pd.DataFrame( weird_things_listified, columns=columns )
+            filtered_df.to_excel( writer, sheet_name=sheet_name, index=False )
+
 def normalize_NTLP_data( df ):
     """
     Adds columns for normalized droplet parameters to a NTLP dataframe from
@@ -465,7 +465,7 @@ def normalize_NTLP_data( df ):
     # Normalize inputs
     df["normalized input radius"]      = (np.log10(df["input radius"]) - np.mean( DROPLET_RADIUS_LOG_RANGE )) / (np.diff( DROPLET_RADIUS_LOG_RANGE)/2)
     df["normalized input temperature"] = (df["input temperature"] - np.mean( DROPLET_TEMPERATURE_RANGE )) / (np.diff( DROPLET_TEMPERATURE_RANGE )/2)
-    df["normalized salinity"]          = (np.log10(df["salinity"]) - np.mean( DROPLET_SALINITY_LOG_RANGE)) / (np.diff( DROPLET_SALINITY_LOG_RANGE)/2)
+    df["normalized salt mass"]         = (np.log10(df["salt mass"]) - np.mean( DROPLET_SALT_MASS_LOG_RANGE)) / (np.diff( DROPLET_SALT_MASS_LOG_RANGE)/2)
     df["normalized air temperature"]   = (df["air temperature"] - np.mean( DROPLET_AIR_TEMPERATURE_RANGE)) / (np.diff( DROPLET_AIR_TEMPERATURE_RANGE)/2)
     df["normalized relative humidity"] = (df["relative humidity"] - np.mean( DROPLET_RELATIVE_HUMIDITY_RANGE)) / (np.diff( DROPLET_RELATIVE_HUMIDITY_RANGE)/2)
     df["normalized air density"]       = (df["air density"] - np.mean( DROPLET_RHOA_RANGE )) / (np.diff( DROPLET_RHOA_RANGE)/2)
@@ -492,7 +492,7 @@ def read_NTLP_data( file_name ):
         time                - float, simulation time at which this sample was taken
         input radius        - float, radius of the particle
         input temperatur    - float, temperature of the particle
-        salinity            - float, salinity of the particle
+        salt mass           - float, salt mass of the particle
         air temperature     - float, ambient air temperature around particle
         relative humidity   - float, relative humidty at particle's surface
         air density         - float, air density around the particle
@@ -512,7 +512,7 @@ def read_NTLP_data( file_name ):
                                   ("time",              np.float32),
                                   ("input radius",      np.float32),
                                   ("input temperature", np.float32),
-                                  ("salinity",          np.float32),
+                                  ("salt mass",         np.float32),
                                   ("air temperature",   np.float32),
                                   ("relative humidity", np.float32),
                                   ("air density",       np.float32)] )

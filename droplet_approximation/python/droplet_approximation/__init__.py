@@ -34,7 +34,7 @@ from .physics import DROPLET_AIR_TEMPERATURE_RANGE, \
                      DROPLET_RADIUS_LOG_RANGE, \
                      DROPLET_RELATIVE_HUMIDITY_RANGE, \
                      DROPLET_RHOA_RANGE, \
-                     DROPLET_SALINITY_LOG_RANGE, \
+                     DROPLET_SALT_MASS_LOG_RANGE, \
                      DROPLET_TEMPERATURE_RANGE, \
                      DROPLET_TIME_LOG_RANGE, \
                      dydt, \

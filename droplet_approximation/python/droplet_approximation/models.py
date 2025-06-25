@@ -7,7 +7,7 @@ from .physics import DROPLET_AIR_TEMPERATURE_RANGE, \
                      DROPLET_RADIUS_LOG_RANGE, \
                      DROPLET_RELATIVE_HUMIDITY_RANGE, \
                      DROPLET_RHOA_RANGE, \
-                     DROPLET_SALINITY_LOG_RANGE, \
+                     DROPLET_SALT_MASS_LOG_RANGE, \
                      DROPLET_TEMPERATURE_RANGE, \
                      normalize_droplet_parameters, \
                      dydt,\
@@ -454,7 +454,7 @@ module droplet_model
     !
     !     do particle_index = 1, number_particles
     !
-    !         input_parameters = [radius, temperature, salinity, air_temperature, rh, rhoa, t_final]
+    !         input_parameters = [radius, temperature, salt_mass, air_temperature, rh, rhoa, t_final]
     !         call estimate( input_parameters, output_parameters )
     !
     !         new_radius      = output_parameters(RADIUS_INDEX)
@@ -533,7 +533,7 @@ module droplet_model
     ! the indices while the output vector only uses the first two.
     integer, parameter :: RADIUS_INDEX          = 1
     integer, parameter :: TEMPERATURE_INDEX     = 2
-    integer, parameter :: SALINITY_INDEX        = 3
+    integer, parameter :: SALT_MASS_INDEX       = 3
     integer, parameter :: AIR_TEMPERATURE_INDEX = 4
     integer, parameter :: RH_INDEX              = 5
     integer, parameter :: RHOA_INDEX            = 6
@@ -555,14 +555,14 @@ module droplet_model
     !
     real*4, parameter :: RADIUS_LOG_RANGE(2)      = [{radius_start:.1f}, {radius_end:.1f}]
     real*4, parameter :: TEMPERATURE_RANGE(2)     = [{temperature_start:.1f}, {temperature_end:.1f}]
-    real*4, parameter :: SALINITY_LOG_RANGE(2)    = [{salinity_start:.2f}, {salinity_end:.2f}]
+    real*4, parameter :: SALT_MASS_LOG_RANGE(2)   = [{salt_mass_start:.2f}, {salt_mass_end:.2f}]
     real*4, parameter :: AIR_TEMPERATURE_RANGE(2) = [{air_temperature_start:.1f}, {air_temperature_end:.1f}]
     real*4, parameter :: RH_RANGE(2)              = [{rh_start:.2f}, {rh_end:.2f}]
     real*4, parameter :: RHOA_RANGE(2)            = [{rhoa_start:.2f}, {rhoa_end:.2f}]
 
     real*4, parameter :: RADIUS_LOG_MEAN      = SUM( RADIUS_LOG_RANGE ) / 2
     real*4, parameter :: TEMPERATURE_MEAN     = SUM( TEMPERATURE_RANGE ) / 2
-    real*4, parameter :: SALINITY_LOG_MEAN    = SUM( SALINITY_LOG_RANGE ) / 2
+    real*4, parameter :: SALT_MASS_LOG_MEAN   = SUM( SALT_MASS_LOG_RANGE ) / 2
     real*4, parameter :: AIR_TEMPERATURE_MEAN = SUM( AIR_TEMPERATURE_RANGE ) / 2
     real*4, parameter :: RH_MEAN              = SUM( RH_RANGE ) / 2
     real*4, parameter :: RHOA_MEAN            = SUM( RHOA_RANGE ) / 2
@@ -573,7 +573,7 @@ module droplet_model
     !
     real*4, parameter :: RADIUS_LOG_WIDTH      = (RADIUS_LOG_RANGE(2)-RADIUS_LOG_RANGE(1))/2
     real*4, parameter :: TEMPERATURE_WIDTH     = (TEMPERATURE_RANGE(2)-TEMPERATURE_RANGE(1))/2
-    real*4, parameter :: SALINITY_LOG_WIDTH    = (SALINITY_LOG_RANGE(2)-SALINITY_LOG_RANGE(1))/2
+    real*4, parameter :: SALT_MASS_LOG_WIDTH   = (SALT_MASS_LOG_RANGE(2)-SALT_MASS_LOG_RANGE(1))/2
     real*4, parameter :: AIR_TEMPERATURE_WIDTH = (AIR_TEMPERATURE_RANGE(2)-AIR_TEMPERATURE_RANGE(1))/2
     real*4, parameter :: RH_WIDTH              = (RH_RANGE(2)-RH_RANGE(1))/2
     real*4, parameter :: RHOA_WIDTH            = (RHOA_RANGE(2)-RHOA_RANGE(1))/2
@@ -615,8 +615,8 @@ module droplet_model
     radius_end=DROPLET_RADIUS_LOG_RANGE[1],
     temperature_start=DROPLET_TEMPERATURE_RANGE[0],
     temperature_end=DROPLET_TEMPERATURE_RANGE[1],
-    salinity_start=DROPLET_SALINITY_LOG_RANGE[0],
-    salinity_end=DROPLET_SALINITY_LOG_RANGE[1],
+    salt_mass_start=DROPLET_SALT_MASS_LOG_RANGE[0],
+    salt_mass_end=DROPLET_SALT_MASS_LOG_RANGE[1],
     air_temperature_start=DROPLET_AIR_TEMPERATURE_RANGE[0],
     air_temperature_end=DROPLET_AIR_TEMPERATURE_RANGE[1],
     rh_start=DROPLET_RELATIVE_HUMIDITY_RANGE[0],
@@ -833,7 +833,7 @@ subroutine estimate( input, output )
     ! Normalize the non-temporal inputs so they're in the range [-1, 1].
     normalized_input(RADIUS_INDEX)          = (log10( input(RADIUS_INDEX) ) - RADIUS_LOG_MEAN) / RADIUS_LOG_WIDTH
     normalized_input(TEMPERATURE_INDEX)     = (input(TEMPERATURE_INDEX) - TEMPERATURE_MEAN) / TEMPERATURE_WIDTH
-    normalized_input(SALINITY_INDEX)        = (log10( input(SALINITY_INDEX) ) - SALINITY_LOG_MEAN) / SALINITY_LOG_WIDTH
+    normalized_input(SALT_MASS_INDEX)       = (log10( input(SALT_MASS_INDEX) ) - SALT_MASS_LOG_MEAN) / SALT_MASS_LOG_WIDTH
     normalized_input(AIR_TEMPERATURE_INDEX) = (input(AIR_TEMPERATURE_INDEX) - AIR_TEMPERATURE_MEAN) / AIR_TEMPERATURE_WIDTH
     normalized_input(RH_INDEX)              = (input(RH_INDEX) - RH_MEAN) / RH_WIDTH
     normalized_input(RHOA_INDEX)            = (input(RHOA_INDEX) - RHOA_MEAN) / RHOA_WIDTH

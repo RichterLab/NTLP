@@ -17,7 +17,7 @@ from scipy.integrate import solve_ivp
 
 #DROPLET_RADIUS_LOG_RANGE        = np.array( (-8, -3) )
 #DROPLET_TEMPERATURE_RANGE       = np.array( (273, 310) )
-#DROPLET_SALINITY_LOG_RANGE      = np.array( (-22, -10) )
+#DROPLET_SALT_MASS_LOG_RANGE     = np.array( (-22, -10) )
 #DROPLET_AIR_TEMPERATURE_RANGE   = np.array( (273, 310) )
 #DROPLET_RELATIVE_HUMIDITY_RANGE = np.array( (0.65, 1.1) )
 #DROPLET_RHOA_RANGE              = np.array( (0.8, 1.2) )
@@ -27,7 +27,7 @@ from scipy.integrate import solve_ivp
 
 DROPLET_RADIUS_LOG_RANGE        = np.array( (-6.75, -3.75) )
 DROPLET_TEMPERATURE_RANGE       = np.array( (284, 300) )
-DROPLET_SALINITY_LOG_RANGE      = np.array( (-17.66, -17.65) )
+DROPLET_SALT_MASS_LOG_RANGE     = np.array( (-17.66, -17.65) )
 DROPLET_AIR_TEMPERATURE_RANGE   = np.array( (284, 300) )
 DROPLET_RELATIVE_HUMIDITY_RANGE = np.array( (1.00, 1.11 ) )
 DROPLET_RHOA_RANGE              = np.array( (0.99, 1.01) )
@@ -57,7 +57,7 @@ def dydt( t, y, parameters ):
                    as either a 1D vector (of length 2), or a 2D array (sized
                    number_droplets x 2) though must be shape compatible with the
                    parameters array.
-      parameters - NumPy array of droplet parameters containing salinity, air temperature,
+      parameters - NumPy array of droplet parameters containing salt mass, air temperature,
                    relative humidity, and rhoa.  May be specified as either a
                    1D vector (of length 2), or a 2D array (sized number_droplets x 2)
                    though must be shape compatible with the y array.
@@ -284,7 +284,7 @@ def normalize_droplet_parameters( droplet_parameters ):
 
     # Sometimes we have the remaining parameters.
     if number_parameters > 2:
-        normalized_droplet_parameters[..., 2] = (np.log10( droplet_parameters[..., 2] ) - np.mean( DROPLET_SALINITY_LOG_RANGE )) / (np.diff( DROPLET_SALINITY_LOG_RANGE ) / 2)
+        normalized_droplet_parameters[..., 2] = (np.log10( droplet_parameters[..., 2] ) - np.mean( DROPLET_SALT_MASS_LOG_RANGE )) / (np.diff( DROPLET_SALT_MASS_LOG_RANGE ) / 2)
         normalized_droplet_parameters[..., 3] = (droplet_parameters[..., 3] - np.mean( DROPLET_AIR_TEMPERATURE_RANGE )) / (np.diff( DROPLET_AIR_TEMPERATURE_RANGE ) / 2)
         normalized_droplet_parameters[..., 4] = (droplet_parameters[..., 4] - np.mean( DROPLET_RELATIVE_HUMIDITY_RANGE )) / (np.diff( DROPLET_RELATIVE_HUMIDITY_RANGE ) / 2)
         normalized_droplet_parameters[..., 5] = (droplet_parameters[..., 5] - np.mean( DROPLET_RHOA_RANGE )) / (np.diff( DROPLET_RHOA_RANGE ) / 2)
@@ -339,7 +339,7 @@ def scale_droplet_parameters( droplet_parameters ):
 
     # Sometimes we have the remaining parameters.
     if number_parameters > 2:
-        scaled_droplet_parameters[..., 2] = 10.0 ** (droplet_parameters[..., 2] * (np.diff( DROPLET_SALINITY_LOG_RANGE ) / 2) + np.mean( DROPLET_SALINITY_LOG_RANGE ))
+        scaled_droplet_parameters[..., 2] = 10.0 ** (droplet_parameters[..., 2] * (np.diff( DROPLET_SALT_MASS_LOG_RANGE ) / 2) + np.mean( DROPLET_SALT_MASS_LOG_RANGE ))
         scaled_droplet_parameters[..., 3] = droplet_parameters[..., 3] * (np.diff( DROPLET_AIR_TEMPERATURE_RANGE ) / 2) + np.mean( DROPLET_AIR_TEMPERATURE_RANGE )
         scaled_droplet_parameters[..., 4] = droplet_parameters[..., 4] * (np.diff( DROPLET_RELATIVE_HUMIDITY_RANGE ) / 2) + np.mean( DROPLET_RELATIVE_HUMIDITY_RANGE )
         scaled_droplet_parameters[..., 5] = droplet_parameters[..., 5] * (np.diff( DROPLET_RHOA_RANGE ) / 2) + np.mean( DROPLET_RHOA_RANGE )
