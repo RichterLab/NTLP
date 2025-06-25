@@ -929,7 +929,7 @@ def do_iterative_bdf( input_parameters, times ):
 
     Returns 1 value:
 
-      output_parameters   - NumPy array, sized len(input_parameters) x 2, containing the
+      output_parameters   - NumPy array, sized input_parameters.shape[0] x 2, containing the
                             estimated trajectory of a particle integrated
                             along its background parameters with BDF
                             in natural ranges. Does NOT calculate
@@ -940,11 +940,11 @@ def do_iterative_bdf( input_parameters, times ):
 
     integration_times = np.diff( times )
 
-    output_parameters       = np.zeros( (len( input_parameters ), 2), dtype=np.float32 )
+    output_parameters       = np.zeros( (input_parameters.shape[0], 2), dtype=np.float32 )
     output_parameters[0, :] = input_parameters[0, :2]
 
     # Evaluate
-    for time_index in range( 1, len( input_parameters ) ):
+    for time_index in range( 1, input_parameters.shape[0] ):
         output_parameters[time_index, :] = solve_ivp( dydt,
                                                       [0, integration_times[time_index - 1]],
                                                       output_parameters[time_index - 1, :],
@@ -975,7 +975,7 @@ def do_iterative_inference( input_parameters, times, model, device ):
 
     Returns 1 value:
 
-      output_parameters   - NumPy array, sized len(input_parameters) x 2,
+      output_parameters   - NumPy array, sized input_parameters.shape[0] x 2,
                             containing the estimated trajectory of a particle
                             integrated along its background parameters with the
                             MLP in natural ranges.  Does NOT calculate output
@@ -990,7 +990,7 @@ def do_iterative_inference( input_parameters, times, model, device ):
     normalized_data   = np.array( normalize_droplet_parameters( input_parameters ) )
     integration_times = np.diff( times )
 
-    output_parameters       = np.zeros( (len( normalized_data ), 2), dtype=np.float32 )
+    output_parameters       = np.zeros( (normalized_data.shape[0], 2), dtype=np.float32 )
     output_parameters[0, :] = normalized_data[0, :2]
 
     normalized_inputs = np.hstack( (output_parameters[0, :],
@@ -998,10 +998,10 @@ def do_iterative_inference( input_parameters, times, model, device ):
                                     [integration_times[0]] ) ).astype( "float32" )
 
     # Evaluate
-    for time_index in range( 1, len( normalized_data ) ):
+    for time_index in range( 1,  normalized_data.shape[0] ):
         output_parameters[time_index, :] = eval_model( torch.from_numpy( normalized_inputs ).to( device ) ).detach().numpy()
 
-        if time_index < len( normalized_data ) - 1:
+        if time_index < normalized_data.shape[0] - 1:
             normalized_inputs = np.hstack( (output_parameters[time_index, :],
                                             normalized_data[time_index, 2:],
                                             [integration_times[time_index]] ) ).astype( "float32" )
