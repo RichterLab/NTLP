@@ -612,6 +612,81 @@ def plot_droplet_size_temperature( size_temperatures, times ):
 
     return fig_h, ax_h
 
+def plot_particle_history( history_nc ):
+    """
+    Plots the particle-related variables in an NTLP history file.  Creates a
+    figure with two horizontal subplots containing:
+
+      1. Particle Events: The counts for new, destroyed, failed Gauss-Newton,
+                          and failed iterative solve (BE), as a function of
+                          time, line and scatter plots.
+      2. Population Counts: The total particle count and breakdown between
+                            aerosol and droplets, as a function of time, line
+                            plots.
+
+    NOTE: This does not visualize the number of activated/deactivated particles.
+          This wasn't needed during verification.
+
+    Takes 1 argument:
+
+      history_nc - netCDF4 Dataset object containing the NTLP history variables.
+
+    Returns 2 values:
+
+      fig_h - The Matplotlib figure handle created.
+      ax_h  - The Matplotlib axes handle containing the line plots.
+
+    """
+
+    simulation_time      = history_nc.variables["time"][:]
+    number_particles     = history_nc.variables["tnumpart"][:]
+    number_droplets      = history_nc.variables["tnumdrop"][:]
+    number_aerosols      = history_nc.variables["tnumaerosol"][:]
+    number_destroyed     = history_nc.variables["tnum_destroy"][:]
+    number_gn_failed     = history_nc.variables["tnum100"][:]
+    number_impossible    = history_nc.variables["tnumimpos"][:]
+    number_new_particles = history_nc.variables["tot_reintro"][:]
+
+    fig_h, ax_h = plt.subplots( 1, 2, figsize=(10, 6) )
+
+    fig_h.suptitle( "Particle Measurements in '{:s}".format( history_nc.filepath() ) )
+
+    #
+    # NOTE: The number of new and failed Gauss-Newton (GN) particles are scatter
+    #       plots so as to not occlude important data with their regular swings
+    #       in value.  Failed GN will always be larger than failed iterative
+    #       solves but we don't want times where there weren't any failures
+    #       (zero value) to clutter the plot with a dip.  Similarly for new
+    #       particles as injections happen at a fixed cadence resulting in
+    #       regular dips covering everything else in the plot (as this is the
+    #       largest magnitude value visualized).
+    #
+    ax_h[0].plot( simulation_time, number_new_particles, ".", label="New Particles" )
+    ax_h[0].plot( simulation_time, number_destroyed,          label="Destroyed Particles" )
+    ax_h[0].plot( simulation_time, number_gn_failed, ".",     label="Gauss-Newton Failed" )
+    ax_h[0].plot( simulation_time, number_impossible,         label="Failed Iterative Solves" )
+
+    # Put the legend in the top-right corner.
+    #
+    # NOTE: There isn't a great place to put it and this is the least worst
+    #       option.  This likely occludes the new particles plot though its
+    #       trend should be understandable from the visible portions.
+    #
+    ax_h[0].legend( loc="upper right" )
+    ax_h[0].set_ylabel( "Count" )
+    ax_h[0].set_xlabel( "Time (s)" )
+    ax_h[0].set_title( "Particle Events" )
+
+    ax_h[1].plot( simulation_time, number_droplets,  label="Droplet Count" )
+    ax_h[1].plot( simulation_time, number_aerosols,  label="Aerosol Count" )
+    ax_h[1].plot( simulation_time, number_particles, label="Particle Count" )
+
+    ax_h[1].legend( loc="center right" )
+    ax_h[1].set_xlabel( "Time (s)" )
+    ax_h[1].set_title( "Population Counts" )
+
+    return fig_h, ax_h
+
 def standard_distance( truth_output, model_output ):
     """
     Calculates the "distance" between the `mlp` output and the true output

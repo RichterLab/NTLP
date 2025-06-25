@@ -12,6 +12,7 @@ from .analysis import analyze_model_iterative_performance, \
                       mse_score_models, \
                       parallel_analyze_model_iterative_performance_NTLP_data, \
                       plot_droplet_size_temperature, \
+                      plot_particle_history, \
                       standard_distance
 from .data import clean_training_data, \
                   create_droplet_batch, \
