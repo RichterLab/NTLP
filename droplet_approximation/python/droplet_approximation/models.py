@@ -2,7 +2,6 @@ import numpy as np
 import torch
 import torch.nn as nn
 
-from scipy.integrate import solve_ivp
 from .data import read_training_file
 from .physics import DROPLET_AIR_TEMPERATURE_RANGE, \
                      DROPLET_RADIUS_LOG_RANGE, \
@@ -12,7 +11,8 @@ from .physics import DROPLET_AIR_TEMPERATURE_RANGE, \
                      DROPLET_TEMPERATURE_RANGE, \
                      normalize_droplet_parameters, \
                      dydt,\
-                     scale_droplet_parameters
+                     scale_droplet_parameters, \
+                     solve_ivp_float32_outputs
 
 class ResidualNet( nn.Module ):
     """
@@ -945,12 +945,12 @@ def do_iterative_bdf( input_parameters, times ):
 
     # Evaluate
     for time_index in range( 1, input_parameters.shape[0] ):
-        output_parameters[time_index, :] = solve_ivp( dydt,
-                                                      [0, integration_times[time_index - 1]],
-                                                      output_parameters[time_index - 1, :],
-                                                      method="BDF",
-                                                      t_eval=[integration_times[time_index-1]],
-                                                      args=(input_parameters[time_index-1, 2:],) ).y[:, 0]
+        output_parameters[time_index, :] = solve_ivp_float32_outputs( dydt,
+                                                                      [0, integration_times[time_index - 1]],
+                                                                      output_parameters[time_index - 1, :],
+                                                                      method="BDF",
+                                                                      t_eval=[integration_times[time_index-1]],
+                                                                      args=(input_parameters[time_index-1, 2:],) ).y[:, 0]
 
     return output_parameters
 
