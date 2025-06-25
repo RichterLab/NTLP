@@ -9,8 +9,8 @@ from .physics import DROPLET_AIR_TEMPERATURE_RANGE, \
                      DROPLET_RHOA_RANGE, \
                      DROPLET_SALT_MASS_LOG_RANGE, \
                      DROPLET_TEMPERATURE_RANGE, \
-                     normalize_droplet_parameters, \
                      dydt,\
+                     normalize_droplet_parameters, \
                      scale_droplet_parameters, \
                      solve_ivp_float32_outputs
 
@@ -77,191 +77,6 @@ class SimpleNet( nn.Module ):
 
         return x
 
-def ode_residual( inputs, outputs, model ):
-    drdt = torch.autograd.grad( outputs[:, 0],
-                                inputs,
-                                grad_outputs=torch.ones_like( outputs[:, 0] ),
-                                create_graph=True )[0]
-    dTdt = torch.autograd.grad( outputs[:, 1],
-                                inputs,
-                                grad_outputs=torch.ones_like( outputs[:, 1] ),
-                                create_graph=True )[0]
-
-    drdt *= np.diff( DROPLET_RADIUS_LOG_RANGE ).astype( float ) * (10**((outputs[:, 0] * np.diff( DROPLET_RADIUS_LOG_RANGE ).astype( float ) / 2) + np.mean( DROPLET_RADIUS_LOG_RANGE ).astype( float ))) * 0.5 * np.log( 10 )
-    dTdt *= np.diff( DROPLET_TEMPERATURE_RANGE ).astype( float ) * 0.5
-
-    return [drdt, dTdt]
-
-def weighted_mse_loss( inputs, targets, weights ):
-    """
-    Calculates MSE error between inputs and targets with a weight for each difference.
-
-    Takes 3 arguments:
-
-      inputs      - Array of any size.
-      targets     - Array with shape matching inputs.
-      weights     - Array with same shape as inputs and targets with coefficients for
-                    each difference.
-
-    Returns 1 value:
-
-      loss - The weighted MSE error with the same shape as inputs.
-
-    """
-    return (weights * ((inputs - targets)**2)).mean()
-
-def train_model( model, criterion, optimizer, device, number_epochs, training_file ):
-    """
-    Trains the supplied model for one or more epochs using all of the droplet parameters
-    in an on-disk training file.  The parameters are read into memory once and then
-    randomly sampled each epoch.  Any weird parameters encountered in the training file
-    are logged and
-
-    Takes 6 arguments:
-
-      model         - PyTorch model to optimize.
-      criterion     - PyTorch loss object to use during optimization.
-      optimizer     - PyTorch optimizer associated with model.
-      device        - Device string indicating where the optimization is
-                      being performed.
-      number_epochs - Number of epochs to train model for.  All training
-                      data in training_file will be seen by the model
-                      this many times.
-      training_file - Path to the file containing training data created by
-                      create_training_file().
-
-    Returns 1 value:
-
-      loss_history - List of training losses, one per mini-batch during
-                     the training process.
-
-    """
-
-    #
-    # NOTE: This is inefficient and requires the entire training data set to reside in
-    #       RAM.  We could read chunks of the file on demand but that would require
-    #       a more sophisticated training loop that performs I/O in a separate thread
-    #       while the optimization process executes.
-    #
-    #       TL;DR Find a big machine to train on.
-    #
-    input_parameters, output_parameters, integration_times = read_training_file( training_file )
-
-    weights = np.reciprocal( integration_times )
-    weights = np.stack( (weights, weights), axis=-1 )
-    weights = torch.from_numpy( weights ).to( device )
-
-    BATCH_SIZE      = 1024
-    MINI_BATCH_SIZE = 1024
-
-    #
-    # NOTE: This ignores parameters if the last batch isn't complete.
-    #
-    NUMBER_BATCHES  = input_parameters.shape[0] // BATCH_SIZE
-
-    # Track each mini-batch's training loss for analysis.
-    loss_history = []
-
-    batch_indices = np.arange( NUMBER_BATCHES )
-
-    for epoch_index in range( number_epochs ):
-        model.train()
-
-        # Reset our training loss.
-        running_loss = 0.0
-
-        # "Shuffle" our training data so each epoch sees it in a different
-        # order.  Note that we generate a permutation of batch indices so
-        # we don't actually rearrange the training data in memory and
-        # dramatically slow things down.
-        permuted_batch_indices = np.random.permutation( batch_indices )
-
-        for batch_index in range( NUMBER_BATCHES ):
-            start_index = permuted_batch_indices[batch_index] * BATCH_SIZE
-            end_index   = start_index + BATCH_SIZE
-
-            # Get the next batch of droplets.
-            inputs          = input_parameters[start_index:end_index, :]
-            outputs         = output_parameters[start_index:end_index, :]
-            times           = integration_times[start_index:end_index]
-            current_weights = weights[start_index:end_index]
-
-            # Normalize the inputs and outputs to [-1, 1].
-            normalized_inputs  = normalize_droplet_parameters( inputs )
-            normalized_outputs = normalize_droplet_parameters( outputs )
-
-            # XXX: Need to rethink how we handle time as an input.  This is annoying
-            #      to have to stack a reshaped vector each time.
-            normalized_inputs = np.hstack( (normalized_inputs,
-                                            times.reshape( (BATCH_SIZE, 1) )) )
-
-            normalized_inputs  = torch.from_numpy( normalized_inputs ).to( device )
-            normalized_outputs = torch.from_numpy( normalized_outputs ).to( device )
-
-            # Reset the parameter gradients.
-            optimizer.zero_grad()
-
-            # Perform the forward pass.
-            normalized_approximations = model( normalized_inputs )
-
-            # Estimate the loss - using weights if needed
-            if criterion == weighted_mse_loss:
-                loss = weighted_mse_loss( normalized_approximations, normalized_outputs, current_weights )
-            else:
-                criterion( normalized_approximations, normalized_outputs )
-
-            # Backwards pass and optimization.
-            loss.backward()
-            optimizer.step()
-
-            running_loss += loss.item()
-
-            if batch_index > 0 and batch_index % MINI_BATCH_SIZE == 0:
-                running_loss /= MINI_BATCH_SIZE
-
-                print( "Epoch #{:d}, batch #{:d} loss: {:g}".format(
-                    epoch_index + 1,
-                    batch_index + 1,
-                    running_loss ), flush=True )
-                print( ((normalized_approximations - normalized_outputs)**2).mean( axis=0 ) )
-                print( ((normalized_approximations - normalized_outputs)**2).max( axis=0 ) )
-                loss_history.append( running_loss )
-
-                # Break out of the batch loop if we ever encounter an input
-                # that causes the loss to spike.  Training data generation
-                # should produce good inputs and outputs though should something
-                # slip through we want to immediately stop training so we can
-                # understand what went wrong - there is no way to recover
-                # from a loss spike that is O(10) when our target loss is O(1e-4).
-                if running_loss > 10:
-                    print( "Crazy loss!" )
-                    print( inputs, outputs )
-                    break
-
-                running_loss = 0.0
-        else:
-            # We finished all of the batches.  Adjust the learning rate and
-            # go to the next epoch.
-            for parameter_group in optimizer.param_groups:
-                parameter_group["lr"] /= 2
-
-            continue
-
-        # We didn't complete all of the batches in this epoch.
-        break
-
-    # Handle the case where we didn't have enough data to complete a mini-batch.
-    if len( loss_history ) == 0:
-        running_loss /= number_epochs * NUMBER_BATCHES
-        loss_history.append( running_loss )
-
-        print( "Epoch #{:d}, batch #{:d} loss: {:g}".format(
-            number_epochs,
-            NUMBER_BATCHES,
-            running_loss ) )
-
-    return loss_history
-
 def do_inference( input_parameters, times, model, device ):
     """
     Estimates droplet parameters using a specified model.  Model evaluation is
@@ -295,6 +110,104 @@ def do_inference( input_parameters, times, model, device ):
     normalized_outputs = eval_model( torch.from_numpy( normalized_inputs ).to( device ) ).to( device ).detach().numpy()
 
     return scale_droplet_parameters( normalized_outputs )
+
+def do_iterative_bdf( input_parameters, times ):
+    """
+    Evaluates a particle trajectory along given background inputs with
+    bdf. Requires all inputs to be sorted with respect to time.
+
+    Evalutes iteratively, using the output time/radius for the (n-1)th time for
+    the n-th time. Background parameters are tracked with `input_parameters[2:]`
+    for each time step.
+
+    Takes 2 arguments:
+
+      input_parameters    - NumPy array, sized number_time_steps x 6, containing the
+                            input parameters for a single particle in order by time.
+                            These are provided in their natural, physical ranges.
+      times               - NumPy array, shaped 1 x data length containing
+                            the time at each step.
+
+    Returns 1 value:
+
+      output_parameters   - NumPy array, sized input_parameters.shape[0] x 2, containing the
+                            estimated trajectory of a particle integrated
+                            along its background parameters with BDF
+                            in natural ranges. Does NOT calculate
+                            output for the last column so that the lengths
+                            of the input and output match
+
+    """
+
+    integration_times = np.diff( times )
+
+    output_parameters       = np.zeros( (input_parameters.shape[0], 2), dtype=np.float32 )
+    output_parameters[0, :] = input_parameters[0, :2]
+
+    # Evaluate
+    for time_index in range( 1, input_parameters.shape[0] ):
+        output_parameters[time_index, :] = solve_ivp_float32_outputs( dydt,
+                                                                      [0, integration_times[time_index - 1]],
+                                                                      output_parameters[time_index - 1, :],
+                                                                      method="BDF",
+                                                                      t_eval=[integration_times[time_index-1]],
+                                                                      args=(input_parameters[time_index-1, 2:],) ).y[:, 0]
+
+    return output_parameters
+
+def do_iterative_inference( input_parameters, times, model, device ):
+    """
+    Estimates a particle trajectory along given background inputs. Requires all
+    inputs to be sorted with respect to time.
+
+    Evaluates iteratively, using the output time/radius for the (n-1)th time for
+    the n-th time. Background parameters are tracked with `input_parameters[2:]`
+    for each time step.
+
+    Takes 4 arguments:
+
+      input_parameters    - Array, sized number_time_steps x 6, containing the
+                            input parameters for a single particle in order by time.
+                            These are provided in their natural, physical ranges.
+      times               - Array, sized 1 x data length containing the time at
+                            each step.
+      model               - PyTorch model to use.
+      device              - Device string to evaluate on.
+
+    Returns 1 value:
+
+      output_parameters   - NumPy array, sized input_parameters.shape[0] x 2,
+                            containing the estimated trajectory of a particle
+                            integrated along its background parameters with the
+                            MLP in natural ranges.  Does NOT calculate output
+                            for the last column so that the lengths of the input
+                            and output match.
+
+    """
+
+    eval_model = model.to( device )
+    eval_model.eval()
+
+    normalized_data   = np.array( normalize_droplet_parameters( input_parameters ) )
+    integration_times = np.diff( times )
+
+    output_parameters       = np.zeros( (normalized_data.shape[0], 2), dtype=np.float32 )
+    output_parameters[0, :] = normalized_data[0, :2]
+
+    normalized_inputs = np.hstack( (output_parameters[0, :],
+                                    normalized_data[0, 2:],
+                                    [integration_times[0]] ) ).astype( "float32" )
+
+    # Evaluate
+    for time_index in range( 1,  normalized_data.shape[0] ):
+        output_parameters[time_index, :] = eval_model( torch.from_numpy( normalized_inputs ).to( device ) ).detach().numpy()
+
+        if time_index < normalized_data.shape[0] - 1:
+            normalized_inputs = np.hstack( (output_parameters[time_index, :],
+                                            normalized_data[time_index, 2:],
+                                            [integration_times[time_index]] ) ).astype( "float32" )
+
+    return scale_droplet_parameters( output_parameters )
 
 def generate_fortran_module( model_name, model_state, output_path ):
     """
@@ -595,6 +508,62 @@ module droplet_model
 
         """
 
+        def write_model_biases( model_state, output_fp, indentation_str ):
+            """
+            Internal routine that generates the biases initialization expressions for
+            all of the biases in the supplied model state.  This does not generate
+            initialization for weights nor does it generate a fully functional subroutine
+            (i.e. pre-amble/epilog).
+
+            Takes 3 arguments:
+
+              model_state     - PyTorch model state dictionary for the model to initialize.
+              output_fp       - File handle to write to.
+              indentation_str - String prepended to each line of the subroutine written.
+
+            Returns nothing.
+            """
+
+            # We rename each of the biases to Fortran-compatible symbols that are
+            # self-descriptive.
+            original_layer_names = expected_biases
+            new_layer_names      = ["layer1_biases",
+                                    "layer2_biases",
+                                    "layer3_biases",
+                                    "output_biases"]
+
+            for original_layer_name, new_layer_name in zip( original_layer_names, new_layer_names ):
+                layer_parameters = model_state[original_layer_name]
+
+                # Start the array assignment to this bias' variable.
+                biases_definition_str = "{:s}{:s} = [".format(
+                    indentation_str,
+                    new_layer_name )
+
+                # Create enough indentation so all of the bias values are aligned
+                # at the first column after the open bracket.
+                biases_indentation_str = " " * len( biases_definition_str )
+
+                # Template to join successive bias values together with.  Note that
+                # this is not applied to the last one.
+                definition_join_str    = ", &\n{:s}".format( biases_indentation_str )
+
+                # Build the list of indented bias values, each printed with 10 digits
+                # after the decimal point, and aligned so that positive biases have a
+                # leading space to match negative biases' alignment.
+                #
+                # NOTE: This assumes the bias values' magnitudes are such that 10 digits
+                #       of precision is sufficient.
+                #
+                bias_values_str = definition_join_str.join(
+                    map( lambda x: "{: .10f}".format( x ),
+                         layer_parameters.cpu().numpy() ) )
+
+                print( "{:s}{:s}]".format(
+                    biases_definition_str,
+                    bias_values_str ),
+                      file=output_fp )
+
         def write_model_weights( model_state, output_fp, indentation_str ):
             """
             Internal routine that generates the weight initialization expressions for
@@ -663,62 +632,6 @@ module droplet_model
                     weights_values_str,
                     weights_indentation_str,
                     weights_reshape_dimensions_str ),
-                      file=output_fp )
-
-        def write_model_biases( model_state, output_fp, indentation_str ):
-            """
-            Internal routine that generates the biases initialization expressions for
-            all of the biases in the supplied model state.  This does not generate
-            initialization for weights nor does it generate a fully functional subroutine
-            (i.e. pre-amble/epilog).
-
-            Takes 3 arguments:
-
-              model_state     - PyTorch model state dictionary for the model to initialize.
-              output_fp       - File handle to write to.
-              indentation_str - String prepended to each line of the subroutine written.
-
-            Returns nothing.
-            """
-
-            # We rename each of the biases to Fortran-compatible symbols that are
-            # self-descriptive.
-            original_layer_names = expected_biases
-            new_layer_names      = ["layer1_biases",
-                                    "layer2_biases",
-                                    "layer3_biases",
-                                    "output_biases"]
-
-            for original_layer_name, new_layer_name in zip( original_layer_names, new_layer_names ):
-                layer_parameters = model_state[original_layer_name]
-
-                # Start the array assignment to this bias' variable.
-                biases_definition_str = "{:s}{:s} = [".format(
-                    indentation_str,
-                    new_layer_name )
-
-                # Create enough indentation so all of the bias values are aligned
-                # at the first column after the open bracket.
-                biases_indentation_str = " " * len( biases_definition_str )
-
-                # Template to join successive bias values together with.  Note that
-                # this is not applied to the last one.
-                definition_join_str    = ", &\n{:s}".format( biases_indentation_str )
-
-                # Build the list of indented bias values, each printed with 10 digits
-                # after the decimal point, and aligned so that positive biases have a
-                # leading space to match negative biases' alignment.
-                #
-                # NOTE: This assumes the bias values' magnitudes are such that 10 digits
-                #       of precision is sufficient.
-                #
-                bias_values_str = definition_join_str.join(
-                    map( lambda x: "{: .10f}".format( x ),
-                         layer_parameters.cpu().numpy() ) )
-
-                print( "{:s}{:s}]".format(
-                    biases_definition_str,
-                    bias_values_str ),
                       file=output_fp )
 
         # Our initialization routine is inside of a "contains" block so we're
@@ -863,100 +776,187 @@ end subroutine estimate
         # Write out the end of the module.
         write_module_epilog( model_state, output_fp )
 
-def do_iterative_bdf( input_parameters, times ):
+def ode_residual( inputs, outputs, model ):
+    drdt = torch.autograd.grad( outputs[:, 0],
+                                inputs,
+                                grad_outputs=torch.ones_like( outputs[:, 0] ),
+                                create_graph=True )[0]
+    dTdt = torch.autograd.grad( outputs[:, 1],
+                                inputs,
+                                grad_outputs=torch.ones_like( outputs[:, 1] ),
+                                create_graph=True )[0]
+
+    drdt *= np.diff( DROPLET_RADIUS_LOG_RANGE ).astype( float ) * (10**((outputs[:, 0] * np.diff( DROPLET_RADIUS_LOG_RANGE ).astype( float ) / 2) + np.mean( DROPLET_RADIUS_LOG_RANGE ).astype( float ))) * 0.5 * np.log( 10 )
+    dTdt *= np.diff( DROPLET_TEMPERATURE_RANGE ).astype( float ) * 0.5
+
+    return [drdt, dTdt]
+
+def train_model( model, criterion, optimizer, device, number_epochs, training_file ):
     """
-    Evaluates a particle trajectory along given background inputs with
-    bdf. Requires all inputs to be sorted with respect to time.
+    Trains the supplied model for one or more epochs using all of the droplet parameters
+    in an on-disk training file.  The parameters are read into memory once and then
+    randomly sampled each epoch.  Any weird parameters encountered in the training file
+    are logged and
 
-    Evalutes iteratively, using the output time/radius for the (n-1)th time for
-    the n-th time. Background parameters are tracked with `input_parameters[2:]`
-    for each time step.
+    Takes 6 arguments:
 
-    Takes 2 arguments:
-
-      input_parameters    - NumPy array, sized number_time_steps x 6, containing the
-                            input parameters for a single particle in order by time.
-                            These are provided in their natural, physical ranges.
-      times               - NumPy array, shaped 1 x data length containing
-                            the time at each step.
+      model         - PyTorch model to optimize.
+      criterion     - PyTorch loss object to use during optimization.
+      optimizer     - PyTorch optimizer associated with model.
+      device        - Device string indicating where the optimization is
+                      being performed.
+      number_epochs - Number of epochs to train model for.  All training
+                      data in training_file will be seen by the model
+                      this many times.
+      training_file - Path to the file containing training data created by
+                      create_training_file().
 
     Returns 1 value:
 
-      output_parameters   - NumPy array, sized input_parameters.shape[0] x 2, containing the
-                            estimated trajectory of a particle integrated
-                            along its background parameters with BDF
-                            in natural ranges. Does NOT calculate
-                            output for the last column so that the lengths
-                            of the input and output match
+      loss_history - List of training losses, one per mini-batch during
+                     the training process.
 
     """
 
-    integration_times = np.diff( times )
+    #
+    # NOTE: This is inefficient and requires the entire training data set to reside in
+    #       RAM.  We could read chunks of the file on demand but that would require
+    #       a more sophisticated training loop that performs I/O in a separate thread
+    #       while the optimization process executes.
+    #
+    #       TL;DR Find a big machine to train on.
+    #
+    input_parameters, output_parameters, integration_times = read_training_file( training_file )
 
-    output_parameters       = np.zeros( (input_parameters.shape[0], 2), dtype=np.float32 )
-    output_parameters[0, :] = input_parameters[0, :2]
+    weights = np.reciprocal( integration_times )
+    weights = np.stack( (weights, weights), axis=-1 )
+    weights = torch.from_numpy( weights ).to( device )
 
-    # Evaluate
-    for time_index in range( 1, input_parameters.shape[0] ):
-        output_parameters[time_index, :] = solve_ivp_float32_outputs( dydt,
-                                                                      [0, integration_times[time_index - 1]],
-                                                                      output_parameters[time_index - 1, :],
-                                                                      method="BDF",
-                                                                      t_eval=[integration_times[time_index-1]],
-                                                                      args=(input_parameters[time_index-1, 2:],) ).y[:, 0]
+    BATCH_SIZE      = 1024
+    MINI_BATCH_SIZE = 1024
 
-    return output_parameters
+    #
+    # NOTE: This ignores parameters if the last batch isn't complete.
+    #
+    NUMBER_BATCHES  = input_parameters.shape[0] // BATCH_SIZE
 
-def do_iterative_inference( input_parameters, times, model, device ):
+    # Track each mini-batch's training loss for analysis.
+    loss_history = []
+
+    batch_indices = np.arange( NUMBER_BATCHES )
+
+    for epoch_index in range( number_epochs ):
+        model.train()
+
+        # Reset our training loss.
+        running_loss = 0.0
+
+        # "Shuffle" our training data so each epoch sees it in a different
+        # order.  Note that we generate a permutation of batch indices so
+        # we don't actually rearrange the training data in memory and
+        # dramatically slow things down.
+        permuted_batch_indices = np.random.permutation( batch_indices )
+
+        for batch_index in range( NUMBER_BATCHES ):
+            start_index = permuted_batch_indices[batch_index] * BATCH_SIZE
+            end_index   = start_index + BATCH_SIZE
+
+            # Get the next batch of droplets.
+            inputs          = input_parameters[start_index:end_index, :]
+            outputs         = output_parameters[start_index:end_index, :]
+            times           = integration_times[start_index:end_index]
+            current_weights = weights[start_index:end_index]
+
+            # Normalize the inputs and outputs to [-1, 1].
+            normalized_inputs  = normalize_droplet_parameters( inputs )
+            normalized_outputs = normalize_droplet_parameters( outputs )
+
+            # XXX: Need to rethink how we handle time as an input.  This is annoying
+            #      to have to stack a reshaped vector each time.
+            normalized_inputs = np.hstack( (normalized_inputs,
+                                            times.reshape( (BATCH_SIZE, 1) )) )
+
+            normalized_inputs  = torch.from_numpy( normalized_inputs ).to( device )
+            normalized_outputs = torch.from_numpy( normalized_outputs ).to( device )
+
+            # Reset the parameter gradients.
+            optimizer.zero_grad()
+
+            # Perform the forward pass.
+            normalized_approximations = model( normalized_inputs )
+
+            # Estimate the loss - using weights if needed
+            if criterion == weighted_mse_loss:
+                loss = weighted_mse_loss( normalized_approximations, normalized_outputs, current_weights )
+            else:
+                criterion( normalized_approximations, normalized_outputs )
+
+            # Backwards pass and optimization.
+            loss.backward()
+            optimizer.step()
+
+            running_loss += loss.item()
+
+            if batch_index > 0 and batch_index % MINI_BATCH_SIZE == 0:
+                running_loss /= MINI_BATCH_SIZE
+
+                print( "Epoch #{:d}, batch #{:d} loss: {:g}".format(
+                    epoch_index + 1,
+                    batch_index + 1,
+                    running_loss ), flush=True )
+                print( ((normalized_approximations - normalized_outputs)**2).mean( axis=0 ) )
+                print( ((normalized_approximations - normalized_outputs)**2).max( axis=0 ) )
+                loss_history.append( running_loss )
+
+                # Break out of the batch loop if we ever encounter an input
+                # that causes the loss to spike.  Training data generation
+                # should produce good inputs and outputs though should something
+                # slip through we want to immediately stop training so we can
+                # understand what went wrong - there is no way to recover
+                # from a loss spike that is O(10) when our target loss is O(1e-4).
+                if running_loss > 10:
+                    print( "Crazy loss!" )
+                    print( inputs, outputs )
+                    break
+
+                running_loss = 0.0
+        else:
+            # We finished all of the batches.  Adjust the learning rate and
+            # go to the next epoch.
+            for parameter_group in optimizer.param_groups:
+                parameter_group["lr"] /= 2
+
+            continue
+
+        # We didn't complete all of the batches in this epoch.
+        break
+
+    # Handle the case where we didn't have enough data to complete a mini-batch.
+    if len( loss_history ) == 0:
+        running_loss /= number_epochs * NUMBER_BATCHES
+        loss_history.append( running_loss )
+
+        print( "Epoch #{:d}, batch #{:d} loss: {:g}".format(
+            number_epochs,
+            NUMBER_BATCHES,
+            running_loss ) )
+
+    return loss_history
+
+def weighted_mse_loss( inputs, targets, weights ):
     """
-    Estimates a particle trajectory along given background inputs. Requires all
-    inputs to be sorted with respect to time.
+    Calculates MSE error between inputs and targets with a weight for each difference.
 
-    Evaluates iteratively, using the output time/radius for the (n-1)th time for
-    the n-th time. Background parameters are tracked with `input_parameters[2:]`
-    for each time step.
+    Takes 3 arguments:
 
-    Takes 4 arguments:
-
-      input_parameters    - Array, sized number_time_steps x 6, containing the
-                            input parameters for a single particle in order by time.
-                            These are provided in their natural, physical ranges.
-      times               - Array, sized 1 x data length containing the time at
-                            each step.
-      model               - PyTorch model to use.
-      device              - Device string to evaluate on.
+      inputs      - Array of any size.
+      targets     - Array with shape matching inputs.
+      weights     - Array with same shape as inputs and targets with coefficients for
+                    each difference.
 
     Returns 1 value:
 
-      output_parameters   - NumPy array, sized input_parameters.shape[0] x 2,
-                            containing the estimated trajectory of a particle
-                            integrated along its background parameters with the
-                            MLP in natural ranges.  Does NOT calculate output
-                            for the last column so that the lengths of the input
-                            and output match.
+      loss - The weighted MSE error with the same shape as inputs.
 
     """
-
-    eval_model = model.to( device )
-    eval_model.eval()
-
-    normalized_data   = np.array( normalize_droplet_parameters( input_parameters ) )
-    integration_times = np.diff( times )
-
-    output_parameters       = np.zeros( (normalized_data.shape[0], 2), dtype=np.float32 )
-    output_parameters[0, :] = normalized_data[0, :2]
-
-    normalized_inputs = np.hstack( (output_parameters[0, :],
-                                    normalized_data[0, 2:],
-                                    [integration_times[0]] ) ).astype( "float32" )
-
-    # Evaluate
-    for time_index in range( 1,  normalized_data.shape[0] ):
-        output_parameters[time_index, :] = eval_model( torch.from_numpy( normalized_inputs ).to( device ) ).detach().numpy()
-
-        if time_index < normalized_data.shape[0] - 1:
-            normalized_inputs = np.hstack( (output_parameters[time_index, :],
-                                            normalized_data[time_index, 2:],
-                                            [integration_times[time_index]] ) ).astype( "float32" )
-
-    return scale_droplet_parameters( output_parameters )
+    return (weights * ((inputs - targets)**2)).mean()

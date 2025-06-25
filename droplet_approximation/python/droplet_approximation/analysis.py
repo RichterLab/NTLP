@@ -9,49 +9,6 @@ from .models import do_inference, do_iterative_inference
 from .physics import dydt, scale_droplet_parameters
 from .physics import DROPLET_TIME_LOG_RANGE, normalize_droplet_parameters
 
-def parallel_analyze_model_iterative_performance_NTLP_data( model, df, iterations, device, cores=64 ):
-    """
-    NEEDS TO BE REWORKED - DO NOT USE
-
-    Calculates the model output by integrating along with each particle's
-    background conditions for `iterations` time steps. Groups the dataset
-    by processor that spawned each particle and then pools these jobs
-    onto `cores` workers.
-
-    Takes 5 arguments:
-
-      model            - PyTorch model to compare against the ODEs.
-      df               - Pandas DataFrame to evaluate particles from.
-      iterations       - Integer, number of time steps to iterate through
-                         for each input.
-      device           - Device to evaluate model on.
-      cores            - Integer, number of workers to parallelize across.  If omitted
-                         defaults to 64 cores.
-
-    Returns 1 value:
-
-      output           - NumPy array of output radii and temperatures
-                         after `iterations` time steps, shaped 2 x len(df).
-
-    """
-
-    print( "Sorting data" )
-    df.sort_values( by=["time", "particle id", "processor"], ascending=[True, True, True], inplace=True )
-    processor_groups = df.groupby( "processor" )
-
-    print( "Integrating data" )
-    inputs = [(dataset, iterations, model, device) for _, dataset in processor_groups]
-
-    with multiprocessing.Pool( processes=cores ) as pool:
-        results = np.vstack( pool.starmap( do_iterative_inference, inputs ) )
-
-    # TODO trim
-
-    print( "Scaling data" )
-    scaled_results = scale_droplet_parameters( results )
-
-    return scaled_results
-
 def analyze_model_iterative_performance( model, input_parameters=None, dt=0.05, final_time=10.0, figure_size=None ):
     """
     Creates a figure with four plots to qualitatively assess the supplied model's
@@ -189,121 +146,6 @@ def analyze_model_iterative_performance( model, input_parameters=None, dt=0.05, 
     ax_h[1][1].set_xscale( "log" )
 
     fig_h.tight_layout()
-
-def mse_score_models( models, file_name, device, weighted=False, normalized=False ):
-    """
-    DEPRECATED.
-
-    Will be rewritten after merge with new methods written locally.
-    Calculates the mean square error on an array of models for a dataset.
-
-    Takes 5 arguments:
-
-      models          - Sequence of PyTorch models to be evaluated.
-      file_name       - Path to training data.
-      device          - Device string to perform model evaluation on.
-      weighted        - Optional boolean, defaults to False, if True,
-                        weights MSE loss by the reciprocal of the
-                        integration time.
-      normalized      - Optional boolean, defaults to False, if True,
-                        normalizes droplet parameters before
-                        calculating MSE loss.
-
-    Returns 1 value:
-
-      losses          - NumPy array, length of models, MSE loss for
-                        each model on the provided data set.
-
-    """
-
-    input_parameters, output_parameters, integration_times = read_training_file( file_name )
-
-    # Normalizes the radii' reciprocal logarithmically since it is harder
-    # to learn.
-    weights = 10**((DROPLET_TIME_LOG_RANGE[0] + DROPLET_TIME_LOG_RANGE[1]) / 2.0) * np.reciprocal( integration_times )
-    weights = np.stack( (weights, weights), axis=-1 )
-
-    BATCH_SIZE = 1024 * 10
-
-    number_droplets = len( input_parameters )
-    number_batches  = (number_droplets + BATCH_SIZE + 1) // BATCH_SIZE
-
-    losses = np.zeros( shape=(len( models ), 2), dtype=np.float64 )
-    for batch_index in range( number_batches ):
-        if batch_index != (number_batches - 1):
-            batch_size = BATCH_SIZE
-        else:
-            batch_size = number_droplets % BATCH_SIZE
-
-        start_index = BATCH_SIZE * batch_index
-        end_index   = start_index + batch_size
-
-        inputs          = input_parameters[start_index:end_index]
-        target_outputs  = output_parameters[start_index:end_index]
-        times           = integration_times[start_index:end_index]
-        current_weights = weights[start_index:end_index]
-
-        # If this gets too large could average over batches, however
-        # not all batches are the same size. Could multiply by
-        # batch_size/BATCH_SIZE and then average by batch size if
-        # need be
-        for model_index in range( len( models ) ):
-            inferred_outputs = do_inference( inputs,
-                                             times,
-                                             models[model_index],
-                                             device )
-            if normalized:
-                error = (normalize_droplet_parameters( inferred_outputs ) -
-                         normalize_droplet_parameters( target_outputs ))
-            else:
-                error = np.array( [np.log10( inferred_outputs[:, 0] /
-                                             target_outputs[:, 0] ),
-                                   inferred_outputs[:, 1] - target_outputs[:, 1]] )
-            if weighted:
-                losses[model_index] += ((current_weights * error)**2).sum( axis=1 )
-            else:
-                losses[model_index] += (error**2).sum( axis=1 )
-
-    losses /= number_droplets
-
-    return losses
-
-def plot_droplet_size_temperature( size_temperatures, times ):
-    """
-    Plots a droplet's size and temperature as a function of time.
-
-    Takes 2 arguments:
-
-      size_temperatures - NumPy array, sized 2 x number_times, containing
-                          droplet radii and temperatures in the first and second
-                          columns, respectively.
-      times             - NumPy vector, of length number_times, containing the
-                          times corresponding to each entry in size_temperatures.
-
-    Returns 2 values:
-
-      fig_h - Figure handle created.
-      ax_h  - Sequence of two axes handles, one for the size plot and another
-              for the temperature plot.
-
-    """
-
-    fig_h, ax_h = plt.subplots( 1, 2, figsize=(9, 4) )
-
-    fig_h.suptitle( "Droplet Size and Temperature (Truth)" )
-
-    ax_h[0].plot( times, size_temperatures[0, :], label="radius" )
-    ax_h[0].set_xlabel( "Time (s)" )
-    ax_h[0].set_ylabel( "Radius (m)" )
-    ax_h[0].set_xscale( "log" )
-    ax_h[0].set_yscale( "log" )
-
-    ax_h[1].plot( times, size_temperatures[1, :], label="temp" )
-    ax_h[1].set_xlabel( "Time (s)" )
-    ax_h[1].set_ylabel( "Temperature (K)" )
-    ax_h[1].set_xscale( "log" )
-
-    return fig_h, ax_h
 
 def analyze_model_performance( model, input_parameters=None, figure_size=None ):
     """
@@ -460,66 +302,6 @@ def analyze_model_performance( model, input_parameters=None, figure_size=None ):
 
     fig_h.tight_layout()
 
-def standard_distance( truth_output, model_output ):
-    """
-    Calculates the "distance" between the `mlp` output and the true output
-    on a dataframe. Uses the absolute value of the difference between the log
-    of both output radii and the absolute value of the difference between the
-    two output temperatures. Requires a dataframe with the mlp output.
-
-    Takes 2 argumenst:
-
-      truth_output        - NumPy array, shaped number 2 x time steps containing:
-                            the backwards euler radius output at index 0
-                            the backwards euler temperature output at index 1
-      model_output        - NumPy array, shaped number 2 x time steps containing:
-                            the MLP radius output at index 0
-                            the MLP temperature output at index 1
-
-    Returns 1 value:
-
-      NTLP_distance_data  - NumPy array, shaped data 2 x time steps, containing
-                            the absolute value of the difference of the log of
-                            the output radii at index 0 the absolute value
-                            difference of of the output temperatures at index 1.
-
-    """
-
-    return np.array( [np.abs( np.log10( model_output[:, 0] / truth_output[:, 0] ) ),
-                      np.abs( model_output[:, 1] - truth_output[:, 1] )] ).T
-
-def calculate_nrmse( truth_output, model_output, distance_function ):
-    """
-    Calculates the normalized root-mean squared error (NRMSE) between the
-    provided truth and model outputs using a user-supplied error function.
-    Returns the NRMSE across all observations (rows).
-
-    Takes 3 arguments:
-
-      truth_output      - NumPy array, sized number_observations x 2, containing
-                          the truth values for radii and temperatures.
-      model_output      - NumPy array, sized number_observations x 2, containing
-                          the model values for radii and temparatures.
-      distance_function - The distance function to compute the error between
-                          truth and model outputs.  Takes two arguments,
-                          truth_output and model_output, and returns a NumPy
-                          array, sized number_observations x 2, containing the
-                          error (distance) between the inputs.
-
-    Returns 2 values:
-
-      radii_nrmse        - NRMSE of the radii.
-      temperatures_nrmse - NRMSE of the temperatures.
-
-    """
-
-    distances = distance_function( truth_output, model_output )
-
-    return (np.sqrt( np.mean( distances[:, 0]**2 ) ) /
-            np.abs( np.mean( np.log10( truth_output[:, 0] ) ) ) +
-            np.sqrt( np.mean( distances[:, 1]**2 ) ) /
-            np.abs( np.mean( truth_output[:, 1] ) ))
-
 def analyze_model_particle_performance( times, truth_output, model_output, distances, title_string=None, figure_size=None, time_range=None ):
     """
     Creates a figure with four plots to qualitatively assess the supplied model's
@@ -639,3 +421,221 @@ def analyze_model_particle_performance( times, truth_output, model_output, dista
         ax_h[1][1].set_xlim( time_range )
 
     fig_h.tight_layout()
+
+def calculate_nrmse( truth_output, model_output, distance_function ):
+    """
+    Calculates the normalized root-mean squared error (NRMSE) between the
+    provided truth and model outputs using a user-supplied error function.
+    Returns the NRMSE across all observations (rows).
+
+    Takes 3 arguments:
+
+      truth_output      - NumPy array, sized number_observations x 2, containing
+                          the truth values for radii and temperatures.
+      model_output      - NumPy array, sized number_observations x 2, containing
+                          the model values for radii and temparatures.
+      distance_function - The distance function to compute the error between
+                          truth and model outputs.  Takes two arguments,
+                          truth_output and model_output, and returns a NumPy
+                          array, sized number_observations x 2, containing the
+                          error (distance) between the inputs.
+
+    Returns 2 values:
+
+      radii_nrmse        - NRMSE of the radii.
+      temperatures_nrmse - NRMSE of the temperatures.
+
+    """
+
+    distances = distance_function( truth_output, model_output )
+
+    return (np.sqrt( np.mean( distances[:, 0]**2 ) ) /
+            np.abs( np.mean( np.log10( truth_output[:, 0] ) ) ) +
+            np.sqrt( np.mean( distances[:, 1]**2 ) ) /
+            np.abs( np.mean( truth_output[:, 1] ) ))
+
+def mse_score_models( models, file_name, device, weighted=False, normalized=False ):
+    """
+    DEPRECATED.
+
+    Will be rewritten after merge with new methods written locally.
+    Calculates the mean square error on an array of models for a dataset.
+
+    Takes 5 arguments:
+
+      models          - Sequence of PyTorch models to be evaluated.
+      file_name       - Path to training data.
+      device          - Device string to perform model evaluation on.
+      weighted        - Optional boolean, defaults to False, if True,
+                        weights MSE loss by the reciprocal of the
+                        integration time.
+      normalized      - Optional boolean, defaults to False, if True,
+                        normalizes droplet parameters before
+                        calculating MSE loss.
+
+    Returns 1 value:
+
+      losses          - NumPy array, length of models, MSE loss for
+                        each model on the provided data set.
+
+    """
+
+    input_parameters, output_parameters, integration_times = read_training_file( file_name )
+
+    # Normalizes the radii' reciprocal logarithmically since it is harder
+    # to learn.
+    weights = 10**((DROPLET_TIME_LOG_RANGE[0] + DROPLET_TIME_LOG_RANGE[1]) / 2.0) * np.reciprocal( integration_times )
+    weights = np.stack( (weights, weights), axis=-1 )
+
+    BATCH_SIZE = 1024 * 10
+
+    number_droplets = len( input_parameters )
+    number_batches  = (number_droplets + BATCH_SIZE + 1) // BATCH_SIZE
+
+    losses = np.zeros( shape=(len( models ), 2), dtype=np.float64 )
+    for batch_index in range( number_batches ):
+        if batch_index != (number_batches - 1):
+            batch_size = BATCH_SIZE
+        else:
+            batch_size = number_droplets % BATCH_SIZE
+
+        start_index = BATCH_SIZE * batch_index
+        end_index   = start_index + batch_size
+
+        inputs          = input_parameters[start_index:end_index]
+        target_outputs  = output_parameters[start_index:end_index]
+        times           = integration_times[start_index:end_index]
+        current_weights = weights[start_index:end_index]
+
+        # If this gets too large could average over batches, however
+        # not all batches are the same size. Could multiply by
+        # batch_size/BATCH_SIZE and then average by batch size if
+        # need be
+        for model_index in range( len( models ) ):
+            inferred_outputs = do_inference( inputs,
+                                             times,
+                                             models[model_index],
+                                             device )
+            if normalized:
+                error = (normalize_droplet_parameters( inferred_outputs ) -
+                         normalize_droplet_parameters( target_outputs ))
+            else:
+                error = np.array( [np.log10( inferred_outputs[:, 0] /
+                                             target_outputs[:, 0] ),
+                                   inferred_outputs[:, 1] - target_outputs[:, 1]] )
+            if weighted:
+                losses[model_index] += ((current_weights * error)**2).sum( axis=1 )
+            else:
+                losses[model_index] += (error**2).sum( axis=1 )
+
+    losses /= number_droplets
+
+    return losses
+
+def parallel_analyze_model_iterative_performance_NTLP_data( model, df, iterations, device, cores=64 ):
+    """
+    NEEDS TO BE REWORKED - DO NOT USE
+
+    Calculates the model output by integrating along with each particle's
+    background conditions for `iterations` time steps. Groups the dataset
+    by processor that spawned each particle and then pools these jobs
+    onto `cores` workers.
+
+    Takes 5 arguments:
+
+      model            - PyTorch model to compare against the ODEs.
+      df               - Pandas DataFrame to evaluate particles from.
+      iterations       - Integer, number of time steps to iterate through
+                         for each input.
+      device           - Device to evaluate model on.
+      cores            - Integer, number of workers to parallelize across.  If omitted
+                         defaults to 64 cores.
+
+    Returns 1 value:
+
+      output           - NumPy array of output radii and temperatures
+                         after `iterations` time steps, shaped 2 x len(df).
+
+    """
+
+    print( "Sorting data" )
+    df.sort_values( by=["time", "particle id", "processor"], ascending=[True, True, True], inplace=True )
+    processor_groups = df.groupby( "processor" )
+
+    print( "Integrating data" )
+    inputs = [(dataset, iterations, model, device) for _, dataset in processor_groups]
+
+    with multiprocessing.Pool( processes=cores ) as pool:
+        results = np.vstack( pool.starmap( do_iterative_inference, inputs ) )
+
+    # TODO trim
+
+    print( "Scaling data" )
+    scaled_results = scale_droplet_parameters( results )
+
+    return scaled_results
+
+def plot_droplet_size_temperature( size_temperatures, times ):
+    """
+    Plots a droplet's size and temperature as a function of time.
+
+    Takes 2 arguments:
+
+      size_temperatures - NumPy array, sized 2 x number_times, containing
+                          droplet radii and temperatures in the first and second
+                          columns, respectively.
+      times             - NumPy vector, of length number_times, containing the
+                          times corresponding to each entry in size_temperatures.
+
+    Returns 2 values:
+
+      fig_h - Figure handle created.
+      ax_h  - Sequence of two axes handles, one for the size plot and another
+              for the temperature plot.
+
+    """
+
+    fig_h, ax_h = plt.subplots( 1, 2, figsize=(9, 4) )
+
+    fig_h.suptitle( "Droplet Size and Temperature (Truth)" )
+
+    ax_h[0].plot( times, size_temperatures[0, :], label="radius" )
+    ax_h[0].set_xlabel( "Time (s)" )
+    ax_h[0].set_ylabel( "Radius (m)" )
+    ax_h[0].set_xscale( "log" )
+    ax_h[0].set_yscale( "log" )
+
+    ax_h[1].plot( times, size_temperatures[1, :], label="temp" )
+    ax_h[1].set_xlabel( "Time (s)" )
+    ax_h[1].set_ylabel( "Temperature (K)" )
+    ax_h[1].set_xscale( "log" )
+
+    return fig_h, ax_h
+
+def standard_distance( truth_output, model_output ):
+    """
+    Calculates the "distance" between the `mlp` output and the true output
+    on a dataframe. Uses the absolute value of the difference between the log
+    of both output radii and the absolute value of the difference between the
+    two output temperatures. Requires a dataframe with the mlp output.
+
+    Takes 2 argumenst:
+
+      truth_output        - NumPy array, shaped number 2 x time steps containing:
+                            the backwards euler radius output at index 0
+                            the backwards euler temperature output at index 1
+      model_output        - NumPy array, shaped number 2 x time steps containing:
+                            the MLP radius output at index 0
+                            the MLP temperature output at index 1
+
+    Returns 1 value:
+
+      NTLP_distance_data  - NumPy array, shaped data 2 x time steps, containing
+                            the absolute value of the difference of the log of
+                            the output radii at index 0 the absolute value
+                            difference of of the output temperatures at index 1.
+
+    """
+
+    return np.array( [np.abs( np.log10( model_output[:, 0] / truth_output[:, 0] ) ),
+                      np.abs( model_output[:, 1] - truth_output[:, 1] )] ).T

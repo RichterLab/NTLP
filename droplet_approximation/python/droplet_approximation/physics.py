@@ -132,115 +132,6 @@ def dydt( t, y, parameters ):
 
     return [dy1dt, dy2dt]
 
-def solve_ivp_float32_outputs( dydt, t_span, y0, **kwargs ):
-    """
-    Solves an initial value problem and returns the solutions in 32-bit precision.
-
-    NOTE: This is a wrapper around scipy.integrate.solve_ivp(), so it takes the
-          same arguments and returns the same values.  See that function's
-          help for a (way more) detailed explanation of each argument and value.
-
-    Takes 4 arguments:
-
-      dydt   - Right-hand side of the system to solve.  The calling signature
-               is 'dydt( t, y, parameters )'.
-      t_span - 2-member sequence specifying the interval of integration.  dydt
-               is integrated from t_span[0] until t_span[1].
-      y0     - Initial state of the system to solve.  Must be compatible with
-               dydt.
-      kwargs - Optional keyword arguments to supply to solve_ivp().
-
-    Returns 1 value:
-
-      solution - Object containing fields related to the integration process,
-                 including:
-
-                   t - Vector of times, of length number_times, where dydt was
-                       evaluated.
-                   y - Array of solutions, shaped number_variables x numbe_times,
-                       where dydt was evaluated.
-
-                 Solutions will be returned according to the evaluation window,
-                 t_eval, either supplied via kwargs or selected as a default from
-                 t_span.
-
-    """
-
-    # Solve the ODE in the precision supplied by the caller.
-    solution = solve_ivp( dydt, t_span, y0, **kwargs )
-
-    # Return the outputs as the requested precision when a solution was found.
-    if solution.success:
-        solution.t = solution.t.astype( "float32" )
-        solution.y = solution.y.astype( "float32" )
-
-    return solution
-
-class TimeoutError( Exception ):
-    pass
-
-def timeout( seconds=10, error_message=os.strerror( errno.ETIME ) ):
-
-    def decorator( func ):
-        def _handle_timeout( signum, frame ):
-            raise TimeoutError( error_message )
-
-        @functools.wraps( func )
-        def wrapper( *args, **kwargs ):
-            signal.signal( signal.SIGALRM, _handle_timeout )
-            signal.alarm( seconds )
-
-            try:
-                result = func( *args, **kwargs )
-            finally:
-                signal.alarm( 0 )
-
-            return result
-
-        return wrapper
-
-    return decorator
-
-@timeout( 5 )
-def timed_solve_ivp( *args, **kwargs ):
-    """
-    Solves an initial value problem and returns the solutions in 32-bit precision,
-    though aborts execution if the solution is not available within 5 seconds.
-    This works around the fact that dydt() sometimes converges *VERY* slowly as
-    some input parameter combinations result in incredibly small steps that
-    results in the solution appearing to hang.
-
-    NOTE: This is a wrapper around scipy.integrate.solve_ivp(), so it takes the
-          same arguments and returns the same values.  See that function's
-          help for a (way more) detailed explanation of each argument and value.
-
-    Takes 4 arguments:
-
-      dydt   - Right-hand side of the system to solve.  The calling signature
-               is 'dydt( t, y, parameters )'.
-      t_span - 2-member sequence specifying the interval of integration.  dydt
-               is integrated from t_span[0] until t_span[1].
-      y0     - Initial state of the system to solve.  Must be compatible with
-               dydt.
-      kwargs - Optional keyword arguments to supply to solve_ivp().
-
-    Returns 1 value:
-
-      solution - Object containing fields related to the integration process,
-                 including:
-
-                   t - Vector of times, of length number_times, where dydt was
-                       evaluated.
-                   y - Array of solutions, shaped number_variables x numbe_times,
-                       where dydt was evaluated.
-
-                 Solutions will be returned according to the evaluation window,
-                 t_eval, either supplied via kwargs or selected as a default from
-                 t_span.
-    """
-
-    return solve_ivp_float32_outputs( *args, **kwargs )
-
 def normalize_droplet_parameters( droplet_parameters ):
     """
     Normalizes an array of droplet parameters into the range [-1, 1].  Operates
@@ -349,3 +240,112 @@ def scale_droplet_parameters( droplet_parameters ):
             scaled_droplet_parameters[..., 6] = droplet_parameters[..., 6]
 
     return scaled_droplet_parameters
+
+def solve_ivp_float32_outputs( dydt, t_span, y0, **kwargs ):
+    """
+    Solves an initial value problem and returns the solutions in 32-bit precision.
+
+    NOTE: This is a wrapper around scipy.integrate.solve_ivp(), so it takes the
+          same arguments and returns the same values.  See that function's
+          help for a (way more) detailed explanation of each argument and value.
+
+    Takes 4 arguments:
+
+      dydt   - Right-hand side of the system to solve.  The calling signature
+               is 'dydt( t, y, parameters )'.
+      t_span - 2-member sequence specifying the interval of integration.  dydt
+               is integrated from t_span[0] until t_span[1].
+      y0     - Initial state of the system to solve.  Must be compatible with
+               dydt.
+      kwargs - Optional keyword arguments to supply to solve_ivp().
+
+    Returns 1 value:
+
+      solution - Object containing fields related to the integration process,
+                 including:
+
+                   t - Vector of times, of length number_times, where dydt was
+                       evaluated.
+                   y - Array of solutions, shaped number_variables x numbe_times,
+                       where dydt was evaluated.
+
+                 Solutions will be returned according to the evaluation window,
+                 t_eval, either supplied via kwargs or selected as a default from
+                 t_span.
+
+    """
+
+    # Solve the ODE in the precision supplied by the caller.
+    solution = solve_ivp( dydt, t_span, y0, **kwargs )
+
+    # Return the outputs as the requested precision when a solution was found.
+    if solution.success:
+        solution.t = solution.t.astype( "float32" )
+        solution.y = solution.y.astype( "float32" )
+
+    return solution
+
+class TimeoutError( Exception ):
+    pass
+
+def timeout( seconds=10, error_message=os.strerror( errno.ETIME ) ):
+
+    def decorator( func ):
+        def _handle_timeout( signum, frame ):
+            raise TimeoutError( error_message )
+
+        @functools.wraps( func )
+        def wrapper( *args, **kwargs ):
+            signal.signal( signal.SIGALRM, _handle_timeout )
+            signal.alarm( seconds )
+
+            try:
+                result = func( *args, **kwargs )
+            finally:
+                signal.alarm( 0 )
+
+            return result
+
+        return wrapper
+
+    return decorator
+
+@timeout( 5 )
+def timed_solve_ivp( *args, **kwargs ):
+    """
+    Solves an initial value problem and returns the solutions in 32-bit precision,
+    though aborts execution if the solution is not available within 5 seconds.
+    This works around the fact that dydt() sometimes converges *VERY* slowly as
+    some input parameter combinations result in incredibly small steps that
+    results in the solution appearing to hang.
+
+    NOTE: This is a wrapper around scipy.integrate.solve_ivp(), so it takes the
+          same arguments and returns the same values.  See that function's
+          help for a (way more) detailed explanation of each argument and value.
+
+    Takes 4 arguments:
+
+      dydt   - Right-hand side of the system to solve.  The calling signature
+               is 'dydt( t, y, parameters )'.
+      t_span - 2-member sequence specifying the interval of integration.  dydt
+               is integrated from t_span[0] until t_span[1].
+      y0     - Initial state of the system to solve.  Must be compatible with
+               dydt.
+      kwargs - Optional keyword arguments to supply to solve_ivp().
+
+    Returns 1 value:
+
+      solution - Object containing fields related to the integration process,
+                 including:
+
+                   t - Vector of times, of length number_times, where dydt was
+                       evaluated.
+                   y - Array of solutions, shaped number_variables x numbe_times,
+                       where dydt was evaluated.
+
+                 Solutions will be returned according to the evaluation window,
+                 t_eval, either supplied via kwargs or selected as a default from
+                 t_span.
+    """
+
+    return solve_ivp_float32_outputs( *args, **kwargs )

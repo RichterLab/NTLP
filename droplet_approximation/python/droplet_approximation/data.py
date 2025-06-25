@@ -15,6 +15,50 @@ from .physics import DROPLET_RADIUS_LOG_RANGE, \
                      scale_droplet_parameters, \
                      timed_solve_ivp
 
+def clean_training_data( file_name ):
+    """
+    Removes invalid droplet parameters found in the supplied file and overwrites it
+    so it only contains valid parameters.  Currently this only filters output
+    parameters that are outside of the expected ranges by more than 3% on either end.
+
+    NOTE: This function isn't normally needed, but there may be times where invalid
+          outputs have been written but the vast majority are good and need to be
+          salvaged.
+
+    Takes 1 argument:
+
+      file_name - Path to the file containing droplet parameters written by
+                  create_training_file().  This file is overwritten with the
+                  filtered droplet parameters.
+
+    Returns 2 values:
+
+      number_parameters     - Number of droplet parameters in the original file.
+      number_bad_parameters - Number of droplet parameters that were filtered out.
+
+    """
+
+    #
+    # NOTE: This isn't terribly efficient and assumes there is enough RAM to
+    #       read, make a copy, and write back out.
+    #
+    input_parameters, output_parameters, times = read_training_file( file_name )
+
+    bad_data_mask = ((output_parameters[:, 0] < 10.0**DROPLET_RADIUS_LOG_RANGE[0] * (100 - 3) / 100) |
+                     (output_parameters[:, 0] > 10.0**DROPLET_RADIUS_LOG_RANGE[1] * (100 + 3) / 100) |
+                     (output_parameters[:, 1] < DROPLET_TEMPERATURE_RANGE[0] * (100 - 3) / 100) |
+                     (output_parameters[:, 1] > DROPLET_TEMPERATURE_RANGE[1] * (100 + 3) / 100))
+
+    input_outputs = np.hstack( (input_parameters,
+                                times.reshape( (-1, 1) ),
+                                output_parameters) )
+
+    # Overwrite the original file with only the good data.
+    input_outputs[~bad_data_mask, :].tofile( file_name )
+
+    # Return the counts of good and bad data so the caller knows what was done.
+    return input_parameters.shape[0], bad_data_mask.sum()
+
 def create_droplet_batch( number_droplets, number_evaluations=1, particle_temperature_distribution=None ):
     """
     Creates a batch of random droplets' input parameters, with t_final.  t_final is sampled
@@ -561,47 +605,3 @@ def read_training_file( file_name ):
     outputs        = inputs_outputs[:, 7:]
 
     return inputs, outputs, times
-
-def clean_training_data( file_name ):
-    """
-    Removes invalid droplet parameters found in the supplied file and overwrites it
-    so it only contains valid parameters.  Currently this only filters output
-    parameters that are outside of the expected ranges by more than 3% on either end.
-
-    NOTE: This function isn't normally needed, but there may be times where invalid
-          outputs have been written but the vast majority are good and need to be
-          salvaged.
-
-    Takes 1 argument:
-
-      file_name - Path to the file containing droplet parameters written by
-                  create_training_file().  This file is overwritten with the
-                  filtered droplet parameters.
-
-    Returns 2 values:
-
-      number_parameters     - Number of droplet parameters in the original file.
-      number_bad_parameters - Number of droplet parameters that were filtered out.
-
-    """
-
-    #
-    # NOTE: This isn't terribly efficient and assumes there is enough RAM to
-    #       read, make a copy, and write back out.
-    #
-    input_parameters, output_parameters, times = read_training_file( file_name )
-
-    bad_data_mask = ((output_parameters[:, 0] < 10.0**DROPLET_RADIUS_LOG_RANGE[0] * (100 - 3) / 100) |
-                     (output_parameters[:, 0] > 10.0**DROPLET_RADIUS_LOG_RANGE[1] * (100 + 3) / 100) |
-                     (output_parameters[:, 1] < DROPLET_TEMPERATURE_RANGE[0] * (100 - 3) / 100) |
-                     (output_parameters[:, 1] > DROPLET_TEMPERATURE_RANGE[1] * (100 + 3) / 100))
-
-    input_outputs = np.hstack( (input_parameters,
-                                times.reshape( (-1, 1) ),
-                                output_parameters) )
-
-    # Overwrite the original file with only the good data.
-    input_outputs[~bad_data_mask, :].tofile( file_name )
-
-    # Return the counts of good and bad data so the caller knows what was done.
-    return input_parameters.shape[0], bad_data_mask.sum()
