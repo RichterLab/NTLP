@@ -506,16 +506,16 @@ def read_NTLP_data( file_name ):
 
     """
 
-    #record_data_tyep = np.dtype([('parameters', np.float32, (6,)), ('times', np.float32), ('outputs', np.float32, (2,)), ('ids', np.int32)])
-    record_data_type = np.dtype( [('particle id',       np.int32),
-                                  ('be flag',           np.int32),
-                                  ('time',              np.float32),
-                                  ('input radius',      np.float32),
-                                  ('input temperature', np.float32),
-                                  ('salinity',          np.float32),
-                                  ('air temperature',   np.float32),
-                                  ('relative humidity', np.float32),
-                                  ('air density',       np.float32)] )
+    #record_data_tyep = np.dtype([("parameters", np.float32, (6,)), ("times", np.float32), ("outputs", np.float32, (2,)), ("ids", np.int32)])
+    record_data_type = np.dtype( [("particle id",       np.int32),
+                                  ("be flag",           np.int32),
+                                  ("time",              np.float32),
+                                  ("input radius",      np.float32),
+                                  ("input temperature", np.float32),
+                                  ("salinity",          np.float32),
+                                  ("air temperature",   np.float32),
+                                  ("relative humidity", np.float32),
+                                  ("air density",       np.float32)] )
 
     inputs_outputs = np.fromfile( file_name, dtype=record_data_type )
 
@@ -524,7 +524,7 @@ def read_NTLP_data( file_name ):
 
     df["processor"] = df["particle id"] % 100
 
-    df.sort_values( by=['particle id', 'time'], ascending=True, inplace=True )
+    df.sort_values( by=["particle id", "time"], ascending=True, inplace=True )
 
     # Calculate outputs and dt, set to 0 if be failed or new particle.
     #

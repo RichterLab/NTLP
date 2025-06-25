@@ -1031,8 +1031,8 @@ def do_iterative_inference( input_parameters, times, model, device ):
 #                            estimated radius and temperature for the droplet
 #                            after `iteartions` time steps.  These are in their
 #                            normalized in the range [-1,1]
-#                            Stored on `df['mlp output radius']` and
-#                            `df['mlp output radius']`.
+#                            Stored on `df["mlp output radius"]` and
+#                            `df["mlp output radius"]`.
 #
 #
 #    """

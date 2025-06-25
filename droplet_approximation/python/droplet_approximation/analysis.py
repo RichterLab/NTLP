@@ -37,7 +37,7 @@ def parallel_analyze_model_iterative_performance_NTLP_data( model, df, iteration
     """
 
     print( "Sorting data" )
-    df.sort_values( by=['time', 'particle id', 'processor'], ascending=[True, True, True], inplace=True )
+    df.sort_values( by=["time", "particle id", "processor"], ascending=[True, True, True], inplace=True )
     processor_groups = df.groupby( "processor" )
 
     print( "Integrating data" )
