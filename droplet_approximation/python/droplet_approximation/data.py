@@ -15,7 +15,7 @@ from .physics import DROPLET_RADIUS_LOG_RANGE, \
                      scale_droplet_parameters, \
                      timed_solve_ivp
 
-def create_droplet_batch( number_droplets, linear_time_flag=False, number_evaluations=1, particle_temperature_distribution=None ):
+def create_droplet_batch( number_droplets, number_evaluations=1, particle_temperature_distribution=None ):
     """
     Creates a batch of random droplets' input parameters, with t_final.  t_final is sampled
     from a slightly larger distribution than the anticipated use cases (spanning [1e-3, 1e1])
@@ -53,9 +53,6 @@ def create_droplet_batch( number_droplets, linear_time_flag=False, number_evalua
     Takes 3 arguments:
 
       number_droplets                     - Number of droplets to generate parameters for.
-      linear_time_flag                    - Optional boolean specifying whether integration times should
-                                            be sampled uniformly through the time range or log spaced.
-                                            Defaults to False so that short term dynamics are captured.
       number_evaluations                  - Optional number of integration times to evaluate each
                                             parameter at so that a temporal window can be learned.  If
                                             omitted defaults to a single point in time per parameter.
@@ -109,8 +106,7 @@ def create_droplet_batch( number_droplets, linear_time_flag=False, number_evalua
     random_outputs = np.empty_like( random_inputs, shape=(number_droplets * number_evaluations, 2) )
 
     # Size of the time window to sample when we're generating multiple temporal
-    # evaluations.  In linear units when linear_time_flag==True (e.g. 1 second),
-    # otherwise in log-space (e.g. 1 order of magnitude).
+    # evaluations.  This is one order of magnitude.
     TIME_WINDOW_SIZE = 1
 
     # We generate data for a time window that is slightly larger than what we're interested
@@ -118,41 +114,25 @@ def create_droplet_batch( number_droplets, linear_time_flag=False, number_evalua
     TIME_RANGE = (10.0**DROPLET_TIME_LOG_RANGE[0], 10.0**DROPLET_TIME_LOG_RANGE[1])
 
     integration_times = np.empty_like( random_inputs, shape=(number_droplets * number_evaluations) )
-    if linear_time_flag:
-        # Generate the starting point for each of the evaluation groups.  We
-        # construct the other times in the group below.
-        integration_times[::number_evaluations] = np.random.uniform( TIME_RANGE[0], TIME_RANGE[1], number_droplets ).astype( "float32" )
 
-        if number_evaluations > 1:
-            for droplet_index in np.arange( number_droplets ):
-                start_index = droplet_index * number_evaluations
-                end_index   = (droplet_index + 1) * number_evaluations
+    # Generate the starting point for each of the evaluation groups.  We
+    # construct the other times in the group below.
+    integration_times[::number_evaluations] = (10.0**np.random.uniform( np.log10( TIME_RANGE[0] ),
+                                                                        np.log10( TIME_RANGE[1] ),
+                                                                        number_droplets )).astype( "float32" )
 
-                # Generate the remaining points in this group while taking care
-                # to not go beyond the largest time we're allowed.
-                integration_times[start_index:end_index] = np.linspace( integration_times[start_index],
-                                                                        min( integration_times[start_index] + TIME_WINDOW_SIZE, TIME_RANGE[1] ),
-                                                                        number_evaluations )
+    if number_evaluations > 1:
+        for droplet_index in np.arange( number_droplets ):
+            start_index = droplet_index * number_evaluations
+            end_index   = (droplet_index + 1) * number_evaluations
 
-    else:
-        # Generate the starting point for each of the evaluation groups.  We
-        # construct the other times in the group below.
-        integration_times[::number_evaluations] = (10.0**np.random.uniform( np.log10( TIME_RANGE[0] ),
-                                                                            np.log10( TIME_RANGE[1] ),
-                                                                            number_droplets )).astype( "float32" )
-
-        if number_evaluations > 1:
-            for droplet_index in np.arange( number_droplets ):
-                start_index = droplet_index * number_evaluations
-                end_index   = (droplet_index + 1) * number_evaluations
-
-                # Generate the remaining points in this group while taking care
-                # to not go beyond the largest time we're allowed.
-                starting_exponent = np.log10( integration_times[start_index] )
-                integration_times[start_index:end_index] = 10.0**np.linspace( starting_exponent,
-                                                                              min( starting_exponent + TIME_WINDOW_SIZE,
-                                                                                   np.log10( TIME_RANGE[1] ) ),
-                                                                              number_evaluations )
+            # Generate the remaining points in this group while taking care
+            # to not go beyond the largest time we're allowed.
+            starting_exponent = np.log10( integration_times[start_index] )
+            integration_times[start_index:end_index] = 10.0**np.linspace( starting_exponent,
+                                                                          min( starting_exponent + TIME_WINDOW_SIZE,
+                                                                               np.log10( TIME_RANGE[1] ) ),
+                                                                          number_evaluations )
 
     # We count the number of problematic parameters we encounter.  Additionally,
     # track the reason why we found the parameters problematic along with the
