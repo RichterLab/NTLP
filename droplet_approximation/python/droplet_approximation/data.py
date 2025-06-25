@@ -181,9 +181,9 @@ def create_droplet_batch( number_droplets, linear_time_flag=False, number_evalua
         # Emulate a do/while loop so we always evaluate at least one parameter before
         # deciding whether to keep it or not.
         while True:
-            y0         = random_inputs[droplet_index, :2] # Radius and temperature.
-            parameters = random_inputs[droplet_index, 2:] # Environmental variables.
-            t_final    = integration_times[droplet_index] # Time to integrate.
+            y0         = random_inputs[droplet_index, :2]
+            parameters = random_inputs[droplet_index, 2:]
+            t_final    = integration_times[droplet_index]
 
             try:
                 solution     = timed_solve_ivp( dydt, [0, t_final], y0, method="BDF", t_eval=[t_final], args=(parameters,) )

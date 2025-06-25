@@ -338,7 +338,8 @@ def do_inference( input_parameters, times, model, device ):
 
     normalized_inputs = np.hstack( (normalize_droplet_parameters( input_parameters ),
                                     times.reshape( (-1, 1) )) ).astype( "float32" )
-    normalized_outputs = eval_model( torch.from_numpy( normalized_inputs ).to( device ) ).to( device ).detach().numpy() # is this to(device) necessary?
+    # XXX: is this to(device) necessary?
+    normalized_outputs = eval_model( torch.from_numpy( normalized_inputs ).to( device ) ).to( device ).detach().numpy()
 
     return scale_droplet_parameters( normalized_outputs )
 

@@ -224,8 +224,10 @@ def mse_score_models( models, file_name, device, weighted=False, normalized=Fals
 
     input_parameters, output_parameters, integration_times = read_training_file( file_name )
 
-    weights = 10**((DROPLET_TIME_LOG_RANGE[0] + DROPLET_TIME_LOG_RANGE[1]) / 2.0) * np.reciprocal( integration_times ) # normalizes the reciprocal logarithmically
-    weights = np.stack( (weights, weights), axis=-1 ) # Temporarily increasing weighting on radius since its harder to learn
+    # Normalizes the radii' reciprocal logarithmically since it is harder
+    # to learn.
+    weights = 10**((DROPLET_TIME_LOG_RANGE[0] + DROPLET_TIME_LOG_RANGE[1]) / 2.0) * np.reciprocal( integration_times )
+    weights = np.stack( (weights, weights), axis=-1 )
 
     BATCH_SIZE = 1024 * 10
 
