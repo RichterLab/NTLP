@@ -940,17 +940,17 @@ def do_iterative_bdf( input_parameters, times ):
 
     integration_times = np.diff( times )
 
-    output_parameters    = np.zeros( (len( input_parameters ), 2), dtype=np.float32 )
-    output_parameters[0] = input_parameters[0, :2]
+    output_parameters       = np.zeros( (len( input_parameters ), 2), dtype=np.float32 )
+    output_parameters[0, :] = input_parameters[0, :2]
 
     # Evaluate
     for time_index in range( 1, len( input_parameters ) ):
-        output_parameters[time_index] = solve_ivp( dydt,
-                                                   [0, integration_times[time_index - 1]],
-                                                   output_parameters[time_index - 1],
-                                                   method="BDF",
-                                                   t_eval=[integration_times[time_index-1]],
-                                                   args=(input_parameters[time_index-1, 2:],) ).y[:, 0]
+        output_parameters[time_index, :] = solve_ivp( dydt,
+                                                      [0, integration_times[time_index - 1]],
+                                                      output_parameters[time_index - 1, :],
+                                                      method="BDF",
+                                                      t_eval=[integration_times[time_index-1]],
+                                                      args=(input_parameters[time_index-1, 2:],) ).y[:, 0]
 
     return output_parameters
 
