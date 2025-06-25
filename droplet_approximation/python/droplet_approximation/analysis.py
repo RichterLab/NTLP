@@ -654,7 +654,7 @@ def analyze_model_particle_performance( times, truth_output, model_output, dista
     ax_h[1][0].set_xscale( "log" )
     ax_h[1][1].set_xscale( "log" )
 
-    if time_range != None:
+    if time_range is not None:
         ax_h[0][0].set_xlim( time_range )
         ax_h[0][1].set_xlim( time_range )
         ax_h[1][0].set_xlim( time_range )

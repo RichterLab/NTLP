@@ -92,7 +92,7 @@ def create_droplet_batch( number_droplets, linear_time_flag=False, number_evalua
                                                                        (number_droplets, 6) ).astype( "float32" ) )
 
     # Fix the particle temperature based on air temperature
-    if particle_temperature_distribution != None:
+    if particle_temperature_distribution is not None:
         random_inputs[::number_evaluations, 1] = (random_inputs[::number_evaluations, 3] +
                                                   np.random.normal( loc=particle_temperature_distribution,
                                                                     scale=particle_temperature_distribution,
