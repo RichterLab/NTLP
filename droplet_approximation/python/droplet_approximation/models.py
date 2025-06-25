@@ -965,11 +965,11 @@ def do_iterative_inference( input_parameters, times, model, device ):
 
     Takes 4 arguments:
 
-      input_parameters    - NumPy array, sized number_time_steps x 6, containing the
+      input_parameters    - Array, sized number_time_steps x 6, containing the
                             input parameters for a single particle in order by time.
                             These are provided in their natural, physical ranges.
-      times               - NumPy array, sized 1 x data length containing
-                            the time at each step.
+      times               - Array, sized 1 x data length containing the time at
+                            each step.
       model               - PyTorch model to use.
       device              - Device string to evaluate on.
 
@@ -987,22 +987,22 @@ def do_iterative_inference( input_parameters, times, model, device ):
     eval_model = model.to( device )
     eval_model.eval()
 
-    normalized_data   = normalize_droplet_parameters( input_parameters )
+    normalized_data   = np.array( normalize_droplet_parameters( input_parameters ) )
     integration_times = np.diff( times )
 
-    output_parameters = np.zeros( (len( normalized_data ), 2), dtype=np.float32 )
+    output_parameters       = np.zeros( (len( normalized_data ), 2), dtype=np.float32 )
+    output_parameters[0, :] = normalized_data[0, :2]
 
-    output_parameters[0] = normalized_data[0, :2]
-    normalized_inputs    = np.concat( (output_parameters[0],
-                                       normalized_data[0, 2:],
-                                       [integration_times[0]] ) ).astype( "float32" )
+    normalized_inputs = np.hstack( (output_parameters[0, :],
+                                    normalized_data[0, 2:],
+                                    [integration_times[0]] ) ).astype( "float32" )
 
     # Evaluate
     for time_index in range( 1, len( normalized_data ) ):
-        output_parameters[time_index] = eval_model( torch.from_numpy( normalized_inputs ).to( device ) ).detach().numpy()
+        output_parameters[time_index, :] = eval_model( torch.from_numpy( normalized_inputs ).to( device ) ).detach().numpy()
 
         if time_index < len( normalized_data ) - 1:
-            normalized_inputs = np.concat( (output_parameters[time_index],
+            normalized_inputs = np.hstack( (output_parameters[time_index, :],
                                             normalized_data[time_index, 2:],
                                             [integration_times[time_index]] ) ).astype( "float32" )
 
