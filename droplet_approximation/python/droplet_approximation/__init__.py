@@ -12,14 +12,20 @@ from .analysis import analyze_model_iterative_performance, \
                       mse_score_models, \
                       parallel_analyze_model_iterative_performance_NTLP_data, \
                       plot_droplet_size_temperature, \
+                      plot_particles, \
                       plot_particle_history, \
                       standard_distance
-from .data import clean_training_data, \
+from .data import batch_convert_NTLP_traces_to_particle_files, \
+                  batch_read_particles_data, \
+                  clean_training_data, \
+                  convert_NTLP_trace_to_particle_files, \
                   create_droplet_batch, \
                   create_training_file, \
+                  get_particle_file_path, \
                   merge_weird_parameters, \
                   normalize_NTLP_data, \
                   read_NTLP_data, \
+                  read_particles_data, \
                   read_training_file, \
                   write_weird_parameters_to_spreadsheet
 from .models import SimpleNet, \

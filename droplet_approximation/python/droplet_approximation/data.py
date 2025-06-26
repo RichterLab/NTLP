@@ -1,3 +1,6 @@
+import fcntl
+import multiprocessing
+import os
 import warnings
 
 import numpy as np
@@ -14,6 +17,125 @@ from .physics import DROPLET_RADIUS_LOG_RANGE, \
                      dydt, \
                      scale_droplet_parameters, \
                      timed_solve_ivp
+
+def batch_convert_NTLP_traces_to_particle_files( trace_paths, particles_root, dirs_per_level, number_processes=0 ):
+    """
+    Converts a sequence of NTLP particle trace files into raw particle files and
+    returns the path to a particle index file containing a sorted list of all
+    unique particle identifiers seen during the conversion.  Conversion of
+    multiple NTLP trace files is performed in parallel.
+
+    Takes 4 arguments:
+
+      trace_paths      - Sequence of NTLP particle trace paths to convert.
+      particles_root   - Path to the top-level directory to write raw particle
+                         files beneath.
+      dirs_per_level   - Number of subdirectories per level in the particle files
+                         directory hierarchy.
+      number_processes - Optional number of processes to use for converting NTLP
+                         particle trace files in parallel.  If omitted, defaults to
+                         0 and one process per core will be utilized.
+
+    Returns 2 values:
+
+      particles_index_path - Path to the particles index file written.  This is beneath
+                             particles_root.
+      unique_particle_ids  - Sorted NumPy array of unique particle identifiers parsed
+                             from all of paths in trace_paths.
+
+    """
+
+    particles_index_path = "{:s}/particles.index".format( particles_root )
+
+    # Default to the number of cores on the system.
+    #
+    # NOTE: This may not be ideal if symmetric multi-threading (SMT, aka
+    #       HyperThreading) is turned on.
+    #
+    if number_processes == 0:
+        number_processes = multiprocessing.cpu_count()
+
+    # Convert all of the particles in parallel.
+    with multiprocessing.Pool( processes=number_processes ) as pool:
+        args_list = [(trace_path, particles_root, dirs_per_level) for trace_path in trace_paths]
+
+        particle_ids_list = pool.starmap( convert_NTLP_trace_to_particle_files,
+                                          args_list )
+
+    # Serialize each of the unique particle identifiers seen to the index.  This
+    # provides discoverability to the raw particle files written above.
+    unique_particle_ids = np.unique( np.hstack( particle_ids_list ) )
+    unique_particle_ids.tofile( particles_index_path )
+
+    return particles_index_path, unique_particle_ids
+
+def batch_read_particles_data( particles_root, particle_ids, dirs_per_level, number_processes=0, quiet_flag=True ):
+    """
+    Reads one or more raw particle files and returns a particles DataFrame.
+    Reading is performed in parallel.
+
+    Takes 5 arguments:
+
+      particles_root   - Path to the top-level directory to read raw particle
+                         files from.
+      particle_ids     - Sequence of particle identifiers to read.
+      dirs_per_level   - Number of subdirectories per level in the particle
+                         files directory hierarchy.
+      number_processes - Optional number of processes to use for reading
+                         particle trace files in parallel.  If omitted, defaults
+                         to 0 and one process per core will be utilized.
+      quiet_flag       - Optional flag specifying whether DataFrame creation
+                         should be quiet or not.  If omitted, defaults to True
+                         and creation does not generate outputs unless an error
+                         occurs.
+
+    Returns 1 value:
+
+      particles_df - DataFrame with one row per partical identifier in particle_ids.
+                     See read_particles_data() for details.
+
+    """
+
+    # Default to the number of cores on the system.
+    #
+    # NOTE: This may not be ideal if symmetric multi-threading (SMT, aka
+    #       HyperThreading) is turned on.
+    #
+    if number_processes == 0:
+        number_processes = multiprocessing.cpu_count()
+
+    # Figure out how many particles to process per process.  The last process
+    # gets fewer.
+    number_particles             = len( particle_ids )
+    number_particles_per_process = number_particles // number_processes
+
+    # Create a list of ranges so we can easily construct the arguments to
+    # the DataFrame parsing code below.
+    particle_ranges = []
+    for process_index in np.arange( number_processes ):
+        start_index = number_particles_per_process * process_index
+        end_index   = number_particles_per_process * (process_index + 1)
+
+        # The last process gets whatever is remaining.
+        if process_index == (number_processes - 1):
+            end_index = -1
+
+        particle_range = range( start_index, end_index )
+        particle_ranges.append( particle_range )
+
+    # Read each chunk of particles in parallel.
+    with multiprocessing.Pool( processes=number_processes ) as pool:
+        args_list = []
+        for particle_range in particle_ranges:
+            args_list.append( (particles_root,
+                               particle_ids[particle_range],
+                               dirs_per_level,
+                               quiet_flag) )
+
+        dfs = pool.starmap( read_particles_data, args_list )
+
+    # Concatenate the resulting DataFrames.
+    return pd.concat( dfs, axis=0 )
 
 def clean_training_data( file_name ):
     """
@@ -58,6 +180,127 @@ def clean_training_data( file_name ):
 
     # Return the counts of good and bad data so the caller knows what was done.
     return input_parameters.shape[0], bad_data_mask.sum()
+
+def convert_NTLP_trace_to_particle_files( trace_path, particles_root, dirs_per_level ):
+    """
+    Converts an NTLP trace file into a one or more raw particle files.  NTLP
+    trace files contain observations of any particles that were seen by the MPI
+    rank that created the trace though it is easier to analyze particles when
+    they are stored in files dedicated to individual particle observations.
+
+    NOTE: This does not generate a unique particle identifier index!
+
+    Takes 3 arguments:
+
+      trace_path     - Path to the NTLP particle trace file to process.
+      particles_root - Path to the top-level directory to write raw particle
+                       files beneath.
+      dirs_per_level - Number of subdirectories per level in the particle files
+                       directory hierarchy.
+
+    Returns 1 value:
+
+      particle_ids - NumPy array of the unique particle identifiers in trace_path.
+
+    """
+
+    def make_particle_file_directories( particle_path ):
+        """
+        Creates all of the intermediate directories in the supplied raw particle
+        file path.  This helper function
+
+        Takes 1 argument:
+
+          particle_path - Path to the raw particle file.
+
+        Returns nothing.
+
+        """
+
+        # Create a directory for a (non-existent) file, but do not do anything
+        # when provided a directory.
+        if not os.path.isdir( particle_path ):
+            parent_path = "/".join( particle_path.split( "/" )[:-1] )
+            os.makedirs( parent_path, exist_ok=True )
+
+        return
+
+    # Each particle is comprised of 2x 32-bit integers and 7x 32-bit floats.
+    RECORD_SIZE       = 9
+    RECORD_SIZE_BYTES = RECORD_SIZE * 4
+
+    # Indices of the record's fields.
+    PARTICLE_ID_INDEX = 0
+
+    # Read in a large block of records at once.
+    NUMBER_RECORDS_PER_CHUNK = 1024 * 1024
+
+    # List of NumPy 1D arrays containing particle identifier associated with
+    # each of the trace file's chunks.
+    particle_ids_list = []
+
+    with open( trace_path, "rb" ) as trace_fp:
+
+        # Iterate through the file reading a chunk of records at
+        # a time.
+        while True:
+            raw_buffer = trace_fp.read( RECORD_SIZE_BYTES * NUMBER_RECORDS_PER_CHUNK )
+
+            # We reached the end of the file in the previous iteration.
+            if not raw_buffer:
+                break
+
+            # Report a partial record.  This gets dropped as we only process an
+            # integral number of records.
+            if len( raw_buffer ) % RECORD_SIZE_BYTES:
+                print( "'{:s}' contains a partial, trailing record!".format( trace_path ) )
+
+            number_records = len( raw_buffer ) // RECORD_SIZE_BYTES
+
+            # Create a 32-bit float array of the records read along with a
+            # 32-bit integer view so we can access both halves of the record.
+            # We make a 32-bit integer view on this data below.
+            chunk_array_fp32  = np.frombuffer( raw_buffer[:(number_records * RECORD_SIZE_BYTES)],
+                                               dtype=np.float32 ).reshape( -1, RECORD_SIZE )
+            chunk_array_int32 = chunk_array_fp32.view( np.int32 )
+
+            # Loop through each of the unique particles and append their records
+            # into a separate file.
+            particle_ids = np.unique( chunk_array_int32[:, PARTICLE_ID_INDEX] )
+            for particle_index, particle_id in enumerate( particle_ids ):
+                particle_path = get_particle_file_path( particles_root,
+                                                        particle_id,
+                                                        dirs_per_level )
+                make_particle_file_directories( particle_path )
+
+                with open( particle_path, "ab" ) as particle_fp:
+                    particle_mask = (chunk_array_int32[:, PARTICLE_ID_INDEX] == particle_id)
+
+                    try:
+                        # Grab the lock so we can write our particles.  This
+                        # blocks until we acquire it.  We need this to ensure
+                        # correct operation when processing multiple NTLP
+                        # particle trace files in parallel as the same particle
+                        # may occur in different MPI ranks' traces.
+                        fcntl.flock( particle_fp.fileno(), fcntl.LOCK_EX )
+
+                        # Append our records to the file.
+                        chunk_array_fp32[particle_mask, :].tofile( particle_fp )
+
+                    except IOError as e:
+                        raise RuntimeError( "Failed to lock '{:s}' for write: {:s}".format(
+                            particle_path,
+                            str( e ) ) )
+
+                    finally:
+                        # Unlock the file for the next writer.
+                        fcntl.flock( particle_fp.fileno(), fcntl.LOCK_UN )
+
+            # Add these particle identifiers to the list of seen identifiers.
+            particle_ids_list.append( particle_ids )
+
+    # Return the unique identifiers seen in this trace.
+    return np.unique( np.hstack( particle_ids_list ) )
 
 def create_droplet_batch( number_droplets, number_evaluations=1, particle_temperature_distribution=None ):
     """
@@ -379,6 +622,49 @@ def create_training_file( file_name, number_droplets, weird_file_name=None, user
                                                weird_inputs,
                                                weird_outputs )
 
+def get_particle_file_path( particles_root, particle_id, dirs_per_level ):
+    """
+    Returns the path to the raw particles file associated with the specified
+    particle identifier.  This simply returns the path and does not guarantee
+    its existence.
+
+    Raw particle files are stored in a multi-level hierarchy so as to distribute
+    them across multiple directories instead of having thousands in a single
+    directory.  The `dirs_per_level` argument specifies how many directories are
+    used at each level.
+
+    Takes 3 arguments:
+
+      particles_root - Path to the top-level of the raw particle files directory.
+      particle_id    - Integral particles identifier of the particle to return
+                       its path.
+      dirs_per_level - Integral number of directories per level in the hierarchy.
+
+    Returns 1 value:
+
+      particle_file_path - Path to the requested particles file.
+
+    """
+
+    # Convert the particle identifier into a pair of integers in the range of
+    # [0, dirs_per_level).  We use these components as sub-directory names
+    # beneath the supplied root so that individual particle files are
+    # distributed across multiple directories instead of having all of them
+    # reside in a single subdirectory.
+    #
+    # To ensure that we spread particles across all top-level subdirectories
+    # (breadth-first) we use the second component as the first subdirectory
+    # and the first component as the second subdirectory.  This works best
+    # when working with sequential particle identifiers.
+    level_1 = (particle_id // dirs_per_level) % dirs_per_level
+    level_2 = particle_id % dirs_per_level
+
+    return "{:s}/{:03d}/{:03d}/{:d}.raw".format(
+        particles_root,
+        level_1,
+        level_2,
+        particle_id )
+
 def merge_weird_parameters( parameters_1, parameters_2 ):
     """
     Merge two dictionaries of lists into a separate copy containing the
@@ -580,6 +866,156 @@ def read_NTLP_data( file_name ):
     df["output temperature"] = calculate_output_flags *  df["input temperature"].shift( periods=-1 )
 
     return df
+
+def read_particles_data( particles_root, particle_ids, dirs_per_level, quiet_flag=True ):
+    """
+    Reads one or more raw particle files and creates a particle-centric
+    DataFrame with one row per particle read.  Each row contains all of the
+    observations stored as 1D NumPy arrays making it easy to operate on the
+    entirety of individual particle's lifetimes.
+
+    Takes 4 arguments:
+
+      particles_root - Path to the top-level directory to read raw particle
+                       files from.
+      particle_ids   - Sequence of particle identifiers to read the associated
+                       raw particle files.
+      dirs_per_level - Number of subdirectories per level in the particle files
+                       directory hierarchy.
+      quiet_flag     - Optional flag specifying whether DataFrame creation
+                       should be quiet or not.  If omitted, defaults to True and
+                       creation does not generate outputs unless an error
+                       occurs.
+
+    Returns 1 value:
+
+      particle_df - DataFrame with one row per particle identifier in particle_ids.
+                    Contains the following columns:
+
+                      "number observations":  Number of observations for the particle.
+                                              This is the length of each of the 1D array
+                                              columns.
+                      "birth time":           Simulation time when this particle was
+                                              created.
+                      "death time":           Simulation time when this particle was
+                                              destroyed.
+                      "integration times":    1D NumPy array of the timestep size
+                      "number be failures":
+                      "be statuses":
+                      "input radii":
+                      "output radii":
+                      "input temperatures":
+                      "output temperatures":
+                      "salt masses":
+                      "air temperatures":
+                      "relative humidities":
+                      "air densities":
+
+    """
+
+    # Each particle is comprised of 2x 32-bit integers and 7x 32-bit floats.
+    RECORD_SIZE = 9
+
+    RECORD_BE_STATUS_INDEX         = 1
+    RECORD_TIME_INDEX              = 2
+    RECORD_RADIUS_INDEX            = 3
+    RECORD_TEMPERATURE_INDEX       = 4
+    RECORD_SALT_MASS_INDEX         = 5
+    RECORD_AIR_TEMPERATURE_INDEX   = 6
+    RECORD_RELATIVE_HUMIDITY_INDEX = 7
+    RECORD_AIR_DENSITY_INDEX       = 8
+
+    data_dict    = {"particle id": particle_ids}
+    particles_df = pd.DataFrame( data_dict ).set_index( "particle id" )
+
+    number_particles = len( particle_ids )
+
+    if not quiet_flag:
+        print( "Parsing {:d} particle{:s}".format(
+            number_particles,
+            "" if number_particles == 1 else "s"
+        ) )
+
+    zeros_int32   = pd.Series( np.zeros( number_particles, dtype=np.int32 ),
+                               index=particle_ids )
+    zeros_float32 = pd.Series( np.zeros( number_particles, dtype=np.float32 ),
+                               index=particle_ids )
+
+    #
+    # NOTE: Order matters here!  Put the more useful information first so it's
+    #       easily visible when inspecting the DataFrame.
+    #
+    # NOTE: We must initialize the scalar columns with a default value versus
+    #       specifying a Series object with a specific type.  The latter doesn't
+    #       work for integral data types as NaN isn't representable as a
+    #       "missing value" type which means Series are changed to a np.float64
+    #       data type to accommodate the initial NaNs.
+    #
+    particles_df["number observations"] = zeros_int32
+    particles_df["birth time"]          = zeros_float32
+    particles_df["death time"]          = zeros_float32
+    particles_df["integration times"]   = pd.Series( dtype=object )
+    particles_df["number be failures"]  = zeros_int32
+    particles_df["be statuses"]         = pd.Series( dtype=object )
+    particles_df["input radii"]         = pd.Series( dtype=object )
+    particles_df["output radii"]        = pd.Series( dtype=object )
+    particles_df["input temperatures"]  = pd.Series( dtype=object )
+    particles_df["output temperatures"] = pd.Series( dtype=object )
+    particles_df["salt masses"]         = pd.Series( dtype=object )
+    particles_df["air temperatures"]    = pd.Series( dtype=object )
+    particles_df["relative humidities"] = pd.Series( dtype=object )
+    particles_df["air densities"]       = pd.Series( dtype=object )
+
+    for particle_id in particle_ids:
+        particle_path = get_particle_file_path( particles_root, particle_id, dirs_per_level )
+
+        # Get each of the observations.
+        observations_fp32  = np.fromfile( particle_path, dtype=np.float32 ).reshape( -1, RECORD_SIZE )
+
+        # Sort the observations by time.
+        #
+        # NOTE: This is needed in case this particle moved across MPI ranks
+        #       during the simulation and was handled by more than one rank.
+        #       In that case the observations within each rank are sorted but we
+        #       could get windows of observations out of order depending on how
+        #       the resulting trace files were post-processed into raw particle files.
+        #
+        sorted_indices     = np.argsort( observations_fp32[:, RECORD_TIME_INDEX] )
+        observations_fp32  = observations_fp32[sorted_indices, :]
+        observations_int32 = observations_fp32.view( np.int32 )
+
+        if not quiet_flag:
+            print( "Processing {:d}".format( int( particle_id ) ) )
+
+        # Total number of full observations for this particle.  The last observation
+        # is ignored since we're combining the inputs of successive observations as
+        # the previous observation's outputs, and we don't have it's result.
+        particles_df.at[particle_id, "number observations"] = observations_fp32.shape[0] - 1
+
+        # Backward Euler failures for this particle.
+        particles_df.at[particle_id, "number be failures"]  = (observations_int32[:-1, RECORD_BE_STATUS_INDEX] > 0).sum()
+        particles_df.at[particle_id, "be statuses"]         = observations_int32[:-1, RECORD_BE_STATUS_INDEX]
+
+        # Simulation timeline.
+        particles_df.at[particle_id, "birth time"]          = observations_fp32[0,  RECORD_TIME_INDEX]
+        particles_df.at[particle_id, "death time"]          = observations_fp32[-1, RECORD_TIME_INDEX]
+        particles_df.at[particle_id, "integration times"]   = np.diff( observations_fp32[:,  RECORD_TIME_INDEX] )
+
+        # Observed radii.
+        particles_df.at[particle_id, "input radii"]         = observations_fp32[:-1, RECORD_RADIUS_INDEX]
+        particles_df.at[particle_id, "output radii"]        = observations_fp32[1:,  RECORD_RADIUS_INDEX]
+
+        # Observed temperatures.
+        particles_df.at[particle_id, "input temperatures"]  = observations_fp32[:-1, RECORD_TEMPERATURE_INDEX]
+        particles_df.at[particle_id, "output temperatures"] = observations_fp32[1:,  RECORD_TEMPERATURE_INDEX]
+
+        # Background parameters.
+        particles_df.at[particle_id, "salt masses"]         = observations_fp32[:-1, RECORD_SALT_MASS_INDEX]
+        particles_df.at[particle_id, "air temperatures"]    = observations_fp32[:-1, RECORD_AIR_TEMPERATURE_INDEX]
+        particles_df.at[particle_id, "relative humidities"] = observations_fp32[:-1, RECORD_RELATIVE_HUMIDITY_INDEX]
+        particles_df.at[particle_id, "air densities"]       = observations_fp32[:-1, RECORD_AIR_DENSITY_INDEX]
+
+    return particles_df
 
 def read_training_file( file_name ):
     """

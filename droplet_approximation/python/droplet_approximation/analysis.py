@@ -2,6 +2,7 @@ import multiprocessing
 
 import matplotlib.pyplot as plt
 import numpy as np
+import pandas as pd
 from scipy.integrate import solve_ivp
 
 from .data import create_droplet_batch, read_training_file
@@ -609,6 +610,134 @@ def plot_droplet_size_temperature( size_temperatures, times ):
     ax_h[1].set_xlabel( "Time (s)" )
     ax_h[1].set_ylabel( "Temperature (K)" )
     ax_h[1].set_xscale( "log" )
+
+    return fig_h, ax_h
+
+def plot_particles( particles_df, force_flag=False ):
+    """
+    Plots one or more particles' characteristics along their lifetimes.  Creates
+    a figure with 7 sub-plots, arranged in a vertical configuration, visualizing
+    the following characteristics:
+
+      1. Integration time, in seconds
+      2. Output radius, in meters
+      3. Output particle temperature, in Kelvin
+      4. Background air temperature, in Kelvin
+      5. Background relative humidity, as a percentage
+      6. Salt mass, in kilograms
+      7. Air density, in ???
+
+    Takes 2 arguments:
+
+      particles_df - Particles DataFrame whose particles should be visualized.
+      force_flag   - Optional flag indicating that large numbers of particles
+                     should be visualized.  If omitted, defaults to False and
+                     ValueError is raised when too many particles are present
+                     in particles_df.
+
+    Returns 2 values:
+
+      fig_h - The Matplotlib figure handle created.
+      ax_h  - The Matplotlib axes handle containing the line plots.
+
+    """
+
+    # 10 particles in the same time window can get busy so set this as our soft
+    # limit for plotting.
+    MAXIMUM_NUMBER_OF_PARTICLES = 10
+
+    if isinstance( particles_df, pd.Series ):
+        particles_df = particles_df.to_frame().T
+
+    # Blow up if we were provided too many particles unless we're forced to.
+    # Things get *really* busy really with more than a handful of particles so
+    # we don't want to plot them if it's not imperative.  Additionally, for very
+    # large numbers of particles (hundreds or thousands) this can take quite a
+    # long time to complete and we want to protect against accidentally plotting
+    # an entire DataFrame and not just a subset of rows.
+    if len( particles_df ) > MAXIMUM_NUMBER_OF_PARTICLES and not force_flag:
+        raise ValueError( "Too many particles to plot ({:d})!".format(
+            len( particles_df ) ) )
+
+    fig_h, ax_h = plt.subplots( 7, 1, figsize=(8, 15) )
+
+    fig_h.suptitle( "{:d} Particle{:s}\n".format(
+        len( particles_df ),
+        "" if len( particles_df ) == 1 else "s"
+    ) )
+
+    # Initialize our temperature range to an infinite range that will get
+    # necked down with each particle processed.
+    temperature_min =  np.inf
+    temperature_max = -np.inf
+
+    # Plot each of the particles sequentially.
+    for particle_index in range( len( particles_df ) ):
+        particle = particles_df.iloc[particle_index]
+
+        # Build this particle's timeline.
+        times = particle["birth time"] + np.cumsum( particle["integration times"] )
+
+        # Keep our particle and air temperatures on the same scale.
+        temperature_min = min( temperature_min,
+                               min( particle["output temperatures"].min(),
+                                    particle["air temperatures"].min() ) )
+        temperature_max = max( temperature_max,
+                               max( particle["output temperatures"].max(),
+                                    particle["air temperatures"].max() ) )
+
+        # Create label for this particle
+        particle_label = str( particle.name )
+
+        # Plot our quantities with labels
+        ax_h[0].plot( times, particle["integration times"], label=particle_label )
+        ax_h[0].set_title( "Integration Time" )
+        ax_h[0].set_ylabel( "dt (s)" )
+
+        ax_h[1].plot( times, particle["output radii"], label=particle_label )
+        ax_h[1].set_title( "Output Radius" )
+        ax_h[1].set_ylabel( "Size (m)" )
+
+        ax_h[2].plot( times, particle["output temperatures"], label=particle_label )
+        ax_h[2].set_title( "Particle Temperature" )
+        ax_h[2].set_ylabel( "Kelvin" )
+
+        ax_h[3].plot( times, particle["air temperatures"], label=particle_label )
+        ax_h[3].set_title( "Air Temperature" )
+        ax_h[3].set_ylabel( "Kelvin" )
+
+        ax_h[4].plot( times, particle["relative humidities"] * 100, label=particle_label )
+        ax_h[4].set_title( "Relative Humidity" )
+        ax_h[4].set_ylabel( "Percentage (%)" )
+
+        ax_h[5].plot( times, particle["salt masses"], label=particle_label )
+        ax_h[5].set_title( "Salt Mass" )
+        ax_h[5].set_ylabel( "kg" )
+
+        ax_h[6].plot( times, particle["air densities"], label=particle_label )
+        ax_h[6].set_title( "Air Density" )
+        ax_h[6].set_ylabel( "?" )
+        ax_h[6].set_xlabel( "Time (s)" )
+
+    # Set the particle and air temperatures to the same scale.
+    ax_h[2].set_ylim( [temperature_min, temperature_max] )
+    ax_h[3].set_ylim( [temperature_min, temperature_max] )
+
+    # Turn on minor ticks on both the X- and Y-axis so its easier to interpret
+    # the data.
+    for axes_index in range( len( ax_h ) ):
+        ax_h[axes_index].minorticks_on()
+
+    # Create a single legend positioned outside the plot area on the right,
+    # centered on the middle axis.
+    ax_h[3].legend( bbox_to_anchor=(1.01, 0.5),
+                    loc="center left",
+                    title="Particles" )
+
+    # Adjust layout to prevent legend from being cut off.  This makes room for
+    # the legend on the right.
+    fig_h.tight_layout()
+    plt.subplots_adjust( right=0.85 )
 
     return fig_h, ax_h
 
