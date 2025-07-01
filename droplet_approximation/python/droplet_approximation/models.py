@@ -1100,7 +1100,7 @@ def train_model( model, criterion, optimizer, device, number_epochs, training_fi
             if criterion == weighted_mse_loss:
                 loss = weighted_mse_loss( normalized_approximations, normalized_outputs, current_weights )
             else:
-                criterion( normalized_approximations, normalized_outputs )
+                loss = criterion( normalized_approximations, normalized_outputs )
 
             # Backwards pass and optimization.
             loss.backward()
