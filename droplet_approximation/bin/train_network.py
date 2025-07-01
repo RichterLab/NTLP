@@ -1,3 +1,4 @@
+import functools
 import warnings
 
 import numpy as np
@@ -26,6 +27,35 @@ def get_checkpoint_extension( model_save_path ):
     """
 
     return model_save_path.split( "." )[-1]
+
+def generate_fortran_module_with_suffix( droplet_model_save_prefix, model_name, model, epoch_number ):
+    """
+    Serializes a model checkpoint's weights into a Fortran module suitable for
+    inferencing.  This is a wrapper around generate_fortran_module() that is
+    suitable to be called back during training so checkpoints have a companion
+    Fortran module.
+
+    Takes 4 arguments:
+
+      droplet_model_save_prefix - Path prefix of the Fortran module to write.  This
+                                  will have the epoch number appended to it, along
+                                  with a ".f90" extension to construct the output
+                                  path name.
+      model_name                - Name of the model being serialized.
+      model                     - PyTorch model being serialized.
+      epoch_number              - Training epoch number associated with model.
+
+    Returns nothing.
+
+    """
+
+    droplet_model_save_path = "{:s}_{:d}.f90".format(
+        droplet_model_save_prefix,
+        epoch_number )
+
+    generate_fortran_module( droplet_model_save_path,
+                             model_name,
+                             model.state_dict() )
 
 def main( argv ):
     if len( argv ) == 4:
@@ -67,57 +97,36 @@ def main( argv ):
     # Move the model to the device we're training with.
     model = model.to( device )
     if epoch_checkpoint_flag:
-        for i in range( number_epochs ):
-            training_loss = train_model( model, 
-                                        criterion,
-                                        optimizer,
-                                        device,
-                                        1, 
-                                        training_data_path )
-
-            # Adjust learning rate
-            for parameter_group in optimizer.param_groups:
-                parameter_group["lr"] /= 2
-
-            print( "Epoch {:n} trained on {:d} mini-batches.".format(
-                i,
-                len( training_loss ) ) ) 
-
-            epoch_droplet_model_save_path = "{:s}_{:d}.f90".format(
-                droplet_model_save_prefix,
-                i + 1 )
-
-            save_model_checkpoint( model_save_prefix,
-                                   i,
-                                   model,
-                                   optimizer,
-                                   criterion,
-                                   training_loss )
-
-            generate_fortran_module( model_name, model.state_dict(), epoch_droplet_model_save_path )
-            print( "Wrote model weights and inferencing code to '{:s}'.".format( 
-                epoch_droplet_model_save_path ) )
-
+        epoch_callback = functools.partial( generate_fortran_module_with_suffix,
+                                            droplet_model_save_prefix,
+                                            model_name )
     else:
-        training_loss = train_model( model, 
-                                     criterion,
-                                     optimizer,
-                                     device,
-                                     number_epochs, 
-                                     training_data_path )
-    
-        print( "Trained on {:d} mini-batches.".format(
-            len( training_loss ) ) ) 
+        epoch_callback = None
 
-        save_model_checkpoint( model_save_prefix,
-                               -1,
-                               model,
-                               optimizer,
-                               criterion,
-                               training_loss )
+    # Train the model, potentially checkpointing and generating Fortran modules
+    # along the way.
+    training_loss = train_model( model,
+                                 criterion,
+                                 optimizer,
+                                 device,
+                                 number_epochs,
+                                 training_data_path,
+                                 model_save_prefix if epoch_checkpoint_flag else None,
+                                 epoch_callback )
 
-        generate_fortran_module( model_name, model.state_dict(), droplet_model_save_path )
-        print( "Wrote model weights and inferencing code to '{:s}'.".format( droplet_model_save_path ) )
+    print( "Trained on {:d} mini-batches.".format(
+        len( training_loss ) ) )
+
+    # Checkpoint the final model and generate a Fortran module for it.
+    save_model_checkpoint( model_save_prefix,
+                           -1,
+                           model,
+                           optimizer,
+                           criterion,
+                           training_loss )
+
+    generate_fortran_module( droplet_model_save_path, model_name, model.state_dict() )
+    print( "Wrote model weights and inferencing code to '{:s}'.".format( droplet_model_save_path ) )
 
 if __name__ == "__main__":
     sys.exit( main( sys.argv ) )

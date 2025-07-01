@@ -26,7 +26,7 @@ def main( argv ):
     
     model = SimpleNet()
 
-    model.load_state_dict( torch.load(model_load_path))
+    load_model_checkpoint( model_load_path, model )
 
     print("Loading data")
     data = pd.read_parquet(NTLP_data_path)

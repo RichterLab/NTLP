@@ -206,7 +206,7 @@ def do_iterative_inference( input_parameters, times, model, device ):
 
     return scale_droplet_parameters( output_parameters )
 
-def generate_fortran_module( model_name, model_state, output_path ):
+def generate_fortran_module( output_path, model_name, model_state ):
     """
     Creates a Fortran 2003 module that allows use of the supplied model with a
     batch size of 1 during inference.
@@ -216,10 +216,10 @@ def generate_fortran_module( model_name, model_state, output_path ):
 
     Takes 3 arguments:
 
+      output_path     - File to write to.  If this exists it is overwritten.
       model_name      - Name of the model to write in the generated module's comments
                         so as to identify where the weights came from.
-      model_state     - PyTorch model state dictionary for the model to expose.
-      output_path     - File to write to.  If this exists it is overwritten.
+      model_state     - PyTorch model state dictionary for the module to expose.
 
     Returns nothing.
 
@@ -1002,28 +1002,38 @@ def save_model_checkpoint( checkpoint_prefix, checkpoint_number, model, optimize
 
     return checkpoint_path
 
-def train_model( model, criterion, optimizer, device, number_epochs, training_file ):
+def train_model( model, criterion, optimizer, device, number_epochs, training_file, checkpoint_prefix=None, epoch_callback=None ):
     """
     Trains the supplied model for one or more epochs using all of the droplet parameters
     in an on-disk training file.  The parameters are read into memory once and then
     randomly sampled each epoch.  Any weird parameters encountered in the training file
     are logged and
 
-    Takes 6 arguments:
+    Takes 8 arguments:
 
-      model         - PyTorch model to optimize.
-      criterion     - PyTorch loss object to use during optimization.
-      optimizer     - PyTorch optimizer associated with model.
-      device        - Device string indicating where the optimization is
-                      being performed.
-      number_epochs - Number of epochs to train model for.  All training
-                      data in training_file will be seen by the model
-                      this many times.
-      training_file - Path to the file containing training data created by
-                      create_training_file() OR a tuple containing three NumPy
-                      arrays: input parameters, output parameters, and
-                      integration times (sized N x 6, N x 2, and N x 1,
-                      respectively, where N are the number of training samples).
+      model             - PyTorch model to optimize.
+      criterion         - PyTorch loss object to use during optimization.
+      optimizer         - PyTorch optimizer associated with model.
+      device            - Device string indicating where the optimization is
+                          being performed.
+      number_epochs     - Number of epochs to train model for.  All training
+                          data in training_file will be seen by the model
+                          this many times.
+      training_file     - Path to the file containing training data created by
+                          create_training_file() OR a tuple containing three NumPy
+                          arrays: input parameters, output parameters, and
+                          integration times (sized N x 6, N x 2, and N x 1,
+                          respectively, where N are the number of training
+                          samples).
+      checkpoint_prefix - Optional path prefix where model checkpoints should
+                          be stored.  If omitted, defaults to None and
+                          checkpoints are not written.  Otherwise, the epoch
+                          number is appended to construct the path where each
+                          epoch's checkpoint is written.
+      epoch_callback    - Optional function to be called after each training
+                          epoch.  If omitted, defaults to None.  When provided
+                          must take the model object and epoch number as
+                          positional arguments.
 
     Returns 1 value:
 
@@ -1060,8 +1070,6 @@ def train_model( model, criterion, optimizer, device, number_epochs, training_fi
     # Track each mini-batch's training loss for analysis.
     training_loss_history = []
 
-    batch_indices = np.arange( NUMBER_BATCHES )
-
     for epoch_index in range( number_epochs ):
         model.train()
 
@@ -1072,7 +1080,12 @@ def train_model( model, criterion, optimizer, device, number_epochs, training_fi
         # order.  Note that we generate a permutation of batch indices so
         # we don't actually rearrange the training data in memory and
         # dramatically slow things down.
-        permuted_batch_indices = np.random.permutation( batch_indices )
+        #
+        # NOTE: This is shuffling batches and *not* the individual training
+        #       samples.  This will not be sufficient if the training samples
+        #       are highly correlated (e.g. they are generated in a sequence)!
+        #
+        permuted_batch_indices = np.random.permutation( NUMBER_BATCHES )
 
         for batch_index in range( NUMBER_BATCHES ):
             start_index = permuted_batch_indices[batch_index] * BATCH_SIZE
@@ -1119,28 +1132,26 @@ def train_model( model, criterion, optimizer, device, number_epochs, training_fi
 
                 training_loss_history.append( running_loss )
 
-                # Break out of the batch loop if we ever encounter an input
-                # that causes the loss to spike.  Training data generation
-                # should produce good inputs and outputs though should something
-                # slip through we want to immediately stop training so we can
-                # understand what went wrong - there is no way to recover
-                # from a loss spike that is O(10) when our target loss is O(1e-4).
-                if running_loss > 10:
-                    print( "Crazy loss!" )
-                    print( inputs, outputs )
-                    break
-
                 running_loss = 0.0
-        else:
-            # We finished all of the batches.  Adjust the learning rate and
-            # go to the next epoch.
-            for parameter_group in optimizer.param_groups:
-                parameter_group["lr"] * 0.5
 
-            continue
+        # We finished all of the batches.  Adjust the learning rate before we
+        # checkpoint so it can be loaded and training resumed without additional
+        # preparation.
+        for parameter_group in optimizer.param_groups:
+            parameter_group["lr"] * 0.5
 
-        # We didn't complete all of the batches in this epoch.
-        break
+        # Checkpoint if requested.
+        if checkpoint_prefix is not None:
+            save_model_checkpoint( checkpoint_prefix,
+                                   epoch_index,
+                                   model,
+                                   optimizer,
+                                   criterion,
+                                   training_loss_history )
+
+        # Run the user's callback if requested.
+        if epoch_callback is not None:
+            epoch_callback( model, epoch_index )
 
     # Handle the case where we didn't have enough data to complete a mini-batch.
     if len( training_loss_history ) == 0:

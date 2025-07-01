@@ -47,7 +47,6 @@ def main( argv ):
     #     leaning heavily on just a subset of weights)
     #
     model     = SimpleNet()
-    model.load_state_dict(torch.load(model_load_path))
     criterion = nn.MSELoss()
     #criterion = weighted_mse_loss
     if config[2]:
@@ -55,22 +54,28 @@ def main( argv ):
     else:
         optimizer = torch.optim.Adam( model.parameters(), lr=config[1])
 
+    load_model_checkpoint( model_load_path, model, optimizer )
     
     # Move the model to the device we're training with.
     model = model.to( device )
-    loss_history = train_model( model, 
-                                criterion,
-                                optimizer,
-                                device,
-                                number_epochs, 
-                                training_data_path )
+    training_loss = train_model( model,
+                                 criterion,
+                                 optimizer,
+                                 device,
+                                 number_epochs,
+                                 training_data_path )
 
     print( "Trained on {:d} mini-batches.".format(
-        len( loss_history ) ) ) 
+        len( training_loss ) ) )
 
-    torch.save( model.state_dict(), model_save_path )
+    torch.save( model_save_path,
+                -1,
+                model,
+                optimizer,
+                criterion,
+                training_loss )
 
-    generate_fortran_module(model_name, model.state_dict(), droplet_model_save_path)
+    generate_fortran_module( droplet_model_save_path, model_name, model.state_dict() )
     print("Wrote model weights and inferencing code to '{:s}'.".format(droplet_model_save_path))
 
 if __name__ == "__main__":
