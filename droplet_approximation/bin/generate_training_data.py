@@ -10,8 +10,8 @@ import sys
 
 from droplet_approximation import create_training_file
 
-# XXX
-NUMBER_DROPLETS = 1024*1536
+# Generate ~1M droplets.
+NUMBER_DROPLETS = 1024 * 1024
 
 def main( argv ):
     """
