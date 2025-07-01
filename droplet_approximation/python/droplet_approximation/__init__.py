@@ -37,15 +37,10 @@ from .models import SimpleNet, \
                     ode_residual, \
                     train_model, \
                     weighted_mse_loss
-from .physics import DROPLET_AIR_TEMPERATURE_RANGE, \
-                     DROPLET_RADIUS_LOG_RANGE, \
-                     DROPLET_RELATIVE_HUMIDITY_RANGE, \
-                     DROPLET_RHOA_RANGE, \
-                     DROPLET_SALT_MASS_LOG_RANGE, \
-                     DROPLET_TEMPERATURE_RANGE, \
-                     DROPLET_TIME_LOG_RANGE, \
-                     dydt, \
+from .physics import dydt, \
+                     get_parameter_ranges, \
                      normalize_droplet_parameters, \
                      scale_droplet_parameters, \
+                     set_parameter_ranges, \
                      solve_ivp_float32_outputs, \
                      timed_solve_ivp

@@ -6,15 +6,9 @@ import warnings
 import numpy as np
 import pandas as pd
 
-from .physics import DROPLET_RADIUS_LOG_RANGE, \
-                     DROPLET_TEMPERATURE_RANGE, \
-                     DROPLET_SALT_MASS_LOG_RANGE, \
-                     DROPLET_AIR_TEMPERATURE_RANGE, \
-                     DROPLET_RELATIVE_HUMIDITY_RANGE, \
-                     DROPLET_RHOA_RANGE, \
-                     DROPLET_TIME_LOG_RANGE, \
-                     TimeoutError, \
+from .physics import TimeoutError, \
                      dydt, \
+                     get_parameter_ranges, \
                      scale_droplet_parameters, \
                      timed_solve_ivp
 
@@ -160,16 +154,19 @@ def clean_training_data( file_name ):
 
     """
 
+    # Get the current parameter ranges.
+    parameter_ranges = get_parameter_ranges()
+
     #
     # NOTE: This isn't terribly efficient and assumes there is enough RAM to
     #       read, make a copy, and write back out.
     #
     input_parameters, output_parameters, times = read_training_file( file_name )
 
-    bad_data_mask = ((output_parameters[:, 0] < 10.0**DROPLET_RADIUS_LOG_RANGE[0] * (100 - 3) / 100) |
-                     (output_parameters[:, 0] > 10.0**DROPLET_RADIUS_LOG_RANGE[1] * (100 + 3) / 100) |
-                     (output_parameters[:, 1] < DROPLET_TEMPERATURE_RANGE[0] * (100 - 3) / 100) |
-                     (output_parameters[:, 1] > DROPLET_TEMPERATURE_RANGE[1] * (100 + 3) / 100))
+    bad_data_mask = ((output_parameters[:, 0] < 10.0**parameter_ranges["radius"][0] * (100 - 3) / 100) |
+                     (output_parameters[:, 0] > 10.0**parameter_ranges["radius"][1] * (100 + 3) / 100) |
+                     (output_parameters[:, 1] < parameter_ranges["temperature"][0] * (100 - 3) / 100) |
+                     (output_parameters[:, 1] > parameter_ranges["temperature"][1] * (100 + 3) / 100))
 
     input_outputs = np.hstack( (input_parameters,
                                 times.reshape( (-1, 1) ),
@@ -371,6 +368,9 @@ def create_droplet_batch( number_droplets, number_evaluations=1, particle_temper
     # ignore them so we only sample the "good" parts of the space.
     warnings.simplefilter( "error", RuntimeWarning )
 
+    # Get the current parameter ranges.
+    parameter_ranges = get_parameter_ranges()
+
     random_inputs     = np.empty( (number_droplets * number_evaluations, 6), dtype=np.float32 )
     random_inputs[::number_evaluations, :] = scale_droplet_parameters( np.reshape( np.random.uniform( -1, 1, number_droplets*6 ),
                                                                        (number_droplets, 6) ).astype( "float32" ) )
@@ -398,7 +398,7 @@ def create_droplet_batch( number_droplets, number_evaluations=1, particle_temper
 
     # We generate data for a time window that is slightly larger than what we're interested
     # in (logspace( -3, 1 )) so we can learn the endpoints.
-    TIME_RANGE = (10.0**DROPLET_TIME_LOG_RANGE[0], 10.0**DROPLET_TIME_LOG_RANGE[1])
+    TIME_RANGE = (10.0**parameter_ranges["time"][0], 10.0**parameter_ranges["time"][1])
 
     integration_times = np.empty_like( random_inputs, shape=(number_droplets * number_evaluations) )
 
@@ -478,17 +478,17 @@ def create_droplet_batch( number_droplets, number_evaluations=1, particle_temper
 
                     # Check that we didn't get strange solutions that are outside of the
                     # expected ranges.  These will also be logged and replaced.
-                    if solution.y[0][0] < 10.0**DROPLET_RADIUS_LOG_RANGE[0] * (100 - 3) / 100:
+                    if solution.y[0][0] < 10.0**parameter_ranges["radius"][0] * (100 - 3) / 100:
                         weird_outputs["radius_too_small"].append( [y0, parameters, t_final, random_outputs[droplet_index, :]] )
                         good_parameters_flag = False
-                    elif solution.y[0][0] > 10.0**DROPLET_RADIUS_LOG_RANGE[1] * (100 + 3) / 100:
+                    elif solution.y[0][0] > 10.0**parameter_ranges["radius"][1] * (100 + 3) / 100:
                         weird_outputs["radius_too_large"].append( [y0, parameters, t_final, random_outputs[droplet_index, :]] )
                         good_parameters_flag = False
 
-                    if solution.y[1][0] < DROPLET_TEMPERATURE_RANGE[0] * (100 - 3) / 100:
+                    if solution.y[1][0] < parameter_ranges["temperature"][0] * (100 - 3) / 100:
                         weird_outputs["temperature_too_small"].append( [y0, parameters, t_final, random_outputs[droplet_index, :]] )
                         good_parameters_flag = False
-                    elif solution.y[1][0] > DROPLET_TEMPERATURE_RANGE[1] * (100 + 3) / 100:
+                    elif solution.y[1][0] > parameter_ranges["temperature"][1] * (100 + 3) / 100:
                         weird_outputs["temperature_too_large"].append( [y0, parameters, t_final, random_outputs[droplet_index, :]] )
                         good_parameters_flag = False
 
@@ -792,17 +792,21 @@ def normalize_NTLP_data( df ):
 
     Returns nothing
     """
+
+    # Get the current parameter ranges.
+    parameter_ranges = get_parameter_ranges()
+
     # Normalize inputs
-    df["normalized input radius"]      = (np.log10(df["input radius"]) - np.mean( DROPLET_RADIUS_LOG_RANGE )) / (np.diff( DROPLET_RADIUS_LOG_RANGE)/2)
-    df["normalized input temperature"] = (df["input temperature"] - np.mean( DROPLET_TEMPERATURE_RANGE )) / (np.diff( DROPLET_TEMPERATURE_RANGE )/2)
-    df["normalized salt mass"]         = (np.log10(df["salt mass"]) - np.mean( DROPLET_SALT_MASS_LOG_RANGE)) / (np.diff( DROPLET_SALT_MASS_LOG_RANGE)/2)
-    df["normalized air temperature"]   = (df["air temperature"] - np.mean( DROPLET_AIR_TEMPERATURE_RANGE)) / (np.diff( DROPLET_AIR_TEMPERATURE_RANGE)/2)
-    df["normalized relative humidity"] = (df["relative humidity"] - np.mean( DROPLET_RELATIVE_HUMIDITY_RANGE)) / (np.diff( DROPLET_RELATIVE_HUMIDITY_RANGE)/2)
-    df["normalized air density"]       = (df["air density"] - np.mean( DROPLET_RHOA_RANGE )) / (np.diff( DROPLET_RHOA_RANGE)/2)
+    df["normalized input radius"]      = (np.log10(df["input radius"]) - np.mean( parameter_ranges["radius"] )) / (np.diff( parameter_ranges["radius"])/2)
+    df["normalized input temperature"] = (df["input temperature"] - np.mean( parameter_ranges["temperature"] )) / (np.diff( parameter_ranges["temperature"] )/2)
+    df["normalized salt mass"]         = (np.log10(df["salt mass"]) - np.mean( parameter_ranges["salt_mass"] )) / (np.diff( parameter_ranges["salt_mass"] )/2)
+    df["normalized air temperature"]   = (df["air temperature"] - np.mean( parameter_ranges["air_temperature"] )) / (np.diff( parameter_ranges["air_temperature"] )/2)
+    df["normalized relative humidity"] = (df["relative humidity"] - np.mean( parameter_ranges["relative_humidity"] )) / (np.diff( parameter_ranges["relative_humidity"] )/2)
+    df["normalized air density"]       = (df["air density"] - np.mean( parameter_ranges["rhoa"] )) / (np.diff( parameter_ranges["rhoa"])/2)
 
     # Normalize outputs
-    df["normalized output radius"]      = (np.log10(df["output radius"]) - np.mean( DROPLET_RADIUS_LOG_RANGE )) / (np.diff( DROPLET_RADIUS_LOG_RANGE)/2)
-    df["normalized output temperature"] = (df["output temperature"] - np.mean( DROPLET_TEMPERATURE_RANGE )) / (np.diff( DROPLET_TEMPERATURE_RANGE )/2)
+    df["normalized output radius"]      = (np.log10(df["output radius"]) - np.mean( parameter_ranges["radius"] )) / (np.diff( parameter_ranges["radius"] )/2)
+    df["normalized output temperature"] = (df["output temperature"] - np.mean( parameter_ranges["temperature"] )) / (np.diff( parameter_ranges["temperature"] )/2)
 
 def read_NTLP_data( file_name ):
     """

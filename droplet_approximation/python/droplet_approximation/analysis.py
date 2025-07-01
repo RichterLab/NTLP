@@ -8,7 +8,7 @@ from scipy.integrate import solve_ivp
 from .data import create_droplet_batch, read_training_file
 from .models import do_inference, do_iterative_inference
 from .physics import dydt, scale_droplet_parameters
-from .physics import DROPLET_TIME_LOG_RANGE, normalize_droplet_parameters
+from .physics import get_parameter_ranges, normalize_droplet_parameters
 
 def analyze_model_iterative_performance( model, input_parameters=None, dt=0.05, final_time=10.0, figure_size=None ):
     """
@@ -483,9 +483,12 @@ def mse_score_models( models, file_name, device, weighted=False, normalized=Fals
 
     input_parameters, output_parameters, integration_times = read_training_file( file_name )
 
+    # Get the current parameter ranges.
+    parameter_ranges = get_parameter_ranges()
+
     # Normalizes the radii' reciprocal logarithmically since it is harder
     # to learn.
-    weights = 10**((DROPLET_TIME_LOG_RANGE[0] + DROPLET_TIME_LOG_RANGE[1]) / 2.0) * np.reciprocal( integration_times )
+    weights = 10**((parameter_ranges["time"][0] + parameter_ranges["time"][1]) / 2.0) * np.reciprocal( integration_times )
     weights = np.stack( (weights, weights), axis=-1 )
 
     BATCH_SIZE = 1024 * 10

@@ -3,13 +3,8 @@ import torch
 import torch.nn as nn
 
 from .data import read_training_file
-from .physics import DROPLET_AIR_TEMPERATURE_RANGE, \
-                     DROPLET_RADIUS_LOG_RANGE, \
-                     DROPLET_RELATIVE_HUMIDITY_RANGE, \
-                     DROPLET_RHOA_RANGE, \
-                     DROPLET_SALT_MASS_LOG_RANGE, \
-                     DROPLET_TEMPERATURE_RANGE, \
-                     dydt,\
+from .physics import dydt,\
+                     get_parameter_ranges, \
                      normalize_droplet_parameters, \
                      scale_droplet_parameters, \
                      solve_ivp_float32_outputs
@@ -288,6 +283,9 @@ def generate_fortran_module( model_name, model_state, output_path ):
         right_now             = datetime.datetime.now()
         current_date_time_str = right_now.strftime( "%Y/%m/%d at %H:%M:%S" )
 
+        # Get the current particle data ranges.
+        parameter_ranges = get_parameter_ranges()
+
         preamble_str = """!
 ! NOTE: This module was generated from {model_name:s} on {creation_date:s}.
 !       Do not modify this directly!  Update the module generator's template and
@@ -477,18 +475,18 @@ module droplet_model
     number_layer1_neurons=model_state["fc1.weight"].shape[0],
     number_layer2_neurons=model_state["fc2.weight"].shape[0],
     number_layer3_neurons=model_state["fc3.weight"].shape[0],
-    radius_start=DROPLET_RADIUS_LOG_RANGE[0],
-    radius_end=DROPLET_RADIUS_LOG_RANGE[1],
-    temperature_start=DROPLET_TEMPERATURE_RANGE[0],
-    temperature_end=DROPLET_TEMPERATURE_RANGE[1],
-    salt_mass_start=DROPLET_SALT_MASS_LOG_RANGE[0],
-    salt_mass_end=DROPLET_SALT_MASS_LOG_RANGE[1],
-    air_temperature_start=DROPLET_AIR_TEMPERATURE_RANGE[0],
-    air_temperature_end=DROPLET_AIR_TEMPERATURE_RANGE[1],
-    rh_start=DROPLET_RELATIVE_HUMIDITY_RANGE[0],
-    rh_end=DROPLET_RELATIVE_HUMIDITY_RANGE[1],
-    rhoa_start=DROPLET_RHOA_RANGE[0],
-    rhoa_end=DROPLET_RHOA_RANGE[1]
+    radius_start=parameter_ranges["radius"][0],
+    radius_end=parameter_ranges["radius"][1],
+    temperature_start=parameter_ranges["temperature"][0],
+    temperature_end=parameter_ranges["temperature"][1],
+    salt_mass_start=parameter_ranges["salt_mass"][0],
+    salt_mass_end=parameter_ranges["salt_mass"][1],
+    air_temperature_start=parameter_ranges["air_temperature"][0],
+    air_temperature_end=parameter_ranges["air_temperature"][1],
+    rh_start=parameter_ranges["relative_humidity"][0],
+    rh_end=parameter_ranges["relative_humidity"][1],
+    rhoa_start=parameter_ranges["rhoa"][0],
+    rhoa_end=parameter_ranges["rhoa"][1]
         )
 
         print( preamble_str, file=output_fp )
@@ -777,6 +775,9 @@ end subroutine estimate
         write_module_epilog( model_state, output_fp )
 
 def ode_residual( inputs, outputs, model ):
+
+    parameter_ranges = get_parameter_ranges()
+
     drdt = torch.autograd.grad( outputs[:, 0],
                                 inputs,
                                 grad_outputs=torch.ones_like( outputs[:, 0] ),
@@ -786,8 +787,8 @@ def ode_residual( inputs, outputs, model ):
                                 grad_outputs=torch.ones_like( outputs[:, 1] ),
                                 create_graph=True )[0]
 
-    drdt *= np.diff( DROPLET_RADIUS_LOG_RANGE ).astype( float ) * (10**((outputs[:, 0] * np.diff( DROPLET_RADIUS_LOG_RANGE ).astype( float ) / 2) + np.mean( DROPLET_RADIUS_LOG_RANGE ).astype( float ))) * 0.5 * np.log( 10 )
-    dTdt *= np.diff( DROPLET_TEMPERATURE_RANGE ).astype( float ) * 0.5
+    drdt *= np.diff( parameter_ranges["radius"] ).astype( float ) * (10**((outputs[:, 0] * np.diff( parameter_ranges["radius"] ).astype( float ) / 2) + np.mean( parameter_ranges["radius"] ).astype( float ))) * 0.5 * np.log( 10 )
+    dTdt *= np.diff( parameter_ranges["temperature"] ).astype( float ) * 0.5
 
     return [drdt, dTdt]
 

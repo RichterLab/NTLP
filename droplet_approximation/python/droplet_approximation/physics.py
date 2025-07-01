@@ -132,6 +132,72 @@ def dydt( t, y, parameters ):
 
     return [dy1dt, dy2dt]
 
+def get_parameter_ranges():
+    """
+    Gets the current droplet parameter ranges as a dictionary mapping
+    droplet property names to a two element 1D NumPy array containing
+    the property's lower and upper bounds, respectively.
+
+    Takes no arguments.
+
+    Returns 1 value:
+
+      parameter_ranges - Dictionary with the following keys: "radius",
+                         "temperature", "salt_mass", "air_temperature",
+                         "relative_humidity", "rhoa", "time"
+
+    """
+
+    parameter_ranges = {}
+
+    parameter_ranges["radius"]            = DROPLET_RADIUS_LOG_RANGE
+    parameter_ranges["temperature"]       = DROPLET_TEMPERATURE_RANGE
+    parameter_ranges["salt_mass"]         = DROPLET_SALT_MASS_LOG_RANGE
+    parameter_ranges["air_temperature"]   = DROPLET_AIR_TEMPERATURE_RANGE
+    parameter_ranges["relative_humidity"] = DROPLET_RELATIVE_HUMIDITY_RANGE
+    parameter_ranges["rhoa"]              = DROPLET_RHOA_RANGE
+    parameter_ranges["time"]              = DROPLET_TIME_LOG_RANGE
+
+    return parameter_ranges
+
+def set_parameter_ranges( parameter_ranges ):
+    """
+    Sets the droplet parameter ranges based on the provided upper
+    and lower bounds.  One or more parameter ranges may be specified
+    depending on the keys present in the specified dictionary, only
+    those present are updated leaving the unspecified properties as
+    is.
+
+    Takes 1 argument:
+
+      parameter_ranges - Dictionary with one or more of the following keys:
+                         "radius", "temperature", "salt_mass",
+                         "air_temperature", "relative_humidity", "rhoa", "time"
+
+    Returns nothing.
+
+    """
+
+    global DROPLET_RADIUS_LOG_RANGE, DROPLET_TEMPERATURE_RANGE, \
+           DROPLET_SALT_MASS_LOG_RANGE, DROPLET_AIR_TEMPERATURE_RANGE, \
+           DROPLET_RELATIVE_HUMIDITY_RANGE, DROPLET_RHOA_RANGE, \
+           DROPLET_TIME_LOG_RANGE
+
+    if "radius" in parameter_ranges:
+        DROPLET_RADIUS_LOG_RANGE = parameter_ranges["radius"]
+    if "temperature" in parameter_ranges:
+        DROPLET_TEMPERATURE_RANGE = parameter_ranges["temperature"]
+    if "salt_mass" in parameter_ranges:
+        DROPLET_SALT_MASS_LOG_RANGE = parameter_ranges["salt_mass"]
+    if "air_temperature" in parameter_ranges:
+        DROPLET_AIR_TEMPERATURE_RANGE = parameter_ranges["air_temperature"]
+    if "relative_humidity" in parameter_ranges:
+        DROPLET_RELATIVE_HUMIDITY_RANGE = parameter_ranges["relative_humidity"]
+    if "rhoa" in parameter_ranges:
+        DROPLET_RHOA_RANGE = parameter_ranges["rhoa"]
+    if "time" in parameter_ranges:
+        DROPLET_TIME_LOG_RANGE = parameter_ranges["time"]
+
 def normalize_droplet_parameters( droplet_parameters ):
     """
     Normalizes an array of droplet parameters into the range [-1, 1].  Operates
