@@ -8,15 +8,23 @@
 from .analysis import analyze_model_iterative_performance, \
                       analyze_model_particle_performance, \
                       analyze_model_performance, \
+                      calculate_cusum, \
                       calculate_nrmse, \
+                      detect_cusum_deviations, \
+                      DeviationDirection, \
+                      DeviationParameter, \
+                      ScoringReport, \
+                      identity_norm, \
                       mse_score_models, \
                       parallel_analyze_model_iterative_performance_NTLP_data, \
                       plot_droplet_size_temperature, \
                       plot_particles, \
                       plot_particle_history, \
-                      standard_distance
+                      standard_distance, \
+                      standard_norm
 from .data import batch_convert_NTLP_traces_to_particle_files, \
                   batch_read_particles_data, \
+                  be_success_mask, \
                   clean_training_data, \
                   convert_NTLP_trace_to_particle_files, \
                   create_droplet_batch, \

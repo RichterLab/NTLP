@@ -131,6 +131,25 @@ def batch_read_particles_data( particles_root, particle_ids, dirs_per_level, num
     # Concatenate the resulting DataFrames.
     return pd.concat( dfs, axis=0 )
 
+def be_success_mask( radius_data ):
+    """
+    Identifies trials where be suceeded (True) and be failed (False).
+    This mask checks for trials that preceed no change in radius.
+    No change in radius corresponds to a time step with a failure
+    in BE. 
+
+    Takes 1 argument:
+      radius_data     - NumPy array, shaped `number of time steps x 2`
+                        containing the radius data for a particle sorted
+                        by time
+
+    Returns 1 value:
+      be_success_mask - NumPy boolean array, True if BE suceeded,
+                        False if it failed.
+    """
+    mask = radius_data[:-1] != radius_data[1:]
+    return np.append( mask, True) # NOTE: this does assume that be always succeeds at the end!
+
 def clean_training_data( file_name ):
     """
     Removes invalid droplet parameters found in the supplied file and overwrites it
