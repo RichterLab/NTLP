@@ -34,7 +34,9 @@ from .models import SimpleNet, \
                     do_iterative_bdf, \
                     do_iterative_inference, \
                     generate_fortran_module, \
+                    load_model_checkpoint, \
                     ode_residual, \
+                    save_model_checkpoint, \
                     train_model, \
                     weighted_mse_loss
 from .physics import dydt, \

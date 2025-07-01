@@ -11,6 +11,22 @@ from droplet_approximation.models import *
 
 number_epochs = 14
 
+def get_checkpoint_extension( model_save_path ):
+    """
+    Gets the file extension used in a checkpoint file's path.
+
+    Takes 1 argument:
+
+      model_save_path - Path to the model's checkpoint.
+
+    Returns 1 value:
+
+      extension_str - Extension on the checkpoint file's path.
+
+    """
+
+    return model_save_path.split( "." )[-1]
+
 def main( argv ):
     if len( argv ) == 4:
         epoch_checkpoint_flag = False
@@ -24,6 +40,8 @@ def main( argv ):
     model_save_path = argv[2]
     droplet_model_save_path = argv[3]
 
+    model_save_prefix = "{:s}_epoch".format( model_save_path.split( "." + get_checkpoint_extension( model_save_path ) )[0] )
+    droplet_model_save_prefix = "{:s}_epoch".format( droplet_model_save_path.split( ".f90" )[0] )
 
     model_name = model_save_path.split("/")[-1].split(".")[0]
 
@@ -50,7 +68,7 @@ def main( argv ):
     model = model.to( device )
     if epoch_checkpoint_flag:
         for i in range( number_epochs ):
-            loss_history = train_model( model, 
+            training_loss = train_model( model, 
                                         criterion,
                                         optimizer,
                                         device,
@@ -63,31 +81,40 @@ def main( argv ):
 
             print( "Epoch {:n} trained on {:d} mini-batches.".format(
                 i,
-                len( loss_history ) ) ) 
+                len( training_loss ) ) ) 
 
-            epoch_model_save_path = "_epoch_{:n}.pth".format( i + 1 ).join(
-                model_save_path.split(".pth") )
-            epoch_droplet_model_save_path = "_epoch_{:n}.f90".format( i + 1 ).join(
-                droplet_model_save_path.split(".f90") )
+            epoch_droplet_model_save_path = "{:s}_{:d}.f90".format(
+                droplet_model_save_prefix,
+                i + 1 )
 
-            torch.save( model.state_dict(), epoch_model_save_path )
+            save_model_checkpoint( model_save_prefix,
+                                   i,
+                                   model,
+                                   optimizer,
+                                   criterion,
+                                   training_loss )
 
             generate_fortran_module( model_name, model.state_dict(), epoch_droplet_model_save_path )
             print( "Wrote model weights and inferencing code to '{:s}'.".format( 
                 epoch_droplet_model_save_path ) )
 
     else:
-        loss_history = train_model( model, 
-                                    criterion,
-                                    optimizer,
-                                    device,
-                                    number_epochs, 
-                                    training_data_path )
+        training_loss = train_model( model, 
+                                     criterion,
+                                     optimizer,
+                                     device,
+                                     number_epochs, 
+                                     training_data_path )
     
         print( "Trained on {:d} mini-batches.".format(
-            len( loss_history ) ) ) 
+            len( training_loss ) ) ) 
 
-        torch.save( model.state_dict(), model_save_path )
+        save_model_checkpoint( model_save_prefix,
+                               -1,
+                               model,
+                               optimizer,
+                               criterion,
+                               training_loss )
 
         generate_fortran_module( model_name, model.state_dict(), droplet_model_save_path )
         print( "Wrote model weights and inferencing code to '{:s}'.".format( droplet_model_save_path ) )

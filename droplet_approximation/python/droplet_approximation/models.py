@@ -1,3 +1,5 @@
+import warnings
+
 import numpy as np
 import torch
 import torch.nn as nn
@@ -774,6 +776,138 @@ end subroutine estimate
         # Write out the end of the module.
         write_module_epilog( model_state, output_fp )
 
+def load_model_checkpoint( checkpoint_path, model, optimizer=None ):
+    """
+    Loads a checkpoint from disk and updates the provided model and optimizer
+    objects with the state contained.  Returns the parameter ranges found in the
+    checkpoint as well as the model's recorded training loss.
+
+    Takes 3 arguments:
+
+      checkpoint_path - Path to the file that checkpoint was loaded from.
+      model           - Torch model whose weights will be set to the
+                        checkpoint's contents.
+      optimizer       - Optional Torch optimizer whose state will be set to the
+                        checkpoint's contents.  If omitted, any optimizer state
+                        in checkpoint_path is ignored.
+
+    Returns 3 values:
+
+      parameter_ranges - Dictionary containing the droplet parameter ranges
+                         associated with model.  See get_parameter_range() for
+                         details.
+      loss_function    - Function handle for the loss function associated with
+                         model.
+      training_loss    - Sequence containing model's training loss across
+                         batches.
+
+    """
+
+    def _load_model_checkpoint_v1( checkpoint_path, model, checkpoint ):
+        """
+        Loads a legacy, version 1 checkpoint.  This is simply a serialization of
+        the model's state dictionary without optimizer state, the loss function,
+        or training lost history.  The model provided is updated in-place.
+
+        Takes 3 arguments:
+
+          checkpoint_path - Path to the file that checkpoint was loaded from.
+          model           - Torch model whose weights will be set to the
+                            checkpoint's contents.
+          checkpoint      - Dictionary containing the weights and biases for
+                            model.  This must be suitable for loading via
+                            .load_state_dict().
+
+        Returns 1 value:
+
+          parameter_ranges - Dictionary containing the current droplet parameter
+                             ranges.  A warning is reported since it is not
+                             guaranteed that these ranges match the model
+                             itself.  See get_parameter_range() for details on
+                             the dictionary's keys.
+
+        """
+
+        # Legacy checkpoints do not contain parameter ranges so warn the user
+        # that what we're returning may not match the model that was loaded.
+        warnings.warn( "Loaded a legacy checkpoint from '{:s}', returning current parameter ranges!".format(
+            checkpoint_path ) )
+
+        # The checkpoint is simply the model's weights and biases.
+        model.load_state_dict( checkpoint )
+
+        return get_parameter_ranges()
+
+    def _load_model_checkpoint_v2( checkpoint_path, model, optimizer, checkpoint ):
+        """
+        Loads a version 2 checkpoint.  These contain model weights, the droplet
+        parameter ranges the model was trained on, and the optimizer's state.
+        The model and optimizer are updated in-place.
+
+        Takes 4 arguments:
+
+          checkpoint_path - Path to the file that checkpoint was loaded from.
+          model           - Torch model whose weights will be set to the
+                            checkpoint's contents.
+          optimizer       - Optional Torch optimizer whose state will be set to
+                            the checkpoint's contents.  If omitted, the loaded
+                            optimizer state is discarded.
+          checkpoint      - Dictionary containing the following keys:
+                            "droplet_parameters", "loss_function",
+                            "model_weights", "optimizer_state".
+
+        Returns 3 values:
+
+          parameter_ranges - Dictionary containing the droplet parameter ranges
+                             associated with model.  See get_parameter_range()
+                             for details.
+          loss_function    - Function handle for the loss function associated
+                             with model.
+          training_loss    - Sequence containing model's training loss across
+                             batches.
+
+        """
+
+        model.load_state_dict( checkpoint["model_weights"] )
+        if optimizer is not None:
+            optimizer.load_state_dict( checkpoint["optimizer_state"] )
+
+        parameter_ranges = checkpoint["droplet_parameter_ranges"]
+        loss_function    = checkpoint["loss_function"]
+        training_loss    = checkpoint["training_loss"]
+
+        return parameter_ranges, loss_function, training_loss
+
+    # Load the checkpoint's Tensors as a dictionary and figure out which version
+    # it is.
+    checkpoint         = torch.load( checkpoint_path )
+    checkpoint_version = checkpoint.get( "checkpoint_version", 1 )
+
+    # Load the checkpoint based on its reported version.  Complain if we don't
+    # know how to support it.
+    if checkpoint_version == 1:
+        # Legacy checkpoints did not track the loss function or training
+        # loss.
+        loss_function = None
+        training_loss = []
+
+        parameter_ranges = _load_model_checkpoint_v1( checkpoint_path,
+                                                      model,
+                                                      checkpoint )
+    elif checkpoint_version == 2:
+        (parameter_ranges,
+         loss_function,
+         training_loss) = _load_model_checkpoint_v2( checkpoint_path,
+                                                     model,
+                                                     optimizer,
+                                                     checkpoint )
+    else:
+        raise RuntimeError( "Unknown checkpoint version ({:d}) in '{:s}'!".format(
+            checkpoint_version,
+            checkpoint_path ) )
+
+    return parameter_ranges, loss_function, training_loss
+
 def ode_residual( inputs, outputs, model ):
 
     parameter_ranges = get_parameter_ranges()
@@ -791,6 +925,82 @@ def ode_residual( inputs, outputs, model ):
     dTdt *= np.diff( parameter_ranges["temperature"] ).astype( float ) * 0.5
 
     return [drdt, dTdt]
+
+def save_model_checkpoint( checkpoint_prefix, checkpoint_number, model, optimizer, loss_function, training_loss, parameter_ranges={} ):
+    """
+    Serializes the provided model and optimizer state disk so that it may
+    be loaded for additional training and/or inferencing.  Existing checkpoints
+    are overwritten.
+
+    Takes 7 arguments:
+
+      checkpoint_prefix - Prefix of the checkpoint path.
+      checkpoint_number - Number of the checkpoint to save.  When non-negative
+                          is combined with checkpoint_prefix to create checkpoint_path.
+      model             - Torch model object whose state should be saved.
+      optimizer         - Torch optimizer object whose state should be saved.
+      loss_function     - Function that computes the loss for model.
+      training_loss     - Sequence containing the training loss history.
+      parameter_ranges  - Optional dictionary containing the droplet parameter
+                          ranges used to train model.  If omitted, defaults to
+                          an empty dictionary and the current parameter ranges
+                          are stored in the checkpoint.
+
+    Returns 1 value:
+
+      checkpoint_path - Path to the checkpoint written, with a ".pt" extension.
+                        If checkpoint_number is negative then checkpoint_prefix
+                        simply has an extension appended, otherwise
+                        checkpoint_number is added before the extension.
+
+    """
+
+    #
+    # NOTE: We only support saving models in the most recent version.  There
+    #       isn't a need to be fully flexible during development and one-off
+    #       cases where we need to write a specific version can be handled
+    #       as needed.
+    #
+    CHECKPOINT_VERSION = 2
+
+    # Build the checkpoint path.
+    if checkpoint_number >= 0:
+        checkpoint_path = "{:s}_{:d}.pt".format(
+            checkpoint_prefix,
+            checkpoint_number )
+    else:
+        checkpoint_path = "{:s}.pt".format(
+            checkpoint_prefix )
+
+    current_parameter_ranges = get_parameter_ranges()
+
+    # Update the parameter ranges with the caller's.
+    if len( parameter_ranges ) > 0:
+        parameter_ranges.update( current_parameter_ranges )
+
+    # Checkpoints are dictionaries comprised of the following key/values:
+    #
+    #  droplet_parameter_ranges - The physics module's current parameter range
+    #                             dictionary.
+    #  loss_function            - Function that computes model's training loss.
+    #  model_weights            - Model weights and biases.
+    #  optimizer_state          - Optional optimizer state so as to continue
+    #                             training where the checkpoint left off.
+    #  training_loss            - Sequence of training loss values.
+    #
+    checkpoint = {
+        "checkpoint_version":       CHECKPOINT_VERSION,
+        "droplet_parameter_ranges": parameter_ranges,
+        "loss_function":            loss_function,
+        "model_weights":            model.state_dict(),
+        "optimizer_state":          optimizer.state_dict(),
+        "training_loss":            training_loss
+    }
+
+    # Serialize the checkpoint.
+    torch.save( checkpoint, checkpoint_path )
+
+    return checkpoint_path
 
 def train_model( model, criterion, optimizer, device, number_epochs, training_file ):
     """
