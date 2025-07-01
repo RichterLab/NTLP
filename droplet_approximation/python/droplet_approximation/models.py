@@ -1020,7 +1020,10 @@ def train_model( model, criterion, optimizer, device, number_epochs, training_fi
                       data in training_file will be seen by the model
                       this many times.
       training_file - Path to the file containing training data created by
-                      create_training_file().
+                      create_training_file() OR a tuple containing three NumPy
+                      arrays: input parameters, output parameters, and
+                      integration times (sized N x 6, N x 2, and N x 1,
+                      respectively, where N are the number of training samples).
 
     Returns 1 value:
 
@@ -1037,7 +1040,10 @@ def train_model( model, criterion, optimizer, device, number_epochs, training_fi
     #
     #       TL;DR Find a big machine to train on.
     #
-    input_parameters, output_parameters, integration_times = read_training_file( training_file )
+    if isinstance( training_file, tuple ):
+        input_parameters, output_parameters, integration_times = training_file
+    else:
+        input_parameters, output_parameters, integration_times = read_training_file( training_file )
 
     weights = np.reciprocal( integration_times )
     weights = np.stack( (weights, weights), axis=-1 )
@@ -1052,7 +1058,7 @@ def train_model( model, criterion, optimizer, device, number_epochs, training_fi
     NUMBER_BATCHES  = input_parameters.shape[0] // BATCH_SIZE
 
     # Track each mini-batch's training loss for analysis.
-    loss_history = []
+    training_loss_history = []
 
     batch_indices = np.arange( NUMBER_BATCHES )
 
@@ -1096,7 +1102,7 @@ def train_model( model, criterion, optimizer, device, number_epochs, training_fi
             # Perform the forward pass.
             normalized_approximations = model( normalized_inputs )
 
-            # Estimate the loss - using weights if needed
+            # Estimate the loss - using weights if needed.
             if criterion == weighted_mse_loss:
                 loss = weighted_mse_loss( normalized_approximations, normalized_outputs, current_weights )
             else:
@@ -1111,13 +1117,7 @@ def train_model( model, criterion, optimizer, device, number_epochs, training_fi
             if batch_index > 0 and batch_index % MINI_BATCH_SIZE == 0:
                 running_loss /= MINI_BATCH_SIZE
 
-                print( "Epoch #{:d}, batch #{:d} loss: {:g}".format(
-                    epoch_index + 1,
-                    batch_index + 1,
-                    running_loss ), flush=True )
-                print( ((normalized_approximations - normalized_outputs)**2).mean( axis=0 ) )
-                print( ((normalized_approximations - normalized_outputs)**2).max( axis=0 ) )
-                loss_history.append( running_loss )
+                training_loss_history.append( running_loss )
 
                 # Break out of the batch loop if we ever encounter an input
                 # that causes the loss to spike.  Training data generation
@@ -1135,7 +1135,7 @@ def train_model( model, criterion, optimizer, device, number_epochs, training_fi
             # We finished all of the batches.  Adjust the learning rate and
             # go to the next epoch.
             for parameter_group in optimizer.param_groups:
-                parameter_group["lr"] /= 2
+                parameter_group["lr"] * 0.5
 
             continue
 
@@ -1143,16 +1143,16 @@ def train_model( model, criterion, optimizer, device, number_epochs, training_fi
         break
 
     # Handle the case where we didn't have enough data to complete a mini-batch.
-    if len( loss_history ) == 0:
+    if len( training_loss_history ) == 0:
         running_loss /= number_epochs * NUMBER_BATCHES
-        loss_history.append( running_loss )
+        training_loss_history.append( running_loss )
 
         print( "Epoch #{:d}, batch #{:d} loss: {:g}".format(
             number_epochs,
             NUMBER_BATCHES,
             running_loss ) )
 
-    return loss_history
+    return training_loss_history
 
 def weighted_mse_loss( inputs, targets, weights ):
     """
