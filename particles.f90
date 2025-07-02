@@ -3165,6 +3165,22 @@ CONTAINS
          keep_particle_flag = (mod(part%pidx, iwritebe_proportion) .eq. 0)
 
          if (iwritebe .eq. 1 .and. keep_particle_flag ) then
+
+            ! Is the trace buffer full?  We need to write it out so we don't
+            ! overwrite older particles.  This occurs when the buffer is smaller
+            ! than the number of particles present.
+            if (be_write_buffer_index == BE_BUFFER_LENGTH) then
+
+                ! Write out every record we've accumulated.
+                do i = 1, BE_BUFFER_LENGTH
+                    write(be_dump_iu) be_int32_write_buffer(:, i)
+                    write(be_dump_iu) be_float32_write_buffer(:, i)
+                end do
+
+                ! Reset the buffer index so we start filling at its beginning.
+                be_write_buffer_index = 0
+            end if
+
             be_write_buffer_index = be_write_buffer_index + 1
 
             be_int32_write_buffer(1,be_write_buffer_index) = numprocs*part%pidx + part%procidx
