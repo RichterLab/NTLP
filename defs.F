@@ -12,7 +12,11 @@ c     ----------------------------------------------------------------------
      +     icoalesce,ipart_method,ipartdiff,isfs,iexner,ilongwave,
      +     inetcdf,iviznetcdf,ihumiditycontrol,ireintro,itrajout,
      +     inewpart,ihurr,icase,ikernel,irestart,iwritebe,
-     +     iwritebe_proportion,iseed_init
+     +     iwritebe_proportion
+
+      !Random number generator seed.  Must be set to zero to default to
+      !a time-based seed in case it isn't specified in the parameters file.
+      integer :: iseed_init = 0
 
       real :: max_time
 c     
