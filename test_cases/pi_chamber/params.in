@@ -39,9 +39,9 @@ iviznetcdf = 1  !Set to 1 to slice viz files to netcdf format (WARNING: it's bee
 ihumiditycontrol = 0  !Adaptive humidity source/sink (used for Pi Chamber; subroutine humidity_control)
 ireintro=1   !Aerosol injection
 itrajout=1   !Write the particle trajectory files. Needs a directory within the scratch space, and each processor writes a file (requires postprocessing to stitch together)
-iwritebe=0
-iwritebe_proportion=2 ! Writes 1/iwritebe_proportion of the particles to the trajectory. Bigger ==> smaller data dump.
-iseed_init=1
+iwritebe=0   !Write a trace of backward Euler inputs/outputs for particles.
+iwritebe_proportion=2 ! Writes 1/iwritebe_proportion of the particles to the particle trace. Bigger ==> smaller particle trace.
+iseed_init=0 !Make the run reproducible.  0 = random seed, non-zero = reproducible seed
 /
 
 !Grid and domain parameters
