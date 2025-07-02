@@ -1,46 +1,55 @@
+from dataclasses import dataclass
 from enum import Enum
 
 import matplotlib.pyplot as plt
 
 import numpy as np
 
-from sklearn.decomposition import PCA
 from sklearn.preprocessing import StandardScaler
-from sklearn.model_selection import GridSearchCV
-from sklearn.mixture import GaussianMixture
+from sklearn.mixture import BayesianGaussianMixture
 
-from .data import be_success_mask
+from torch import multiprocessing
+
+from .data import be_success_mask, read_particles_data
 from .models import do_inference, do_iterative_inference
+from .physics import set_parameter_ranges
 
 def calculate_cusum( differences, tolerance ):
     """
-    Calculates the cumulative sum (CUSUM) on an array. Can be 1D for
-    one variable or 2D for calculation of multiple variables at once.
-    Usually used on an arrays of differences in MLP and BE output.
+    Calculates the cumulative sum (CUSUM) of an array of differences. 
+    Can be 1D for one variable or 2D for multiple variables at once.
+    Usually used on an arrays of radius/temperature differences in 
+    MLP and BE output.
 
     Takes 2 arguments:
- 
-      rt_differences  - Array, 1D for one variable or 2D for simultaneous
-                        evaluation, sized number_variables x number_observations.
-                        Contains arrays of the differences to analyze.
-      tolerance       - Array or Float, contains the error tolerances for each
-                        variable. Corresponds to `k` in CUSUM formula.
+      differences - NumPy array, 1D for one variable or 2D for simultaneous
+                    evaluation, sized number_variables x number_observations,
+                    contains arrays of the differences to analyze.
+      tolerance   - NumPy array or Float, contains the error tolerances for each
+                    variable and corresponds to `k` in CUSUM formula.
 
     Returns 1 value:
-      cusum           - Array, sized 2 x number_variables x number_observations,
-                        containing:
-                            an array of the positive cumulative sums for each variable
-                                at each time step at index 0
-                            an array of the negative cumulative sums for each variable
-                                at each time step at index 1
+      cusum - NumPy array, sized number_variables x 2 x number_observations,
+              contains:
+                  an array of the positive cumulative sums for each
+                      variable at each time step at index [..., 0, :]
+                  an array of the negative cumulative sums for each
+                      variable at each time step at index [..., 1, :]
 
     """
-    cusum = np.zeros( shape=( *differences.shape[:-1], 2, differences.shape[-1] ) )
+    cusum            = np.zeros( shape=( *differences.shape[:-1], 2, differences.shape[-1] ) )
+    cusum[..., 0, 0] = np.maximum( differences[..., 0] - tolerance, 0 )
+    cusum[..., 1, 0] = np.minimum( differences[..., 0] + tolerance, 0 )
 
-    for i in range( 1, differences.shape[-1] ):
-        cusum[..., 0, i] = np.maximum( cusum[..., 0, i-1] + differences[..., i-1] - tolerance, 0 )
-        cusum[..., 1, i] = np.minimum( cusum[..., 1, i-1] + differences[..., i-1] + tolerance, 0 )
-
+    for time_step in range( 1, differences.shape[-1] ):
+        # Positive CUSUM
+        cusum[..., 0, time_step] = np.maximum( cusum[..., 0, time_step-1] 
+                                             + differences[..., time_step] 
+                                             - tolerance, 0 )
+        # Negative CUSUM
+        cusum[..., 1, time_step] = np.minimum( cusum[..., 1, time_step-1] 
+                                             + differences[..., time_step] 
+                                             + tolerance, 0 )
     return cusum
 
 def calculate_nrmse( truth_output, model_output ):
@@ -49,18 +58,17 @@ def calculate_nrmse( truth_output, model_output ):
     provided truth and model outputs. Returns the NRMSE across all observations
     (rows). NRMSE is normalized on the average of the truth value.
 
-    Takes 3 arguments:
+    Takes 2 arguments:
 
-      truth_output      - NumPy array, sized number_observations x 2, containing
-                          the truth values for radii and temperatures.
-      model_output      - NumPy array, sized number_observations x 2, containing
-                          the model values for radii and temparatures.
+      truth_output - NumPy array, sized number_observations x 2, containing
+                     the truth values for droplet radii and temperatures.
+      model_output - NumPy array, sized number_observations x 2, containing
+                     the model values for droplet radii and temperatures.
 
-    Returns 2 values:
+    Returns 1 value:
 
-      radii_nrmse        - NRMSE of the radii.
-      temperatures_nrmse - NRMSE of the temperatures.
-
+      NRMSE - the normalized root mean squared error of model_output against 
+              truth_output.
     """
 
     RMSE = np.sqrt( np.mean( ( truth_output - model_output ) ** 2, axis=0 ) )
@@ -70,343 +78,478 @@ def calculate_nrmse( truth_output, model_output ):
 
 def detect_cusum_deviations( cusum_data, threshold ):
     """
-    Creates a mask the size of the incoming CUSUM data that identifies
-    where the CUSUM first exceeds the threshold.
+    Creates a mask the shape of the incoming CUSUM data that identifies
+    the indexes where the CUSUM begins to exceed the error threshold (h).
 
     Takes 2 arguments:
-      cusum_data      - Array, sized number_variables x 2 x number_observations. 
-                        Optionally can provide a 2D array of 2 x number_observations
-                        to detect deviations for just one variable.
-      threshold       - Array, sized number_variables or just one float if evaluating
-                        on one variable. Contains desired threshold for each CUSUM array 
-                        in the last dimension of `cusum_data`. Corresponds to
-                        `h` in the CUSUM formula.
+      cusum_data - Array, sized number_variables x 2 x number_observations.
+                   Usually, this is output data from `calculate_cusum`.
+                   Optionally can provide a 2D array of 2 x number_observations
+                   to detect deviations for just one variable. In either case,
+                   the second dimension of the array corresponds to
+                   positive/negative CUSUMs.
+      threshold  - Array, sized number_variables, or a float if evaluating
+                   on one variable, containing the threshold to apply to the
+                   CUSUM array for each variable respectively. Corresponds to
+                   `h` in the CUSUM formula.
 
     Returns 1 value:
-      cusum_edge_mask - Array, sized ... x number_observations. Contains
-                        a mask with `True` at the index where the CUSUM
-                        exceeded `threshold` and `False` everywhere else.
+      cusum_edge_mask - Array, sized number_variables x 2 x number_observations,
+                        containing an array of masks for each variable and
+                        positive/negative CUSUM. False everywhere except
+                        at the index where the CUSUM starts exceeding `threshold`.
     """
 
-    if cusum_data.ndim == 2:
-        threshold = threshold[:, None]
     if cusum_data.ndim == 3:
         threshold = threshold[:, None, None]
 
-    cusum_threshold = np.abs( cusum_data ) > threshold
-    cusum_edge_mask = ( cusum_threshold[..., 1:] == 1 ) & ( cusum_threshold[..., :-1] == 0 )
-    cusum_edge_mask = np.insert(cusum_edge_mask, 0, False, axis=-1 )
+    # If the threshold is exceeded in the first observation, record that
+    # as a deviation (True). Then, record all observations# where CUSUM exceeds
+    # the threshold but was within the threshold
+    # in the previous observation.
+    cusum_edge_mask          = np.zeros( cusum_data.shape, dtype=bool )
+    cusum_threshold          = np.abs( cusum_data ) > threshold
+    cusum_edge_mask[..., 0]  = cusum_threshold[..., 0]
+    cusum_edge_mask[..., 1:] = cusum_threshold[..., 1:] & ( ~cusum_threshold[..., :-1] )
 
     return cusum_edge_mask
 
 class DeviationDirection( Enum ):
     """
-    Encodes the direction of each deviation
+    This enum records the direction of a deviation.
     """
     NEGATIVE = 0
     POSITIVE = 1
 
 class DeviationParameter( Enum ):
     """
-    Encodes the parameter associated with each deviation
+    This enum records the parameter associated with a deviation.
     """
     RADIUS = 0
     TEMPERATURE = 1
+
+# This may be rewritten in the future as `ParticleScores` in
+# order to be more data-oriented. Instead of containing values
+# for an individual particle, each object would contain an array
+# of values. `particle_pipeline` would return one `ParticleScores`
+# object, and `Scoring_Report` `__init__` would concatenate all of
+# these arrays together.
+@dataclass
+class ParticleScore:
+    """
+    This is a data class to structure output from `particle_pipeline`.
+    
+    Contains 10 attributes:
+      particle_id            - Integer, id of the particle processed.
+      particle_nrmse         - Float, NRMSE of the particle against BE outputs.
+      square_error           - NumPy Array, sized 2, contains the square of the
+                               difference between BE and MLP output for radius
+                               and temperature respectively. Used to calculate
+                               overall NRMSE.
+      truth_sum              - NumPy Array, sized 2, contains the sum of the truth 
+                               values for radius and temperature respectively. Used
+                               to calculate overall NRMSE.
+      observation_count      - Integer, number of observations in this particle's
+                               trajectory. Used to calculate overall NRMSE.
+      deviations             - NumPy array, sized number_deviations x 7,
+                               contains the droplet parameters each deviation,
+                               including integration time.
+      deviation_directions   - NumPy array of DeviationDirections, sized 
+                               number_deviations, containing whether each 
+                               deviation was positive or negative.
+      deviation_parameters   - NumPy array of DeviationParameters, sized
+                               number_deviations, containing whether each 
+                               deviation occurred in the radius or temperature
+                               output.
+      deviation_times        - NumPy array of floats, sized number_deviations,
+                               containing the time at which each deviation occurred.
+      deviation_particle_ids - NumPy array of integers containing the particle id
+                               of each deviation. Technically, this is redundant to
+                               particle_id, but it is used by ScoringReport to
+                               cleanly generate the overall deviation_particle_ids array.
+    """
+
+    particle_id:            int
+    particle_nrmse:         np.float64
+    square_error:           np.ndarray
+    truth_sum:              np.ndarray 
+    observation_count:      int
+    deviations:             np.ndarray
+    deviation_directions:   np.ndarray
+    deviation_parameters:   np.ndarray
+    deviation_times:        np.ndarray
+    deviation_particle_ids: np.ndarray
+
+def particle_scoring_pipeline( particles_root, particle_ids, dirs_per_level, model, device, cusum_error_tolerance,
+                               cusum_error_threshold, norm, iterative, parameter_ranges ):
+    """
+    Calculates NRMSE and deviations for a set of particles on a given model. Loads
+    particle data from per particle data frames. Also provides statistics needed
+    to calcualte overall dataset NRMSE.
+
+    Takes 10 arguments:
+      particles_root        - Path to the top-level directory to read raw
+                              particle files from.
+      particle_ids          - Sequence of particle identifiers to process.
+      dirs_per_level        - Number of subdirectories per level in the
+                              particle files directory hierarchy.
+      model                 - PyTorch model to use
+      device                - The device to evaluate on.
+      cusum_error_tolerance - NumPy Array, sized 2, containing the
+                              radius/temperature tolerances to pass to 
+                              `calculate_cusum`.
+      cusum_error_threshold - NumPy Array, sized 2, containing the 
+                              radius/temperature thresholds to pass to
+                              `detect_cusum_deviations`.
+      norm                  - User provided norm to apply to all data before
+                              scoring and deviation detection. Accepts an
+                              array sized number_observations x 2 and returns
+                              a normed array of the same length.
+      iterative             - Boolean, indicates whether to evaluate the model 
+                              directly on every time step, or to iterate radius
+                              and temperature from the first time step.
+      parameter_ranges      - Dictionary of any changes to the droplet parameter
+                              ranges required for the given model.
+
+    Returns 1 Value:
+      ParticleScores - List of ParticleScore objects.
+    """
+
+    set_parameter_ranges( parameter_ranges )
+    
+    particle_scores = []
+
+    for particle_ids_batch in particle_ids:
+        particles_df = read_particles_data( particles_root, particle_ids_batch, dirs_per_level )
+        for particle_index, particle_id in enumerate( particle_ids_batch ):
+            # Load parameters and mask out BE failures
+            particle_parameters = np.stack( particles_df.iloc[particle_index][[
+                                      "input radii",
+                                      "input temperatures",
+                                      "salt masses",
+                                      "air temperatures",
+                                      "relative humidities",
+                                      "air densities",
+                                      "integration times"
+                                  ]].to_numpy(), axis=-1 )
+            be_mask             = be_success_mask( particle_parameters[:, 0] ) 
+            particle_parameters = particle_parameters[be_mask, :]
+            particle_times      = np.cumsum( particle_parameters[:, -1] )
+            
+            # Ignore the first trial because it is not an output
+            normed_be_output  = norm( particle_parameters[1:, :2] )
+            normed_mlp_output = np.empty( shape=( particle_parameters.shape[0] - 1, 2 ) )
+
+            # Calculate MLP results
+
+            # We remove the last trial of `do_inference` since we don't have a reference
+            # radius/temperature for the time step after the last one.
+            # We also remove the first trial of `do_iterative_inference` since it just returns
+            # the first radius/temperature; i.e. it is not a true MLP output.
+            # This also aligns the indices of the results.
+            if iterative:
+                normed_mlp_output = norm( do_iterative_inference(
+                                                            particle_parameters[:, :-1],
+                                                            particle_times,
+                                                            model,
+                                                            device)[1:] )
+            else:
+                normed_mlp_output = norm( do_inference( particle_parameters[:, :-1],
+                                                        particle_parameters[:, -1],
+                                                        model,
+                                                        device)[:-1] )
+
+            # Calculating the overall NRMSE directly would require copying all of the particle
+            # data frames together. Instead, we just copy the square error and the sum of the truth
+            # parameters for each particle so that net NRMSE can be calculated later.
+            particle_nrmse      = calculate_nrmse( normed_be_output, normed_mlp_output )
+            square_error        = np.sum( ( normed_be_output - normed_mlp_output ) ** 2, axis=0 )
+            truth_sum           = np.abs( np.sum( normed_be_output, axis=0 ) )
+            number_observations = particle_parameters.shape[0]
+
+            # Calculate CUSUM. There structure of the result will be
+            # [ [ Positive Radius CUSUM array, Negative Radius CUSUM array ],
+            #   [ Positive Temperature CUSUM array, Negative Temperature CUSUM array ] ]
+            normed_output_differences = ( normed_mlp_output - normed_be_output ).T
+            cusum                     = calculate_cusum( normed_output_differences, cusum_error_tolerance )
+
+            # Create a mask for when positive/negative radius/temperature CUSUM exceeds
+            # the threshold. Flatten so that we can zip it into results with the enum arrays.
+            # The structure of this array will be
+            # [ Positive Radius Deviation Mask, Negative Radius Deviation Mask,
+            #   Positive Temperature Deviation Mask, Negative Temperature Deviation Mask ]
+            # Also adds a "False" to the start since the first time step isn't an output and so
+            # it is not in the CUSUM, but it also never a deviation.
+            deviation_masks  = detect_cusum_deviations( cusum, cusum_error_threshold ).reshape( (4, -1) )
+            deviation_masks  = np.insert( deviation_masks, 0, False, axis=-1 )
+            deviation_counts = deviation_masks.sum( axis=1 )
+
+            # These arrays allow the deviations identified with each
+            # CUSUM array to be zipped with their corresponding enums. 
+
+            deviation_direction_vector = np.array( [ DeviationDirection.POSITIVE,
+                                                     DeviationDirection.NEGATIVE,
+                                                     DeviationDirection.POSITIVE,
+                                                     DeviationDirection.NEGATIVE ] )
+            deviation_parameter_vector = np.array( [ DeviationParameter.RADIUS,
+                                                     DeviationParameter.RADIUS,
+                                                     DeviationParameter.TEMPERATURE,
+                                                     DeviationParameter.TEMPERATURE ] )
+
+            # Record data about the deviations
+            deviations             = np.vstack( [ particle_parameters[mask] for mask in deviation_masks ] )
+            deviation_directions   = np.hstack( [ np.full( count, direction ) for count, direction
+                                                  in zip( deviation_counts, deviation_direction_vector ) ] )
+            deviation_parameters   = np.hstack( [ np.full( count, direction ) for count, direction
+                                                  in zip( deviation_counts, deviation_parameter_vector ) ] )
+            deviation_times        = np.hstack( [ particle_times[mask] for mask in deviation_masks ] )
+            deviation_particle_ids = np.full( deviation_counts.sum(), particle_id )
+
+
+            # In the future, if we want access to CUSUM or MLP radius data, perhaps write it to a new
+            # per particle analysis dataframe here
+
+            particle_score = ParticleScore( particle_id, particle_nrmse, square_error, truth_sum, 
+                                            number_observations, deviations, deviation_directions, 
+                                            deviation_parameters, deviation_times, deviation_particle_ids )
+
+            particle_scores.append( particle_score )
+
+    return particle_scores
 
 class ScoringReport():
     """
     A class to handle the information when scoring a model.  
 
-    Properties:
-      cluster_centers             - NumPy array, sized number_clusters
-                                    times 7, containing the droplet
-                                    parameters for the centroid of each
-                                    cluster
-      cluster_model               - The Gaussian mixture model that was
-                                    used to cluster the data
-      cusum_error_threshold       - NumPy array, sized 2, containing the
-                                    threshold used to calculate the CUSUM
-                                    for radius and temperature respectively.
-      cusum_error_tolerance       - NumPy array, sized 2, containing the
-                                    tolerance used to calculate the CUSUM
-                                    for radius and temperature respectively.
-      deviations                  - NumPy array, sized number_deviations x 7
-                                    containing the droplet parameters for
-                                    each deviation
-      deviation_clusters          - NumPy array of integers, size number_deviations,
-                                    containing the index of the cluster that the
-                                    deviation belongs to.
-      deviation_directions        - NumPy array of DeviationDirections, sized
-                                    number_deviations containing whether each
-                                    deviation was positive or negative.
-      deviation_particle_ids      - NumPy array of integers containing the particle
-                                    id of each deviation.
-      deviation_parameters        - NumPy array of DeviationParameters, sized
-                                    number_deviations containing whether each
-                                    deviation occured in the radius or temperature
-                                    output.
-      deviation_times             - NumPy array of floats, sized number_deviations,
-                                    containing the time at which each deviation
-                                    occured.
-      iterative                   - Boolean, False if the scoring was done
-                                    with direct model outputs. True if the
-                                    scoring was done with iterative outputs.
-      model_name                  - String, the name of the model evaluated.
-      net_nrmse                   - Float, NRMSE of the entire dataset
-      pca_model                   - Scikit-learn PCA, PCA object for deviation parameters
-      per_particle_nrmse          - Dictionary, keys are particle IDs, values are floats
-                                    corresponding to the model's NRMSE on the
-                                    given particle.
-      z_scorer                    - Scikit-learn StandardScaler, z-scores deviation parameters
-      zs_mean                     - The mean of each droplet parameter pre-zscore. Used to convert
-                                    between PCA coordinates and natural ranges.
+    Contains 16 attributes:
+      cluster_centers        - NumPy array, sized number_clusters
+                               times 7, containing the droplet
+                               parameters for the centroid of each
+                               cluster.
+      cluster_model          - The Gaussian mixture model that was
+                               used to cluster the data.
+      cusum_error_threshold  - NumPy array, sized 2, containing the
+                               threshold used to calculate the CUSUM
+                               for radius and temperature respectively.
+      cusum_error_tolerance  - NumPy array, sized 2, containing the
+                               tolerance used to calculate the CUSUM
+                               for radius and temperature respectively.
+      deviations             - NumPy array, sized number_deviations x 7
+                               containing the droplet parameters for
+                               each deviation.
+      deviation_clusters     - NumPy array of integers, size number_deviations,
+                               containing the index of the cluster that the
+                               deviation belongs to.
+      deviation_directions   - NumPy array of DeviationDirections, sized
+                               number_deviations containing whether each
+                               deviation was positive or negative.
+      deviation_particle_ids - NumPy array of integers containing the particle
+                               id of each deviation.
+      deviation_parameters   - NumPy array of DeviationParameters, sized
+                               number_deviations containing whether each
+                               deviation occurred in the radius or temperature
+                               output.
+      deviation_times        - NumPy array of floats, sized number_deviations,
+                               containing the time at which each deviation
+                               occurred.
+      iterative              - Boolean, False if the scoring was done
+                               with direct model outputs. True if the
+                               scoring was done with iterative outputs.
+      model_name             - String, the name of the model evaluated.
+      net_nrmse              - Float, NRMSE of the entire dataset.
+      per_particle_nrmse     - Dictionary, keys are particle IDs, values are floats
+                               corresponding to the model's NRMSE on the
+                               given particle.
+      z_score_model          - Scikit-learn StandardScaler, z-scores deviation
+                               parameters.
+      z_score_mean           - The mean of each droplet parameter pre-zscore.
+                               Used to convert between z-scored coordinates and
+                               natural ranges.
 
     """
-    def __init__( self, droplet_parameter_list, particle_ids, model, model_name, device,
+    def __init__( self, particles_root, particle_ids, dirs_per_level, model, model_name, device,
                  cusum_error_tolerance, cusum_error_threshold, norm=None, iterative=False, 
-                 pca_threshold = 0.90, max_clusters = 7 ):
+                 max_clusters = 7, number_processes=0, number_batches=1, parameter_ranges=None ):
         """
         Takes 12 arguments:
-          droplet_parameter_list      - List of NumPy arrays containing the droplet
-                                        parameters for each particle.
-          particle_ids                - List containing the particle ids to identify
-                                        the elements in droplet_parameter_list.
-          model_name                  - The name of the model evalutes.
-          device                      - The device to evaluate on.
-          cusum_error_tolerance       - NumPy Array, sized 2, containing the radius/tempearture
-                                        tolerances to pass to `calculate_cusum`.
-          cusum_error_threshold       - NumPy Array, sized 2, containing the radius/temperature
-                                        thresholds to pass to  `detect_cusum_deviations`
-          norm                        - User provided norm to apply to all data before
-                                        scoring and deviation detection. Accepts an array
-                                        sized number_observations x 2 and returns a normed
-                                        array of the same length. Defaults to `identity_norm`.
-          iterative                   - Boolean, indicates whether to evaluate the model directly
-                                        on every time step, or to iterate radius and temperature
-                                        from the first time step.
-          pca_threshold               - Float between 0 and 1, determines the minimum data
-                                        retention PCA must attain. Defaults to 90%.
-          max_clusters                - Integer, identifies the max number of clusters for
-                                        the Gaussian mixture model to attempt. Defaults to 7.
+          particles_root        - Path to the top-level directory to read raw
+                                  particle files from.
+          particle_ids          - Sequence of particle identifiers to process.
+          dirs_per_level        - Number of subdirectories per level in the
+                                  particle files directory hierarchy.
+          model                 - PyTorch model to use
+          model_name            - The name of the model being evaluated.
+          device                - The device to evaluate on.
+          cusum_error_tolerance - NumPy Array, sized 2, containing the
+                                  radius/temperature tolerances to pass to
+                                  `calculate_cusum`.
+          cusum_error_threshold - NumPy Array, sized 2, containing the
+                                  radius/temperature thresholds to pass
+                                  to `detect_cusum_deviations`.
+          norm                  - Optional user provided norm to apply to all
+                                  data before scoring and deviation detection. 
+                                  Accepts an array sized number_observations x 2
+                                  and returns a normed array of the same length.
+                                  Defaults to `identity_norm`.
+          iterative             - Optional Boolean, determines whether the back end
+                                  used to calculate MLP output is `do_inference`
+                                  (if False) or `do_iterative_inference` (if True).
+                                  Defaults to False.
+          max_clusters          - Optional Integer, identifies the max number of
+                                  clusters for the Bayesian Gaussian mixture model
+                                  to attempt. Defaults to 7.
+          number_processes      - Optional Integer, the number of workers to
+                                  parallelize error analysis across. Defaults
+                                  to `multiprocessing.cpu_count()`.
+          number_batches        - Optional Integer, determines the number of
+                                  batches for each core to break up the particles
+                                  into. Higher batches results in fewer particles
+                                  loaded at one time. Defaults to 1.
+          parameter_ranges      - Optional dictionary of any changes to the droplet
+                                  parameter ranges required for the given model.
+                                  Defaults to None.
         """
+        
+        # The processes must be created with spawn; it seems the pipeline 
+        # will not parallelize properly with fork.
+        multiprocessing.set_start_method('spawn', force=True)
 
         if norm is None:
             norm = identity_norm
+        if number_processes == 0:
+            number_processes = multiprocessing.cpu_count()
 
         self.cusum_error_tolerance = cusum_error_tolerance
         self.cusum_error_threshold = cusum_error_threshold
+        self.iterative             = iterative
+        self.model_name            = model_name
 
-        self.iterative = iterative
-        self.model_name = model_name
+        # Splits all of the requested particle ids across processors
+        # and into batches to avoid loading all of the particles
+        # at once
+        particle_id_chunks  = [ np.array_split( process_particle_ids, number_batches )
+                                for process_particle_ids in np.array_split( particle_ids,
+                                                                            number_processes ) ]
+        pipeline_parameters = [ [ particles_root, process_particle_ids, dirs_per_level,
+                                  model, device, cusum_error_tolerance, cusum_error_threshold, 
+                                  norm, iterative, parameter_ranges ] 
+                                for process_particle_ids in particle_id_chunks ]
 
-        particle_count = len( droplet_parameter_list )
+        with multiprocessing.Pool( processes=number_processes ) as pool:
+            particle_scores_list = pool.starmap( particle_scoring_pipeline, pipeline_parameters )
 
-        # Clean bad BE trials from data
-        for particle_index in range( particle_count ):
-            droplet_parameter_list[particle_index] = droplet_parameter_list[particle_index][
-                be_success_mask( droplet_parameter_list[particle_index][:, 0] ) ]
+        # Collect results
+        self.per_particle_nrmse = {}
 
-        particle_times_list = [ np.cumsum( droplet_parameter_list[particle_index][:, -1] )
-                                for particle_index in range( particle_count ) ]
+        overall_square_error      = np.zeros( 2 )
+        overall_truth_sum         = np.zeros( 2 )
+        overall_observation_count = 0
 
-        # Calculate MLP results by particle
-        # Extract the be outputs from the be inputs
-        # Ignoring the first input in non-iterative case
-        # Since it isn't an output of do_inference
-        if iterative:
-            normed_be_output_list = [ norm( particle_parameters[:, :2] )
-                                      for particle_parameters in droplet_parameter_list ]
-        else:
-            normed_be_output_list = [ norm( particle_parameters[1:, :2] ) 
-                                      for particle_parameters in droplet_parameter_list ]
-
-        # Generate list of normed MLP output parameters
-        normed_mlp_output_list = [ np.empty( shape=( particle_parameters.shape[0] - 1, 2) ) 
-                                   for particle_parameters in droplet_parameter_list ]
-        for particle_index, particle_parameters in enumerate( droplet_parameter_list ):
-            # It feels a little silly to run do_inference and seperate the parameters
-            # And then stack them again in `do_inference...`
-            if iterative:
-                normed_mlp_output_list[particle_index] = norm( do_iterative_inference( 
-                                                particle_parameters[:, :-1],
-                                                np.cumsum( particle_parameters[:, -1] ),
-                                                model,
-                                                device) )
-            else:
-                normed_mlp_output_list[particle_index] = norm( do_inference( 
-                                                particle_parameters[:, :-1],
-                                                particle_parameters[:, -1],
-                                                model,
-                                                device)[:-1] )
-
-        # Calculate overall NRMSE
-        merged_normed_be_outputs = np.vstack( normed_be_output_list )
-        merged_normed_mlp_ouputs = np.vstack( normed_mlp_output_list )
-
-        self.net_nrmse = calculate_nrmse( merged_normed_be_outputs, merged_normed_mlp_ouputs )
-
-        del merged_normed_be_outputs # Delete these large arrays since they are no longe rneeded
-        del merged_normed_mlp_ouputs
-
-        # Per particle NRMSE
-        self.per_particle_nrmse =   { particle_ids[i]: calculate_nrmse(
-                                        normed_be_output_list[i],
-                                        normed_mlp_output_list[i] )
-                                    for i in range(particle_count) }
-
-        # Per particle CUSUM detection
-        deviations = []
-        deviation_directions = []
+        deviations             = []
+        deviation_directions   = []
+        deviation_parameters   = []
+        deviation_times        = []
         deviation_particle_ids = []
-        deviation_parameters = []
-        deviation_times = []
 
-        # Write one deviations array and store seperately the metadata in some other array
-        for particle_index in range( particle_count ):
-            # Create an array of the radius differences and temperature differences
-            normed_output_differences = ( normed_mlp_output_list[particle_index]
-                                        - normed_be_output_list[particle_index] ).T
+        for particle_scores in particle_scores_list:
+            for particle_score in particle_scores:
+                self.per_particle_nrmse[particle_score.particle_id] = particle_score.particle_nrmse
 
-            # Calculate CUSUM. There structure of this array will be
-            # [ [ Positive Radius CUSUM, Negative Radius CUSUM ],
-            #   [ Positive Temperature CUSUM, Negative Temperature CUSUM ] ]
-            cusum = calculate_cusum( normed_output_differences, cusum_error_tolerance )
+                overall_square_error      += particle_score.square_error
+                overall_truth_sum         += particle_score.truth_sum
+                overall_observation_count += particle_score.observation_count
 
-            # Create a mask for when positive/negative radius/temperature error appear
-            # The structure of this array will be
-            # [ Positive Radius Deviation Mask, Negative Radius Deviation Mask,
-            #   Positive Temperature Deviation Mask, Negative Temperature Deviation Mask ]
-            deviation_masks =  detect_cusum_deviations( cusum, cusum_error_threshold ).reshape( (4, -1) )
+                deviations.append(             particle_score.deviations )
+                deviation_directions.append(   particle_score.deviation_directions ) 
+                deviation_parameters.append(   particle_score.deviation_parameters ) 
+                deviation_times.append(        particle_score.deviation_times ) 
+                deviation_particle_ids.append( particle_score.deviation_particle_ids )
 
-            # Encode the direction/parameter for each mask
-            deviation_direction_vector = np.array( [ DeviationDirection.POSITIVE,
-                                                    DeviationDirection.NEGATIVE,
-                                                     DeviationDirection.POSITIVE,
-                                                     DeviationDirection.NEGATIVE ] )
-            deviation_parameter_vector = np.array( [ DeviationParameter.RADIUS,
-                                                     DeviationParameter.RADIUS,
-                                                     DeviationParameter.TEMPERATURE, 
-                                                     DeviationParameter.TEMPERATURE ] )
+        self.net_nrmse = np.sum( np.sqrt( overall_square_error / overall_observation_count )
+                               / ( overall_truth_sum / overall_observation_count ) )
 
-            # Correct for different output lengths of inference and standard inference
-            if not iterative:
-                deviation_masks = np.insert( deviation_masks, 0, False, axis=-1 )
-
-            # Count the different types of deviations
-            deviation_counts = deviation_masks.sum( axis=1 )
-
-            # Add the droplet parameters to the deviation array
-            deviations.extend( np.vstack(
-                [ droplet_parameter_list[particle_index][mask] for mask in deviation_masks ] ) )
-
-            # Add the particle ids to the deviation particle id array
-            deviation_particle_ids.extend( np.full( deviation_counts.sum(),
-                                                    particle_ids[particle_index] ) )
-
-            # Add the deviation directions to the deviation direction array
-            deviation_directions.extend( np.hstack( [ np.full( count, direction ) for count, direction
-                                            in zip( deviation_counts, deviation_direction_vector ) ] ) )
-
-            # Add the deviation parameters to the deviation direction array
-            deviation_parameters.extend( np.hstack( [ np.full( count, direction ) for count, direction
-                                            in zip( deviation_counts, deviation_parameter_vector ) ] ) )
-
-            # Add the deviation times to the deviation time array
-            deviation_times.extend( np.hstack(
-                [ particle_times_list[particle_index][mask] for mask in deviation_masks ] ) )
-
-        # Put the data into np arrays for easier manupulation
-        self.deviations = np.array( deviations )
-        self.deviation_directions = np.array( deviation_directions )
-        self.deviation_particle_ids = np.array( deviation_particle_ids )
-        self.deviation_parameters = np.array( deviation_parameters )
-        self.deviation_times = np.array( deviation_times )
+        self.deviations             = np.vstack( deviations )
+        self.deviation_directions   = np.hstack( deviation_directions )
+        self.deviation_parameters   = np.hstack( deviation_parameters )
+        self.deviation_times        = np.hstack( deviation_times )
+        self.deviation_particle_ids = np.hstack( deviation_particle_ids )
 
         # Clustering
-        self.z_scaler = StandardScaler()
-        z_scored_deviations = self.z_scaler.fit_transform( self.deviations )
-        self.zs_mean = np.mean( z_scored_deviations, axis=0 ) # Used later to reverse PCA
+        self.z_score_model           = StandardScaler()
+        z_scored_deviations          = self.z_score_model.fit_transform( self.deviations )
+        filtered_z_scored_deviations = z_scored_deviations[np.all( np.abs( z_scored_deviations < 3 ),
+                                                                   axis=1)]
+        self.z_score_mean            = np.mean( z_scored_deviations, axis=0 )
 
-        self.pca_model = PCA( n_components = pca_threshold )
-        deviations_pca = self.pca_model.fit_transform( z_scored_deviations )
+        self.cluster_model = ( BayesianGaussianMixture( init_params="k-means++",
+                                                        n_init=5, 
+                                                        n_components=max_clusters )
+                                                       .fit( filtered_z_scored_deviations ) )
 
-        # Determine optimal gaussian mixture cluster parameters
-        def gmm_bic_score( estimator, X ):
-            return -estimator.bic(X)
+        self.deviation_clusters = self.cluster_model.predict( z_scored_deviations )
+        self.cluster_centers    = ( self.z_score_model.inverse_transform( self.cluster_model.means_ )
+                                  + self.z_score_mean )
 
-        param_grid = {
-            "n_components": range(1, max_clusters)
-        }
-
-        grid_search = GridSearchCV(
-            GaussianMixture( init_params="k-means++", n_init=15, covariance_type="full" ),
-                param_grid=param_grid, scoring=gmm_bic_score
-        )
-
-        grid_search.fit( deviations_pca )
-
-        # Cluster based on the best BIC score
-        self.cluster_model = grid_search.best_estimator_
-        self.deviation_clusters = self.cluster_model.predict( deviations_pca )
-
-        self.cluster_centers = self.z_scaler.inverse_transform(
-            np.dot( self.cluster_model.means_, self.pca_model.components_ )
-          + self.zs_mean )
-
-    def plot_deviations( self ):
+    def plot_deviations( self, label_centers=True ):
         """
         Plots the deviations in their clusters in 3d coordinates:
-            x: log10 radius
-            y: particle temperature - air temperature
-            z: Relative Humidity 
+          x: log10 radius
+          y: particle temperature - air temperature
+          z: Relative Humidity 
 
-        Likewise labels the coordinates of cluster centers
+        Likewise labels the coordinates of cluster centers if
+        `label_centers=True`.
 
-        Takes no arguments.
+        Takes 1 argument:
+          label_centers - Optional Boolean, determines whether to label
+                          the center of each deviation cluster. Defaults
+                          to True.
 
         Returns 2 values:
-            fig   - the matplotlib figure of the graph
-            ax    - the axis of the graph
+          fig - the matplotlib figure of the graph
+          ax  - the axis of the graph
         """
-        plot_data = np.array( [
-            np.log10( self.deviations[:, 0] ),
-            self.deviations[:, 1] - self.deviations[:, 3],
-            self.deviations[:, 4] ] )
-
-        cluster_coordinates = np.array( [
-            np.log10( self.cluster_centers[:, 0] ),
-            self.cluster_centers[:, 1] - self.cluster_centers[:, 3],
-            self.cluster_centers[:, 4] ] )
-
-        cluster_center_labels = [f"Cluster {i}: {cluster_coordinates.T[i]}"
-                                 for i in range( self.cluster_model.n_components ) ]
+        # Gather all of the data in the desired coordinates
+        plot_data             = np.array( [ np.log10( self.deviations[:, 0] ),
+                                            self.deviations[:, 1] - self.deviations[:, 3],
+                                            self.deviations[:, 4] ] )
+        cluster_coordinates   = np.array( [ np.log10( self.cluster_centers[:, 0] ),
+                                            self.cluster_centers[:, 1] - self.cluster_centers[:, 3],
+                                            self.cluster_centers[:, 4] ] )
+        cluster_center_labels = [f"Cluster { cluster_index }: { cluster_coordinates.T[cluster_index] }"
+                                 for cluster_index in range( self.cluster_model.n_components ) ]
 
         fig = plt.figure()
-        ax = plt.axes(projection="3d")
-        ax.scatter(plot_data[0], plot_data[1], plot_data[2],
-            c=self.deviation_clusters )
+        ax  = plt.axes( projection="3d" )
+        ax.scatter( plot_data[0], plot_data[1], plot_data[2], c=self.deviation_clusters )
 
         # Label the cluster centers
-        ax.scatter(cluster_coordinates[0], cluster_coordinates[1], cluster_coordinates[2],
+        ax.scatter( cluster_coordinates[0], cluster_coordinates[1], cluster_coordinates[2],
             c=np.arange( self.cluster_model.n_components ), s=20 )
 
-        for i in range( self.cluster_model.n_components ):
-            ax.text( cluster_coordinates[0][i], cluster_coordinates[1][i],
-                cluster_coordinates[2][i], cluster_center_labels[i],
-                fontweight="bold", color="r" )
+        if label_centers:
+            for cluster_index in range( self.cluster_model.n_components ):
+                ax.text( cluster_coordinates[0][cluster_index], cluster_coordinates[1][cluster_index],
+                    cluster_coordinates[2][cluster_index], cluster_center_labels[cluster_index],
+                    fontweight="bold", color="r" )
 
         ax.set_xlabel("Log Radius (m)")
         ax.set_ylabel("Temperature Difference (K)")
         ax.set_zlabel("Relative Humidity (%)")
 
-        ax.set_title(f"{'Iterative' if self.iterative else ''} Deviation Clusters for {self.model_name}\n"
-                + f"Radius Tolerance: {100*self.cusum_error_tolerance[0]:.3f}%,"
-                + f" Temperature Tolerance: {self.cusum_error_tolerance[1]:.3f} degrees\n"
-                + f"Radius Threshold: {self.cusum_error_threshold[0]:.3f},"
-                + f" Temperature Threshold: {self.cusum_error_threshold[1]:.3f}\n")
+        # Do not pad these curly braces with spaces.
+        # ':3f ' is not the same as ':3f'. The former
+        # will throw an error.
+        ax.set_title(f"{'Iterative' if self.iterative else ''} Deviation Clusters "
+                   + f"for { self.model_name }\n"
+                   + f"Radius Tolerance: {100*self.cusum_error_tolerance[0]:.3f}%,"
+                   + f" Temperature Tolerance: {self.cusum_error_tolerance[1]:.3f} degrees\n"
+                   + f"Radius Threshold: {self.cusum_error_threshold[0]:.3f},"
+                   + f" Temperature Threshold: {self.cusum_error_threshold[1]:.3f}\n")
 
-        ax.set_box_aspect(None, zoom=0.85)
-
+        # Zooming out prevents clipping the z-axis label
+        ax.set_box_aspect( None, zoom=0.85 )
+        
         fig.tight_layout()
 
         return fig, ax
@@ -417,62 +560,35 @@ def identity_norm( rt_data ):
     nothing to `rt_data`.
 
     Takes 1 argument:
-      rt_data     - NumPy array, time steps x 2 containing
-                        radius data in natural ranges at 0
-                        temperature data in natural ranges at 1
+      rt_data - NumPy array, time steps x 2 containing
+                    radius data in natural ranges at 0
+                    temperature data in natural ranges at 1
 
     Returns 1 value:
-      rt_data     - NumPy array, time steps x 2 containing
-                        radius data in natural ranges at 0
-                        temperature data in natural ranges at 1
+      rt_data - NumPy array, time steps x 2 containing
+                    radius data in normed ranges at 0
+                    temperature data in normed ranges at 1
 
     """
     return rt_data
-
-def standard_distance( truth_output, model_output ):
-    """
-    Calculates the "distance" between the `mlp` output and the true output
-    on a dataframe. Uses the absolute value of the difference between the log
-    of both output radii and the absolute value of the difference between the
-    two output temperatures. Requires a dataframe with the mlp output.
-
-    Takes 2 argumenst:
-
-      truth_output        - NumPy array, shaped number 2 x time steps containing:
-                            the backwards euler radius output at index 0
-                            the backwards euler temperature output at index 1
-      model_output        - NumPy array, shaped number 2 x time steps containing:
-                            the MLP radius output at index 0
-                            the MLP temperature output at index 1
-
-    Returns 1 value:
-
-      NTLP_distance_data  - NumPy array, shaped data 2 x time steps, containing
-                            the absolute value of the difference of the log of
-                            the output radii at index 0 the absolute value
-                            difference of of the output temperatures at index 1.
-
-    """
-
-    return np.array( [np.abs( np.log10( model_output[:, 0] / truth_output[:, 0] ) ),
-                      np.abs( model_output[:, 1] - truth_output[:, 1] )] ).T
 
 def standard_norm( rt_data ):
     """
     Normalizes rt_data by applying log10 to radius.
 
     Takes 1 argument:
-      rt_data     - NumPy array, time steps x 2 containing
-                        radius data in natural ranges at 0
-                        temperature data in natural ranges at 1
+      rt_data - NumPy array, number_observations x 2 containing:
+                  radius data in natural ranges at index 0
+                  temperature data in natural ranges at index 1
 
     Returns 1 value:
-      normalized_rt_data  - NumPy array, time steps x 2 containing
-                                log10 radius data in natural ranges at index 0
-                                temperature data in natural ranges at index 1
+      normalized_rt_data - NumPy array, time steps x 2 containing:
+                             log10 radius data in natural ranges at index 0
+                             temperature data in natural ranges at index 1
     """
-    normalized_rt_data = np.empty_like( rt_data )
+    normalized_rt_data       = np.empty_like( rt_data )
     normalized_rt_data[:, 0] = np.log10( rt_data[:, 0] )
     normalized_rt_data[:, 1] = rt_data[:, 1]
 
     return normalized_rt_data
+
