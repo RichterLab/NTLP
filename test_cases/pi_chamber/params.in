@@ -90,12 +90,10 @@ rad_Fcb = 0.0    !Net radiative flux at cloud (or domain) base
 
 !Set the paths for code I/O. Must be on the scratch directory, not AFS!
 &path_names
-
-path_seed="/scratch365/dcolange/pi_chamber/"
-path_part="/scratch365/dcolange/pi_chamber/part.le.cou002"
-path_res= "/scratch365/dcolange/pi_chamber/u.le.cou002"
-path_ran= "/scratch365/dcolange/pi_chamber/u.le.cou000"
-
+path_seed="PATH_TO_SCRATCH/pi_chamber/"
+path_part="PATH_TO_SCRATCH/pi_chamber/part.le.cou002"
+path_res= "PATH_TO_SCRATCH/pi_chamber/u.le.cou002"
+path_ran= "PATH_TO_SCRATCH/pi_chamber/u.le.cou000"
 /
 
 
