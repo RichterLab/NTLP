@@ -19,6 +19,8 @@ module particles
   real, allocatable :: sigm_sdzext(:,:,:)
   real, allocatable :: vis_ss(:,:,:),vis_sext(:,:,:)
 
+  integer :: numpart_processed=0
+
   integer :: particletype,pad_diff
   integer :: numpart,tnumpart,ngidx
   integer :: numdrop,tnumdrop
@@ -3208,6 +3210,8 @@ CONTAINS
 
         if (ievap .EQ. 1 .and. part%qinf .gt. 0.0) then
 
+               numpart_processed = numpart_processed + 1
+
                !Gives initial guess into nonlinear solver
                !mflag = 0, has equilibrium radius; mflag = 1, no
                !equilibrium (uses itself as initial guess)
@@ -3508,6 +3512,8 @@ CONTAINS
         part%vp(1:3) = (part%vp(1:3)+taup_i*dt*corrfac*part%uf(1:3)+dt*part_grav(1:3))/(1+dt*corrfac*taup_i)
 
         if (ievap .EQ. 1 .and. part%qinf .gt. 0.0) then
+
+            numpart_processed = numpart_processed + 1
 
 	    !Uses externally-trained ANN (MLP) to update the particle radius/temp
             !Inputs: radius, Tp, m_s, Tf, qinf, rhoa, dt
