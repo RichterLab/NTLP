@@ -882,7 +882,7 @@ def read_NTLP_data( file_name ):
     #
     # NOTE: Failed backward Euler is denoted as a non-zero value.
     #
-    calculate_output_flags = (df["be flag"] == 0) * (df["particle id"].diff( periods=-1 ) == 0)
+    calculate_output_flags = (df["be flag"] == 0) & (df["particle id"].diff( periods=-1 ) == 0)
 
     df["integration time"]   = calculate_output_flags * -df["time"].diff( periods=-1 )
     df["output radius"]      = calculate_output_flags *  df["input radius"].shift( periods=-1 )
