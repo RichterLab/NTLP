@@ -103,8 +103,11 @@ def do_inference( input_parameters, times, model, device ):
 
     normalized_inputs = np.hstack( (normalize_droplet_parameters( input_parameters ),
                                     times.reshape( (-1, 1) )) ).astype( "float32" )
+    # Don't calculate gradients since they are
+    # Unnecessary for inference.
     # XXX: is this to(device) necessary?
-    normalized_outputs = eval_model( torch.from_numpy( normalized_inputs ).to( device ) ).to( device ).detach().numpy()
+    with torch.no_grad():
+        normalized_outputs = eval_model( torch.from_numpy( normalized_inputs ).to( device ) ).to( device )
 
     return scale_droplet_parameters( normalized_outputs )
 
@@ -185,26 +188,21 @@ def do_iterative_inference( input_parameters, times, model, device ):
     eval_model = model.to( device )
     eval_model.eval()
 
-    normalized_data   = np.array( normalize_droplet_parameters( input_parameters ) )
-    integration_times = np.diff( times )
+    # Calculate integration time between time steps.
+    # Keep an extra 0 at the end so that the array is
+    # the same length as the input parameters.
+    integration_times      = np.zeros( times.shape[0] )
+    integration_times[:-1] = np.diff( times )
 
-    output_parameters       = np.zeros( (normalized_data.shape[0], 2), dtype=np.float32 )
-    output_parameters[0, :] = normalized_data[0, :2]
+    normalized_data = torch.from_numpy( np.hstack( [ normalize_droplet_parameters( input_parameters ),
+                                                     integration_times.reshape( -1, 1 ) ] )
+                                          .astype( "float32" )).to( device )
 
-    normalized_inputs = np.hstack( (output_parameters[0, :],
-                                    normalized_data[0, 2:],
-                                    [integration_times[0]] ) ).astype( "float32" )
+    with torch.no_grad():
+        for time_index in range( 1,  normalized_data.shape[0] ):
+            normalized_data[time_index, :2] = eval_model( normalized_data[time_index - 1, :] )
 
-    # Evaluate
-    for time_index in range( 1,  normalized_data.shape[0] ):
-        output_parameters[time_index, :] = eval_model( torch.from_numpy( normalized_inputs ).to( device ) ).detach().numpy()
-
-        if time_index < normalized_data.shape[0] - 1:
-            normalized_inputs = np.hstack( (output_parameters[time_index, :],
-                                            normalized_data[time_index, 2:],
-                                            [integration_times[time_index]] ) ).astype( "float32" )
-
-    return scale_droplet_parameters( output_parameters )
+    return scale_droplet_parameters( normalized_data[:, :2].numpy() ) 
 
 def generate_fortran_module( output_path, model_name, model_state ):
     """
