@@ -526,7 +526,7 @@ def plot_particles( particles_df, force_flag=False ):
         particle = particles_df.iloc[particle_index]
 
         # Build this particle's timeline.
-        times = particle["birth time"] + np.cumsum( particle["integration times"] )
+        times = particle["birth time"] + np.cumsum( particle["integration times"] ) - particle["integration times"][0]
 
         # Keep our particle and air temperatures on the same scale.
         temperature_min = min( temperature_min,
