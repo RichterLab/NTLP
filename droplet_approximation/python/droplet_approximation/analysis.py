@@ -463,7 +463,7 @@ def plot_droplet_size_temperature( size_temperatures, times ):
 
     return fig_h, ax_h
 
-def plot_particles( particles_df, force_flag=False ):
+def plot_particles( particles_df, force_flag=False, time_range=[-np.inf, np.inf] ):
     """
     Plots one or more particles' characteristics along their lifetimes.  Creates
     a figure with 7 sub-plots, arranged in a vertical configuration, visualizing
@@ -484,6 +484,11 @@ def plot_particles( particles_df, force_flag=False ):
                      should be visualized.  If omitted, defaults to False and
                      ValueError is raised when too many particles are present
                      in particles_df.
+      time_range   - Optional tuple containing the time bounds, lower and upper,
+                     to plot particles.  If omitted, defaults to [-np.inf, np.inf]
+                     and all particles are plotted.  If a particle in particles_df
+                     does not have any observations in time_range then it is
+                     not plotted.
 
     Returns 2 values:
 
@@ -528,43 +533,51 @@ def plot_particles( particles_df, force_flag=False ):
         # Build this particle's timeline.
         times = particle["birth time"] + np.cumsum( particle["integration times"] ) - particle["integration times"][0]
 
+        # Identify the observations of interest.
+        times_mask = (times >= time_range[0]) & (times <= time_range[1])
+
+        # Skip this particle if it's observations aren't within the requested
+        # range.
+        if times_mask.sum() == 0:
+            continue
+
         # Keep our particle and air temperatures on the same scale.
         temperature_min = min( temperature_min,
-                               min( particle["output temperatures"].min(),
-                                    particle["air temperatures"].min() ) )
+                               min( particle["output temperatures"][times_mask].min(),
+                                    particle["air temperatures"][times_mask].min() ) )
         temperature_max = max( temperature_max,
-                               max( particle["output temperatures"].max(),
-                                    particle["air temperatures"].max() ) )
+                               max( particle["output temperatures"][times_mask].max(),
+                                    particle["air temperatures"][times_mask].max() ) )
 
         # Create label for this particle
         particle_label = str( particle.name )
 
         # Plot our quantities with labels
-        ax_h[0].plot( times, particle["integration times"], label=particle_label )
+        ax_h[0].plot( times[times_mask], particle["integration times"][times_mask], label=particle_label )
         ax_h[0].set_title( "Integration Time" )
         ax_h[0].set_ylabel( "dt (s)" )
 
-        ax_h[1].plot( times, particle["output radii"], label=particle_label )
+        ax_h[1].plot( times[times_mask], particle["output radii"][times_mask], label=particle_label )
         ax_h[1].set_title( "Output Radius" )
         ax_h[1].set_ylabel( "Size (m)" )
 
-        ax_h[2].plot( times, particle["output temperatures"], label=particle_label )
+        ax_h[2].plot( times[times_mask], particle["output temperatures"][times_mask], label=particle_label )
         ax_h[2].set_title( "Particle Temperature" )
         ax_h[2].set_ylabel( "Kelvin" )
 
-        ax_h[3].plot( times, particle["air temperatures"], label=particle_label )
+        ax_h[3].plot( times[times_mask], particle["air temperatures"][times_mask], label=particle_label )
         ax_h[3].set_title( "Air Temperature" )
         ax_h[3].set_ylabel( "Kelvin" )
 
-        ax_h[4].plot( times, particle["relative humidities"] * 100, label=particle_label )
+        ax_h[4].plot( times[times_mask], particle["relative humidities"][times_mask] * 100, label=particle_label )
         ax_h[4].set_title( "Relative Humidity" )
         ax_h[4].set_ylabel( "Percentage (%)" )
 
-        ax_h[5].plot( times, particle["salt masses"], label=particle_label )
+        ax_h[5].plot( times[times_mask], particle["salt masses"][times_mask], label=particle_label )
         ax_h[5].set_title( "Salt Mass" )
         ax_h[5].set_ylabel( "kg" )
 
-        ax_h[6].plot( times, particle["air densities"], label=particle_label )
+        ax_h[6].plot( times[times_mask], particle["air densities"][times_mask], label=particle_label )
         ax_h[6].set_title( "Air Density" )
         ax_h[6].set_ylabel( "kg/m^3" )
         ax_h[6].set_xlabel( "Time (s)" )
