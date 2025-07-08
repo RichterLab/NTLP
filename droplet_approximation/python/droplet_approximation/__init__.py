@@ -48,7 +48,8 @@ from .scoring import calculate_cusum, \
                      detect_cusum_deviations, \
                      DeviationDirection, \
                      DeviationParameter, \
-                     ScoringReport, \
                      identity_norm, \
-                     standard_distance, \
+                     ParticleScore, \
+                     particle_scoring_pipeline, \
+                     ScoringReport, \
                      standard_norm

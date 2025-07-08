@@ -139,7 +139,7 @@ def be_success_mask( radius_data ):
     in BE. 
 
     Takes 1 argument:
-      radius_data     - NumPy array, shaped `number of time steps x 2`
+      radius_data     - NumPy array, shaped `number of time steps`
                         containing the radius data for a particle sorted
                         by time
 

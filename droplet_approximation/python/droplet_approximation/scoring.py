@@ -128,6 +128,25 @@ class DeviationParameter( Enum ):
     RADIUS = 0
     TEMPERATURE = 1
 
+def identity_norm( rt_data ):
+    """
+    A blank norm to use as a placeholder in analysis functions. Does
+    nothing to `rt_data`.
+
+    Takes 1 argument:
+      rt_data - NumPy array, time steps x 2 containing
+                    radius data in natural ranges at 0
+                    temperature data in natural ranges at 1
+
+    Returns 1 value:
+      rt_data - NumPy array, time steps x 2 containing
+                    radius data in normed ranges at 0
+                    temperature data in normed ranges at 1
+
+    """
+    return rt_data
+
+
 # This may be rewritten in the future as `ParticleScores` in
 # order to be more data-oriented. Instead of containing values
 # for an individual particle, each object would contain an array
@@ -553,24 +572,6 @@ class ScoringReport():
         fig.tight_layout()
 
         return fig, ax
-
-def identity_norm( rt_data ):
-    """
-    A blank norm to use as a placeholder in analysis functions. Does
-    nothing to `rt_data`.
-
-    Takes 1 argument:
-      rt_data - NumPy array, time steps x 2 containing
-                    radius data in natural ranges at 0
-                    temperature data in natural ranges at 1
-
-    Returns 1 value:
-      rt_data - NumPy array, time steps x 2 containing
-                    radius data in normed ranges at 0
-                    temperature data in normed ranges at 1
-
-    """
-    return rt_data
 
 def standard_norm( rt_data ):
     """
