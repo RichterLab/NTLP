@@ -6,6 +6,7 @@ from scipy.integrate import solve_ivp
 from .data import create_droplet_batch
 from .models import do_inference, do_iterative_inference
 from .physics import dydt
+from .scoring import calculate_nrmse, identity_norm
 
 def analyze_model_iterative_performance( model, input_parameters=None, dt=0.05, final_time=10.0, figure_size=None ):
     """
@@ -300,7 +301,7 @@ def analyze_model_performance( model, input_parameters=None, figure_size=None ):
 
     fig_h.tight_layout()
 
-def analyze_model_particle_performance( times, truth_output, model_output, distances, title_string=None, figure_size=None, time_range=None ):
+def analyze_model_particle_performance( times, truth_output, model_output, norm=None, title_string=None, figure_size=None, time_range=None ):
     """
     Creates a figure with four plots to qualitatively assess the supplied model's
     performance on a particular particle's trajectory from an NTLP dump. For both
@@ -323,9 +324,10 @@ def analyze_model_particle_performance( times, truth_output, model_output, dista
       model_output    - NumPy array, shaped 2 x len( times ). Contains an
                         array of the particle's estimated radius and temperature
                         at index 0 and 1 respectively.
-      distances       - NumPy array, shaped 2 x len( times ). Contains
-                        an array of the distance between the particle's true
-                        output and the MLP output.
+      norm            - Optional user provided norm to apply to all
+                        data before calculating nrmse. Accepts an array 
+                        sized number_observations x 2 and returns a normed 
+                        array of the same length. Defaults to `identity_norm`.
       title_string    - Optional string to append to plot title
       figure_size     - Optional sequence, of length 2, containing the width
                         and height of the figure created.  If omitted, defaults
@@ -338,6 +340,10 @@ def analyze_model_particle_performance( times, truth_output, model_output, dista
     Returns nothing.
 
     """
+
+    # Default to identity norm
+    if norm is None:
+        norm = identity_norm
 
     # Default to something that fits a set of four plots (in a 2x2 grid) comfortably.
     if figure_size is None:
@@ -352,13 +358,15 @@ def analyze_model_particle_performance( times, truth_output, model_output, dista
     # Sort the dataframe by time
     t_eval = times
 
-    # Compute the normalized RMSE across the entire time scale.
-    rmse_0 = np.sqrt( np.mean( distances[:, 0]**2 ) ) / np.abs( np.mean( np.log10( truth_output[:, 0] ) ) ) # TODO fix hard-coded log
-    rmse_1 = np.sqrt( np.mean( distances[:, 1]**2 ) ) / np.abs( np.mean( truth_output[:, 1] ) )
+    normed_truth_output = norm( truth_output )
+    normed_model_output = norm( model_output )
 
+    # Compute the normalized RMSE across the entire time scale.
+    nrmse = calculate_nrmse( normed_truth_output, normed_model_output )
+    
     # Create our figure and embed the parameters that were evaluated.
     fig_h, ax_h = plt.subplots( 2, 2, figsize=figure_size )
-    fig_h.suptitle( "Droplet Size and Temperature\nRadius NRMSE={:g}%, Temperature NRMSE={:g}%\n{}".format( rmse_0 * 100, rmse_1 * 100, title_string) )
+    fig_h.suptitle( "Droplet Size and Temperature\n NRMSE={:g}%\n{}".format( nrmse * 100, title_string) )
 
     # Truth vs model predictions.
     ax_h[0][0].plot( t_eval, truth_output[:, 0], TRUTH_COLOR,
@@ -405,12 +413,8 @@ def analyze_model_particle_performance( times, truth_output, model_output, dista
     ax_h[1][1].set_xlabel( "Time (s)" )
 
     # Show time in log-scale as well as the droplets' radius.
-    ax_h[0][0].set_xscale( "log" )
     ax_h[0][0].set_yscale( "log" )
-    ax_h[0][1].set_xscale( "log" )
     ax_h[0][1].set_yscale( "log" )
-    ax_h[1][0].set_xscale( "log" )
-    ax_h[1][1].set_xscale( "log" )
 
     if time_range is not None:
         ax_h[0][0].set_xlim( time_range )
