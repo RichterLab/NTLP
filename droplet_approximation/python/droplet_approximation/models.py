@@ -1030,8 +1030,13 @@ def train_model( model, criterion, optimizer, device, number_epochs, training_fi
                           epoch's checkpoint is written.
       epoch_callback    - Optional function to be called after each training
                           epoch.  If omitted, defaults to None.  When provided
-                          must take the model object and epoch number as
-                          positional arguments.
+                          must take:
+
+                            model:          Torch model object
+                            epoch_number:   Training epoch that just completed
+                            optimizer:      Torch optimizer object
+                            training_loss:  Sequence of training loss for the
+                                            last epoch
 
     Returns 1 value:
 
@@ -1149,7 +1154,10 @@ def train_model( model, criterion, optimizer, device, number_epochs, training_fi
 
         # Run the user's callback if requested.
         if epoch_callback is not None:
-            epoch_callback( model, epoch_index )
+            epoch_callback( model,
+                            epoch_index,
+                            optimizer,
+                            running_loss )
 
     # Handle the case where we didn't have enough data to complete a mini-batch.
     if len( training_loss_history ) == 0:
