@@ -545,7 +545,7 @@ def create_droplet_batch( number_droplets, number_evaluations=1, particle_temper
 
     return random_inputs, random_outputs, integration_times, weird_inputs, weird_outputs
 
-def create_training_file( file_name, number_droplets, weird_file_name=None, user_batch_size=None, particle_temperature_distribution=None ):
+def create_training_file( file_name, number_droplets, weird_file_name=None, user_batch_size=None, particle_temperature_distribution=None, quiet_flag=True ):
     """
     Generates random droplet parameters, both inputs and their corresponding
     ODE outputs, and writes them as fixed-size binary records to a file.  This
@@ -568,7 +568,7 @@ def create_training_file( file_name, number_droplets, weird_file_name=None, user
 
     The file generated can be read via read_training_file().
 
-    Takes 4 arguments:
+    Takes 6 arguments:
 
       file_name                           - Path to the file to write the droplet parameters.  This
                                             is overwritten if it exists.
@@ -584,6 +584,9 @@ def create_training_file( file_name, number_droplets, weird_file_name=None, user
                                             difference between particle temperature and air temperature.
                                             If none, generate air temperature as usual. Passed to
                                             `create_droplet_batch`
+      quiet_flag                          - Optional flag specifying whether execution should be quiet.
+                                            If omitted, defaults to True.
+
 
     """
 
@@ -606,10 +609,11 @@ def create_training_file( file_name, number_droplets, weird_file_name=None, user
     with open( file_name, "wb" ) as output_fp:
         for batch_index in range( number_batches ):
 
-            print( "Writing batch #{:d} (configurations {:d}-{:d})".format(
-                batch_index,
-                batch_index * BATCH_SIZE,
-                (batch_index + 1) * BATCH_SIZE - 1 ) )
+            if not quiet_flag:
+                print( "Writing batch #{:d} (configurations {:d}-{:d})".format(
+                    batch_index,
+                    batch_index * BATCH_SIZE,
+                    (batch_index + 1) * BATCH_SIZE - 1 ) )
 
             # Determine how many droplets to create in this batch.
             if batch_index != (number_batches - 1):
