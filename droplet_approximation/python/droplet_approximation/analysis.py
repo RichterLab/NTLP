@@ -475,7 +475,7 @@ def plot_particles( particles_df, force_flag=False ):
       4. Background air temperature, in Kelvin
       5. Background relative humidity, as a percentage
       6. Salt mass, in kilograms
-      7. Air density, in ???
+      7. Air density, in kg/m^3
 
     Takes 2 arguments:
 
@@ -566,7 +566,7 @@ def plot_particles( particles_df, force_flag=False ):
 
         ax_h[6].plot( times, particle["air densities"], label=particle_label )
         ax_h[6].set_title( "Air Density" )
-        ax_h[6].set_ylabel( "?" )
+        ax_h[6].set_ylabel( "kg/m^3" )
         ax_h[6].set_xlabel( "Time (s)" )
 
     # Set the particle and air temperatures to the same scale.
