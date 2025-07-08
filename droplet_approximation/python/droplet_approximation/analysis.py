@@ -586,8 +586,8 @@ def plot_particles( particles_df, force_flag=False ):
 
     # Adjust layout to prevent legend from being cut off.  This makes room for
     # the legend on the right.
-    fig_h.tight_layout()
     plt.subplots_adjust( right=0.85 )
+    fig_h.tight_layout()
 
     return fig_h, ax_h
 
