@@ -619,7 +619,7 @@ def create_training_file( file_name, number_droplets, weird_file_name=None, user
             if batch_index != (number_batches - 1):
                 batch_size = BATCH_SIZE
             else:
-                batch_size = number_droplets % BATCH_SIZE
+                batch_size = number_droplets - BATCH_SIZE*batch_index
 
             # Get the next batch of droplets.
             (inputs,
