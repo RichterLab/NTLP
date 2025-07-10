@@ -63,12 +63,12 @@ def batch_convert_NTLP_traces_to_particle_files( trace_paths, particles_root, di
 
     return particles_index_path, unique_particle_ids
 
-def batch_read_particles_data( particles_root, particle_ids, dirs_per_level, number_processes=0, quiet_flag=True ):
+def batch_read_particles_data( particles_root, particle_ids, dirs_per_level, number_processes=0, quiet_flag=True, cold_threshold=-np.inf):
     """
     Reads one or more raw particle files and returns a particles DataFrame.
     Reading is performed in parallel.
 
-    Takes 5 arguments:
+    Takes 6 arguments:
 
       particles_root   - Path to the top-level directory to read raw particle
                          files from.
@@ -82,6 +82,12 @@ def batch_read_particles_data( particles_root, particle_ids, dirs_per_level, num
                          should be quiet or not.  If omitted, defaults to True
                          and creation does not generate outputs unless an error
                          occurs.
+      cold_threshold   - Optional floating point value specifying the lower
+                         bound for particle temperatures before they're
+                         considered "cold" and should be trimmed from the
+                         DataFrame.  Cold particles are invalid from the NTLP
+                         simulation's standpoint but were not flagged as such.
+                         If omitted, all particles are retained.
 
     Returns 1 value:
 
@@ -124,7 +130,8 @@ def batch_read_particles_data( particles_root, particle_ids, dirs_per_level, num
             args_list.append( (particles_root,
                                particle_ids[particle_range],
                                dirs_per_level,
-                               quiet_flag) )
+                               quiet_flag,
+                               cold_threshold) )
 
         dfs = pool.starmap( read_particles_data, args_list )
 
@@ -879,14 +886,14 @@ def read_NTLP_data( file_name ):
 
     return df
 
-def read_particles_data( particles_root, particle_ids, dirs_per_level, quiet_flag=True ):
+def read_particles_data( particles_root, particle_ids, dirs_per_level, quiet_flag=True, cold_threshold=-np.inf ):
     """
     Reads one or more raw particle files and creates a particle-centric
     DataFrame with one row per particle read.  Each row contains all of the
     observations stored as 1D NumPy arrays making it easy to operate on the
     entirety of individual particle's lifetimes.
 
-    Takes 4 arguments:
+    Takes 5 arguments:
 
       particles_root - Path to the top-level directory to read raw particle
                        files from.
@@ -898,6 +905,11 @@ def read_particles_data( particles_root, particle_ids, dirs_per_level, quiet_fla
                        should be quiet or not.  If omitted, defaults to True and
                        creation does not generate outputs unless an error
                        occurs.
+      cold_threshold - Optional floating point value specifying the lower bound
+                       for particle temperatures before they're considered "cold"
+                       and should be trimmed from the DataFrame.  Cold particles
+                       are invalid from the NTLP simulation's standpoint but were
+                       not flagged as such.  If omitted, all particles are retained.
 
     Returns 1 value:
 
@@ -912,7 +924,7 @@ def read_particles_data( particles_root, particle_ids, dirs_per_level, quiet_fla
                       "death time":           Simulation time when this particle was
                                               destroyed.
                       "integration times":    1D NumPy array of the timestep size
-                      "number be failures":
+                      "number be failures":   XXX
                       "be statuses":
                       "input radii":
                       "output radii":
@@ -1026,6 +1038,44 @@ def read_particles_data( particles_root, particle_ids, dirs_per_level, quiet_fla
         particles_df.at[particle_id, "air temperatures"]    = observations_fp32[:-1, RECORD_AIR_TEMPERATURE_INDEX]
         particles_df.at[particle_id, "relative humidities"] = observations_fp32[:-1, RECORD_RELATIVE_HUMIDITY_INDEX]
         particles_df.at[particle_id, "air densities"]       = observations_fp32[:-1, RECORD_AIR_DENSITY_INDEX]
+
+        # Excise cold observations if requested.  These are an artifact
+        # of backward Euler that produces extremely cold temperatures
+        # when the process should have failed.
+        if particles_df.at[particle_id, "input temperatures"].min() < cold_threshold:
+
+            # Cold particles occur once toward the beginning of their lifetime
+            # where their temperature plunges for one (maybe two) timesteps.
+
+            # Trim one additional point after the cold particle recovers.
+            NUMBER_PADDING_POINTS = 1
+
+            # Names of the observation columns.  Each of these stores an array
+            # of observations that we're trimming.
+            OBSERVATION_NAMES = [
+                "integration times",
+                "be statuses",
+                "input radii",
+                "output radii",
+                "input temperatures",
+                "output temperatures",
+                "salt masses",
+                "air temperatures",
+                "relative humidities",
+                "air densities"
+            ]
+
+            # Locate where the cold particle occurs.
+            cold_observation_index = particles_df.at[particle_id, "input temperatures"].argmin()
+            trim_index             = cold_observation_index + 1 + NUMBER_PADDING_POINTS
+
+            # Subtract the trimmed observations and pretend that the particle
+            # sprang into existence after our cut.
+            particles_df.at[particle_id, "number observations"] -= trim_index + 1
+            particles_df.at[particle_id, "birth time"]          += particles_df.at[particle_id, "integration times"][:trim_index].sum()
+
+            for observation_name in OBSERVATION_NAMES:
+                particles_df.at[particle_id, observation_name] = particles_df.at[particle_id, observation_name][trim_index:]
 
     return particles_df
 
