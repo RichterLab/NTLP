@@ -471,8 +471,11 @@ class ScoringReport():
                                   norm, iterative, parameter_ranges ] 
                                 for process_particle_ids in particle_id_chunks ]
 
-        with multiprocessing.Pool( processes=number_processes ) as pool:
-            particle_scores_list = pool.starmap( particle_scoring_pipeline, pipeline_parameters )
+        if number_processes > 1:
+            with multiprocessing.Pool( processes=number_processes ) as pool:
+                particle_scores_list = pool.starmap( particle_scoring_pipeline, pipeline_parameters )
+        else:
+            particle_scores_list = [particle_scoring_pipeline( *pipeline_parameters[0] )]
 
         # Collect results
         self.per_particle_nrmse = {}
