@@ -105,11 +105,10 @@ def do_inference( input_parameters, times, model, device ):
                                     times.reshape( (-1, 1) )) ).astype( "float32" )
     # Don't calculate gradients since they are
     # Unnecessary for inference.
-    # XXX: is this to(device) necessary?
     with torch.no_grad():
-        normalized_outputs = eval_model( torch.from_numpy( normalized_inputs ).to( device ) ).to( device )
+        normalized_outputs = eval_model( torch.from_numpy( normalized_inputs ).to( device ) )
 
-    return scale_droplet_parameters( normalized_outputs )
+    return scale_droplet_parameters( normalized_outputs.cpu() )
 
 def do_iterative_bdf( input_parameters, times ):
     """
@@ -202,7 +201,7 @@ def do_iterative_inference( input_parameters, times, model, device ):
         for time_index in range( 1,  normalized_data.shape[0] ):
             normalized_data[time_index, :2] = eval_model( normalized_data[time_index - 1, :] )
 
-    return scale_droplet_parameters( normalized_data[:, :2].numpy() ) 
+    return scale_droplet_parameters( normalized_data[:, :2].to( "cpu" ).numpy() )
 
 def generate_fortran_module( output_path, model_name, model_state ):
     """
