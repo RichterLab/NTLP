@@ -2,6 +2,7 @@ from dataclasses import dataclass
 from enum import Enum
 
 import matplotlib.pyplot as plt
+from matplotlib import colors
 
 import numpy as np
 
@@ -242,7 +243,8 @@ def particle_scoring_pipeline( particles_root, particle_ids, dirs_per_level, mod
         particles_df = read_particles_data( particles_root, particle_ids_batch, dirs_per_level )
         for particle_index, particle_id in enumerate( particle_ids_batch ):
             # Load parameters and mask out BE failures
-            particle_parameters = np.stack( particles_df.iloc[particle_index][[
+            p_df                = particles_df.iloc[particle_index]
+            particle_parameters = np.stack( p_df[[
                                       "input radii",
                                       "input temperatures",
                                       "salt masses",
@@ -251,10 +253,25 @@ def particle_scoring_pipeline( particles_root, particle_ids, dirs_per_level, mod
                                       "air densities",
                                       "integration times"
                                   ]].to_numpy(), axis=-1 )
-            be_mask             = be_success_mask( particle_parameters[:, 0] ) 
-            particle_parameters = particle_parameters[be_mask, :]
-            particle_times      = np.cumsum( particle_parameters[:, -1] )
-            
+            # Calculate actual particle times in simulation time and particle times after
+            # removing BE failures. The particle times in normal simulation time are used
+            # for reporting where the deviations are. The part times after removing BE failures
+            # are used for iterative model inference.
+            be_mask               = be_success_mask( particle_parameters[:, 0] )
+            actual_particle_times = np.delete( np.cumsum( np.insert( particle_parameters[:, -1],
+                                                                     0,
+                                                                     0.0 )[:-1] ),
+                                              ~be_mask ) + p_df["birth time"]
+            particle_parameters   = particle_parameters[be_mask, :]
+            particle_times        = np.cumsum( np.insert( particle_parameters[:, -1],
+                                                                     0,
+                                                                     0.0 )[:-1] ) + p_df["birth time"]
+
+            # If there is only one trial for a given particle,
+            # there will be no MLP outputs to analyze, so we should skip
+            if particle_parameters.shape[0] == 1:
+                continue
+    
             # Ignore the first trial because it is not an output
             normed_be_output  = norm( particle_parameters[1:, :2] )
             normed_mlp_output = np.empty( shape=( particle_parameters.shape[0] - 1, 2 ) )
@@ -321,7 +338,7 @@ def particle_scoring_pipeline( particles_root, particle_ids, dirs_per_level, mod
                                                   in zip( deviation_counts, deviation_direction_vector ) ] )
             deviation_parameters   = np.hstack( [ np.full( count, direction ) for count, direction
                                                   in zip( deviation_counts, deviation_parameter_vector ) ] )
-            deviation_times        = np.hstack( [ particle_times[mask] for mask in deviation_masks ] )
+            deviation_times        = np.hstack( [ actual_particle_times[mask] for mask in deviation_masks ] )
             deviation_particle_ids = np.full( deviation_counts.sum(), particle_id )
 
 
@@ -509,7 +526,7 @@ class ScoringReport():
         self.cluster_centers    = ( self.z_score_model.inverse_transform( self.cluster_model.means_ )
                                   + self.z_score_mean )
 
-    def plot_deviations( self, label_centers=True ):
+    def plot_deviations( self, label_centers=True, thinning_ratio=1 ):
         """
         Plots the deviations in their clusters in 3d coordinates:
           x: log10 radius
@@ -519,19 +536,22 @@ class ScoringReport():
         Likewise labels the coordinates of cluster centers if
         `label_centers=True`.
 
-        Takes 1 argument:
-          label_centers - Optional Boolean, determines whether to label
-                          the center of each deviation cluster. Defaults
-                          to True.
+        Takes 2 argument:
+          label_centers  - Optional Boolean, determines whether to label
+                           the center of each deviation cluster. Defaults
+                           to True.
+          thinning_ratio - Optional Integer, determines what fraction of
+                           droplets to plot. Defaults to 1.
 
         Returns 2 values:
           fig - the matplotlib figure of the graph
           ax  - the axis of the graph
         """
-        # Gather all of the data in the desired coordinates
-        plot_data             = np.array( [ np.log10( self.deviations[:, 0] ),
-                                            self.deviations[:, 1] - self.deviations[:, 3],
-                                            self.deviations[:, 4] ] )
+        colormap = colors.ListedColormap( ["red", "blue", "green", "orange", "black", "yellow", "teal", "gold", "magenta", "lightgreen", "navy", "dimgray", "lightcoral"] )
+        # Gather all of the data in the desired coordinates. Thin the data out based on thinning_ratio
+        plot_data             = np.array( [ np.log10( self.deviations[::thinning_ratio, 0] ),
+                                            self.deviations[::thinning_ratio, 1] - self.deviations[::thinning_ratio, 3],
+                                            self.deviations[::thinning_ratio, 4] ] )
         cluster_coordinates   = np.array( [ np.log10( self.cluster_centers[:, 0] ),
                                             self.cluster_centers[:, 1] - self.cluster_centers[:, 3],
                                             self.cluster_centers[:, 4] ] )
@@ -540,7 +560,10 @@ class ScoringReport():
 
         fig = plt.figure()
         ax  = plt.axes( projection="3d" )
-        ax.scatter( plot_data[0], plot_data[1], plot_data[2], c=self.deviation_clusters )
+        for cluster_id in np.unique( self.deviation_clusters ):
+            cluster_plot_data = plot_data[:, self.deviation_clusters[::thinning_ratio] == cluster_id]
+            cluster_colors    = np.full( (cluster_plot_data.shape[1], 4), colormap( cluster_id ) )
+            ax.scatter( cluster_plot_data[0], cluster_plot_data[1], cluster_plot_data[2], color=cluster_colors, label=f"Cluster {cluster_id}" )
 
         # Label the cluster centers
         ax.scatter( cluster_coordinates[0], cluster_coordinates[1], cluster_coordinates[2],
@@ -567,11 +590,46 @@ class ScoringReport():
                    + f" Temperature Threshold: {self.cusum_error_threshold[1]:.3f}\n")
 
         # Zooming out prevents clipping the z-axis label
-        ax.set_box_aspect( None, zoom=0.85 )
-        
+
+        ax.legend()
         fig.tight_layout()
 
         return fig, ax
+
+    def recluster( self, z_score_outlier_threshold = 3, n_init = 5, n_components = 7, init_params="k-means++", **kwargs ):
+        """
+        Reruns deviation clustering with the given arguments.
+
+        Takes 5 arguments:
+          z_score_outlier_threshold - Optional integer, determines how many standard deviations 
+                                      off of average deviation droplet parameters to include in clustering.
+                                      Defaults to 3.
+          n_init                    - Optional integer, specifies how many times to initialize clustering.
+                                      Defaults to 5.
+          n_components              - Optional integer, specifies how many clusters to find.
+                                      Defaults to 7.
+          init_params               - Optional String, specifies what method BayesianGaussianMixture
+                                      uses for initialization. Defaults to 'k-means++'.
+          **kwargs                  - Additional arguments for BayesianGaussianMixture.
+
+        Returns nothing.
+        """
+
+        self.z_score_model           = StandardScaler()
+        z_scored_deviations          = self.z_score_model.fit_transform( self.deviations )
+        filtered_z_scored_deviations = z_scored_deviations[np.all( np.abs( z_scored_deviations < z_score_outlier_threshold ),
+                                                                   axis=1)]
+        self.z_score_mean            = np.mean( z_scored_deviations, axis=0 )
+
+        self.cluster_model = ( BayesianGaussianMixture( init_params=init_params,
+                                                        n_init=n_init, 
+                                                        n_components=n_components,
+                                                        **kwargs )
+                                                       .fit( filtered_z_scored_deviations ) )
+
+        self.deviation_clusters = self.cluster_model.predict( z_scored_deviations )
+        self.cluster_centers    = ( self.z_score_model.inverse_transform( self.cluster_model.means_ )
+                                  + self.z_score_mean )
 
 def standard_norm( rt_data ):
     """
