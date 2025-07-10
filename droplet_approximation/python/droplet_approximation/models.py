@@ -999,14 +999,15 @@ def save_model_checkpoint( checkpoint_prefix, checkpoint_number, model, optimize
 
     return checkpoint_path
 
-def train_model( model, criterion, optimizer, device, number_epochs, training_file, checkpoint_prefix=None, epoch_callback=None ):
+def train_model( model, criterion, optimizer, device, number_epochs, training_file, validation_file=None, checkpoint_prefix=None, epoch_callback=None ):
     """
     Trains the supplied model for one or more epochs using all of the droplet parameters
     in an on-disk training file.  The parameters are read into memory once and then
     randomly sampled each epoch.  Any weird parameters encountered in the training file
-    are logged and
+    are logged when requested.  Model performance may be evaluated when a validation
+    file is provided and is done so at the end of each epoch.
 
-    Takes 8 arguments:
+    Takes 9 arguments:
 
       model             - PyTorch model to optimize.
       criterion         - PyTorch loss object to use during optimization.
@@ -1022,6 +1023,13 @@ def train_model( model, criterion, optimizer, device, number_epochs, training_fi
                           integration times (sized N x 6, N x 2, and N x 1,
                           respectively, where N are the number of training
                           samples).
+      validation_file   - Optional path to the file containing validation data created by
+                          create_training_file() OR a tuple containing three NumPy
+                          arrays: input parameters, output parameters, and
+                          integration times (sized N x 6, N x 2, and N x 1,
+                          respectively, where N are the number of training
+                          samples).  If omitted, defaults to None and no
+                          validation evaluations are performed
       checkpoint_prefix - Optional path prefix where model checkpoints should
                           be stored.  If omitted, defaults to None and
                           checkpoints are not written.  Otherwise, the epoch
@@ -1031,18 +1039,31 @@ def train_model( model, criterion, optimizer, device, number_epochs, training_fi
                           epoch.  If omitted, defaults to None.  When provided
                           must take:
 
-                            model:          Torch model object
-                            epoch_number:   Training epoch that just completed
-                            optimizer:      Torch optimizer object
-                            training_loss:  Sequence of training loss for the
-                                            last epoch
+                            model:           Torch model object
+                            epoch_number:    Training epoch that just completed
+                            optimizer:       Torch optimizer object
+                            training_loss:   Sequence of training loss for the
+                                             last epoch
+                            validation_loss: Scalar validation loss for the last
+                                             epoch
 
-    Returns 1 value:
+    Returns 2 values:
 
-      loss_history - List of training losses, one per mini-batch during
-                     the training process.
+      training_loss_history   - List of training losses, one per mini-batch, per
+                                epoch, during the training process.
+      validation_loss_history - List of validation losses, one per epoch, during
+                                the training process.
 
     """
+
+    # Number of training samples per batch.
+    BATCH_SIZE      = 1024
+
+    # Number of batches to train on per training loss measurement.
+    MINI_BATCH_SIZE = 1024
+
+    # Number of validation samples per validation batch.
+    VALIDATION_BATCH_SIZE = BATCH_SIZE * 10
 
     #
     # NOTE: This is inefficient and requires the entire training data set to reside in
@@ -1053,30 +1074,51 @@ def train_model( model, criterion, optimizer, device, number_epochs, training_fi
     #       TL;DR Find a big machine to train on.
     #
     if isinstance( training_file, tuple ):
-        input_parameters, output_parameters, integration_times = training_file
+        training_inputs, training_outputs, training_times = training_file
     else:
-        input_parameters, output_parameters, integration_times = read_training_file( training_file )
+        training_inputs, training_outputs, training_times = read_training_file( training_file )
 
-    weights = np.reciprocal( integration_times )
+    if validation_file is not None:
+        if isinstance( validation_file, tuple ):
+            validation_inputs, validation_outputs, validation_times = validation_file
+        else:
+            validation_inputs, validation_outputs, validation_times = read_training_file( validation_file )
+
+        # Normalize the validation data once and prepare it for inference.
+        #
+        # NOTE: We don't send it to the device since it may be too large
+        #       to hold on to during training.
+        #
+        validation_inputs  = normalize_droplet_parameters( validation_inputs )
+        validation_outputs = normalize_droplet_parameters( validation_outputs )
+
+        validation_inputs  = np.hstack( (validation_inputs,
+                                         validation_times.reshape( -1, 1 )) )
+
+        validation_inputs  = torch.from_numpy( validation_inputs )
+        validation_outputs = torch.from_numpy( validation_outputs )
+
+    weights = np.reciprocal( training_times )
     weights = np.stack( (weights, weights), axis=-1 )
     weights = torch.from_numpy( weights ).to( device )
-
-    BATCH_SIZE      = 1024
-    MINI_BATCH_SIZE = 1024
 
     #
     # NOTE: This ignores parameters if the last batch isn't complete.
     #
-    NUMBER_BATCHES  = input_parameters.shape[0] // BATCH_SIZE
+    number_batches = training_inputs.shape[0] // BATCH_SIZE
 
     # Track each mini-batch's training loss for analysis.
     training_loss_history = []
+
+    # Track each epoch's validation loss for analysis.
+    validation_loss_history = []
 
     for epoch_index in range( number_epochs ):
         model.train()
 
         # Reset our training loss.
-        running_loss = 0.0
+        training_loss = []
+        running_loss  = 0.0
 
         # "Shuffle" our training data so each epoch sees it in a different
         # order.  Note that we generate a permutation of batch indices so
@@ -1087,16 +1129,16 @@ def train_model( model, criterion, optimizer, device, number_epochs, training_fi
         #       samples.  This will not be sufficient if the training samples
         #       are highly correlated (e.g. they are generated in a sequence)!
         #
-        permuted_batch_indices = np.random.permutation( NUMBER_BATCHES )
+        permuted_batch_indices = np.random.permutation( number_batches )
 
-        for batch_index in range( NUMBER_BATCHES ):
+        for batch_index in range( number_batches ):
             start_index = permuted_batch_indices[batch_index] * BATCH_SIZE
             end_index   = start_index + BATCH_SIZE
 
             # Get the next batch of droplets.
-            inputs          = input_parameters[start_index:end_index, :]
-            outputs         = output_parameters[start_index:end_index, :]
-            times           = integration_times[start_index:end_index]
+            inputs          = training_inputs[start_index:end_index, :]
+            outputs         = training_outputs[start_index:end_index, :]
+            times           = training_times[start_index:end_index]
             current_weights = weights[start_index:end_index]
 
             # Normalize the inputs and outputs to [-1, 1].
@@ -1132,6 +1174,7 @@ def train_model( model, criterion, optimizer, device, number_epochs, training_fi
             if batch_index > 0 and batch_index % MINI_BATCH_SIZE == 0:
                 running_loss /= MINI_BATCH_SIZE
 
+                training_loss.append( running_loss )
                 training_loss_history.append( running_loss )
 
                 running_loss = 0.0
@@ -1151,24 +1194,54 @@ def train_model( model, criterion, optimizer, device, number_epochs, training_fi
                                    criterion,
                                    training_loss_history )
 
+        # Measure our validation loss if we have data.
+        if validation_file is not None:
+            with torch.no_grad():
+                running_loss = 0.0
+
+                # Compute the number of batches we have, possibly including a
+                # partial last batch.
+                number_validation_batches = (validation_inputs.shape[0] + VALIDATION_BATCH_SIZE - 1) // VALIDATION_BATCH_SIZE
+
+                # Evaluate each of the batches and accumulate a running loss.
+                for validation_batch_index in range( number_validation_batches ):
+                    start_index = validation_batch_index * VALIDATION_BATCH_SIZE
+                    if validation_batch_index == number_validation_batches - 1:
+                        end_index = -1
+                    else:
+                        end_index = start_index + BATCH_SIZE
+
+                    validation_approximations = model( validation_inputs[start_index:end_index].to( device ) )
+
+                    # Estimate the loss - using weights if needed.
+                    if criterion == weighted_mse_loss:
+                        loss = weighted_mse_loss( validation_approximations,
+                                                  validation_outputs[start_index:end_index].to( device ),
+                                                  current_weights )
+                    else:
+                        loss = criterion( validation_approximations,
+                                          validation_outputs[start_index:end_index].to( device ) )
+
+                    running_loss += loss.item()
+
+            validation_loss = running_loss / number_validation_batches
+
+            validation_loss_history.append( validation_loss )
+
         # Run the user's callback if requested.
         if epoch_callback is not None:
             epoch_callback( model,
                             epoch_index,
                             optimizer,
-                            running_loss )
+                            training_loss,
+                            validation_loss )
 
     # Handle the case where we didn't have enough data to complete a mini-batch.
     if len( training_loss_history ) == 0:
-        running_loss /= number_epochs * NUMBER_BATCHES
+        running_loss /= number_epochs * number_batches
         training_loss_history.append( running_loss )
 
-        print( "Epoch #{:d}, batch #{:d} loss: {:g}".format(
-            number_epochs,
-            NUMBER_BATCHES,
-            running_loss ) )
-
-    return training_loss_history
+    return training_loss_history, validation_loss_history
 
 def weighted_mse_loss( inputs, targets, weights ):
     """
