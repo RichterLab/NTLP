@@ -112,7 +112,7 @@ def batch_read_particles_data( particles_root, particle_ids, dirs_per_level, num
 
         # The last process gets whatever is remaining.
         if process_index == (number_processes - 1):
-            end_index = -1
+            end_index = number_particles
 
         particle_range = range( start_index, end_index )
         particle_ranges.append( particle_range )
