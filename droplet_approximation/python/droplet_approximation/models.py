@@ -973,7 +973,7 @@ def save_model_checkpoint( checkpoint_prefix, checkpoint_number, model, optimize
 
     # Update the parameter ranges with the caller's.
     if len( parameter_ranges ) > 0:
-        parameter_ranges.update( current_parameter_ranges )
+        current_parameter_ranges.update( parameter_ranges )
 
     # Checkpoints are dictionaries comprised of the following key/values:
     #
@@ -987,7 +987,7 @@ def save_model_checkpoint( checkpoint_prefix, checkpoint_number, model, optimize
     #
     checkpoint = {
         "checkpoint_version":       CHECKPOINT_VERSION,
-        "droplet_parameter_ranges": parameter_ranges,
+        "droplet_parameter_ranges": current_parameter_ranges,
         "loss_function":            loss_function,
         "model_weights":            model.state_dict(),
         "optimizer_state":          optimizer.state_dict(),
