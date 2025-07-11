@@ -1189,7 +1189,10 @@ def train_model( model, criterion, optimizer, device, number_epochs, training_fi
 
             running_loss += loss.item()
 
-            if batch_index > 0 and batch_index % MINI_BATCH_SIZE == 0:
+            # Detect when we're at the end of the mini-batch and update our
+            # loss.  This properly handles the case where we have exactly one
+            # mini batch-worth of training data.
+            if batch_index % MINI_BATCH_SIZE == (MINI_BATCH_SIZE - 1):
                 running_loss /= MINI_BATCH_SIZE
 
                 training_loss.append( running_loss )
