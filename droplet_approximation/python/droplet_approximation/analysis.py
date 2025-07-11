@@ -325,8 +325,8 @@ def analyze_model_particle_performance( times, truth_output, model_output, norm=
                         array of the particle's estimated radius and temperature
                         at index 0 and 1 respectively.
       norm            - Optional user provided norm to apply to all
-                        data before calculating nrmse. Accepts an array 
-                        sized number_observations x 2 and returns a normed 
+                        data before calculating nrmse. Accepts an array
+                        sized number_observations x 2 and returns a normed
                         array of the same length. Defaults to `identity_norm`.
       title_string    - Optional string to append to plot title
       figure_size     - Optional sequence, of length 2, containing the width
@@ -363,7 +363,7 @@ def analyze_model_particle_performance( times, truth_output, model_output, norm=
 
     # Compute the normalized RMSE across the entire time scale.
     nrmse = calculate_nrmse( normed_truth_output, normed_model_output )
-    
+
     # Create our figure and embed the parameters that were evaluated.
     fig_h, ax_h = plt.subplots( 2, 2, figsize=figure_size )
     fig_h.suptitle( "Droplet Size and Temperature\n NRMSE={:g}%\n{}".format( nrmse * 100, title_string) )

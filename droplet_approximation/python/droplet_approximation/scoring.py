@@ -17,9 +17,9 @@ from .physics import set_parameter_ranges
 
 def calculate_cusum( differences, tolerance ):
     """
-    Calculates the cumulative sum (CUSUM) of an array of differences. 
+    Calculates the cumulative sum (CUSUM) of an array of differences.
     Can be 1D for one variable or 2D for multiple variables at once.
-    Usually used on an arrays of radius/temperature differences in 
+    Usually used on an arrays of radius/temperature differences in
     MLP and BE output.
 
     Takes 2 arguments:
@@ -38,19 +38,22 @@ def calculate_cusum( differences, tolerance ):
                       variable at each time step at index [..., 1, :]
 
     """
-    cusum            = np.zeros( shape=( *differences.shape[:-1], 2, differences.shape[-1] ) )
+
+    cusum            = np.zeros( shape=(*differences.shape[:-1], 2, differences.shape[-1]) )
     cusum[..., 0, 0] = np.maximum( differences[..., 0] - tolerance, 0 )
     cusum[..., 1, 0] = np.minimum( differences[..., 0] + tolerance, 0 )
 
     for time_step in range( 1, differences.shape[-1] ):
         # Positive CUSUM
-        cusum[..., 0, time_step] = np.maximum( cusum[..., 0, time_step-1] 
-                                             + differences[..., time_step] 
-                                             - tolerance, 0 )
+        cusum[..., 0, time_step] = np.maximum( cusum[..., 0, time_step-1] +
+                                               differences[..., time_step] -
+                                               tolerance,
+                                               0 )
         # Negative CUSUM
-        cusum[..., 1, time_step] = np.minimum( cusum[..., 1, time_step-1] 
-                                             + differences[..., time_step] 
-                                             + tolerance, 0 )
+        cusum[..., 1, time_step] = np.minimum( cusum[..., 1, time_step-1] +
+                                               differences[..., time_step] +
+                                               tolerance,
+                                               0 )
     return cusum
 
 def calculate_nrmse( truth_output, model_output ):
@@ -68,14 +71,14 @@ def calculate_nrmse( truth_output, model_output ):
 
     Returns 1 value:
 
-      NRMSE - the normalized root mean squared error of model_output against 
+      NRMSE - the normalized root mean squared error of model_output against
               truth_output.
     """
 
-    RMSE = np.sqrt( np.mean( ( truth_output - model_output ) ** 2, axis=0 ) )
+    RMSE           = np.sqrt( np.mean( (truth_output - model_output)**2, axis=0 ) )
     truth_averages = np.abs( np.mean( truth_output, axis=0 ) )
 
-    return ( RMSE / truth_averages ).sum()
+    return (RMSE / truth_averages).sum()
 
 def detect_cusum_deviations( cusum_data, threshold ):
     """
@@ -111,7 +114,7 @@ def detect_cusum_deviations( cusum_data, threshold ):
     cusum_edge_mask          = np.zeros( cusum_data.shape, dtype=bool )
     cusum_threshold          = np.abs( cusum_data ) > threshold
     cusum_edge_mask[..., 0]  = cusum_threshold[..., 0]
-    cusum_edge_mask[..., 1:] = cusum_threshold[..., 1:] & ( ~cusum_threshold[..., :-1] )
+    cusum_edge_mask[..., 1:] = cusum_threshold[..., 1:] & (~cusum_threshold[..., :-1])
 
     return cusum_edge_mask
 
@@ -119,6 +122,7 @@ class DeviationDirection( Enum ):
     """
     This enum records the direction of a deviation.
     """
+
     NEGATIVE = 0
     POSITIVE = 1
 
@@ -126,7 +130,8 @@ class DeviationParameter( Enum ):
     """
     This enum records the parameter associated with a deviation.
     """
-    RADIUS = 0
+
+    RADIUS      = 0
     TEMPERATURE = 1
 
 def identity_norm( rt_data ):
@@ -145,6 +150,7 @@ def identity_norm( rt_data ):
                     temperature data in normed ranges at 1
 
     """
+
     return rt_data
 
 
@@ -158,15 +164,16 @@ def identity_norm( rt_data ):
 class ParticleScore:
     """
     This is a data class to structure output from `particle_pipeline`.
-    
+
     Contains 10 attributes:
+
       particle_id            - Integer, id of the particle processed.
       particle_nrmse         - Float, NRMSE of the particle against BE outputs.
       square_error           - NumPy Array, sized 2, contains the square of the
                                difference between BE and MLP output for radius
                                and temperature respectively. Used to calculate
                                overall NRMSE.
-      truth_sum              - NumPy Array, sized 2, contains the sum of the truth 
+      truth_sum              - NumPy Array, sized 2, contains the sum of the truth
                                values for radius and temperature respectively. Used
                                to calculate overall NRMSE.
       observation_count      - Integer, number of observations in this particle's
@@ -174,11 +181,11 @@ class ParticleScore:
       deviations             - NumPy array, sized number_deviations x 7,
                                contains the droplet parameters each deviation,
                                including integration time.
-      deviation_directions   - NumPy array of DeviationDirections, sized 
-                               number_deviations, containing whether each 
+      deviation_directions   - NumPy array of DeviationDirections, sized
+                               number_deviations, containing whether each
                                deviation was positive or negative.
       deviation_parameters   - NumPy array of DeviationParameters, sized
-                               number_deviations, containing whether each 
+                               number_deviations, containing whether each
                                deviation occurred in the radius or temperature
                                output.
       deviation_times        - NumPy array of floats, sized number_deviations,
@@ -187,12 +194,13 @@ class ParticleScore:
                                of each deviation. Technically, this is redundant to
                                particle_id, but it is used by ScoringReport to
                                cleanly generate the overall deviation_particle_ids array.
+
     """
 
     particle_id:            int
     particle_nrmse:         np.float64
     square_error:           np.ndarray
-    truth_sum:              np.ndarray 
+    truth_sum:              np.ndarray
     observation_count:      int
     deviations:             np.ndarray
     deviation_directions:   np.ndarray
@@ -208,6 +216,7 @@ def particle_scoring_pipeline( particles_root, particle_ids, dirs_per_level, mod
     to calcualte overall dataset NRMSE.
 
     Takes 10 arguments:
+
       particles_root        - Path to the top-level directory to read raw
                               particle files from.
       particle_ids          - Sequence of particle identifiers to process.
@@ -216,31 +225,35 @@ def particle_scoring_pipeline( particles_root, particle_ids, dirs_per_level, mod
       model                 - PyTorch model to use
       device                - The device to evaluate on.
       cusum_error_tolerance - NumPy Array, sized 2, containing the
-                              radius/temperature tolerances to pass to 
+                              radius/temperature tolerances to pass to
                               `calculate_cusum`.
-      cusum_error_threshold - NumPy Array, sized 2, containing the 
+      cusum_error_threshold - NumPy Array, sized 2, containing the
                               radius/temperature thresholds to pass to
                               `detect_cusum_deviations`.
       norm                  - User provided norm to apply to all data before
                               scoring and deviation detection. Accepts an
                               array sized number_observations x 2 and returns
                               a normed array of the same length.
-      iterative             - Boolean, indicates whether to evaluate the model 
+      iterative             - Boolean, indicates whether to evaluate the model
                               directly on every time step, or to iterate radius
                               and temperature from the first time step.
       parameter_ranges      - Dictionary of any changes to the droplet parameter
                               ranges required for the given model.
 
     Returns 1 Value:
+
       ParticleScores - List of ParticleScore objects.
+
     """
 
     set_parameter_ranges( parameter_ranges )
-    
+
     particle_scores = []
 
     for particle_ids_batch in particle_ids:
+
         particles_df = read_particles_data( particles_root, particle_ids_batch, dirs_per_level )
+
         for particle_index, particle_id in enumerate( particle_ids_batch ):
             # Load parameters and mask out BE failures
             p_df                = particles_df.iloc[particle_index]
@@ -261,20 +274,20 @@ def particle_scoring_pipeline( particles_root, particle_ids, dirs_per_level, mod
             actual_particle_times = np.delete( np.cumsum( np.insert( particle_parameters[:, -1],
                                                                      0,
                                                                      0.0 )[:-1] ),
-                                              ~be_mask ) + p_df["birth time"]
+                                               ~be_mask ) + p_df["birth time"]
             particle_parameters   = particle_parameters[be_mask, :]
             particle_times        = np.cumsum( np.insert( particle_parameters[:, -1],
-                                                                     0,
-                                                                     0.0 )[:-1] ) + p_df["birth time"]
+                                                          0,
+                                                          0.0 )[:-1] ) + p_df["birth time"]
 
             # If there is only one trial for a given particle,
             # there will be no MLP outputs to analyze, so we should skip
             if particle_parameters.shape[0] == 1:
                 continue
-    
+
             # Ignore the first trial because it is not an output
             normed_be_output  = norm( particle_parameters[1:, :2] )
-            normed_mlp_output = np.empty( shape=( particle_parameters.shape[0] - 1, 2 ) )
+            normed_mlp_output = np.empty( shape=(particle_parameters.shape[0] - 1, 2) )
 
             # Calculate MLP results
 
@@ -299,14 +312,14 @@ def particle_scoring_pipeline( particles_root, particle_ids, dirs_per_level, mod
             # data frames together. Instead, we just copy the square error and the sum of the truth
             # parameters for each particle so that net NRMSE can be calculated later.
             particle_nrmse      = calculate_nrmse( normed_be_output, normed_mlp_output )
-            square_error        = np.sum( ( normed_be_output - normed_mlp_output ) ** 2, axis=0 )
+            square_error        = np.sum( (normed_be_output - normed_mlp_output)**2, axis=0 )
             truth_sum           = np.abs( np.sum( normed_be_output, axis=0 ) )
             number_observations = particle_parameters.shape[0]
 
             # Calculate CUSUM. There structure of the result will be
             # [ [ Positive Radius CUSUM array, Negative Radius CUSUM array ],
             #   [ Positive Temperature CUSUM array, Negative Temperature CUSUM array ] ]
-            normed_output_differences = ( normed_mlp_output - normed_be_output ).T
+            normed_output_differences = (normed_mlp_output - normed_be_output).T
             cusum                     = calculate_cusum( normed_output_differences, cusum_error_tolerance )
 
             # Create a mask for when positive/negative radius/temperature CUSUM exceeds
@@ -321,7 +334,7 @@ def particle_scoring_pipeline( particles_root, particle_ids, dirs_per_level, mod
             deviation_counts = deviation_masks.sum( axis=1 )
 
             # These arrays allow the deviations identified with each
-            # CUSUM array to be zipped with their corresponding enums. 
+            # CUSUM array to be zipped with their corresponding enums.
 
             deviation_direction_vector = np.array( [ DeviationDirection.POSITIVE,
                                                      DeviationDirection.NEGATIVE,
@@ -341,12 +354,11 @@ def particle_scoring_pipeline( particles_root, particle_ids, dirs_per_level, mod
             deviation_times        = np.hstack( [ actual_particle_times[mask] for mask in deviation_masks ] )
             deviation_particle_ids = np.full( deviation_counts.sum(), particle_id )
 
-
             # In the future, if we want access to CUSUM or MLP radius data, perhaps write it to a new
             # per particle analysis dataframe here
 
-            particle_score = ParticleScore( particle_id, particle_nrmse, square_error, truth_sum, 
-                                            number_observations, deviations, deviation_directions, 
+            particle_score = ParticleScore( particle_id, particle_nrmse, square_error, truth_sum,
+                                            number_observations, deviations, deviation_directions,
                                             deviation_parameters, deviation_times, deviation_particle_ids )
 
             particle_scores.append( particle_score )
@@ -355,9 +367,10 @@ def particle_scoring_pipeline( particles_root, particle_ids, dirs_per_level, mod
 
 class ScoringReport():
     """
-    A class to handle the information when scoring a model.  
+    A class to handle the information when scoring a model.
 
     Contains 16 attributes:
+
       cluster_centers        - NumPy array, sized number_clusters
                                times 7, containing the droplet
                                parameters for the centroid of each
@@ -403,9 +416,10 @@ class ScoringReport():
                                natural ranges.
 
     """
+
     def __init__( self, particles_root, particle_ids, dirs_per_level, model, model_name, device,
-                 cusum_error_tolerance, cusum_error_threshold, norm=None, iterative=False, 
-                 max_clusters = 7, number_processes=0, number_batches=1, parameter_ranges=None ):
+                  cusum_error_tolerance, cusum_error_threshold, norm=None, iterative=False,
+                  max_clusters=7, number_processes=0, number_batches=1, parameter_ranges=None ):
         """
         Takes 12 arguments:
           particles_root        - Path to the top-level directory to read raw
@@ -423,7 +437,7 @@ class ScoringReport():
                                   radius/temperature thresholds to pass
                                   to `detect_cusum_deviations`.
           norm                  - Optional user provided norm to apply to all
-                                  data before scoring and deviation detection. 
+                                  data before scoring and deviation detection.
                                   Accepts an array sized number_observations x 2
                                   and returns a normed array of the same length.
                                   Defaults to `identity_norm`.
@@ -445,10 +459,10 @@ class ScoringReport():
                                   parameter ranges required for the given model.
                                   Defaults to None.
         """
-        
-        # The processes must be created with spawn; it seems the pipeline 
+
+        # The processes must be created with spawn; it seems the pipeline
         # will not parallelize properly with fork.
-        multiprocessing.set_start_method('spawn', force=True)
+        multiprocessing.set_start_method( 'spawn', force=True )
 
         if norm is None:
             norm = identity_norm
@@ -463,13 +477,13 @@ class ScoringReport():
         # Splits all of the requested particle ids across processors
         # and into batches to avoid loading all of the particles
         # at once
-        particle_id_chunks  = [ np.array_split( process_particle_ids, number_batches )
-                                for process_particle_ids in np.array_split( particle_ids,
-                                                                            number_processes ) ]
-        pipeline_parameters = [ [ particles_root, process_particle_ids, dirs_per_level,
-                                  model, device, cusum_error_tolerance, cusum_error_threshold, 
-                                  norm, iterative, parameter_ranges ] 
-                                for process_particle_ids in particle_id_chunks ]
+        particle_id_chunks  = [np.array_split( process_particle_ids, number_batches )
+                               for process_particle_ids in np.array_split( particle_ids,
+                                                                           number_processes )]
+        pipeline_parameters = [[particles_root, process_particle_ids, dirs_per_level,
+                                model, device, cusum_error_tolerance, cusum_error_threshold,
+                                norm, iterative, parameter_ranges]
+                               for process_particle_ids in particle_id_chunks]
 
         if number_processes > 1:
             with multiprocessing.Pool( processes=number_processes ) as pool:
@@ -499,13 +513,13 @@ class ScoringReport():
                 overall_observation_count += particle_score.observation_count
 
                 deviations.append(             particle_score.deviations )
-                deviation_directions.append(   particle_score.deviation_directions ) 
-                deviation_parameters.append(   particle_score.deviation_parameters ) 
-                deviation_times.append(        particle_score.deviation_times ) 
+                deviation_directions.append(   particle_score.deviation_directions )
+                deviation_parameters.append(   particle_score.deviation_parameters )
+                deviation_times.append(        particle_score.deviation_times )
                 deviation_particle_ids.append( particle_score.deviation_particle_ids )
 
-        self.net_nrmse = np.sum( np.sqrt( overall_square_error / overall_observation_count )
-                               / ( overall_truth_sum / overall_observation_count ) )
+        self.net_nrmse = np.sum( np.sqrt( overall_square_error / overall_observation_count ) /
+                                 (overall_truth_sum / overall_observation_count) )
 
         self.deviations             = np.vstack( deviations )
         self.deviation_directions   = np.hstack( deviation_directions )
@@ -520,26 +534,28 @@ class ScoringReport():
                                                                    axis=1)]
         self.z_score_mean            = np.mean( z_scored_deviations, axis=0 )
 
-        self.cluster_model = ( BayesianGaussianMixture( init_params="k-means++",
-                                                        n_init=5, 
-                                                        n_components=max_clusters )
-                                                       .fit( filtered_z_scored_deviations ) )
+        self.cluster_model = (BayesianGaussianMixture( init_params="k-means++",
+                                                       n_init=5,
+                                                       n_components=max_clusters )
+                              .fit( filtered_z_scored_deviations ))
 
         self.deviation_clusters = self.cluster_model.predict( z_scored_deviations )
-        self.cluster_centers    = ( self.z_score_model.inverse_transform( self.cluster_model.means_ )
-                                  + self.z_score_mean )
+        self.cluster_centers    = (self.z_score_model.inverse_transform( self.cluster_model.means_ ) +
+                                   self.z_score_mean)
 
     def plot_deviations( self, label_centers=True, thinning_ratio=1 ):
         """
         Plots the deviations in their clusters in 3d coordinates:
+
           x: log10 radius
           y: particle temperature - air temperature
-          z: Relative Humidity 
+          z: Relative Humidity
 
         Likewise labels the coordinates of cluster centers if
         `label_centers=True`.
 
         Takes 2 argument:
+
           label_centers  - Optional Boolean, determines whether to label
                            the center of each deviation cluster. Defaults
                            to True.
@@ -547,50 +563,75 @@ class ScoringReport():
                            droplets to plot. Defaults to 1.
 
         Returns 2 values:
+
           fig - the matplotlib figure of the graph
           ax  - the axis of the graph
+
         """
-        colormap = colors.ListedColormap( ["red", "blue", "green", "orange", "black", "yellow", "teal", "gold", "magenta", "lightgreen", "navy", "dimgray", "lightcoral"] )
+
+        colormap = colors.ListedColormap( ["red",
+                                           "blue",
+                                           "green",
+                                           "orange",
+                                           "black",
+                                           "yellow",
+                                           "teal",
+                                           "gold",
+                                           "magenta",
+                                           "lightgreen",
+                                           "navy",
+                                           "dimgray",
+                                           "lightcoral"] )
+
         # Gather all of the data in the desired coordinates. Thin the data out based on thinning_ratio
-        plot_data             = np.array( [ np.log10( self.deviations[::thinning_ratio, 0] ),
-                                            self.deviations[::thinning_ratio, 1] - self.deviations[::thinning_ratio, 3],
-                                            self.deviations[::thinning_ratio, 4] ] )
-        cluster_coordinates   = np.array( [ np.log10( self.cluster_centers[:, 0] ),
-                                            self.cluster_centers[:, 1] - self.cluster_centers[:, 3],
-                                            self.cluster_centers[:, 4] ] )
+        plot_data             = np.array( [np.log10( self.deviations[::thinning_ratio, 0] ),
+                                           self.deviations[::thinning_ratio, 1] - self.deviations[::thinning_ratio, 3],
+                                           self.deviations[::thinning_ratio, 4]] )
+        cluster_coordinates   = np.array( [np.log10( self.cluster_centers[:, 0] ),
+                                           self.cluster_centers[:, 1] - self.cluster_centers[:, 3],
+                                           self.cluster_centers[:, 4]] )
         cluster_center_labels = [f"Cluster { cluster_index }: { cluster_coordinates.T[cluster_index] }"
-                                 for cluster_index in range( self.cluster_model.n_components ) ]
+                                 for cluster_index in range( self.cluster_model.n_components )]
 
         fig = plt.figure()
         ax  = plt.axes( projection="3d" )
+
         for cluster_id in np.unique( self.deviation_clusters ):
             cluster_plot_data = plot_data[:, self.deviation_clusters[::thinning_ratio] == cluster_id]
             cluster_colors    = np.full( (cluster_plot_data.shape[1], 4), colormap( cluster_id ) )
-            ax.scatter( cluster_plot_data[0], cluster_plot_data[1], cluster_plot_data[2], color=cluster_colors, label=f"Cluster {cluster_id}" )
+            ax.scatter( cluster_plot_data[0],
+                        cluster_plot_data[1],
+                        cluster_plot_data[2],
+                        color=cluster_colors,
+                        label=f"Cluster {cluster_id}" )
 
         # Label the cluster centers
-        ax.scatter( cluster_coordinates[0], cluster_coordinates[1], cluster_coordinates[2],
-            c=np.arange( self.cluster_model.n_components ), s=20 )
+        ax.scatter( cluster_coordinates[0],
+                    cluster_coordinates[1],
+                    cluster_coordinates[2],
+                    c=np.arange( self.cluster_model.n_components ),
+                    s=20 )
 
         if label_centers:
             for cluster_index in range( self.cluster_model.n_components ):
                 ax.text( cluster_coordinates[0][cluster_index], cluster_coordinates[1][cluster_index],
-                    cluster_coordinates[2][cluster_index], cluster_center_labels[cluster_index],
-                    fontweight="bold", color="r" )
+                         cluster_coordinates[2][cluster_index], cluster_center_labels[cluster_index],
+                         fontweight="bold",
+                         color="r" )
 
-        ax.set_xlabel("Log Radius (m)")
-        ax.set_ylabel("Temperature Difference (K)")
-        ax.set_zlabel("Relative Humidity (%)")
+        ax.set_xlabel( "Log Radius (m)" )
+        ax.set_ylabel( "Temperature Difference (K)" )
+        ax.set_zlabel( "Relative Humidity (%)" )
 
         # Do not pad these curly braces with spaces.
         # ':3f ' is not the same as ':3f'. The former
         # will throw an error.
-        ax.set_title(f"{'Iterative' if self.iterative else ''} Deviation Clusters "
-                   + f"for { self.model_name }\n"
-                   + f"Radius Tolerance: {100*self.cusum_error_tolerance[0]:.3f}%,"
-                   + f" Temperature Tolerance: {self.cusum_error_tolerance[1]:.3f} degrees\n"
-                   + f"Radius Threshold: {self.cusum_error_threshold[0]:.3f},"
-                   + f" Temperature Threshold: {self.cusum_error_threshold[1]:.3f}\n")
+        ax.set_title( f"{'Iterative' if self.iterative else ''} Deviation Clusters " +
+                      f"for { self.model_name }\n" +
+                      f"Radius Tolerance: {100*self.cusum_error_tolerance[0]:.3f}%," +
+                      f" Temperature Tolerance: {self.cusum_error_tolerance[1]:.3f} degrees\n" +
+                      f"Radius Threshold: {self.cusum_error_threshold[0]:.3f}," +
+                      f" Temperature Threshold: {self.cusum_error_threshold[1]:.3f}\n" )
 
         # Zooming out prevents clipping the z-axis label
 
@@ -604,7 +645,7 @@ class ScoringReport():
         Reruns deviation clustering with the given arguments.
 
         Takes 5 arguments:
-          z_score_outlier_threshold - Optional integer, determines how many standard deviations 
+          z_score_outlier_threshold - Optional integer, determines how many standard deviations
                                       off of average deviation droplet parameters to include in clustering.
                                       Defaults to 3.
           n_init                    - Optional integer, specifies how many times to initialize clustering.
@@ -625,7 +666,7 @@ class ScoringReport():
         self.z_score_mean            = np.mean( z_scored_deviations, axis=0 )
 
         self.cluster_model = ( BayesianGaussianMixture( init_params=init_params,
-                                                        n_init=n_init, 
+                                                        n_init=n_init,
                                                         n_components=n_components,
                                                         **kwargs )
                                                        .fit( filtered_z_scored_deviations ) )
@@ -639,18 +680,23 @@ def standard_norm( rt_data ):
     Normalizes rt_data by applying log10 to radius.
 
     Takes 1 argument:
+
       rt_data - NumPy array, number_observations x 2 containing:
+
                   radius data in natural ranges at index 0
                   temperature data in natural ranges at index 1
 
     Returns 1 value:
+
       normalized_rt_data - NumPy array, time steps x 2 containing:
+
                              log10 radius data in natural ranges at index 0
                              temperature data in natural ranges at index 1
+
     """
+
     normalized_rt_data       = np.empty_like( rt_data )
     normalized_rt_data[:, 0] = np.log10( rt_data[:, 0] )
     normalized_rt_data[:, 1] = rt_data[:, 1]
 
     return normalized_rt_data
-
