@@ -1065,6 +1065,24 @@ def train_model( model, criterion, optimizer, device, number_epochs, training_fi
     # Number of validation samples per validation batch.
     VALIDATION_BATCH_SIZE = BATCH_SIZE * 10
 
+    # Setup our callback(s) so we simply call them at the right time during
+    # training.
+    epoch_callbacks = []
+    if epoch_callback is not None:
+
+        # Support being provided a single callback instead of a list of them.
+        if callable( epoch_callback ):
+            epoch_callbacks.append( epoch_callback )
+        # Blow up if we didn't have a callback or a list of them.
+        elif type( epoch_callback ) is not list:
+            raise ValueError( "Epoch callback is neither callable nor a list ({:s})!".format(
+                type( epoch_callback ) ) )
+        elif not all( map( lambda x: callable( x ), epoch_callback ) ):
+            raise ValueError( "One of the callbacks provided isn't callable!" )
+        else:
+            # Add all of the callbacks.
+            epoch_callbacks.extend( epoch_callback )
+
     #
     # NOTE: This is inefficient and requires the entire training data set to reside in
     #       RAM.  We could read chunks of the file on demand but that would require
@@ -1228,8 +1246,8 @@ def train_model( model, criterion, optimizer, device, number_epochs, training_fi
 
             validation_loss_history.append( validation_loss )
 
-        # Run the user's callback if requested.
-        if epoch_callback is not None:
+        # Execute each of the callbacks.
+        for epoch_callback in epoch_callbacks:
             epoch_callback( model,
                             epoch_index,
                             optimizer,
