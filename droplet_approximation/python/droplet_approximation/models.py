@@ -999,7 +999,7 @@ def save_model_checkpoint( checkpoint_prefix, checkpoint_number, model, optimize
 
     return checkpoint_path
 
-def train_model( model, criterion, optimizer, device, number_epochs, training_file, validation_file=None, checkpoint_prefix=None, epoch_callback=None ):
+def train_model( model, criterion, optimizer, device, number_epochs, training_file, validation_file=None, checkpoint_prefix=None, epoch_callback=None, lr_scale=0.5 ):
     """
     Trains the supplied model for one or more epochs using all of the droplet parameters
     in an on-disk training file.  The parameters are read into memory once and then
@@ -1007,7 +1007,7 @@ def train_model( model, criterion, optimizer, device, number_epochs, training_fi
     are logged when requested.  Model performance may be evaluated when a validation
     file is provided and is done so at the end of each epoch.
 
-    Takes 9 arguments:
+    Takes 10 arguments:
 
       model             - PyTorch model to optimize.
       criterion         - PyTorch loss object to use during optimization.
@@ -1046,6 +1046,11 @@ def train_model( model, criterion, optimizer, device, number_epochs, training_fi
                                              last epoch
                             validation_loss: Scalar validation loss for the last
                                              epoch
+
+      lr_scale          - Optional floating point value, in the range of (0, 1],
+                          to scale the learning rate at the end of each epoch.
+                          If omitted, defaults to 0.5.
+
 
     Returns 2 values:
 
@@ -1204,7 +1209,7 @@ def train_model( model, criterion, optimizer, device, number_epochs, training_fi
         # checkpoint so it can be loaded and training resumed without additional
         # preparation.
         for parameter_group in optimizer.param_groups:
-            parameter_group["lr"] * 0.5
+            parameter_group["lr"] *= lr_scale
 
         # Checkpoint if requested.
         if checkpoint_prefix is not None:
