@@ -84,7 +84,7 @@ def analyze_model_iterative_performance( model, input_parameters=None, dt=0.05, 
     # Removed fined-grained (DNS vs. LES) analysis since dt is constant
 
     # Create our figure and embed the parameters that were evaluated.
-    fig_h, ax_h = plt.subplots( 2, 2, figsize=figure_size )
+    fig_h, ax_h = plt.subplots( 2, 2, figsize=figure_size, sharex=True )
     fig_h.suptitle( "Droplet Size and Temperature\nRadius={:g}, Temperature={:g}, m_s={:g}, Air Temp={:g}, RH={:g}, rhoa={:g}".format(
         input_parameters[0],
         input_parameters[1],
@@ -239,7 +239,7 @@ def analyze_model_performance( model, input_parameters=None, figure_size=None ):
     print( "NRMSE: {}%, {}%".format( rmse_0 * 100, rmse_1 * 100 ) )
 
     # Create our figure and embed the parameters that were evaluated.
-    fig_h, ax_h = plt.subplots( 2, 2, figsize=figure_size )
+    fig_h, ax_h = plt.subplots( 2, 2, figsize=figure_size, sharex=True )
     fig_h.suptitle( "Droplet Size and Temperature\nRadius={:g}, Temperature={:g}, m_s={:g}, Air Temp={:g}, RH={:g}, rhoa={:g}".format(
         input_parameters[0, 0],
         input_parameters[0, 1],
@@ -365,7 +365,7 @@ def analyze_model_particle_performance( times, truth_output, model_output, norm=
     nrmse = calculate_nrmse( normed_truth_output, normed_model_output )
 
     # Create our figure and embed the parameters that were evaluated.
-    fig_h, ax_h = plt.subplots( 2, 2, figsize=figure_size )
+    fig_h, ax_h = plt.subplots( 2, 2, figsize=figure_size, sharex=True )
     fig_h.suptitle( "Droplet Size and Temperature\n NRMSE={:g}%\n{}".format( nrmse * 100, title_string) )
 
     # Truth vs model predictions.
@@ -446,7 +446,7 @@ def plot_droplet_size_temperature( size_temperatures, times ):
 
     """
 
-    fig_h, ax_h = plt.subplots( 1, 2, figsize=(9, 4) )
+    fig_h, ax_h = plt.subplots( 1, 2, figsize=(9, 4), sharex=True )
 
     fig_h.suptitle( "Droplet Size and Temperature (Truth)" )
 
@@ -514,7 +514,7 @@ def plot_particles( particles_df, force_flag=False, time_range=[-np.inf, np.inf]
         raise ValueError( "Too many particles to plot ({:d})!".format(
             len( particles_df ) ) )
 
-    fig_h, ax_h = plt.subplots( 7, 1, figsize=(8, 15) )
+    fig_h, ax_h = plt.subplots( 7, 1, figsize=(8, 15), sharex=True )
 
     fig_h.suptitle( "{:d} Particle{:s}\n".format(
         len( particles_df ),
