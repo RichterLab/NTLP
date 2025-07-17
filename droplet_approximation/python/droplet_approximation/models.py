@@ -999,7 +999,7 @@ def save_model_checkpoint( checkpoint_prefix, checkpoint_number, model, optimize
 
     return checkpoint_path
 
-def train_model( model, criterion, optimizer, device, number_epochs, training_file, validation_file=None, checkpoint_prefix=None, epoch_callback=None, lr_scale=0.5 ):
+def train_model( model, criterion, optimizer, device, number_epochs, training_file, validation_file=None, checkpoint_prefix=None, epoch_callback=None, lr_scale=0.5, batch_size=1024 ):
     """
     Trains the supplied model for one or more epochs using all of the droplet parameters
     in an on-disk training file.  The parameters are read into memory once and then
@@ -1007,7 +1007,7 @@ def train_model( model, criterion, optimizer, device, number_epochs, training_fi
     are logged when requested.  Model performance may be evaluated when a validation
     file is provided and is done so at the end of each epoch.
 
-    Takes 10 arguments:
+    Takes 11 arguments:
 
       model             - PyTorch model to optimize.
       criterion         - PyTorch loss object to use during optimization.
@@ -1050,7 +1050,8 @@ def train_model( model, criterion, optimizer, device, number_epochs, training_fi
       lr_scale          - Optional floating point value, in the range of (0, 1],
                           to scale the learning rate at the end of each epoch.
                           If omitted, defaults to 0.5.
-
+      batch_size        - Optional batch size used during training.  If omitted,
+                          defaults to 1024 samples.
 
     Returns 2 values:
 
@@ -1061,14 +1062,11 @@ def train_model( model, criterion, optimizer, device, number_epochs, training_fi
 
     """
 
-    # Number of training samples per batch.
-    BATCH_SIZE      = 1024
-
     # Number of batches to train on per training loss measurement.
     MINI_BATCH_SIZE = 1024
 
     # Number of validation samples per validation batch.
-    VALIDATION_BATCH_SIZE = BATCH_SIZE * 10
+    VALIDATION_BATCH_SIZE = 10240
 
     # Setup our callback(s) so we simply call them at the right time during
     # training.
@@ -1128,7 +1126,7 @@ def train_model( model, criterion, optimizer, device, number_epochs, training_fi
     #
     # NOTE: This ignores parameters if the last batch isn't complete.
     #
-    number_batches = training_inputs.shape[0] // BATCH_SIZE
+    number_batches = training_inputs.shape[0] // batch_size
 
     # Track each mini-batch's training loss for analysis.
     training_loss_history = []
@@ -1155,8 +1153,8 @@ def train_model( model, criterion, optimizer, device, number_epochs, training_fi
         permuted_batch_indices = np.random.permutation( number_batches )
 
         for batch_index in range( number_batches ):
-            start_index = permuted_batch_indices[batch_index] * BATCH_SIZE
-            end_index   = start_index + BATCH_SIZE
+            start_index = permuted_batch_indices[batch_index] * batch_size
+            end_index   = start_index + batch_size
 
             # Get the next batch of droplets.
             inputs          = training_inputs[start_index:end_index, :]
@@ -1171,7 +1169,7 @@ def train_model( model, criterion, optimizer, device, number_epochs, training_fi
             # XXX: Need to rethink how we handle time as an input.  This is annoying
             #      to have to stack a reshaped vector each time.
             normalized_inputs = np.hstack( (normalized_inputs,
-                                            times.reshape( (BATCH_SIZE, 1) )) )
+                                            times.reshape( (batch_size, 1) )) )
 
             normalized_inputs  = torch.from_numpy( normalized_inputs ).to( device )
             normalized_outputs = torch.from_numpy( normalized_outputs ).to( device )
