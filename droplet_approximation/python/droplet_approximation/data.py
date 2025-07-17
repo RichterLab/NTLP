@@ -63,12 +63,12 @@ def batch_convert_NTLP_traces_to_particle_files( trace_paths, particles_root, di
 
     return particles_index_path, unique_particle_ids
 
-def batch_read_particles_data( particles_root, particle_ids, dirs_per_level, number_processes=0, quiet_flag=True, cold_threshold=-np.inf):
+def batch_read_particles_data( particles_root, particle_ids, dirs_per_level, number_processes=0, **kwargs ):
     """
     Reads one or more raw particle files and returns a particles DataFrame.
     Reading is performed in parallel.
 
-    Takes 6 arguments:
+    Takes 4 arguments:
 
       particles_root   - Path to the top-level directory to read raw particle
                          files from.
@@ -78,16 +78,8 @@ def batch_read_particles_data( particles_root, particle_ids, dirs_per_level, num
       number_processes - Optional number of processes to use for reading
                          particle trace files in parallel.  If omitted, defaults
                          to 0 and one process per core will be utilized.
-      quiet_flag       - Optional flag specifying whether DataFrame creation
-                         should be quiet or not.  If omitted, defaults to True
-                         and creation does not generate outputs unless an error
-                         occurs.
-      cold_threshold   - Optional floating point value specifying the lower
-                         bound for particle temperatures before they're
-                         considered "cold" and should be trimmed from the
-                         DataFrame.  Cold particles are invalid from the NTLP
-                         simulation's standpoint but were not flagged as such.
-                         If omitted, all particles are retained.
+      kwargs           - Optional dictionary of arguments to pass to
+                         read_particle_data().
 
     Returns 1 value:
 
@@ -127,13 +119,19 @@ def batch_read_particles_data( particles_root, particle_ids, dirs_per_level, num
     with multiprocessing.Pool( processes=number_processes ) as pool:
         args_list = []
         for particle_range in particle_ranges:
+            #
+            # NOTE: We're passing the keyword arguments dictionary as a
+            #       positional parameter to the internal wrapper!  This works
+            #       around the fact that 1) .starmap() doesn't handle keyword
+            #       arguments and 2) we can't run a lambda function (because it
+            #       can't be pickled).
+            #
             args_list.append( (particles_root,
                                particle_ids[particle_range],
                                dirs_per_level,
-                               quiet_flag,
-                               cold_threshold) )
+                               kwargs) )
 
-        dfs = pool.starmap( read_particles_data, args_list )
+        dfs = pool.starmap( _read_particles_data_wrapper, args_list )
 
     # Concatenate the resulting DataFrames.
     return pd.concat( dfs, axis=0 )
@@ -888,14 +886,45 @@ def read_NTLP_data( file_name, number_ranks ):
 
     return df
 
-def read_particles_data( particles_root, particle_ids, dirs_per_level, quiet_flag=True, cold_threshold=-np.inf ):
+def _read_particles_data_wrapper( particles_root, particle_ids, dirs_per_level, kwargs ):
+    """
+    Wrapper to read_particles_data() that can be called with a
+    multiprocessing.pool().  This proxies a required keyword arguments
+    dictionary, possibly empty, into the optional keyword arguments dictionary
+    that the wrapped function expects.
+
+    Takes 4 arguments:
+
+      particles_root - Path to the top-level directory to read raw particle
+                       files from.
+      particle_ids   - Sequence of particle identifiers to read the associated
+                       raw particle files.
+      dirs_per_level - Number of subdirectories per level in the particle files
+                       directory hierarchy.
+      kwargs         - Dictionary of keyword arguments to supply to read_particle_data().
+
+                       NOTE: This is required and not optional!
+
+    Returns 1 value:
+
+      particle_df - DataFrame with one row per particle identifier in particle_ids.
+                    See read_particle_data() for details on the columns contained.
+
+    """
+
+    return read_particles_data( particles_root,
+                                particle_ids,
+                                dirs_per_level,
+                                **kwargs )
+
+def read_particles_data( particles_root, particle_ids, dirs_per_level, quiet_flag=True, cold_threshold=-np.inf, time_range=[-np.inf, np.inf] ):
     """
     Reads one or more raw particle files and creates a particle-centric
     DataFrame with one row per particle read.  Each row contains all of the
     observations stored as 1D NumPy arrays making it easy to operate on the
     entirety of individual particle's lifetimes.
 
-    Takes 5 arguments:
+    Takes 6 arguments:
 
       particles_root - Path to the top-level directory to read raw particle
                        files from.
@@ -912,6 +941,11 @@ def read_particles_data( particles_root, particle_ids, dirs_per_level, quiet_fla
                        and should be trimmed from the DataFrame.  Cold particles
                        are invalid from the NTLP simulation's standpoint but were
                        not flagged as such.  If omitted, all particles are retained.
+      time_range     - Optional sequence of two values specifying the start and
+                       end simulation times to crop particle observations to.
+                       Observations outside of the window are discarded.  If
+                       omitted, defaults to [-np.inf, np.inf] and all observations
+                       are retained.
 
     Returns 1 value:
 
@@ -925,6 +959,8 @@ def read_particles_data( particles_root, particle_ids, dirs_per_level, quiet_fla
                                               created.
                       "death time":           Simulation time when this particle was
                                               destroyed.
+                      "times":                1D NumPy array of Simulation times
+                                              for each of the observations.
                       "integration times":    1D NumPy array of the timestep size
                       "number be failures":   XXX
                       "be statuses":
@@ -980,6 +1016,7 @@ def read_particles_data( particles_root, particle_ids, dirs_per_level, quiet_fla
     particles_df["number observations"] = zeros_int32
     particles_df["birth time"]          = zeros_float32
     particles_df["death time"]          = zeros_float32
+    particles_df["times"]               = pd.Series( dtype=object )
     particles_df["integration times"]   = pd.Series( dtype=object )
     particles_df["number be failures"]  = zeros_int32
     particles_df["be statuses"]         = pd.Series( dtype=object )
@@ -1013,33 +1050,82 @@ def read_particles_data( particles_root, particle_ids, dirs_per_level, quiet_fla
         if not quiet_flag:
             print( "Processing {:d}".format( int( particle_id ) ) )
 
-        # Total number of full observations for this particle.  The last observation
-        # is ignored since we're combining the inputs of successive observations as
-        # the previous observation's outputs, and we don't have it's result.
-        particles_df.at[particle_id, "number observations"] = observations_fp32.shape[0] - 1
+        # Build this particle's timeline so we can keep the observations of
+        # interest.
+        #
+        # NOTE: This timeline includes all observation's whose inputs occur
+        #       within the range, admitting the last observation's output
+        #       to fall just outside of the range.
+        #
+        timeline_mask = ((observations_fp32[:, RECORD_TIME_INDEX] >= time_range[0]) &
+                         (observations_fp32[:, RECORD_TIME_INDEX] <= time_range[1]))
+        included_mask = np.where( timeline_mask )[0]
+
+        # Include the successive observation into the mask if the time range
+        # did not include the last observation.
+        if len( included_mask ) > 0:
+
+            if included_mask[-1] != (len( timeline_mask ) - 1):
+                timeline_mask[included_mask[-1] + 1] = True
+
+        # Total number of full observations for this particle.  The last
+        # observation is ignored since we're combining the inputs of successive
+        # observations as the previous observation's outputs, and we don't have
+        # it's result.
+        #
+        # NOTE: We may not have any observations if the particle existed outside
+        #       of the supplied time range.
+        #
+        particles_df.at[particle_id, "number observations"] = max( 0, timeline_mask.sum() - 1 )
+
+        # Keep track of when this particle existed regardless of whether we
+        # retain any of it's observations.
+        particles_df.at[particle_id, "birth time"] = observations_fp32[0,  RECORD_TIME_INDEX]
+        particles_df.at[particle_id, "death time"] = observations_fp32[-1, RECORD_TIME_INDEX]
+
+        # If this particle doesn't have observations set it to "empty" and move
+        # to the next.
+        if particles_df.at[particle_id, "number observations"] == 0:
+            particles_df.at[particle_id, "number be failures"]     = 0
+            particles_df.at[particle_id, "be statuses"]            = np.array( [] )
+            particles_df.at[particle_id, "times"]                  = np.array( [] )
+            particles_df.at[particle_id, "integration times"]      = np.array( [] )
+            particles_df.at[particle_id, "input be radii"]         = np.array( [] )
+            particles_df.at[particle_id, "output be radii"]        = np.array( [] )
+            particles_df.at[particle_id, "input be temperatures"]  = np.array( [] )
+            particles_df.at[particle_id, "output be temperatures"] = np.array( [] )
+            particles_df.at[particle_id, "salt masses"]            = np.array( [] )
+            particles_df.at[particle_id, "air temperatures"]       = np.array( [] )
+            particles_df.at[particle_id, "relative humidities"]    = np.array( [] )
+            particles_df.at[particle_id, "air densities"]          = np.array( [] )
+
+            continue
 
         # Backward Euler failures for this particle.
-        particles_df.at[particle_id, "number be failures"]  = (observations_int32[:-1, RECORD_BE_STATUS_INDEX] > 0).sum()
-        particles_df.at[particle_id, "be statuses"]         = observations_int32[:-1, RECORD_BE_STATUS_INDEX]
+        particles_df.at[particle_id, "number be failures"]  = (observations_int32[:-1, RECORD_BE_STATUS_INDEX][timeline_mask[:-1]] > 0).sum()
+        particles_df.at[particle_id, "be statuses"]         = observations_int32[:-1, RECORD_BE_STATUS_INDEX][timeline_mask[:-1]]
 
         # Simulation timeline.
-        particles_df.at[particle_id, "birth time"]          = observations_fp32[0,  RECORD_TIME_INDEX]
-        particles_df.at[particle_id, "death time"]          = observations_fp32[-1, RECORD_TIME_INDEX]
-        particles_df.at[particle_id, "integration times"]   = np.diff( observations_fp32[:,  RECORD_TIME_INDEX] )
+        particles_df.at[particle_id, "integration times"]   = np.diff( observations_fp32[:,  RECORD_TIME_INDEX][timeline_mask] )
 
         # Observed radii.
-        particles_df.at[particle_id, "input radii"]         = observations_fp32[:-1, RECORD_RADIUS_INDEX]
-        particles_df.at[particle_id, "output radii"]        = observations_fp32[1:,  RECORD_RADIUS_INDEX]
+        particles_df.at[particle_id, "input radii"]         = observations_fp32[:-1, RECORD_RADIUS_INDEX][timeline_mask[:-1]]
+        particles_df.at[particle_id, "output radii"]        = observations_fp32[1:,  RECORD_RADIUS_INDEX][timeline_mask[1:]]
 
         # Observed temperatures.
-        particles_df.at[particle_id, "input temperatures"]  = observations_fp32[:-1, RECORD_TEMPERATURE_INDEX]
-        particles_df.at[particle_id, "output temperatures"] = observations_fp32[1:,  RECORD_TEMPERATURE_INDEX]
+        particles_df.at[particle_id, "input temperatures"]  = observations_fp32[:-1, RECORD_TEMPERATURE_INDEX][timeline_mask[:-1]]
+        particles_df.at[particle_id, "output temperatures"] = observations_fp32[1:,  RECORD_TEMPERATURE_INDEX][timeline_mask[1:]]
 
         # Background parameters.
-        particles_df.at[particle_id, "salt masses"]         = observations_fp32[:-1, RECORD_SALT_MASS_INDEX]
-        particles_df.at[particle_id, "air temperatures"]    = observations_fp32[:-1, RECORD_AIR_TEMPERATURE_INDEX]
-        particles_df.at[particle_id, "relative humidities"] = observations_fp32[:-1, RECORD_RELATIVE_HUMIDITY_INDEX]
-        particles_df.at[particle_id, "air densities"]       = observations_fp32[:-1, RECORD_AIR_DENSITY_INDEX]
+        particles_df.at[particle_id, "salt masses"]         = observations_fp32[:-1, RECORD_SALT_MASS_INDEX][timeline_mask[:-1]]
+        particles_df.at[particle_id, "air temperatures"]    = observations_fp32[:-1, RECORD_AIR_TEMPERATURE_INDEX][timeline_mask[:-1]]
+        particles_df.at[particle_id, "relative humidities"] = observations_fp32[:-1, RECORD_RELATIVE_HUMIDITY_INDEX][timeline_mask[:-1]]
+        particles_df.at[particle_id, "air densities"]       = observations_fp32[:-1, RECORD_AIR_DENSITY_INDEX][timeline_mask[:-1]]
+
+        # Construct the particle's time line.
+        particles_df.at[particle_id, "times"]               = (particles_df.at[particle_id, "birth time"] +
+                                                               np.cumsum( particles_df.at[particle_id, "integration times"] ) -
+                                                               particles_df.at[particle_id, "integration times"][0])
 
         # Excise cold observations if requested.  These are an artifact
         # of backward Euler that produces extremely cold temperatures
@@ -1055,6 +1141,7 @@ def read_particles_data( particles_root, particle_ids, dirs_per_level, quiet_fla
             # Names of the observation columns.  Each of these stores an array
             # of observations that we're trimming.
             OBSERVATION_NAMES = [
+                "times",
                 "integration times",
                 "be statuses",
                 "input radii",
