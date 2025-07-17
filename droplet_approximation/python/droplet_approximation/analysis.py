@@ -470,8 +470,8 @@ def plot_particles( particles_df, force_flag=False, time_range=[-np.inf, np.inf]
     the following characteristics:
 
       1. Integration time, in seconds
-      2. Output radius, in meters
-      3. Output particle temperature, in Kelvin
+      2. Output BE radius, in meters
+      3. Output BE particle temperature, in Kelvin
       4. Background air temperature, in Kelvin
       5. Background relative humidity, as a percentage
       6. Salt mass, in kilograms
@@ -543,10 +543,10 @@ def plot_particles( particles_df, force_flag=False, time_range=[-np.inf, np.inf]
 
         # Keep our particle and air temperatures on the same scale.
         temperature_min = min( temperature_min,
-                               min( particle["output temperatures"][times_mask].min(),
+                               min( particle["output be temperatures"][times_mask].min(),
                                     particle["air temperatures"][times_mask].min() ) )
         temperature_max = max( temperature_max,
-                               max( particle["output temperatures"][times_mask].max(),
+                               max( particle["output be temperatures"][times_mask].max(),
                                     particle["air temperatures"][times_mask].max() ) )
 
         # Create label for this particle
@@ -557,11 +557,11 @@ def plot_particles( particles_df, force_flag=False, time_range=[-np.inf, np.inf]
         ax_h[0].set_title( "Integration Time" )
         ax_h[0].set_ylabel( "dt (s)" )
 
-        ax_h[1].plot( times[times_mask], particle["output radii"][times_mask], label=particle_label )
+        ax_h[1].plot( times[times_mask], particle["output be radii"][times_mask], label=particle_label )
         ax_h[1].set_title( "Output Radius" )
         ax_h[1].set_ylabel( "Size (m)" )
 
-        ax_h[2].plot( times[times_mask], particle["output temperatures"][times_mask], label=particle_label )
+        ax_h[2].plot( times[times_mask], particle["output be temperatures"][times_mask], label=particle_label )
         ax_h[2].set_title( "Particle Temperature" )
         ax_h[2].set_ylabel( "Kelvin" )
 

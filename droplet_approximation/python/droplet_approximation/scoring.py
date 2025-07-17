@@ -258,8 +258,8 @@ def particle_scoring_pipeline( particles_root, particle_ids, dirs_per_level, mod
             # Load parameters and mask out BE failures
             p_df                = particles_df.iloc[particle_index]
             particle_parameters = np.stack( p_df[[
-                                      "input radii",
-                                      "input temperatures",
+                                      "input be radii",
+                                      "input be temperatures",
                                       "salt masses",
                                       "air temperatures",
                                       "relative humidities",

@@ -964,10 +964,10 @@ def read_particles_data( particles_root, particle_ids, dirs_per_level, quiet_fla
                       "integration times":    1D NumPy array of the timestep size
                       "number be failures":   XXX
                       "be statuses":
-                      "input radii":
-                      "output radii":
-                      "input temperatures":
-                      "output temperatures":
+                      "input be radii":
+                      "output be radii":
+                      "input be temperatures":
+                      "output be temperatures":
                       "salt masses":
                       "air temperatures":
                       "relative humidities":
@@ -1013,21 +1013,21 @@ def read_particles_data( particles_root, particle_ids, dirs_per_level, quiet_fla
     #       "missing value" type which means Series are changed to a np.float64
     #       data type to accommodate the initial NaNs.
     #
-    particles_df["number observations"] = zeros_int32
-    particles_df["birth time"]          = zeros_float32
-    particles_df["death time"]          = zeros_float32
-    particles_df["times"]               = pd.Series( dtype=object )
-    particles_df["integration times"]   = pd.Series( dtype=object )
-    particles_df["number be failures"]  = zeros_int32
-    particles_df["be statuses"]         = pd.Series( dtype=object )
-    particles_df["input radii"]         = pd.Series( dtype=object )
-    particles_df["output radii"]        = pd.Series( dtype=object )
-    particles_df["input temperatures"]  = pd.Series( dtype=object )
-    particles_df["output temperatures"] = pd.Series( dtype=object )
-    particles_df["salt masses"]         = pd.Series( dtype=object )
-    particles_df["air temperatures"]    = pd.Series( dtype=object )
-    particles_df["relative humidities"] = pd.Series( dtype=object )
-    particles_df["air densities"]       = pd.Series( dtype=object )
+    particles_df["number observations"]    = zeros_int32
+    particles_df["birth time"]             = zeros_float32
+    particles_df["death time"]             = zeros_float32
+    particles_df["times"]                  = pd.Series( dtype=object )
+    particles_df["integration times"]      = pd.Series( dtype=object )
+    particles_df["number be failures"]     = zeros_int32
+    particles_df["be statuses"]            = pd.Series( dtype=object )
+    particles_df["input be radii"]         = pd.Series( dtype=object )
+    particles_df["output be radii"]        = pd.Series( dtype=object )
+    particles_df["input be temperatures"]  = pd.Series( dtype=object )
+    particles_df["output be temperatures"] = pd.Series( dtype=object )
+    particles_df["salt masses"]            = pd.Series( dtype=object )
+    particles_df["air temperatures"]       = pd.Series( dtype=object )
+    particles_df["relative humidities"]    = pd.Series( dtype=object )
+    particles_df["air densities"]          = pd.Series( dtype=object )
 
     for particle_id in particle_ids:
         particle_path = get_particle_file_path( particles_root, particle_id, dirs_per_level )
@@ -1088,7 +1088,6 @@ def read_particles_data( particles_root, particle_ids, dirs_per_level, quiet_fla
         if particles_df.at[particle_id, "number observations"] == 0:
             particles_df.at[particle_id, "number be failures"]     = 0
             particles_df.at[particle_id, "be statuses"]            = np.array( [] )
-            particles_df.at[particle_id, "times"]                  = np.array( [] )
             particles_df.at[particle_id, "integration times"]      = np.array( [] )
             particles_df.at[particle_id, "input be radii"]         = np.array( [] )
             particles_df.at[particle_id, "output be radii"]        = np.array( [] )
@@ -1098,39 +1097,40 @@ def read_particles_data( particles_root, particle_ids, dirs_per_level, quiet_fla
             particles_df.at[particle_id, "air temperatures"]       = np.array( [] )
             particles_df.at[particle_id, "relative humidities"]    = np.array( [] )
             particles_df.at[particle_id, "air densities"]          = np.array( [] )
+            particles_df.at[particle_id, "times"]                  = np.array( [] )
 
             continue
 
         # Backward Euler failures for this particle.
-        particles_df.at[particle_id, "number be failures"]  = (observations_int32[:-1, RECORD_BE_STATUS_INDEX][timeline_mask[:-1]] > 0).sum()
-        particles_df.at[particle_id, "be statuses"]         = observations_int32[:-1, RECORD_BE_STATUS_INDEX][timeline_mask[:-1]]
+        particles_df.at[particle_id, "number be failures"]     = (observations_int32[:-1, RECORD_BE_STATUS_INDEX][timeline_mask[:-1]] > 0).sum()
+        particles_df.at[particle_id, "be statuses"]            = observations_int32[:-1, RECORD_BE_STATUS_INDEX][timeline_mask[:-1]]
 
         # Simulation timeline.
-        particles_df.at[particle_id, "integration times"]   = np.diff( observations_fp32[:,  RECORD_TIME_INDEX][timeline_mask] )
+        particles_df.at[particle_id, "integration times"]      = np.diff( observations_fp32[:,  RECORD_TIME_INDEX][timeline_mask] )
 
         # Observed radii.
-        particles_df.at[particle_id, "input radii"]         = observations_fp32[:-1, RECORD_RADIUS_INDEX][timeline_mask[:-1]]
-        particles_df.at[particle_id, "output radii"]        = observations_fp32[1:,  RECORD_RADIUS_INDEX][timeline_mask[1:]]
+        particles_df.at[particle_id, "input be radii"]         = observations_fp32[:-1, RECORD_RADIUS_INDEX][timeline_mask[:-1]]
+        particles_df.at[particle_id, "output be radii"]        = observations_fp32[1:,  RECORD_RADIUS_INDEX][timeline_mask[1:]]
 
         # Observed temperatures.
-        particles_df.at[particle_id, "input temperatures"]  = observations_fp32[:-1, RECORD_TEMPERATURE_INDEX][timeline_mask[:-1]]
-        particles_df.at[particle_id, "output temperatures"] = observations_fp32[1:,  RECORD_TEMPERATURE_INDEX][timeline_mask[1:]]
+        particles_df.at[particle_id, "input be temperatures"]  = observations_fp32[:-1, RECORD_TEMPERATURE_INDEX][timeline_mask[:-1]]
+        particles_df.at[particle_id, "output be temperatures"] = observations_fp32[1:,  RECORD_TEMPERATURE_INDEX][timeline_mask[1:]]
 
         # Background parameters.
-        particles_df.at[particle_id, "salt masses"]         = observations_fp32[:-1, RECORD_SALT_MASS_INDEX][timeline_mask[:-1]]
-        particles_df.at[particle_id, "air temperatures"]    = observations_fp32[:-1, RECORD_AIR_TEMPERATURE_INDEX][timeline_mask[:-1]]
-        particles_df.at[particle_id, "relative humidities"] = observations_fp32[:-1, RECORD_RELATIVE_HUMIDITY_INDEX][timeline_mask[:-1]]
-        particles_df.at[particle_id, "air densities"]       = observations_fp32[:-1, RECORD_AIR_DENSITY_INDEX][timeline_mask[:-1]]
+        particles_df.at[particle_id, "salt masses"]            = observations_fp32[:-1, RECORD_SALT_MASS_INDEX][timeline_mask[:-1]]
+        particles_df.at[particle_id, "air temperatures"]       = observations_fp32[:-1, RECORD_AIR_TEMPERATURE_INDEX][timeline_mask[:-1]]
+        particles_df.at[particle_id, "relative humidities"]    = observations_fp32[:-1, RECORD_RELATIVE_HUMIDITY_INDEX][timeline_mask[:-1]]
+        particles_df.at[particle_id, "air densities"]          = observations_fp32[:-1, RECORD_AIR_DENSITY_INDEX][timeline_mask[:-1]]
 
         # Construct the particle's time line.
-        particles_df.at[particle_id, "times"]               = (particles_df.at[particle_id, "birth time"] +
-                                                               np.cumsum( particles_df.at[particle_id, "integration times"] ) -
-                                                               particles_df.at[particle_id, "integration times"][0])
+        particles_df.at[particle_id, "times"]                  = (particles_df.at[particle_id, "birth time"] +
+                                                                  np.cumsum( particles_df.at[particle_id, "integration times"] ) -
+                                                                  particles_df.at[particle_id, "integration times"][0])
 
         # Excise cold observations if requested.  These are an artifact
         # of backward Euler that produces extremely cold temperatures
         # when the process should have failed.
-        if particles_df.at[particle_id, "input temperatures"].min() < cold_threshold:
+        if particles_df.at[particle_id, "input be temperatures"].min() < cold_threshold:
 
             # Cold particles occur once toward the beginning of their lifetime
             # where their temperature plunges for one (maybe two) timesteps.
@@ -1144,10 +1144,10 @@ def read_particles_data( particles_root, particle_ids, dirs_per_level, quiet_fla
                 "times",
                 "integration times",
                 "be statuses",
-                "input radii",
-                "output radii",
-                "input temperatures",
-                "output temperatures",
+                "input be radii",
+                "output be radii",
+                "input be temperatures",
+                "output be temperatures",
                 "salt masses",
                 "air temperatures",
                 "relative humidities",
@@ -1155,7 +1155,7 @@ def read_particles_data( particles_root, particle_ids, dirs_per_level, quiet_fla
             ]
 
             # Locate where the cold particle occurs.
-            cold_observation_index = particles_df.at[particle_id, "input temperatures"].argmin()
+            cold_observation_index = particles_df.at[particle_id, "input be temperatures"].argmin()
             trim_index             = cold_observation_index + 1 + NUMBER_PADDING_POINTS
 
             # Subtract the trimmed observations and pretend that the particle
