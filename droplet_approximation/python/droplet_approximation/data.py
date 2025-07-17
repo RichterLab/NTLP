@@ -823,19 +823,21 @@ def normalize_NTLP_data( df ):
     df["normalized output radius"]      = (np.log10(df["output radius"]) - np.mean( parameter_ranges["radius"] )) / (np.diff( parameter_ranges["radius"] )/2)
     df["normalized output temperature"] = (df["output temperature"] - np.mean( parameter_ranges["temperature"] )) / (np.diff( parameter_ranges["temperature"] )/2)
 
-def read_NTLP_data( file_name ):
+def read_NTLP_data( file_name, number_ranks ):
     """
     Reads all of the fixed-size binary records from the path specified and returns
     a pandas DataFrame containing the processed data.
 
-    Takes 1 argument:
+    Takes 2 argument:
 
       file_name           - String, path to NTLP dump
+      number_ranks        - Integer, number of MPI ranks in the simulation that generated
+                            the NTLP trace.
 
     Returns 1 value:
 
       df  - Pandas DataFrame containing:
-        particle id         - integer, equals 100 x particle id + processor rank
+        particle id         - integer, equals number_ranks x particle id + processor rank
         be flag             - integer flag, 0 if backwards euler failed to produce
                               an output. 1 if it successfully produced an output.
         time                - float, simulation time at which this sample was taken
@@ -870,7 +872,7 @@ def read_NTLP_data( file_name ):
     df = pd.DataFrame( data=inputs_outputs,
                        columns=record_data_type.names )
 
-    df["processor"] = df["particle id"] % 100
+    df["processor"] = df["particle id"] % number_ranks
 
     df.sort_values( by=["particle id", "time"], ascending=True, inplace=True )
 
