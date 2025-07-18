@@ -635,6 +635,92 @@ def create_training_file( file_name, number_droplets, weird_file_name=None, user
                                                weird_inputs,
                                                weird_outputs )
 
+def get_evaluation_column_names( evaluation_tags ):
+    """
+    Returns the names of evaluation column names for accessing the radii and
+    temperature evaluations in a particles DataFrame.
+
+    Note that these columns are only valid for DataFrames loaded with the same
+    evaluations.  See read_particle_data() for details.
+
+    Takes 1 argument:
+
+      evaluation_tag - String specifying the evaluation file to get the
+                       corresponding DataFrame columns.  May be specified as
+                       a sequence of evaluation tags if multiple evaluations
+                       are requested.
+
+    Returns 1 value:
+
+      column_names - A pair of DataFrame column names, the first component is
+                     for radii and the second for the temperatures.  Will be a
+                     sequence of pairs if evaluation_tag is a sequence.
+
+    """
+
+    # Column name templates.
+    #
+    # NOTE: This should match the style of the input BE column names.
+    #
+    RADII_TEMPLATE        = "output {:s} radii"
+    TEMPERATURES_TEMPLATE = "output {:s} temperatures"
+
+    # Figure out whether we need to wrap/unwrap a single pair or not.
+    scalar_flag = isinstance( evaluation_tag, str )
+
+    if scalar_flag:
+        evaluation_tag = [evaluation_tag]
+
+    # Build the column names for each tag.
+    column_names = []
+    for evaluation_tag in evaluation_tag:
+        column_names.append( (RADII_TEMPLATE.format( evaluation_tag ),
+                              TEMPERATURES_TEMPLATE.format( evaluation_tag )) )
+
+    # Return the same data type as received from the caller.
+    if scalar_flag:
+        return column_names[0]
+    else:
+        return column_names
+
+def get_evaluation_file_paths( particle_path, evaluation_extensions=[] ):
+    """
+    Returns the path to the evaluation file associated with the provided
+    raw particle file path.  The type of evaluation file is given by the
+    file extension provided.
+
+    Takes 2 arguments:
+
+      particle_path        - Path to the reference, raw particle file.
+      evaluation_extension - File name extension of the evaluation file
+                             of interest.  May be specified as a sequence
+                             of extensions if multiple evaluation files
+                             are requested.
+
+    Returns 1 value:
+
+      evaluation_path - Path to the evaluation file.  Will be a sequence of
+                        evaluation file paths if evaluation_extension is.
+
+    """
+
+    # Figure out whether we need to wrap/unwrap a single path or not.
+    scalar_flag = isinstance( evaluation_extension, str )
+
+    if scalar_flag:
+        evaluation_extension = [evaluation_extension]
+
+    # Add the file extensions to the particle file's path prefix.
+    particle_root    = os.path.splitext( particle_path )[0]
+    evaluation_paths = list( map( lambda extension: particle_root + "." + extension,
+                                  evaluation_extension ) )
+
+    # Return the same data type as received from the caller.
+    if scalar_flag:
+        return evaluation_paths[0]
+    else:
+        return evaluation_paths
+
 def get_particle_file_path( particles_root, particle_id, dirs_per_level ):
     """
     Returns the path to the raw particles file associated with the specified
@@ -917,7 +1003,7 @@ def _read_particles_data_wrapper( particles_root, particle_ids, dirs_per_level, 
                                 dirs_per_level,
                                 **kwargs )
 
-def read_particles_data( particles_root, particle_ids, dirs_per_level, quiet_flag=True, cold_threshold=-np.inf, time_range=[-np.inf, np.inf] ):
+def read_particles_data( particles_root, particle_ids, dirs_per_level, quiet_flag=True, cold_threshold=-np.inf, time_range=[-np.inf, np.inf], evaluations={} ):
     """
     Reads one or more raw particle files and creates a particle-centric
     DataFrame with one row per particle read.  Each row contains all of the
@@ -946,32 +1032,91 @@ def read_particles_data( particles_root, particle_ids, dirs_per_level, quiet_fla
                        Observations outside of the window are discarded.  If
                        omitted, defaults to [-np.inf, np.inf] and all observations
                        are retained.
+      evaluations    - Optional dictionary containing a map of tags to evaluation
+                       file extensions to read and incorporate into the DataFrame.
+                       If omitted, defaults to an empty dictionary and no
+                       evaluations are processed.
+
+                       NOTE: If an evaluation file is missing, DataFrame
+                             construction is aborted so the issue can be
+                             remedied.
 
     Returns 1 value:
 
       particle_df - DataFrame with one row per particle identifier in particle_ids.
                     Contains the following columns:
 
-                      "number observations":  Number of observations for the particle.
-                                              This is the length of each of the 1D array
-                                              columns.
-                      "birth time":           Simulation time when this particle was
-                                              created.
-                      "death time":           Simulation time when this particle was
-                                              destroyed.
-                      "times":                1D NumPy array of Simulation times
-                                              for each of the observations.
-                      "integration times":    1D NumPy array of the timestep size
-                      "number be failures":   XXX
-                      "be statuses":
-                      "input be radii":
-                      "output be radii":
-                      "input be temperatures":
-                      "output be temperatures":
-                      "salt masses":
-                      "air temperatures":
-                      "relative humidities":
-                      "air densities":
+                      "number observations":    Number of observations for the
+                                                particle.  This is the length of
+                                                each of the 1D array columns.
+                      "birth time":             Simulation time when this
+                                                particle was created.
+                      "death time":             Simulation time when this
+                                                particle was destroyed.
+                      "times":                  1D NumPy array of Simulation
+                                                times for each of the
+                                                observations.
+                      "integration times":      1D NumPy array of the timestep
+                                                size.
+                      "number be failures":     Non-negative number of backward
+                                                Euler failures across a
+                                                particle's observations.
+                      "be statuses":            1D NumPy array of integral
+                                                backward Euler (BE) status
+                                                codes, one per observation:
+
+                                                  0 - BE succeeded
+                                                  1 - Gauss-Newton and
+                                                      Levenberg-Marquardt both
+                                                      failed to converge
+                                                  2 - BE generated a NaN
+                                                      particle radius
+                                                  3 - BE generated a negative
+                                                      particle radius
+                                                  4 - BE generated a NaN
+                                                      particle temperature
+                                                  5 - BE generated a freezing
+                                                      particle temperature (less
+                                                      than 273.15K)
+                                                  6 - BE generated a particle
+                                                      with a radius larger than
+                                                      10 millimeters (1e-2m)
+
+                      "input be radii":         1D NumPy array of particle
+                                                radii before backward Euler, in
+                                                meters.
+                      "output be radii":        1D NumPy array of particle
+                                                radii after backward Euler, in
+                                                meters.
+                      "input be temperatures":  1D NumPy array of particle
+                                                temperatures before backward
+                                                Euler, in Kelvin.
+                      "output be temperatures": 1D NumPy array of particle
+                                                temperatures after backward
+                                                Euler, in Kelvin.
+                      "salt masses":            1D NumPy array of the particle's
+                                                salt mass, in kilograms.
+                      "air temperatures":       1D NumPy array of air
+                                                temperatures at the particle's
+                                                positions, in Kelvin.
+                      "relative humidities":    1D NumPy array of fractional
+                                                relative humidities, in the
+                                                range of [0, 1.5].
+                      "air densities":          1D NumPy array of air density
+                                                at the particle's positions,
+                                                in kilogram/meter^3.
+
+                    If evaluations is supplied then two additional columns
+                    per evaluation tag (key) are present.  These tags
+                    are substituted into the following templates to create
+                    the additional column names:
+
+                     "output <tag> radii":        1D NumPy array of particle
+                                                  radii after <tag>'s evaluation,
+                                                  in meters.
+                     "output <tag> temperatures": 1D NumPy array of particle
+                                                  temperatures after <tag>'s
+                                                  evaluation, in Kelvin.
 
     """
 
@@ -986,6 +1131,31 @@ def read_particles_data( particles_root, particle_ids, dirs_per_level, quiet_fla
     RECORD_AIR_TEMPERATURE_INDEX   = 6
     RECORD_RELATIVE_HUMIDITY_INDEX = 7
     RECORD_AIR_DENSITY_INDEX       = 8
+
+    # Names of the observation columns.  Each of these stores an array of
+    # observations that could be trimmed due to cold particles, if requested.
+    #
+    # NOTE: These do not yet include the evaluation observation.  Those
+    #       columns are added later.
+    #
+    OBSERVATION_NAMES = [
+        "times",
+        "integration times",
+        "be statuses",
+        "input be radii",
+        "output be radii",
+        "input be temperatures",
+        "output be temperatures",
+        "salt masses",
+        "air temperatures",
+        "relative humidities",
+        "air densities"
+    ]
+
+    # Rearrange the evaluations map into arrays of tags and extensions for
+    # easier access.
+    evaluation_tags       = list( evaluations.keys() )
+    evaluation_extensions = list( evaluations.values() )
 
     data_dict    = {"particle id": particle_ids}
     particles_df = pd.DataFrame( data_dict ).set_index( "particle id" )
@@ -1003,6 +1173,9 @@ def read_particles_data( particles_root, particle_ids, dirs_per_level, quiet_fla
     zeros_float32 = pd.Series( np.zeros( number_particles, dtype=np.float32 ),
                                index=particle_ids )
 
+    # Create the columns we'll populate below with the correct data types.
+    # Scalar columns must specify their data type (implicitly by initializing it
+    # with a NumPy array) otherwise they'll default to np.float64.
     #
     # NOTE: Order matters here!  Put the more useful information first so it's
     #       easily visible when inspecting the DataFrame.
@@ -1029,6 +1202,20 @@ def read_particles_data( particles_root, particle_ids, dirs_per_level, quiet_fla
     particles_df["relative humidities"]    = pd.Series( dtype=object )
     particles_df["air densities"]          = pd.Series( dtype=object )
 
+    # Add the evaluation columns.  Each of them are an array like the other
+    # observation columns.
+    #
+    # NOTE: We add these last as they're not (necessarily) more important than
+    #       the original observations.
+    #
+    evaluation_column_names = get_evaluation_column_names( evaluation_tags )
+    for column_names_pair in evaluation_column_names:
+        evaluation_radii_name, evaluation_temperatures_name = *column_names_pair
+
+        particles_df[evaluation_radii_name]        = pd.Series( dtype=object )
+        particles_df[evaluation_temperatures_name] = pd.Series( dtype=object )
+
+    # Start processing particles.
     for particle_id in particle_ids:
         particle_path = get_particle_file_path( particles_root, particle_id, dirs_per_level )
 
@@ -1086,18 +1273,10 @@ def read_particles_data( particles_root, particle_ids, dirs_per_level, quiet_fla
         # If this particle doesn't have observations set it to "empty" and move
         # to the next.
         if particles_df.at[particle_id, "number observations"] == 0:
-            particles_df.at[particle_id, "number be failures"]     = 0
-            particles_df.at[particle_id, "be statuses"]            = np.array( [] )
-            particles_df.at[particle_id, "integration times"]      = np.array( [] )
-            particles_df.at[particle_id, "input be radii"]         = np.array( [] )
-            particles_df.at[particle_id, "output be radii"]        = np.array( [] )
-            particles_df.at[particle_id, "input be temperatures"]  = np.array( [] )
-            particles_df.at[particle_id, "output be temperatures"] = np.array( [] )
-            particles_df.at[particle_id, "salt masses"]            = np.array( [] )
-            particles_df.at[particle_id, "air temperatures"]       = np.array( [] )
-            particles_df.at[particle_id, "relative humidities"]    = np.array( [] )
-            particles_df.at[particle_id, "air densities"]          = np.array( [] )
-            particles_df.at[particle_id, "times"]                  = np.array( [] )
+            particles_df.at[particle_id, "number be failures"] = 0
+
+            for observation_name in OBSERVATION_NAMES:
+                particles_df.at[particle_id, observation_name] = np.array( [] )
 
             continue
 
@@ -1127,6 +1306,20 @@ def read_particles_data( particles_root, particle_ids, dirs_per_level, quiet_fla
                                                                   np.cumsum( particles_df.at[particle_id, "integration times"] ) -
                                                                   particles_df.at[particle_id, "integration times"][0])
 
+        # Get the evaluation file paths to read and the corresponding columns.
+        evaluation_file_paths = get_evaluation_file_paths( particle_path,
+                                                           evaluation_extensions )
+        for evaluation_file_path, column_names_pair in zip( evaluation_file_paths,
+                                                            evaluation_column_names ):
+
+            (evaluation_radii_name,
+             evaluation_temperatures_name) = *column_names_pair
+            (evaluation_radii,
+             evaluation_temperatures)      = _read_particle_evaluation_data( evaluation_file_path )
+
+            particles_df.at[particle_id, evaluation_radii_name]        = evaluation_radii
+            particles_df.at[particle_id, evaluation_temperatures_name] = evaluation_temperatures
+
         # Excise cold observations if requested.  These are an artifact
         # of backward Euler that produces extremely cold temperatures
         # when the process should have failed.
@@ -1137,22 +1330,6 @@ def read_particles_data( particles_root, particle_ids, dirs_per_level, quiet_fla
 
             # Trim one additional point after the cold particle recovers.
             NUMBER_PADDING_POINTS = 1
-
-            # Names of the observation columns.  Each of these stores an array
-            # of observations that we're trimming.
-            OBSERVATION_NAMES = [
-                "times",
-                "integration times",
-                "be statuses",
-                "input be radii",
-                "output be radii",
-                "input be temperatures",
-                "output be temperatures",
-                "salt masses",
-                "air temperatures",
-                "relative humidities",
-                "air densities"
-            ]
 
             # Locate where the cold particle occurs.
             cold_observation_index = particles_df.at[particle_id, "input be temperatures"].argmin()
@@ -1167,6 +1344,41 @@ def read_particles_data( particles_root, particle_ids, dirs_per_level, quiet_fla
                 particles_df.at[particle_id, observation_name] = particles_df.at[particle_id, observation_name][trim_index:]
 
     return particles_df
+
+def _read_particle_evaluation_data( evaluation_file_path ):
+    """
+    Reads an evaluation file and returns the evaluations' radii and temperatures
+    as two NumPy arrays.  Separate arrays are returned to simplify assignment of
+    the resulting data into DataFrame columns.
+
+    NOTE: It is assumed that the contents of the evaluations file is sorted by
+          simulation time!  This means the arrays returned are *NOT* guaranteed
+          to be time aligned with raw particle observations.
+
+    Takes 1 argument:
+
+      evaluation_file_path - Path to evaluation file to read.
+
+    Returns 2 values:
+
+      evaluation_radii        - NumPy array, sized number_time_steps x 1, containing
+                                the evaluation radii.
+      evaluation_temperatures - NumPy array, sized number_time_steps x 1, containing
+                                the evaluation temperatures.
+
+    """
+
+    #
+    # NOTE: Evaluation data are already sorted by time!
+    #
+    evaluation_data = np.fromfile( evaluation_file_path, dtype=np.float32 ).reshape( (-1, 2) )
+
+    # Split the data into two separate arrays since we're assigning these to
+    # Pandas Series.
+    evaluation_radii        = evaluation_data[:, 0]
+    evaluation_temperatures = evaluation_data[:, 1]
+
+    return (evaluation_radii, evaluation_temperatures)
 
 def read_training_file( file_name ):
     """
