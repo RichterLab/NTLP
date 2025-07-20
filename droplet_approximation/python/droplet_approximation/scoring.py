@@ -23,6 +23,7 @@ def calculate_cusum( differences, tolerance ):
     MLP and BE output.
 
     Takes 2 arguments:
+
       differences - NumPy array, 1D for one variable or 2D for simultaneous
                     evaluation, sized number_variables x number_observations,
                     contains arrays of the differences to analyze.
@@ -30,12 +31,14 @@ def calculate_cusum( differences, tolerance ):
                     variable and corresponds to `k` in CUSUM formula.
 
     Returns 1 value:
+
       cusum - NumPy array, sized number_variables x 2 x number_observations,
               contains:
-                  an array of the positive cumulative sums for each
-                      variable at each time step at index [..., 0, :]
-                  an array of the negative cumulative sums for each
-                      variable at each time step at index [..., 1, :]
+
+                  1. an array of the positive cumulative sums for each
+                     variable at each time step at index [..., 0, :]
+                  2. an array of the negative cumulative sums for each
+                     variable at each time step at index [..., 1, :]
 
     """
 
@@ -86,6 +89,7 @@ def detect_cusum_deviations( cusum_data, threshold ):
     the indexes where the CUSUM begins to exceed the error threshold (h).
 
     Takes 2 arguments:
+
       cusum_data - Array, sized number_variables x 2 x number_observations.
                    Usually, this is output data from `calculate_cusum`.
                    Optionally can provide a 2D array of 2 x number_observations
@@ -98,10 +102,12 @@ def detect_cusum_deviations( cusum_data, threshold ):
                    `h` in the CUSUM formula.
 
     Returns 1 value:
+
       cusum_edge_mask - Array, sized number_variables x 2 x number_observations,
                         containing an array of masks for each variable and
                         positive/negative CUSUM. False everywhere except
                         at the index where the CUSUM starts exceeding `threshold`.
+
     """
 
     if cusum_data.ndim == 3:
@@ -140,14 +146,16 @@ def identity_norm( rt_data ):
     nothing to `rt_data`.
 
     Takes 1 argument:
-      rt_data - NumPy array, time steps x 2 containing
-                    radius data in natural ranges at 0
-                    temperature data in natural ranges at 1
+
+      rt_data - NumPy array, sized, time steps x 2, containing 1) radius data in
+                natural ranges at 0, and 2) temperature data in natural ranges
+                at 1.
 
     Returns 1 value:
-      rt_data - NumPy array, time steps x 2 containing
-                    radius data in normed ranges at 0
-                    temperature data in normed ranges at 1
+
+      rt_data - NumPy array, sized, time steps x 2, containing 1) radius data in
+                normed ranges at 0, and 2) temperature data in normed ranges at
+                1.
 
     """
 
@@ -422,6 +430,7 @@ class ScoringReport():
                   max_clusters=7, number_processes=0, number_batches=1, parameter_ranges=None ):
         """
         Takes 12 arguments:
+
           particles_root        - Path to the top-level directory to read raw
                                   particle files from.
           particle_ids          - Sequence of particle identifiers to process.
@@ -657,6 +666,7 @@ class ScoringReport():
           **kwargs                  - Additional arguments for BayesianGaussianMixture.
 
         Returns nothing.
+
         """
 
         self.z_score_model           = StandardScaler()
