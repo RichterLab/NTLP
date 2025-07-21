@@ -20,6 +20,21 @@ DROPLET_RELATIVE_HUMIDITY_RANGE = np.array( (0.65, 1.1) )
 DROPLET_RHOA_RANGE              = np.array( (0.8, 1.2) )
 DROPLET_TIME_LOG_RANGE          = np.array( (-2.0, 1.0) )
 
+# Tolerances for BDF solves.  Per solve_ivp() the effective tolerance is:
+#
+#   absolute_tolerance + (solution * relative_tolerance)
+#
+# Where the local error estimate used for convergence is kept within this value.
+# We specify two absolute tolerances, one each for radius and temperature, since
+# they have significantly different magnitudes and ranges.
+#
+# NOTE: These values are significantly tighter than solve_ivp()'s defaults
+#       and are required for clean data with small particles (micron sized and
+#       smaller, i.e. radius <= 1e-6m).
+#
+BDF_TOLERANCE_ABSOLUTE = (1e-10, 1e-4)
+BDF_TOLERANCE_RELATIVE = 1e-7
+
 def dydt( t, y, parameters ):
     """
     Differential equations governing a water droplet's radius and temperature as
