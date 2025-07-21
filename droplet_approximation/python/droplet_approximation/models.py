@@ -74,20 +74,74 @@ class SimpleNet( nn.Module ):
 
         return x
 
+def do_bdf( input_parameters, times ):
+    """
+    Evaluates droplet parameters using backward differentiation formula (BDF) at the
+    supplied simulation times.
+
+    Evaluates each droplet parameter independently so as to provide comparison of
+    BDF's solution against the reference observation.  The ith input is used to
+    generate the ith output.
+
+    Takes 2 arguments:
+
+      input_parameters    - NumPy array, sized number_time_steps x 6, containing the
+                            input parameters for a single particle in order by time.
+                            These are provided in their natural, physical ranges.
+      times               - NumPy array, shaped number_time_steps x 1, containing
+                            the time at each step.
+
+    Returns 1 value:
+
+      output_parameters   - NumPy array, sized number_time_steps x 2, containing
+                            the evaluated size and temperature of the particle
+                            along its background parameters with BDF in natural
+                            ranges.
+
+                            NOTE: The final timestep's outputs are zero since
+                                  they cannot be computed without an additional
+                                  simulation time.  This padding ensures
+                                  output_parameters has a compatible shape with
+                                  input_parameters.
+
+    """
+
+    integration_times = np.diff( times )
+
+    # Our outputs are sized the same as our inputs though the last value is set
+    # to zero since we don't have an integration time (or output to compare
+    # against) for the last observation.  As a result we skip it.
+    output_parameters        = np.empty( (input_parameters.shape[0], 2), dtype=np.float32 )
+    output_parameters[-1, :] = 0
+
+    # Evaluate all but the last observation since those are the only ones we have
+    # integration times for.
+    for time_index in range( input_parameters.shape[0] - 1 ):
+        output_parameters[time_index, :] = solve_ivp_float32_outputs( dydt,
+                                                                      [0, integration_times[time_index]],
+                                                                      input_parameters[time_index, :2],
+                                                                      method="BDF",
+                                                                      t_eval=[integration_times[time_index]],
+                                                                      args=(input_parameters[time_index, 2:],) ).y[:, 0]
+
+    return output_parameters
+
 def do_inference( input_parameters, times, model, device ):
     """
     Estimates droplet parameters using a specified model.  Model evaluation is
-    performed on the CPU
+    performed on the device specified.
 
     Takes 4 arguments:
 
-      input_parameters - NumPy array, sized number_droplets x 6, containing the
-                         input parameters for number_droplets-many droplets.  These are
-                         provided in their natural, physical ranges.
-      times            - NumPy array, sized number_droplets, containing the integration
-                         times to evaluate each droplet at.
+      input_parameters - NumPy array, sized number_time_steps x 6, containing
+                         the input parameters for either one particle with
+                         number_time_steps-many time steps or parameters for
+                         number_time_steps-many droplets each with a single
+                         observations.
+      times            - NumPy array, sized number_time_steps x 1, containing
+                         the time at each step.
       model            - PyTorch model to use.
-      device           - Device string to perform the evaluation on.
+      device           - String specifying the device to evaluate with.
 
     Returns 1 value:
 
@@ -96,45 +150,60 @@ def do_inference( input_parameters, times, model, device ):
                           at the specified integraition times.  These are in their
                           natural physical ranges.
 
+                            NOTE: The final timestep's outputs are zero since
+                                  they cannot be computed without an additional
+                                  simulation time.  This padding ensures
+                                  output_parameters has a compatible shape with
+                                  input_parameters.
+
     """
 
     eval_model = model.to( device )
     eval_model.eval()
 
-    normalized_inputs = np.hstack( (normalize_droplet_parameters( input_parameters ),
-                                    times.reshape( (-1, 1) )) ).astype( "float32" )
-    # Don't calculate gradients since they are
-    # Unnecessary for inference.
+    # Stack the normalized parameters (all except the last) along with the
+    # integration times so we have a single array to supply to the model.
+    normalized_inputs = np.hstack( (normalize_droplet_parameters( input_parameters[:-1, :] ),
+                                    np.diff( times ).reshape( (-1, 1) )) ).astype( "float32" )
+
+    # Allocate the outputs and zero the last output since direct inference does
+    # not produce one due to the lack of an integration time for the final
+    # input..
+    normalized_outputs        = torch.empty( (input_parameters.shape[0], 2), dtype=torch.float32 ).to( device )
+    normalized_outputs[-1, :] = 0
+
+    # Disable gradient accumulation since they're unnecessary for inference.
     with torch.no_grad():
-        normalized_outputs = eval_model( torch.from_numpy( normalized_inputs ).to( device ) )
+        normalized_outputs[:-1, :] = eval_model( torch.from_numpy( normalized_inputs ).to( device ) )
 
     return scale_droplet_parameters( normalized_outputs.cpu() )
 
 def do_iterative_bdf( input_parameters, times ):
     """
-    Evaluates a particle trajectory along given background inputs with
-    bdf. Requires all inputs to be sorted with respect to time.
-
-    Evalutes iteratively, using the output time/radius for the (n-1)th time for
-    the n-th time. Background parameters are tracked with `input_parameters[2:]`
-    for each time step.
+    Iteratively evaluates a particle trajectory along given background inputs with
+    backward differentiation formula (BDF).  The outputs for the ith time are
+    used as the input for the (i+1)th time.
 
     Takes 2 arguments:
 
       input_parameters    - NumPy array, sized number_time_steps x 6, containing the
                             input parameters for a single particle in order by time.
                             These are provided in their natural, physical ranges.
-      times               - NumPy array, shaped 1 x data length containing
+      times               - NumPy array, shaped number_time_steps x 1, containing
                             the time at each step.
 
     Returns 1 value:
 
-      output_parameters   - NumPy array, sized input_parameters.shape[0] x 2, containing the
+      output_parameters   - NumPy array, sized number_time_steps x 2, containing the
                             estimated trajectory of a particle integrated
                             along its background parameters with BDF
-                            in natural ranges. Does NOT calculate
-                            output for the last column so that the lengths
-                            of the input and output match
+                            in natural ranges.
+
+                            NOTE: The first timestep's outputs are set to the
+                                  inputs since they cannot be computed without
+                                  an additional, preceding input.  This padding
+                                  ensures output_parameters has a compatible
+                                  shape with input_parameters.
 
     """
 
@@ -156,31 +225,32 @@ def do_iterative_bdf( input_parameters, times ):
 
 def do_iterative_inference( input_parameters, times, model, device ):
     """
-    Estimates a particle trajectory along given background inputs. Requires all
-    inputs to be sorted with respect to time.
-
-    Evaluates iteratively, using the output time/radius for the (n-1)th time for
-    the n-th time. Background parameters are tracked with `input_parameters[2:]`
-    for each time step.
+    Iteratively Estimates a particle trajectory along given background inputs
+    using a MLP model.  The outputs for the ith time are used as the input for
+    the (i+1)th time.
 
     Takes 4 arguments:
 
       input_parameters    - Array, sized number_time_steps x 6, containing the
                             input parameters for a single particle in order by time.
                             These are provided in their natural, physical ranges.
-      times               - Array, sized 1 x data length containing the time at
-                            each step.
+      times               - Array, sized number_time_steps x 1, containing the
+                            time at each step.
       model               - PyTorch model to use.
-      device              - Device string to evaluate on.
+      device              - String specifying the device to evaluate with.
 
     Returns 1 value:
 
-      output_parameters   - NumPy array, sized input_parameters.shape[0] x 2,
-                            containing the estimated trajectory of a particle
-                            integrated along its background parameters with the
-                            MLP in natural ranges.  Does NOT calculate output
-                            for the last column so that the lengths of the input
-                            and output match.
+      output_parameters   - NumPy array, sized number_time_steps x 2, containing
+                            the estimated trajectory of a particle integrated
+                            along its background parameters with the MLP in
+                            natural ranges.
+
+                            NOTE: The first timestep's outputs are set to the
+                                  inputs since they cannot be computed without
+                                  an additional, preceding input.  This padding
+                                  ensures output_parameters has a compatible
+                                  shape with input_parameters.
 
     """
 
