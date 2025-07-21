@@ -11,9 +11,18 @@ from sklearn.mixture import BayesianGaussianMixture
 
 from torch import multiprocessing
 
-from .data import be_success_mask, read_particles_data
-from .models import do_inference, do_iterative_inference
-from .physics import set_parameter_ranges
+from .data import ParticleRecord, \
+                  be_success_mask, \
+                  get_evaluation_file_path, \
+                  get_particle_file_path
+from .models import do_bdf, \
+                    do_inference, \
+                    do_iterative_bdf, \
+                    do_iterative_inference
+from .physics import BDF_TOLERANCE_ABSOLUTE, \
+                     BDF_TOLERANCE_RELATIVE, \
+                     get_parameter_ranges, \
+                     set_parameter_ranges
 
 def calculate_cusum( differences, tolerance ):
     """
@@ -140,6 +149,17 @@ class DeviationParameter( Enum ):
     RADIUS      = 0
     TEMPERATURE = 1
 
+class EvaluationType( Enum ):
+    """
+    Enumeration class specifying how particle observations should be evaluated.
+    """
+
+    # Evaluate with backward differentiation formula (BDF).
+    BDF = 1
+
+    # Evaluate using a trained MLP model.
+    MLP = 2
+
 def identity_norm( rt_data ):
     """
     A blank norm to use as a placeholder in analysis functions. Does
@@ -215,6 +235,195 @@ class ParticleScore:
     deviation_parameters:   np.ndarray
     deviation_times:        np.ndarray
     deviation_particle_ids: np.ndarray
+
+def particle_evaluation_pipeline( particles_root, particle_ids, dirs_per_level,
+                                  evaluation_type, evaluation_extension, iterative_flag,
+                                  parameters ):
+    """
+    Evaluates particle outputs based on backward Euler observations as inputs.
+    Loads raw particle data for each of the particle identifiers supplied,
+    evaluates outputs with the data loaded per the evaluation type, and writes
+    the results to evaluation files next to the raw particle data so they
+    may be used at a later date.
+
+    Supports BDF and MLP evaluation types, as well as iterative and direct
+    evaluations.
+
+    NOTE: This evaluates every observation for each particle.  While this may
+          generate unphysical outputs (e.g. cold particles generated from
+          backward Euler) or deviate from a particle's "true" track (e.g. due
+          to a backward Euler failure leaving a particle unchanged for one
+          timestep) this is required so that the evaluation outputs have the
+          same shape as the observations and can be properly read.
+
+    Takes 7 arguments:
+
+      particles_root       - Path to the top-level directory to read raw
+                             particle files from.
+      particle_ids         - Sequence of particle identifiers to read the
+                             associated raw particle files.
+      dirs_per_level       - Number of subdirectories per level in the particle
+                             files directory hierarchy.
+      evaluation_type      - One of the EvaluationType class' enumerations
+                             specifying the method of evaluation.  .BDF
+                             specifies backwards differentiation formula (BDF),
+                             and .MLP specifies inference with a MLP model.
+      evaluation_extension - File name extension to use when writing the
+                             evaluated outputs to disk.  Evaluation files
+                             are written in the same directory as the raw
+                             particle files they are associated with.
+      iterative_flag       - Boolean flag specifying whether iterative
+                             (True) or direct evaluation (False) should
+                             be used.  Iterative evaluation uses the
+                             previous outputs as the next time step's inputs
+                             while direct evaluation always uses the
+                             original backward Euler (BE) inputs at
+                             each time step.
+      parameters           - Dictionary of parameters to use during
+                             evaluation.  The contents depends on
+                             evaluation_type.
+
+                             For EvaluationType.BDF, the following key/values
+                             are allowed:
+
+                               atol - Absolute tolerance used during the
+                                      BDF solve.  If omitted, uses solve_ivp()'s
+                                      default.  See solve_ivp() for details.
+                               rtol - Relative tolerance used during the
+                                      BDF solve.  If omitted, uses solve_ivp()'s
+                                      default.  See solve_ivp() for details.
+
+                             For EvaluationType.MLP, the following key/values
+                             are required:
+
+                                model            - PyTorch model to evaluate
+                                                   with.
+                                device           - String specifying the device
+                                                   where evaluation should
+                                                   occur.
+                                parameter_ranges - Dictionary containing parameter
+                                                   ranges to use when evaluating
+                                                   model.  See set_parameter_ranges()
+                                                   for details.
+
+    Returns nothing.
+
+    """
+
+    #
+    # NOTE: This method works directly with the contents of raw particle files
+    #       instead of DataFrames to minimize unnecessary overhead.  It is
+    #       assumed that for the general case there are a *lot* of particles and
+    #       that some evaluation methods (e.g. BDF) are relatively slow so this
+    #       implementation avoids converting the raw observations into a
+    #       DataFrame just to convert it back into a NumPy array for evaluation.
+    #       This is particularly key for particles which have O(10^5), or more,
+    #       observations where the overhead for data conversion starts to add
+    #       up.
+    #
+
+    # Make a shallow copy of the caller's parameters so we don't modify theirs.
+    local_parameters = parameters
+
+    # Verify that we got the correct parameters for the evaluation type
+    # requested and setup the inference function handle.
+    if evaluation_type == EvaluationType.BDF:
+        # BDF can accept tolerances to control is convergence.  Use the
+        # packages's defaults if the caller didn't supply any.
+        if "atol" not in local_parameters:
+            local_parameters["atol"] = BDF_TOLERANCE_ABSOLUTE
+        if "rtol" not in local_parameters:
+            local_parameters["rtol"] = BDF_TOLERANCE_RELATIVE
+
+        if iterative_flag:
+            inference = do_iterative_bdf
+        else:
+            inference = do_bdf
+    elif evaluation_type == EvaluationType.MLP:
+        # MLP requires a model and a device to execute on.
+        if "model" not in local_parameters:
+            raise ValueError( "MLP inference requires the 'model' parameter." )
+        elif "device" not in local_parameters:
+            raise ValueError( "MLP inference requires the 'device' parameter." )
+        elif "parameter_ranges" not in local_parameters:
+            raise ValueError( "MLP inference requires the 'parameter_ranges' parameter." )
+
+        if iterative_flag:
+            inference = do_iterative_inference
+        else:
+            inference = do_inference
+    else:
+        raise ValueError( "evaluation_type must be either EvaluationTyep.BDF or EvaluationType.MLP, got {}!".format(
+            evaluation_type ) )
+
+    # Direct and iterative evaluations access a different subset of the outputs
+    # computed.  Construct a slice object to simplify the indexing below.
+    if iterative_flag:
+        # Iterative outputs use the first input as the output and use previous
+        # outputs as current inputs.
+        output_slice = slice( 1, None )
+    else:
+        # Direct outputs use the corresponding input, though there is no
+        # final output since we don't know the integration time to use.
+        output_slice = slice( None, -1 )
+
+    # MLP evaluation requires us to have the correct parameter ranges set,
+    # otherwise our scaling will generate garbage results.
+    previous_parameter_ranges = get_parameter_ranges()
+
+    if evaluation_type == EvaluationType.MLP:
+        set_parameter_ranges( local_parameters["parameter_ranges" ] )
+
+    try:
+        # Walk through each of the particles, read the raw observations,
+        # evaluate them according to the caller's specifications, and write them
+        # to disk.
+        for particle_id in particle_ids:
+
+            # Get the particle and evaluation file paths.
+            particle_path   = get_particle_file_path( particles_root, particle_id, dirs_per_level )
+            evaluation_path = get_evaluation_file_path( particle_path, evaluation_extension )
+
+            # Provide a 32-bit floating point value view of the observations.
+            # We only need the particle characteristics and environmental values
+            # and not any of the integral fields.
+            #
+            # NOTE: We must sort these to account for how the observations are
+            #       captured within NTLP.  Otherwise we may have time go
+            #       backwards and BDF/MLP won't be happy.
+            #
+            observations_fp32 = np.fromfile( particle_path, dtype=np.float32 ).reshape( -1, ParticleRecord.SIZE.value )
+            sorted_indices    = np.argsort( observations_fp32[:, ParticleRecord.TIME_INDEX.value] )
+            observations_fp32 = observations_fp32[sorted_indices, :]
+
+            outputs = np.empty( shape=(observations_fp32.shape[0] - 1, 2), dtype=np.float32 )
+
+            # Evaluate the output for every observation we're interested in.
+            # We will ignore either the first or the last based on whether
+            # we're evaluating directly or iteratively, respectively.  See
+            # the documentation for the output_slice for details.
+            if evaluation_type == EvaluationType.BDF:
+                outputs[:] = inference( observations_fp32[:, ParticleRecord.RADIUS_INDEX.value:ParticleRecord.SIZE.value],
+                                        observations_fp32[:, ParticleRecord.TIME_INDEX.value] )[output_slice, :]
+            else:
+                outputs[:] = inference( observations_fp32[:, ParticleRecord.RADIUS_INDEX.value:ParticleRecord.SIZE.value],
+                                        observations_fp32[:, ParticleRecord.TIME_INDEX.value],
+                                        local_parameters["model"],
+                                        local_parameters["device"] )[output_slice, :]
+
+            # Write out the evaluations and move on to the next particle.
+            #
+            # NOTE: This writes evaluations in a time-sorted order which doesn't
+            #       necessarily match the raw particles!
+            #
+            outputs.tofile( evaluation_path )
+    #
+    # NOTE: We don't catch exceptions here, only guarantee that the original
+    #       parameter ranges are restored before returning.
+    #
+
+    finally:
+        set_parameter_ranges( previous_parameter_ranges )
 
 def particle_scoring_pipeline( particles_root, particle_ids, dirs_per_level, model, device, cusum_error_tolerance,
                                cusum_error_threshold, norm, iterative, parameter_ranges ):

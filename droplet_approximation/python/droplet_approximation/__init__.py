@@ -11,13 +11,16 @@ from .analysis import analyze_model_iterative_performance, \
                       plot_droplet_size_temperature, \
                       plot_particles, \
                       plot_particle_history
-from .data import batch_convert_NTLP_traces_to_particle_files, \
+from .data import BE_TAG_NAME, \
+                  batch_convert_NTLP_traces_to_particle_files, \
                   batch_read_particles_data, \
                   be_success_mask, \
                   clean_training_data, \
                   convert_NTLP_trace_to_particle_files, \
                   create_droplet_batch, \
                   create_training_file, \
+                  get_evaluation_column_names, \
+                  get_evaluation_file_path, \
                   get_particle_file_path, \
                   merge_weird_parameters, \
                   normalize_NTLP_data, \
@@ -43,13 +46,15 @@ from .physics import dydt, \
                      set_parameter_ranges, \
                      solve_ivp_float32_outputs, \
                      timed_solve_ivp
-from .scoring import calculate_cusum, \
+from .scoring import DeviationDirection, \
+                     DeviationParameter, \
+                     EvaluationType, \
+                     ParticleScore, \
+                     ScoringReport, \
+                     calculate_cusum, \
                      calculate_nrmse, \
                      detect_cusum_deviations, \
-                     DeviationDirection, \
-                     DeviationParameter, \
                      identity_norm, \
-                     ParticleScore, \
+                     particle_evaluation_pipeline, \
                      particle_scoring_pipeline, \
-                     ScoringReport, \
                      standard_norm

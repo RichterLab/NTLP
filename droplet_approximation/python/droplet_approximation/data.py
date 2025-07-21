@@ -1,3 +1,4 @@
+from enum import Enum
 import fcntl
 import multiprocessing
 import os
@@ -11,6 +12,33 @@ from .physics import TimeoutError, \
                      get_parameter_ranges, \
                      scale_droplet_parameters, \
                      timed_solve_ivp
+
+# "Evaluation" tag for backward Euler (BE) so it may be handled programmatically
+# along with other evaluations.
+BE_TAG_NAME = "be"
+
+class ParticleRecord( Enum ):
+    """
+    Container for constants describing the format of a raw particle record.
+    Provides the size of the record as well as named indices into the record
+    itself.
+    """
+
+    # Indices in a raw particle record.  This is what is traced from NTLP; raw
+    # particle files are comprised of records with the same particle identifier.
+    PARTICLE_ID             = 0
+    BE_STATUS_INDEX         = 1
+    TIME_INDEX              = 2
+    RADIUS_INDEX            = 3
+    TEMPERATURE_INDEX       = 4
+    SALT_MASS_INDEX         = 5
+    AIR_TEMPERATURE_INDEX   = 6
+    RELATIVE_HUMIDITY_INDEX = 7
+    AIR_DENSITY_INDEX       = 8
+
+    # Each particle is comprised of 2x 32-bit integers and 7x 32-bit floats.
+    SIZE       = AIR_DENSITY_INDEX + 1
+    SIZE_BYTES = SIZE * 4
 
 def batch_convert_NTLP_traces_to_particle_files( trace_paths, particles_root, dirs_per_level, number_processes=0 ):
     """
@@ -254,13 +282,6 @@ def convert_NTLP_trace_to_particle_files( trace_path, particles_root, dirs_per_l
 
         return
 
-    # Each particle is comprised of 2x 32-bit integers and 7x 32-bit floats.
-    RECORD_SIZE       = 9
-    RECORD_SIZE_BYTES = RECORD_SIZE * 4
-
-    # Indices of the record's fields.
-    PARTICLE_ID_INDEX = 0
-
     # Read in a large block of records at once.
     NUMBER_RECORDS_PER_CHUNK = 1024 * 1024
 
@@ -273,7 +294,7 @@ def convert_NTLP_trace_to_particle_files( trace_path, particles_root, dirs_per_l
         # Iterate through the file reading a chunk of records at
         # a time.
         while True:
-            raw_buffer = trace_fp.read( RECORD_SIZE_BYTES * NUMBER_RECORDS_PER_CHUNK )
+            raw_buffer = trace_fp.read( ParticleRecord.SIZE_BYTES * NUMBER_RECORDS_PER_CHUNK )
 
             # We reached the end of the file in the previous iteration.
             if not raw_buffer:
@@ -281,21 +302,21 @@ def convert_NTLP_trace_to_particle_files( trace_path, particles_root, dirs_per_l
 
             # Report a partial record.  This gets dropped as we only process an
             # integral number of records.
-            if len( raw_buffer ) % RECORD_SIZE_BYTES:
+            if len( raw_buffer ) % ParticleRecord.SIZE_BYTES.value:
                 print( "'{:s}' contains a partial, trailing record!".format( trace_path ) )
 
-            number_records = len( raw_buffer ) // RECORD_SIZE_BYTES
+            number_records = len( raw_buffer ) // ParticleRecord.SIZE_BYTES.value
 
             # Create a 32-bit float array of the records read along with a
             # 32-bit integer view so we can access both halves of the record.
             # We make a 32-bit integer view on this data below.
-            chunk_array_fp32  = np.frombuffer( raw_buffer[:(number_records * RECORD_SIZE_BYTES)],
-                                               dtype=np.float32 ).reshape( -1, RECORD_SIZE )
+            chunk_array_fp32  = np.frombuffer( raw_buffer[:(number_records * ParticleRecord.SIZE_BYTES.value)],
+                                               dtype=np.float32 ).reshape( -1, ParticleRecord.SIZE.value )
             chunk_array_int32 = chunk_array_fp32.view( np.int32 )
 
             # Loop through each of the unique particles and append their records
             # into a separate file.
-            particle_ids = np.unique( chunk_array_int32[:, PARTICLE_ID_INDEX] )
+            particle_ids = np.unique( chunk_array_int32[:, ParticleRecord.PARTICLE_ID.value] )
             for particle_index, particle_id in enumerate( particle_ids ):
                 particle_path = get_particle_file_path( particles_root,
                                                         particle_id,
@@ -303,7 +324,7 @@ def convert_NTLP_trace_to_particle_files( trace_path, particles_root, dirs_per_l
                 make_particle_file_directories( particle_path )
 
                 with open( particle_path, "ab" ) as particle_fp:
-                    particle_mask = (chunk_array_int32[:, PARTICLE_ID_INDEX] == particle_id)
+                    particle_mask = (chunk_array_int32[:, ParticleRecord.PARTICLE_ID.value] == particle_id)
 
                     try:
                         # Grab the lock so we can write our particles.  This
@@ -643,7 +664,7 @@ def create_training_file( file_name, number_droplets, weird_file_name=None, user
                                                weird_inputs,
                                                weird_outputs )
 
-def get_evaluation_column_names( evaluation_tags ):
+def get_evaluation_column_names( evaluation_tag ):
     """
     Returns the names of evaluation column names for accessing the radii and
     temperature evaluations in a particles DataFrame.
@@ -691,7 +712,7 @@ def get_evaluation_column_names( evaluation_tags ):
     else:
         return column_names
 
-def get_evaluation_file_paths( particle_path, evaluation_extensions=[] ):
+def get_evaluation_file_path( particle_path, evaluation_extension ):
     """
     Returns the path to the evaluation file associated with the provided
     raw particle file path.  The type of evaluation file is given by the
@@ -1018,7 +1039,7 @@ def read_particles_data( particles_root, particle_ids, dirs_per_level, quiet_fla
     observations stored as 1D NumPy arrays making it easy to operate on the
     entirety of individual particle's lifetimes.
 
-    Takes 6 arguments:
+    Takes 7 arguments:
 
       particles_root - Path to the top-level directory to read raw particle
                        files from.
@@ -1128,30 +1149,19 @@ def read_particles_data( particles_root, particle_ids, dirs_per_level, quiet_fla
 
     """
 
-    # Each particle is comprised of 2x 32-bit integers and 7x 32-bit floats.
-    RECORD_SIZE = 9
-
-    RECORD_BE_STATUS_INDEX         = 1
-    RECORD_TIME_INDEX              = 2
-    RECORD_RADIUS_INDEX            = 3
-    RECORD_TEMPERATURE_INDEX       = 4
-    RECORD_SALT_MASS_INDEX         = 5
-    RECORD_AIR_TEMPERATURE_INDEX   = 6
-    RECORD_RELATIVE_HUMIDITY_INDEX = 7
-    RECORD_AIR_DENSITY_INDEX       = 8
-
     # Names of the observation columns.  Each of these stores an array of
     # observations that could be trimmed due to cold particles, if requested.
     #
     # NOTE: These do not yet include the evaluation observation.  Those
     #       columns are added later.
     #
+    BE_RADII_NAME, BE_TEMPERATURES_NAME = get_evaluation_column_names( BE_TAG_NAME )
     OBSERVATION_NAMES = [
         "times",
         "integration times",
         "be statuses",
-        "input be radii",
-        "output be radii",
+        BE_RADII_NAME,
+        BE_TEMPERATURES_NAME,
         "input be temperatures",
         "output be temperatures",
         "salt masses",
@@ -1202,9 +1212,9 @@ def read_particles_data( particles_root, particle_ids, dirs_per_level, quiet_fla
     particles_df["number be failures"]     = zeros_int32
     particles_df["be statuses"]            = pd.Series( dtype=object )
     particles_df["input be radii"]         = pd.Series( dtype=object )
-    particles_df["output be radii"]        = pd.Series( dtype=object )
+    particles_df[BE_RADII_NAME]            = pd.Series( dtype=object )
     particles_df["input be temperatures"]  = pd.Series( dtype=object )
-    particles_df["output be temperatures"] = pd.Series( dtype=object )
+    particles_df[BE_TEMPERATURES_NAME]     = pd.Series( dtype=object )
     particles_df["salt masses"]            = pd.Series( dtype=object )
     particles_df["air temperatures"]       = pd.Series( dtype=object )
     particles_df["relative humidities"]    = pd.Series( dtype=object )
@@ -1218,7 +1228,7 @@ def read_particles_data( particles_root, particle_ids, dirs_per_level, quiet_fla
     #
     evaluation_column_names = get_evaluation_column_names( evaluation_tags )
     for column_names_pair in evaluation_column_names:
-        evaluation_radii_name, evaluation_temperatures_name = *column_names_pair
+        evaluation_radii_name, evaluation_temperatures_name = column_names_pair
 
         particles_df[evaluation_radii_name]        = pd.Series( dtype=object )
         particles_df[evaluation_temperatures_name] = pd.Series( dtype=object )
@@ -1228,7 +1238,7 @@ def read_particles_data( particles_root, particle_ids, dirs_per_level, quiet_fla
         particle_path = get_particle_file_path( particles_root, particle_id, dirs_per_level )
 
         # Get each of the observations.
-        observations_fp32  = np.fromfile( particle_path, dtype=np.float32 ).reshape( -1, RECORD_SIZE )
+        observations_fp32  = np.fromfile( particle_path, dtype=np.float32 ).reshape( -1, ParticleRecord.SIZE.value )
 
         # Sort the observations by time.
         #
@@ -1238,7 +1248,7 @@ def read_particles_data( particles_root, particle_ids, dirs_per_level, quiet_fla
         #       could get windows of observations out of order depending on how
         #       the resulting trace files were post-processed into raw particle files.
         #
-        sorted_indices     = np.argsort( observations_fp32[:, RECORD_TIME_INDEX] )
+        sorted_indices     = np.argsort( observations_fp32[:, ParticleRecord.TIME_INDEX.value] )
         observations_fp32  = observations_fp32[sorted_indices, :]
         observations_int32 = observations_fp32.view( np.int32 )
 
@@ -1252,8 +1262,8 @@ def read_particles_data( particles_root, particle_ids, dirs_per_level, quiet_fla
         #       within the range, admitting the last observation's output
         #       to fall just outside of the range.
         #
-        timeline_mask = ((observations_fp32[:, RECORD_TIME_INDEX] >= time_range[0]) &
-                         (observations_fp32[:, RECORD_TIME_INDEX] <= time_range[1]))
+        timeline_mask = ((observations_fp32[:, ParticleRecord.TIME_INDEX.value] >= time_range[0]) &
+                         (observations_fp32[:, ParticleRecord.TIME_INDEX.value] <= time_range[1]))
         included_mask = np.where( timeline_mask )[0]
 
         # Include the successive observation into the mask if the time range
@@ -1275,8 +1285,8 @@ def read_particles_data( particles_root, particle_ids, dirs_per_level, quiet_fla
 
         # Keep track of when this particle existed regardless of whether we
         # retain any of it's observations.
-        particles_df.at[particle_id, "birth time"] = observations_fp32[0,  RECORD_TIME_INDEX]
-        particles_df.at[particle_id, "death time"] = observations_fp32[-1, RECORD_TIME_INDEX]
+        particles_df.at[particle_id, "birth time"] = observations_fp32[0,  ParticleRecord.TIME_INDEX.value]
+        particles_df.at[particle_id, "death time"] = observations_fp32[-1, ParticleRecord.TIME_INDEX.value]
 
         # If this particle doesn't have observations set it to "empty" and move
         # to the next.
@@ -1289,25 +1299,25 @@ def read_particles_data( particles_root, particle_ids, dirs_per_level, quiet_fla
             continue
 
         # Backward Euler failures for this particle.
-        particles_df.at[particle_id, "number be failures"]     = (observations_int32[:-1, RECORD_BE_STATUS_INDEX][timeline_mask[:-1]] > 0).sum()
-        particles_df.at[particle_id, "be statuses"]            = observations_int32[:-1, RECORD_BE_STATUS_INDEX][timeline_mask[:-1]]
+        particles_df.at[particle_id, "number be failures"]     = (observations_int32[:-1, ParticleRecord.BE_STATUS_INDEX.value][timeline_mask[:-1]] > 0).sum()
+        particles_df.at[particle_id, "be statuses"]            = observations_int32[:-1, ParticleRecord.BE_STATUS_INDEX.value][timeline_mask[:-1]]
 
         # Simulation timeline.
-        particles_df.at[particle_id, "integration times"]      = np.diff( observations_fp32[:,  RECORD_TIME_INDEX][timeline_mask] )
+        particles_df.at[particle_id, "integration times"]      = np.diff( observations_fp32[:, ParticleRecord.TIME_INDEX.value][timeline_mask] )
 
         # Observed radii.
-        particles_df.at[particle_id, "input be radii"]         = observations_fp32[:-1, RECORD_RADIUS_INDEX][timeline_mask[:-1]]
-        particles_df.at[particle_id, "output be radii"]        = observations_fp32[1:,  RECORD_RADIUS_INDEX][timeline_mask[1:]]
+        particles_df.at[particle_id, "input be radii"]         = observations_fp32[:-1, ParticleRecord.RADIUS_INDEX.value][timeline_mask[:-1]]
+        particles_df.at[particle_id, BE_RADII_NAME]            = observations_fp32[1:,  ParticleRecord.RADIUS_INDEX.value][timeline_mask[1:]]
 
         # Observed temperatures.
-        particles_df.at[particle_id, "input be temperatures"]  = observations_fp32[:-1, RECORD_TEMPERATURE_INDEX][timeline_mask[:-1]]
-        particles_df.at[particle_id, "output be temperatures"] = observations_fp32[1:,  RECORD_TEMPERATURE_INDEX][timeline_mask[1:]]
+        particles_df.at[particle_id, "input be temperatures"]  = observations_fp32[:-1, ParticleRecord.TEMPERATURE_INDEX.value][timeline_mask[:-1]]
+        particles_df.at[particle_id, BE_TEMPERATURES_NAME]     = observations_fp32[1:,  ParticleRecord.TEMPERATURE_INDEX.value][timeline_mask[1:]]
 
         # Background parameters.
-        particles_df.at[particle_id, "salt masses"]            = observations_fp32[:-1, RECORD_SALT_MASS_INDEX][timeline_mask[:-1]]
-        particles_df.at[particle_id, "air temperatures"]       = observations_fp32[:-1, RECORD_AIR_TEMPERATURE_INDEX][timeline_mask[:-1]]
-        particles_df.at[particle_id, "relative humidities"]    = observations_fp32[:-1, RECORD_RELATIVE_HUMIDITY_INDEX][timeline_mask[:-1]]
-        particles_df.at[particle_id, "air densities"]          = observations_fp32[:-1, RECORD_AIR_DENSITY_INDEX][timeline_mask[:-1]]
+        particles_df.at[particle_id, "salt masses"]            = observations_fp32[:-1, ParticleRecord.SALT_MASS_INDEX.value][timeline_mask[:-1]]
+        particles_df.at[particle_id, "air temperatures"]       = observations_fp32[:-1, ParticleRecord.AIR_TEMPERATURE_INDEX.value][timeline_mask[:-1]]
+        particles_df.at[particle_id, "relative humidities"]    = observations_fp32[:-1, ParticleRecord.RELATIVE_HUMIDITY_INDEX.value][timeline_mask[:-1]]
+        particles_df.at[particle_id, "air densities"]          = observations_fp32[:-1, ParticleRecord.AIR_DENSITY_INDEX.value][timeline_mask[:-1]]
 
         # Construct the particle's time line.
         particles_df.at[particle_id, "times"]                  = (particles_df.at[particle_id, "birth time"] +
@@ -1315,18 +1325,30 @@ def read_particles_data( particles_root, particle_ids, dirs_per_level, quiet_fla
                                                                   particles_df.at[particle_id, "integration times"][0])
 
         # Get the evaluation file paths to read and the corresponding columns.
-        evaluation_file_paths = get_evaluation_file_paths( particle_path,
-                                                           evaluation_extensions )
+        evaluation_file_paths = get_evaluation_file_path( particle_path,
+                                                          evaluation_extensions )
         for evaluation_file_path, column_names_pair in zip( evaluation_file_paths,
                                                             evaluation_column_names ):
 
             (evaluation_radii_name,
-             evaluation_temperatures_name) = *column_names_pair
+             evaluation_temperatures_name) = column_names_pair
             (evaluation_radii,
              evaluation_temperatures)      = _read_particle_evaluation_data( evaluation_file_path )
 
-            particles_df.at[particle_id, evaluation_radii_name]        = evaluation_radii
-            particles_df.at[particle_id, evaluation_temperatures_name] = evaluation_temperatures
+            #
+            # NOTE: Evaluation files only contain the outputs generated by
+            #       evaluating the previous input, resulting in arrays that are
+            #       one shorter than the particle's observations.  As a result
+            #       we don't have to play as many indexing games like we do
+            #       above.
+            #
+            #       The timeline mask covers all particle observations,
+            #       including the first that does not correspond to an output.
+            #       We remove the first mask entry to align it against our
+            #       evaluation data.
+            #
+            particles_df.at[particle_id, evaluation_radii_name]        = evaluation_radii[timeline_mask[1:]]
+            particles_df.at[particle_id, evaluation_temperatures_name] = evaluation_temperatures[timeline_mask[1:]]
 
         # Excise cold observations if requested.  These are an artifact
         # of backward Euler that produces extremely cold temperatures

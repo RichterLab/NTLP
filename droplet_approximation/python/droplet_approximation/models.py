@@ -74,7 +74,7 @@ class SimpleNet( nn.Module ):
 
         return x
 
-def do_bdf( input_parameters, times ):
+def do_bdf( input_parameters, times, **kwargs ):
     """
     Evaluates droplet parameters using backward differentiation formula (BDF) at the
     supplied simulation times.
@@ -83,13 +83,14 @@ def do_bdf( input_parameters, times ):
     BDF's solution against the reference observation.  The ith input is used to
     generate the ith output.
 
-    Takes 2 arguments:
+    Takes 3 arguments:
 
       input_parameters    - NumPy array, sized number_time_steps x 6, containing the
                             input parameters for a single particle in order by time.
                             These are provided in their natural, physical ranges.
       times               - NumPy array, shaped number_time_steps x 1, containing
                             the time at each step.
+      kwargs              - Optional keyword arguments to supply to solve_ivp_float32_outputs().
 
     Returns 1 value:
 
@@ -122,7 +123,8 @@ def do_bdf( input_parameters, times ):
                                                                       input_parameters[time_index, :2],
                                                                       method="BDF",
                                                                       t_eval=[integration_times[time_index]],
-                                                                      args=(input_parameters[time_index, 2:],) ).y[:, 0]
+                                                                      args=(input_parameters[time_index, 2:],),
+                                                                      **kwargs ).y[:, 0]
 
     return output_parameters
 
@@ -178,19 +180,20 @@ def do_inference( input_parameters, times, model, device ):
 
     return scale_droplet_parameters( normalized_outputs.cpu() )
 
-def do_iterative_bdf( input_parameters, times ):
+def do_iterative_bdf( input_parameters, times, **kwargs ):
     """
     Iteratively evaluates a particle trajectory along given background inputs with
     backward differentiation formula (BDF).  The outputs for the ith time are
     used as the input for the (i+1)th time.
 
-    Takes 2 arguments:
+    Takes 3 arguments:
 
       input_parameters    - NumPy array, sized number_time_steps x 6, containing the
                             input parameters for a single particle in order by time.
                             These are provided in their natural, physical ranges.
       times               - NumPy array, shaped number_time_steps x 1, containing
                             the time at each step.
+      kwargs              - Optional keyword arguments to supply to solve_ivp_float32_outputs().
 
     Returns 1 value:
 
@@ -219,7 +222,8 @@ def do_iterative_bdf( input_parameters, times ):
                                                                       output_parameters[time_index - 1, :],
                                                                       method="BDF",
                                                                       t_eval=[integration_times[time_index-1]],
-                                                                      args=(input_parameters[time_index-1, 2:],) ).y[:, 0]
+                                                                      args=(input_parameters[time_index-1, 2:],),
+                                                                      **kwargs ).y[:, 0]
 
     return output_parameters
 
