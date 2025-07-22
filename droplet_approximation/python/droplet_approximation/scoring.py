@@ -14,7 +14,8 @@ from torch import multiprocessing
 from .data import ParticleRecord, \
                   be_success_mask, \
                   get_evaluation_file_path, \
-                  get_particle_file_path
+                  get_particle_file_path, \
+                  _read_raw_particle_data
 from .models import do_bdf, \
                     do_inference, \
                     do_iterative_bdf, \
@@ -384,24 +385,15 @@ def particle_evaluation_pipeline( particles_root, particle_ids, dirs_per_level,
             particle_path   = get_particle_file_path( particles_root, particle_id, dirs_per_level )
             evaluation_path = get_evaluation_file_path( particle_path, evaluation_extension )
 
-            # Provide a 32-bit floating point value view of the observations.
-            # We only need the particle characteristics and environmental values
-            # and not any of the integral fields.
-            #
-            # NOTE: We must sort these to account for how the observations are
-            #       captured within NTLP.  Otherwise we may have time go
-            #       backwards and BDF/MLP won't be happy.
-            #
-            observations_fp32 = np.fromfile( particle_path, dtype=np.float32 ).reshape( -1, ParticleRecord.SIZE.value )
-            sorted_indices    = np.argsort( observations_fp32[:, ParticleRecord.TIME_INDEX.value] )
-            observations_fp32 = observations_fp32[sorted_indices, :]
-
-            outputs = np.empty( shape=(observations_fp32.shape[0] - 1, 2), dtype=np.float32 )
+            # Get the particle's observations sorted by time.
+            observations_fp32 = _read_raw_particle_data( particle_path )
 
             # Evaluate the output for every observation we're interested in.
             # We will ignore either the first or the last based on whether
             # we're evaluating directly or iteratively, respectively.  See
             # the documentation for the output_slice for details.
+            outputs = np.empty( shape=(observations_fp32.shape[0] - 1, 2), dtype=np.float32 )
+
             if evaluation_type == EvaluationType.BDF:
                 outputs[:] = inference( observations_fp32[:, ParticleRecord.RADIUS_INDEX.value:ParticleRecord.SIZE.value],
                                         observations_fp32[:, ParticleRecord.TIME_INDEX.value] )[output_slice, :]

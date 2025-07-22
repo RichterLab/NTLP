@@ -1238,18 +1238,7 @@ def read_particles_data( particles_root, particle_ids, dirs_per_level, quiet_fla
         particle_path = get_particle_file_path( particles_root, particle_id, dirs_per_level )
 
         # Get each of the observations.
-        observations_fp32  = np.fromfile( particle_path, dtype=np.float32 ).reshape( -1, ParticleRecord.SIZE.value )
-
-        # Sort the observations by time.
-        #
-        # NOTE: This is needed in case this particle moved across MPI ranks
-        #       during the simulation and was handled by more than one rank.
-        #       In that case the observations within each rank are sorted but we
-        #       could get windows of observations out of order depending on how
-        #       the resulting trace files were post-processed into raw particle files.
-        #
-        sorted_indices     = np.argsort( observations_fp32[:, ParticleRecord.TIME_INDEX.value] )
-        observations_fp32  = observations_fp32[sorted_indices, :]
+        observations_fp32  = _read_raw_particle_data( particle_path )
         observations_int32 = observations_fp32.view( np.int32 )
 
         if not quiet_flag:
@@ -1409,6 +1398,46 @@ def _read_particle_evaluation_data( evaluation_file_path ):
     evaluation_temperatures = evaluation_data[:, 1]
 
     return (evaluation_radii, evaluation_temperatures)
+
+def _read_raw_particle_data( particle_path ):
+    """
+    Reads a raw particle file and returns its contents as an array of 32-bit
+    floating point values, sorted by the simulation time field.  The integer
+    field values are not cast as floating point values but rather are simply
+    interpreted as floating point values at the bit level and can be accessed
+    by applying a view to the returned array.
+
+    Takes 1 argument:
+
+      particle_path - Path to the raw particle file to read.
+
+    Returns 1 value:
+
+      observations_fp32 - NumPy array, shaped number_observations x
+                          ParticleRecord.SIZE, containing the particle's
+                          observations interpreted as 32-bit floating point
+                          values.  Since two of the columns are actually 32-bit
+                          integer values, access to those columns must be
+                          performed via a .view() on the returned array.
+
+                          See ParticleRecord for details on the array's columns.
+
+    """
+
+    observations_fp32  = np.fromfile( particle_path, dtype=np.float32 ).reshape( -1, ParticleRecord.SIZE.value )
+
+    # Sort the observations by time.
+    #
+    # NOTE: This is needed in case this particle moved across MPI ranks during
+    #       the simulation and was handled by more than one rank.  In that case
+    #       the observations within each rank are sorted but we could get
+    #       windows of observations out of order depending on how the resulting
+    #       trace files were post-processed into raw particle files.
+    #
+    sorted_indices    = np.argsort( observations_fp32[:, ParticleRecord.TIME_INDEX.value] )
+    observations_fp32 = observations_fp32[sorted_indices, :]
+
+    return observations_fp32
 
 def read_training_file( file_name ):
     """
