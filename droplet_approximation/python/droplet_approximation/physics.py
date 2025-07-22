@@ -1,3 +1,4 @@
+from enum import Enum
 import errno
 import functools
 import os
@@ -34,6 +35,102 @@ DROPLET_TIME_LOG_RANGE          = np.array( (-2.0, 1.0) )
 #
 BDF_TOLERANCE_ABSOLUTE = (1e-10, 1e-4)
 BDF_TOLERANCE_RELATIVE = 1e-7
+
+class DisplayType( Enum ):
+    """
+    Enumeration class specifying how particle parameter ranges are displayed.
+    """
+
+    # Show the ranges in human-readable form with units.
+    HUMAN   = 0
+
+    # Show the ranges as code that can be copy and pasted.
+    CODE    = 1
+
+    # Show the ranges in a form that can be parsed on the command line.
+    COMMAND = 2
+
+def display_parameter_ranges( parameter_ranges, display_type=DisplayType.HUMAN, indentation_str="" ):
+    """
+    Displays the supplied parameter ranges in a variety of formats depending on
+    how they'll be used.  Human-readable (with units and details), code (that
+    can be copied verbatim), and command line (that can be parsed) formats are
+    supported.
+
+    Takes 3 arguments:
+
+      parameter_ranges - Dictionary of parameter ranges from get_parameter_ranges().
+                         This must have all of the parameter keys!
+      display_type     - Optional DisplayType enumeration specifying how to
+                         display the ranges.
+
+                            .CODE:    Ranges are printed as code that can be copied
+                                      and pasted as is.
+                            .COMMAND: Ranges are printed compactly in a format that
+                                      can be parsed on the command line.
+                            .HUMAN:   Ranges are printed for human consumption with
+                                      units and additional details for interpretation.
+
+                         If omitted, defaults to DisplayType.HUMAN.
+
+      indentation_str  - Optional indentation string that is applied before each
+                         line of output.  If omitted, defaults to an empty
+                         string resulting in no indentation.
+
+    Returns nothing.
+
+    """
+
+    TEMPLATE_HUMAN = \
+        "{indent:s}Data ranges:\n" + \
+        "\n" + \
+        "{indent:s}  log10(Radius)       [{{:.2f}}, {{:.2f}}] m\n" + \
+        "{indent:s}  Temperature:        [{{:.2f}}, {{:.2f}}] K\n" + \
+        "{indent:s}  log10(Salt mass):   [{{:.2f}}, {{:.2f}}] kg/m^3\n" + \
+        "{indent:s}  Air temperature:    [{{:.2f}}, {{:.2f}}] K\n" + \
+        "{indent:s}  Relative humidity:  [{{:.2f}}, {{:.2f}}] %\n" + \
+        "{indent:s}  Air density:        [{{:.2f}}, {{:.2f}}] kg/m^3\n" + \
+        "{indent:s}  log10(dt):          [{{:.2f}}, {{:.2f}}] s"
+    TEMPLATE_CODE = \
+        "{indent:s}parameter_ranges = {{{{\n" + \
+        "{indent:s}    \"radius\":             ({{:f}}, {{:f}}),\n" + \
+        "{indent:s}    \"temperature\":        ({{:f}}, {{:f}}),\n" + \
+        "{indent:s}    \"salt_mass\":          ({{:f}}, {{:f}}),\n" + \
+        "{indent:s}    \"air_temperature\":    ({{:f}}, {{:f}}),\n" + \
+        "{indent:s}    \"relative_humidity\":  ({{:f}}, {{:f}}),\n" + \
+        "{indent:s}    \"rhoa\":               ({{:f}}, {{:f}}),\n" + \
+        "{indent:s}    \"time\":               ({{:f}}, {{:f}})\n" + \
+        "{indent:s}}}}}"
+    TEMPLATE_COMMAND = \
+        "{indent:s}{{:f}}:{{:f}},{{:f}}:{{:f}},{{:f}}:{{:f}},{{:f}}:{{:f}},{{:f}}:{{:f}},{{:f}}:{{:f}},{{:f}}:{{:f}}"
+
+    # Instantiate an indented template.  Blow up if we don't know which
+    # template to use.
+    if display_type == DisplayType.CODE:
+        template = TEMPLATE_CODE.format( indent=indentation_str )
+    elif display_type == DisplayType.COMMAND:
+        template = TEMPLATE_COMMAND.format( indent=indentation_str )
+    elif display_type == DisplayType.HUMAN:
+        template = TEMPLATE_HUMAN.format( indent=indentation_str )
+    else:
+        raise ValueError( "Unknown DisplayType provided ({})!  Must be one of: '{:s}', '{:s}', '{:s}'.".format(
+            display_type,
+            "human",
+            "code",
+            "command_line" ) )
+
+    # Render the ranges according to the template.
+    display_str = template.format(
+        parameter_ranges["radius"][0],            parameter_ranges["radius"][1],
+        parameter_ranges["temperature"][0],       parameter_ranges["temperature"][1],
+        parameter_ranges["salt_mass"][0],         parameter_ranges["salt_mass"][1],
+        parameter_ranges["air_temperature"][0],   parameter_ranges["air_temperature"][1],
+        parameter_ranges["relative_humidity"][0], parameter_ranges["relative_humidity"][1],
+        parameter_ranges["rhoa"][0],              parameter_ranges["rhoa"][1],
+        parameter_ranges["time"][0],              parameter_ranges["time"][1] )
+
+    # Display the range.
+    print( display_str )
 
 def dydt( t, y, parameters ):
     """

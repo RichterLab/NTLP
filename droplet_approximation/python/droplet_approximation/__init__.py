@@ -39,7 +39,9 @@ from .models import SimpleNet, \
                     save_model_checkpoint, \
                     train_model, \
                     weighted_mse_loss
-from .physics import dydt, \
+from .physics import DisplayType, \
+                     display_parameter_ranges, \
+                     dydt, \
                      get_parameter_ranges, \
                      normalize_droplet_parameters, \
                      scale_droplet_parameters, \
