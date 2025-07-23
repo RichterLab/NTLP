@@ -3,7 +3,9 @@ import numpy as np
 import pandas as pd
 from scipy.integrate import solve_ivp
 
-from .data import create_droplet_batch
+from .data import BE_TAG_NAME, \
+                  create_droplet_batch, \
+                  get_evaluation_column_names
 from .models import do_inference, do_iterative_inference
 from .physics import dydt
 from .scoring import calculate_nrmse, identity_norm
@@ -463,7 +465,7 @@ def plot_droplet_size_temperature( size_temperatures, times ):
 
     return fig_h, ax_h
 
-def plot_particles( particles_df, force_flag=False, time_range=[-np.inf, np.inf] ):
+def plot_particles( particles_df, force_flag=False, time_range=[-np.inf, np.inf], evaluation_tags=[] ):
     """
     Plots one or more particles' characteristics along their lifetimes.  Creates
     a figure with 7 sub-plots, arranged in a vertical configuration, visualizing
@@ -477,18 +479,26 @@ def plot_particles( particles_df, force_flag=False, time_range=[-np.inf, np.inf]
       6. Salt mass, in kilograms
       7. Air density, in kg/m^3
 
-    Takes 2 arguments:
+    Can plot multiple evaluations for each particle to analyze model performance.
 
-      particles_df - Particles DataFrame whose particles should be visualized.
-      force_flag   - Optional flag indicating that large numbers of particles
-                     should be visualized.  If omitted, defaults to False and
-                     ValueError is raised when too many particles are present
-                     in particles_df.
-      time_range   - Optional tuple containing the time bounds, lower and upper,
-                     to plot particles.  If omitted, defaults to [-np.inf, np.inf]
-                     and all particles are plotted.  If a particle in particles_df
-                     does not have any observations in time_range then it is
-                     not plotted.
+    Takes 4 arguments:
+
+      particles_df    - Particles DataFrame whose particles should be visualized.
+      force_flag      - Optional flag indicating that large numbers of particles
+                        should be visualized.  If omitted, defaults to False and
+                        ValueError is raised when too many particles are present
+                        in particles_df.
+      time_range      - Optional tuple containing the time bounds, lower and upper,
+                        to plot particles.  If omitted, defaults to [-np.inf, np.inf]
+                        and all particles are plotted.  If a particle in particles_df
+                        does not have any observations in time_range then it is
+                        not plotted.
+      evaluation_tags - Optional list of evaluation tags specifying evaluations
+                        to plot for each particle.  If omitted, defaults to an
+                        empty list which visualizes the backward Euler (BE)
+                        observations.  When provided, *only* the tags specified
+                        are visualized which will not include the BE observations
+                        unless included in evaluation_tags.
 
     Returns 2 values:
 
@@ -497,12 +507,66 @@ def plot_particles( particles_df, force_flag=False, time_range=[-np.inf, np.inf]
 
     """
 
-    # 10 particles in the same time window can get busy so set this as our soft
-    # limit for plotting.
-    MAXIMUM_NUMBER_OF_PARTICLES = 10
+    def _get_particle_label( particle_df ):
+        """
+        Constructs a string label for the supplied particle DataFrame from its
+        particle identifier.
+
+        Takes 1 argument:
+
+          particle_df - Particle DataFrame to label.
+
+        Returns 1 value:
+
+          particle_label - Label associated with the particle supplied.
+
+        """
+
+        return str( particle_df.name )
+
+    def _get_evaluation_label( particle_label, evaluation_tag ):
+        """
+        Constructs a label for a specific evaluation tag given the provided
+        particle label.
+
+        Takes 2 arguments:
+
+          particle_label - Particle label string.
+          evaluation_tag - Evaluation tag string.
+
+        Returns 1 value:
+
+          evaluation_label - Label associated with the particle's evaluation.
+
+        """
+
+        return "{:s} - {:s}".format(particle_label, evaluation_tag )
+
+    # Limit ourselves to the number of unique colors Matplotlib has with the
+    # default color scheme by default.  More particles than this will reuse
+    # colors making it difficult to distinguish what is what.
+    # Get the default Matplotlib color sequence.  We cycle
+    colors_list                 = plt.rcParams["axes.prop_cycle"].by_key()["color"]
+    MAXIMUM_NUMBER_OF_PARTICLES = len( colors_list )
 
     if isinstance( particles_df, pd.Series ):
         particles_df = particles_df.to_frame().T
+
+    # Visualize BE for each particle if no evaluations were requested, otherwise
+    # make it the first evaluation plotted for consistency.  We build a map
+    # from the requested evaluation tags to the DataFrame column names that
+    # provide the data to plot.
+    #
+    # NOTE: Care is taken to add the tags to the map so that BE is first when
+    #       requested, so as to match the plot colors across the different axes.
+    #       This requires Python 3.6 or newer.
+    #
+    evaluations_map = {}
+    if len( evaluation_tags ) == 0 or BE_TAG_NAME in evaluation_tags:
+        evaluations_map[BE_TAG_NAME] = get_evaluation_column_names( BE_TAG_NAME )
+
+    for evaluation_tag in evaluation_tags:
+        evaluations_map[evaluation_tag] = get_evaluation_column_names( evaluation_tag )
 
     # Blow up if we were provided too many particles unless we're forced to.
     # Things get *really* busy really with more than a handful of particles so
@@ -510,9 +574,12 @@ def plot_particles( particles_df, force_flag=False, time_range=[-np.inf, np.inf]
     # large numbers of particles (hundreds or thousands) this can take quite a
     # long time to complete and we want to protect against accidentally plotting
     # an entire DataFrame and not just a subset of rows.
-    if len( particles_df ) > MAXIMUM_NUMBER_OF_PARTICLES and not force_flag:
-        raise ValueError( "Too many particles to plot ({:d})!".format(
-            len( particles_df ) ) )
+    if len( particles_df ) * len( evaluations_map ) > MAXIMUM_NUMBER_OF_PARTICLES and not force_flag:
+        raise ValueError( "Too many particles to plot ({:d} particle{:s} each with {:d} evaluation{:s})!".format(
+            len( particles_df ),
+            "" if len( particles_df ) == 1 else "s",
+            len( evaluations_map ),
+            "" if len( evaluations_map ) == 1 else "s" ) )
 
     fig_h, ax_h = plt.subplots( 7, 1, figsize=(8, 15), sharex=True )
 
@@ -525,6 +592,40 @@ def plot_particles( particles_df, force_flag=False, time_range=[-np.inf, np.inf]
     # necked down with each particle processed.
     temperature_min =  np.inf
     temperature_max = -np.inf
+
+    # We need our line plots' colors to match so that the environmental plots'
+    # (air temperature, relative humidity, etc) colors are synchronized with the
+    # BE evaluations colors (or the first evaluation when BE isn't present).
+    # This is trivial when BE is the only evaluation though gets complicated
+    # when there are additional.
+    #
+    # We build a mapping plot label names to colors to avoid complicated modular
+    # arithmetic while keeping the logic to handle the environmental/evaluation
+    # asymmetry as minimal as possible.
+    colors_map = {}
+    for particle_index in range( len( particles_df ) ):
+        # Get the particle's label and its (equivalent) first evaluation label.
+        particle_label         = _get_particle_label( particles_df.iloc[particle_index] )
+        first_evaluation_label = _get_evaluation_label( particle_label,
+                                                        list( evaluations_map.keys() )[0] )
+
+        # Figure out where this particle's colors start.
+        environmental_color_index = (particle_index * len( evaluations_map )) % MAXIMUM_NUMBER_OF_PARTICLES
+
+        # The particle's label, used for environmental plots, and the first
+        # evaluation's label share the same color so users can understand which
+        # particles traversed what environment.
+        colors_map[particle_label]         = colors_list[environmental_color_index]
+        colors_map[first_evaluation_label] = colors_list[environmental_color_index]
+
+        # The remaining evaluation labels use the colors available before the
+        # next particle's color.
+        for evaluation_tag_index in range( 1, len( evaluations_map ) ):
+            evaluation_label = _get_evaluation_label( particle_label,
+                                                      list( evaluations_map.keys() )[evaluation_tag_index] )
+
+            evaluation_color_index       = (environmental_color_index + evaluation_tag_index) % MAXIMUM_NUMBER_OF_PARTICLES
+            colors_map[evaluation_label] = colors_list[evaluation_color_index]
 
     # Plot each of the particles sequentially.
     for particle_index in range( len( particles_df ) ):
@@ -542,45 +643,90 @@ def plot_particles( particles_df, force_flag=False, time_range=[-np.inf, np.inf]
             continue
 
         # Keep our particle and air temperatures on the same scale.
-        temperature_min = min( temperature_min,
-                               min( particle["output be temperatures"][times_mask].min(),
-                                    particle["air temperatures"][times_mask].min() ) )
-        temperature_max = max( temperature_max,
-                               max( particle["output be temperatures"][times_mask].max(),
-                                    particle["air temperatures"][times_mask].max() ) )
+        for evaluation_tag in evaluations_map:
+            evaluation_temperatures_name = evaluations_map[evaluation_tag][1]
 
-        # Create label for this particle
-        particle_label = str( particle.name )
+            temperature_min = min( temperature_min,
+                                   particle[evaluation_temperatures_name][times_mask].min() )
+            temperature_max = max( temperature_max,
+                                   particle[evaluation_temperatures_name][times_mask].max() )
+
+        # Create label for this particle.
+        particle_label = _get_particle_label( particle )
 
         # Plot our quantities with labels
-        ax_h[0].plot( times[times_mask], particle["integration times"][times_mask], label=particle_label )
+        ax_h[0].plot( times[times_mask],
+                      particle["integration times"][times_mask],
+                      color=colors_map[particle_label],
+                      label=particle_label )
         ax_h[0].set_title( "Integration Time" )
         ax_h[0].set_ylabel( "dt (s)" )
 
-        ax_h[1].plot( times[times_mask], particle["output be radii"][times_mask], label=particle_label )
+        # Plot the radii and temperatures for each of the evaluations.
+        for evaluation_tag in evaluations_map:
+            (evaluation_radii_name,
+             evaluation_temperatures_name) = evaluations_map[evaluation_tag]
+
+            evaluation_label = _get_evaluation_label( particle_label,
+                                                      evaluation_tag )
+
+            #
+            # NOTE: These are labeled with the evaluation tag as a suffix.
+            #
+            ax_h[1].plot( times[times_mask],
+                          particle[evaluation_radii_name][times_mask],
+                          color=colors_map[evaluation_label],
+                          label=evaluation_label )
+            ax_h[2].plot( times[times_mask],
+                          particle[evaluation_temperatures_name][times_mask],
+                          color=colors_map[evaluation_label],
+                          label=evaluation_label )
+
         ax_h[1].set_title( "Output Radius" )
         ax_h[1].set_ylabel( "Size (m)" )
 
-        ax_h[2].plot( times[times_mask], particle["output be temperatures"][times_mask], label=particle_label )
         ax_h[2].set_title( "Particle Temperature" )
         ax_h[2].set_ylabel( "Kelvin" )
 
-        ax_h[3].plot( times[times_mask], particle["air temperatures"][times_mask], label=particle_label )
+        # Now plot the environments for the particle.
+        ax_h[3].plot( times[times_mask],
+                      particle["air temperatures"][times_mask],
+                      color=colors_map[particle_label],
+                      label=particle_label )
         ax_h[3].set_title( "Air Temperature" )
         ax_h[3].set_ylabel( "Kelvin" )
 
-        ax_h[4].plot( times[times_mask], particle["relative humidities"][times_mask] * 100, label=particle_label )
+        ax_h[4].plot( times[times_mask],
+                      particle["relative humidities"][times_mask] * 100,
+                      color=colors_map[particle_label],
+                      label=particle_label )
         ax_h[4].set_title( "Relative Humidity" )
         ax_h[4].set_ylabel( "Percentage (%)" )
 
-        ax_h[5].plot( times[times_mask], particle["salt masses"][times_mask], label=particle_label )
+        ax_h[5].plot( times[times_mask],
+                      particle["salt masses"][times_mask],
+                      color=colors_map[particle_label],
+                      label=particle_label )
         ax_h[5].set_title( "Salt Mass" )
         ax_h[5].set_ylabel( "kg" )
 
-        ax_h[6].plot( times[times_mask], particle["air densities"][times_mask], label=particle_label )
+        ax_h[6].plot( times[times_mask],
+                      particle["air densities"][times_mask],
+                      color=colors_map[particle_label],
+                      label=particle_label )
         ax_h[6].set_title( "Air Density" )
         ax_h[6].set_ylabel( "kg/m^3" )
         ax_h[6].set_xlabel( "Time (s)" )
+
+    # Adjust our temperature bounds *very* slightly so our line plots don't
+    # touch the edge of the axes.
+    #
+    # NOTE: We choose 1/20th of a percent of 300K is 0.15K.  Enough to give a
+    #       slight amount of padding but not enough to change the zoom on the
+    #       temperature plots so as to preserve their dynamics.
+    #
+    temperature_min *= 0.9995
+    temperature_max *= 1.0005
 
     # Set the particle and air temperatures to the same scale.
     ax_h[2].set_ylim( [temperature_min, temperature_max] )
@@ -593,7 +739,7 @@ def plot_particles( particles_df, force_flag=False, time_range=[-np.inf, np.inf]
 
     # Create a single legend positioned outside the plot area on the right,
     # centered on the middle axis.
-    ax_h[3].legend( bbox_to_anchor=(1.01, 0.5),
+    ax_h[2].legend( bbox_to_anchor=(1.01, 0.5),
                     loc="center left",
                     title="Particles" )
 
