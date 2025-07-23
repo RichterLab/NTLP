@@ -139,14 +139,19 @@ particles_chunk_size = (len( particle_indices ) + number_processes - 1) // numbe
 args_list = []
 particle_indices_list = []
 for process_index in range( number_processes ):
-    start_index = particles_chunk_size * process_index
+    start_index = particle_indices[0] + particles_chunk_size * process_index
 
     # Find the end of this process' range.  Take care to not exceed the last
     # requested particle while also handling any remaining particles if the
     # number of processes doesn't evenly divide the particle count.
+    #
+    # NOTE: We must add one to the last particle index to maintain Python's
+    #       open upper bound, otherwise we'll trim off the last requested
+    #       particle.
+    #
     if process_index == number_processes - 1:
         end_index = min( len( particle_ids ),
-                         particle_indices_range_components[1] )
+                         particle_indices[-1] + 1 )
     else:
         end_index = start_index + particles_chunk_size
 
