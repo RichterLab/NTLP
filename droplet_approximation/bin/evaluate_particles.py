@@ -38,9 +38,12 @@ if repo_root is None:
 
 if not mlp_flag:
     evaluation_type      = droplet_approximation.EvaluationType.BDF
-    evaluation_extension = "bdf"
+    evaluation_extension = "bdf_iterative"
     iterative_flag       = True
-    parameters           = {}
+    parameters           = {
+        "atol":    (1e-10, 1e-4),
+        "rtol":    (1e-7)
+    }
 else:
     evaluation_type      = droplet_approximation.EvaluationType.MLP
     evaluation_extension = "mlp-test"
@@ -185,7 +188,7 @@ if evaluation_type == droplet_approximation.EvaluationType.BDF:
            "  Relative tolerance:    {:s}\n".format(
                "Iterative" if iterative_flag else "Direct",
                evaluation_extension,
-               "SciPy default!" if "atol" not in parameters else "{:.1g}".format( parameters["atol"] ),
+               "SciPy default!" if "atol" not in parameters else "({:.1g}, {:.1g})".format( *parameters["atol"] ),
                "SciPy default!" if "rtol" not in parameters else "{:.1g}".format( parameters["rtol"] )
            ) )
 elif evaluation_type == droplet_approximation.EvaluationType.MLP:
