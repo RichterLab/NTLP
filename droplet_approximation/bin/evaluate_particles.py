@@ -21,7 +21,7 @@ import droplet_approximation
 
 # Default to reviewing what would be done before we launch potentially
 # hours/days worth of work.  Set this to False to execute as well.
-testing_flag = False
+testing_flag = True
 
 # Manual toggle between BDF and MLP until this script is updated with proper
 # command line flags.
