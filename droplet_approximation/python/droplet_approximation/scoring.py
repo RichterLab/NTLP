@@ -396,7 +396,9 @@ def particle_evaluation_pipeline( particles_root, particle_ids, dirs_per_level,
 
             if evaluation_type == EvaluationType.BDF:
                 outputs[:] = inference( observations_fp32[:, ParticleRecord.RADIUS_INDEX.value:ParticleRecord.SIZE.value],
-                                        observations_fp32[:, ParticleRecord.TIME_INDEX.value] )[output_slice, :]
+                                        observations_fp32[:, ParticleRecord.TIME_INDEX.value],
+                                        atol=local_parameters["atol"],
+                                        rtol=local_parameters["rtol"] )[output_slice, :]
             else:
                 outputs[:] = inference( observations_fp32[:, ParticleRecord.RADIUS_INDEX.value:ParticleRecord.SIZE.value],
                                         observations_fp32[:, ParticleRecord.TIME_INDEX.value],
