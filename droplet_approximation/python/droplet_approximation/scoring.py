@@ -12,9 +12,9 @@ from sklearn.mixture import BayesianGaussianMixture
 from torch import multiprocessing
 
 from .data import ParticleRecord, \
-                  be_success_mask, \
                   get_evaluation_file_path, \
                   get_particle_file_path, \
+                  read_particles_data, \
                   _read_raw_particle_data
 from .models import do_bdf, \
                     do_inference, \
@@ -417,118 +417,96 @@ def particle_evaluation_pipeline( particles_root, particle_ids, dirs_per_level,
     finally:
         set_parameter_ranges( previous_parameter_ranges )
 
-def particle_scoring_pipeline( particles_root, particle_ids, dirs_per_level, model, device, cusum_error_tolerance,
-                               cusum_error_threshold, norm, iterative, parameter_ranges ):
+def particle_scoring_pipeline( particles_root, particle_ids_batches, dirs_per_level, reference_evaluation, comparison_evaluation, cusum_error_tolerance, cusum_error_threshold, norm, cold_threshold, filter_be_failures ):
     """
-    Calculates NRMSE and deviations for a set of particles on a given model. Loads
-    particle data from per particle data frames. Also provides statistics needed
+    Calculates NRMSE and deviations for a set of particles between two evaluation tags. 
+    Loads particle data from per particle data frames. Also provides statistics needed
     to calcualte overall dataset NRMSE.
 
-    Takes 10 arguments:
+    Takes 8 arguments:
 
-      particles_root        - Path to the top-level directory to read raw
-                              particle files from.
-      particle_ids          - Sequence of particle identifiers to process.
-      dirs_per_level        - Number of subdirectories per level in the
-                              particle files directory hierarchy.
-      model                 - PyTorch model to use
-      device                - The device to evaluate on.
-      cusum_error_tolerance - NumPy Array, sized 2, containing the
-                              radius/temperature tolerances to pass to
-                              `calculate_cusum`.
-      cusum_error_threshold - NumPy Array, sized 2, containing the
-                              radius/temperature thresholds to pass to
-                              `detect_cusum_deviations`.
-      norm                  - User provided norm to apply to all data before
-                              scoring and deviation detection. Accepts an
-                              array sized number_observations x 2 and returns
-                              a normed array of the same length.
-      iterative             - Boolean, indicates whether to evaluate the model
-                              directly on every time step, or to iterate radius
-                              and temperature from the first time step.
-      parameter_ranges      - Dictionary of any changes to the droplet parameter
-                              ranges required for the given model.
+      particles_root         - Path to the top-level directory to read raw
+                               particle files from.
+      particle_ids_batches   - List of batches of particle ids to process.
+                               e.g. [[1,2,3],[4,5],[7,8,9]] will process
+                               particles ids 1,2,3 as a batch, then 4,5,
+                               then 7,8,9.
+      dirs_per_level         - Number of subdirectories per level in the
+                               particle files directory hierarchy.
+      reference_evaluation   - Dictionary containing a map of the evaluation
+                               tag to its file extension for the reference
+                               evaluation.
+      comparison_evaluation  - Dictionary containing a map of the evaluation
+                               tag to its file extension for the evaluation
+                               to compare.
+      cusum_error_tolerance  - NumPy Array, sized 2, containing the
+                               radius/temperature tolerances to pass to
+                               `calculate_cusum`.
+      cusum_error_threshold  - NumPy Array, sized 2, containing the
+                               radius/temperature thresholds to pass to
+                               `detect_cusum_deviations`.
+      norm                   - User provided norm to apply to all data before
+                               scoring and deviation detection. Accepts an
+                               array sized number_observations x 2 and returns
+                               a normed array of the same length.
 
     Returns 1 Value:
 
       ParticleScores - List of ParticleScore objects.
 
     """
+    reference_evaluation_tag  = list( reference_evaluation.keys() )[0]
+    comparison_evaluation_tag = list( comparison_evaluation.keys() )[0]
 
-    set_parameter_ranges( parameter_ranges )
+    evaluations = reference_evaluation | comparison_evaluation
 
     particle_scores = []
 
-    for particle_ids_batch in particle_ids:
-
-        particles_df = read_particles_data( particles_root, particle_ids_batch, dirs_per_level )
-
-        for particle_index, particle_id in enumerate( particle_ids_batch ):
-            # Load parameters and mask out BE failures
+    for particle_ids in particle_ids_batches:
+        particles_df = read_particles_data( particles_root, particle_ids, dirs_per_level, evaluations=evaluations, cold_threshold=cold_threshold )
+        for particle_index, particle_id in enumerate( particle_ids ):
             p_df                = particles_df.iloc[particle_index]
+            simulation_times    = p_df["times"]
             particle_parameters = np.stack( p_df[[
-                                      "input be radii",
-                                      "input be temperatures",
+                                      "input {:s} radii".format( reference_evaluation_tag ),
+                                      "input {:s} temperatures".format( reference_evaluation_tag ),
                                       "salt masses",
                                       "air temperatures",
                                       "relative humidities",
                                       "air densities",
                                       "integration times"
-                                  ]].to_numpy(), axis=-1 )
-            # Calculate actual particle times in simulation time and particle times after
-            # removing BE failures. The particle times in normal simulation time are used
-            # for reporting where the deviations are. The part times after removing BE failures
-            # are used for iterative model inference.
-            be_mask               = be_success_mask( particle_parameters[:, 0] )
-            actual_particle_times = np.delete( np.cumsum( np.insert( particle_parameters[:, -1],
-                                                                     0,
-                                                                     0.0 )[:-1] ),
-                                               ~be_mask ) + p_df["birth time"]
-            particle_parameters   = particle_parameters[be_mask, :]
-            particle_times        = np.cumsum( np.insert( particle_parameters[:, -1],
-                                                          0,
-                                                          0.0 )[:-1] ) + p_df["birth time"]
+                                      ]].to_numpy(), axis=-1 )
 
-            # If there is only one trial for a given particle,
-            # there will be no MLP outputs to analyze, so we should skip
-            if particle_parameters.shape[0] == 1:
+            normed_reference_output  = norm( np.stack( p_df[["output {:s} radii".format( reference_evaluation_tag ), 
+                                                              "output {:s} temperatures".format( reference_evaluation_tag )
+                                                            ]].to_numpy(), axis=-1 ) )
+            normed_comparison_output = norm( np.stack( p_df[["output {:s} radii".format( comparison_evaluation_tag ), 
+                                                              "output {:s} temperatures".format( comparison_evaluation_tag )
+                                                             ]].to_numpy(), axis=-1 ) )
+
+            if filter_be_failures:
+                be_mask                  = p_df["be statuses"] == 0
+                particle_parameters      = particle_parameters[be_mask, :]
+                normed_reference_output  = normed_reference_output[be_mask, :]
+                normed_comparison_output = normed_comparison_output[be_mask, :]
+                simulation_times         = simulation_times[be_mask]
+
+            # If there are no trials to compare, ignore this particle
+            if normed_reference_output.shape[0] == 0:
                 continue
-
-            # Ignore the first trial because it is not an output
-            normed_be_output  = norm( particle_parameters[1:, :2] )
-            normed_mlp_output = np.empty( shape=(particle_parameters.shape[0] - 1, 2) )
-
-            # Calculate MLP results
-
-            # We remove the last trial of `do_inference` since we don't have a reference
-            # radius/temperature for the time step after the last one.
-            # We also remove the first trial of `do_iterative_inference` since it just returns
-            # the first radius/temperature; i.e. it is not a true MLP output.
-            # This also aligns the indices of the results.
-            if iterative:
-                normed_mlp_output = norm( do_iterative_inference(
-                                                            particle_parameters[:, :-1],
-                                                            particle_times,
-                                                            model,
-                                                            device)[1:] )
-            else:
-                normed_mlp_output = norm( do_inference( particle_parameters[:, :-1],
-                                                        particle_parameters[:, -1],
-                                                        model,
-                                                        device)[:-1] )
 
             # Calculating the overall NRMSE directly would require copying all of the particle
             # data frames together. Instead, we just copy the square error and the sum of the truth
             # parameters for each particle so that net NRMSE can be calculated later.
-            particle_nrmse      = calculate_nrmse( normed_be_output, normed_mlp_output )
-            square_error        = np.sum( (normed_be_output - normed_mlp_output)**2, axis=0 )
-            truth_sum           = np.abs( np.sum( normed_be_output, axis=0 ) )
+            particle_nrmse      = calculate_nrmse( normed_reference_output, normed_comparison_output )
+            square_error        = np.sum( (normed_reference_output - normed_comparison_output)**2, axis=0 )
+            truth_sum           = np.abs( np.sum( normed_reference_output, axis=0 ) )
             number_observations = particle_parameters.shape[0]
 
             # Calculate CUSUM. There structure of the result will be
             # [ [ Positive Radius CUSUM array, Negative Radius CUSUM array ],
             #   [ Positive Temperature CUSUM array, Negative Temperature CUSUM array ] ]
-            normed_output_differences = (normed_mlp_output - normed_be_output).T
+            normed_output_differences = (normed_comparison_output - normed_reference_output).T
             cusum                     = calculate_cusum( normed_output_differences, cusum_error_tolerance )
 
             # Create a mask for when positive/negative radius/temperature CUSUM exceeds
@@ -536,10 +514,7 @@ def particle_scoring_pipeline( particles_root, particle_ids, dirs_per_level, mod
             # The structure of this array will be
             # [ Positive Radius Deviation Mask, Negative Radius Deviation Mask,
             #   Positive Temperature Deviation Mask, Negative Temperature Deviation Mask ]
-            # Also adds a "False" to the start since the first time step isn't an output and so
-            # it is not in the CUSUM, but it also never a deviation.
             deviation_masks  = detect_cusum_deviations( cusum, cusum_error_threshold ).reshape( (4, -1) )
-            deviation_masks  = np.insert( deviation_masks, 0, False, axis=-1 )
             deviation_counts = deviation_masks.sum( axis=1 )
 
             # These arrays allow the deviations identified with each
@@ -560,11 +535,8 @@ def particle_scoring_pipeline( particles_root, particle_ids, dirs_per_level, mod
                                                   in zip( deviation_counts, deviation_direction_vector ) ] )
             deviation_parameters   = np.hstack( [ np.full( count, direction ) for count, direction
                                                   in zip( deviation_counts, deviation_parameter_vector ) ] )
-            deviation_times        = np.hstack( [ actual_particle_times[mask] for mask in deviation_masks ] )
+            deviation_times        = np.hstack( [ simulation_times[mask] for mask in deviation_masks ] )
             deviation_particle_ids = np.full( deviation_counts.sum(), particle_id )
-
-            # In the future, if we want access to CUSUM or MLP radius data, perhaps write it to a new
-            # per particle analysis dataframe here
 
             particle_score = ParticleScore( particle_id, particle_nrmse, square_error, truth_sum,
                                             number_observations, deviations, deviation_directions,
@@ -610,10 +582,10 @@ class ScoringReport():
       deviation_times        - NumPy array of floats, sized number_deviations,
                                containing the time at which each deviation
                                occurred.
-      iterative              - Boolean, False if the scoring was done
-                               with direct model outputs. True if the
-                               scoring was done with iterative outputs.
-      model_name             - String, the name of the model evaluated.
+      reference_evaluation   - Dicionary containing the evaluation tag that was
+                               used as the reference for scoring.
+      comparison_evaluaton   - Dictionary containing the evaluation tag that was
+                               scored.
       net_nrmse              - Float, NRMSE of the entire dataset.
       per_particle_nrmse     - Dictionary, keys are particle IDs, values are floats
                                corresponding to the model's NRMSE on the
@@ -626,9 +598,10 @@ class ScoringReport():
 
     """
 
-    def __init__( self, particles_root, particle_ids, dirs_per_level, model, model_name, device,
-                  cusum_error_tolerance, cusum_error_threshold, norm=None, iterative=False,
-                  max_clusters=7, number_processes=0, number_batches=1, parameter_ranges=None ):
+    def __init__( self, particles_root, particle_ids, dirs_per_level, reference_evaluation, 
+                  comparison_evaluation, cusum_error_tolerance, cusum_error_threshold, norm=None, 
+                  max_clusters=7, number_processes=0, number_batches=1, cold_threshold=-np.inf,
+                  filter_be_failures=False ):
         """
         Takes 12 arguments:
 
@@ -637,9 +610,12 @@ class ScoringReport():
           particle_ids          - Sequence of particle identifiers to process.
           dirs_per_level        - Number of subdirectories per level in the
                                   particle files directory hierarchy.
-          model                 - PyTorch model to use
-          model_name            - The name of the model being evaluated.
-          device                - The device to evaluate on.
+          reference_evaluation  - Dictionary containing a map of the evaluation
+                                  tag to its file extension for the reference
+                                  evaluation.
+          comparison_evaluation - Dictionary containing a map of the evaluation
+                                  tag to its file extension for the evaluation
+                                  to compare.
           cusum_error_tolerance - NumPy Array, sized 2, containing the
                                   radius/temperature tolerances to pass to
                                   `calculate_cusum`.
@@ -651,10 +627,6 @@ class ScoringReport():
                                   Accepts an array sized number_observations x 2
                                   and returns a normed array of the same length.
                                   Defaults to `identity_norm`.
-          iterative             - Optional Boolean, determines whether the back end
-                                  used to calculate MLP output is `do_inference`
-                                  (if False) or `do_iterative_inference` (if True).
-                                  Defaults to False.
           max_clusters          - Optional Integer, identifies the max number of
                                   clusters for the Bayesian Gaussian mixture model
                                   to attempt. Defaults to 7.
@@ -665,9 +637,13 @@ class ScoringReport():
                                   batches for each core to break up the particles
                                   into. Higher batches results in fewer particles
                                   loaded at one time. Defaults to 1.
-          parameter_ranges      - Optional dictionary of any changes to the droplet
-                                  parameter ranges required for the given model.
-                                  Defaults to None.
+          cold_threshold        - Optional floating point value specifying the lower bound
+                                  for particle temperatures before they're considered "cold"
+                                  and should be trimmed from the DataFrame.  Cold particles
+                                  are invalid from the NTLP simulation's standpoint but were
+                                  not flagged as such.  If omitted, all particles are retained.
+          filter_be_failures    - Optional boolean, if True, remove all trials with BE failures
+                                  before scoring. Defaults to False.
         """
 
         # The processes must be created with spawn; it seems the pipeline
@@ -681,8 +657,8 @@ class ScoringReport():
 
         self.cusum_error_tolerance = cusum_error_tolerance
         self.cusum_error_threshold = cusum_error_threshold
-        self.iterative             = iterative
-        self.model_name            = model_name
+        self.reference_evaluation  = reference_evaluation 
+        self.comparison_evaluation = comparison_evaluation
 
         # Splits all of the requested particle ids across processors
         # and into batches to avoid loading all of the particles
@@ -691,8 +667,8 @@ class ScoringReport():
                                for process_particle_ids in np.array_split( particle_ids,
                                                                            number_processes )]
         pipeline_parameters = [[particles_root, process_particle_ids, dirs_per_level,
-                                model, device, cusum_error_tolerance, cusum_error_threshold,
-                                norm, iterative, parameter_ranges]
+                                reference_evaluation, comparison_evaluation, cusum_error_tolerance,
+                                cusum_error_threshold, norm, cold_threshold, filter_be_failures]
                                for process_particle_ids in particle_id_chunks]
 
         if number_processes > 1:
@@ -833,11 +809,14 @@ class ScoringReport():
         ax.set_ylabel( "Temperature Difference (K)" )
         ax.set_zlabel( "Relative Humidity (%)" )
 
+        comparison_label = "{:s} vs {:s}".format( next( iter( self.reference_evaluation ) ),
+                                                  next( iter( self.comparison_evaluation ) ) )
+
         # Do not pad these curly braces with spaces.
         # ':3f ' is not the same as ':3f'. The former
         # will throw an error.
-        ax.set_title( f"{'Iterative' if self.iterative else ''} Deviation Clusters " +
-                      f"for { self.model_name }\n" +
+        ax.set_title( f"Deviation Clusters " +
+                      f"for { comparison_label }\n" +
                       f"Radius Tolerance: {100*self.cusum_error_tolerance[0]:.3f}%," +
                       f" Temperature Tolerance: {self.cusum_error_tolerance[1]:.3f} degrees\n" +
                       f"Radius Threshold: {self.cusum_error_threshold[0]:.3f}," +
