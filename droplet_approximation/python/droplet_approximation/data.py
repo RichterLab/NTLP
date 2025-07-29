@@ -1148,6 +1148,10 @@ def read_particles_data( particles_root, particle_ids, dirs_per_level, quiet_fla
                                                   evaluation, in Kelvin.
 
     """
+    # Remove "be" if it is an evaluation tag
+    # to avoid attempted reading
+    if "be" in evaluations.keys():
+        del evaluations["be"]
 
     # Names of the observation columns.  Each of these stores an array of
     # observations that could be trimmed due to cold particles, if requested.
@@ -1163,17 +1167,18 @@ def read_particles_data( particles_root, particle_ids, dirs_per_level, quiet_fla
         BE_RADII_NAME,
         BE_TEMPERATURES_NAME,
         "input be temperatures",
-        "output be temperatures",
+        "input be radii",
         "salt masses",
         "air temperatures",
         "relative humidities",
         "air densities"
     ]
-
+    
     # Rearrange the evaluations map into arrays of tags and extensions for
     # easier access.
     evaluation_tags       = list( evaluations.keys() )
     evaluation_extensions = list( evaluations.values() )
+
 
     data_dict    = {"particle id": particle_ids}
     particles_df = pd.DataFrame( data_dict ).set_index( "particle id" )
@@ -1232,6 +1237,8 @@ def read_particles_data( particles_root, particle_ids, dirs_per_level, quiet_fla
 
         particles_df[evaluation_radii_name]        = pd.Series( dtype=object )
         particles_df[evaluation_temperatures_name] = pd.Series( dtype=object )
+
+        OBSERVATION_NAMES.extend( [evaluation_radii_name, evaluation_temperatures_name] )
 
     # Start processing particles.
     for particle_id in particle_ids:
