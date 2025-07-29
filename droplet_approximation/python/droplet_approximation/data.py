@@ -498,12 +498,18 @@ def create_droplet_batch( number_droplets, number_evaluations=1 ):
             t_final    = integration_times[droplet_index]
 
             try:
-                solution     = timed_solve_ivp( dydt, [0, t_final], y0, method="BDF", t_eval=[t_final], args=(parameters,) )
+                random_outputs[droplet_index, :] = timed_solve_ivp( dydt,
+                                                                    [0, t_final],
+                                                                    y0,
+                                                                    method="BDF",
+                                                                    t_eval=[t_final],
+                                                                    args=(parameters,) )
 
-                if solution.success:
-                    random_outputs[droplet_index, 0] = solution.y[0][0]
-                    random_outputs[droplet_index, 1] = solution.y[1][0]
-
+                # Did the solve fail (e.g. dydt's exponentials overflowed, BDF's
+                # LU solve failed, etc)?
+                if np.any( np.isnan( random_outputs[droplet_index, :] ) ):
+                    weird_inputs["failed_solve"].append( [y0, parameters, t_final, "solve_ivp() failed"] )
+                else:
                     good_parameters_flag = True
 
                     # Check that we didn't get a physically impossible solution.  These
@@ -514,35 +520,32 @@ def create_droplet_batch( number_droplets, number_evaluations=1 ):
                     #       we leave it here so it is easy to identify physically impossible
                     #       cases.
                     #
-                    if solution.y[0][0] <= 0.0:
+                    if random_outputs[droplet_index, 0] <= 0.0:
                         weird_outputs["radius_nonpositive"].append( [y0, parameters, t_final, random_outputs[droplet_index, :]] )
                         good_parameters_flag = False
-                    elif solution.y[1][0] <= 0.0:
+                    elif random_outputs[droplet_index, 1] <= 0.0:
                         weird_outputs["temperature_nonpositive"].append( [y0, parameters, t_final, random_outputs[droplet_index, :]] )
                         good_parameters_flag = False
 
                     # Check that we didn't get strange solutions that are outside of the
                     # expected ranges.  These will also be logged and replaced.
-                    if solution.y[0][0] < 10.0**parameter_ranges["radius"][0] * (100 - 3) / 100:
+                    if random_outputs[droplet_index, 0] < 10.0**parameter_ranges["radius"][0] * (100 - 3) / 100:
                         weird_outputs["radius_too_small"].append( [y0, parameters, t_final, random_outputs[droplet_index, :]] )
                         good_parameters_flag = False
-                    elif solution.y[0][0] > 10.0**parameter_ranges["radius"][1] * (100 + 3) / 100:
+                    elif random_outputs[droplet_index, 0] > 10.0**parameter_ranges["radius"][1] * (100 + 3) / 100:
                         weird_outputs["radius_too_large"].append( [y0, parameters, t_final, random_outputs[droplet_index, :]] )
                         good_parameters_flag = False
 
-                    if solution.y[1][0] < parameter_ranges["temperature"][0] * (100 - 3) / 100:
+                    if random_outputs[droplet_index, 1] < parameter_ranges["temperature"][0] * (100 - 3) / 100:
                         weird_outputs["temperature_too_small"].append( [y0, parameters, t_final, random_outputs[droplet_index, :]] )
                         good_parameters_flag = False
-                    elif solution.y[1][0] > parameter_ranges["temperature"][1] * (100 + 3) / 100:
+                    elif random_outputs[droplet_index, 1] > parameter_ranges["temperature"][1] * (100 + 3) / 100:
                         weird_outputs["temperature_too_large"].append( [y0, parameters, t_final, random_outputs[droplet_index, :]] )
                         good_parameters_flag = False
 
                     # Jump to the next droplet's parameters if we didn't detect a problem.
                     if good_parameters_flag:
                         break
-                else:
-                    # Record the cases that fail to converge.
-                    weird_inputs["failed_solve"].append( [y0, parameters, t_final, solution.message] )
 
             except RuntimeWarning as e:
                 weird_inputs["evaluation_warning"].append( [y0, parameters, t_final, str( e )] )

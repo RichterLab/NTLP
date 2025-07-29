@@ -3,6 +3,7 @@ import errno
 import functools
 import os
 import signal
+import warnings
 
 import numpy as np
 from scipy.integrate import solve_ivp
@@ -409,6 +410,10 @@ def scale_droplet_parameters( droplet_parameters ):
 def solve_ivp_float32_outputs( dydt, t_span, y0, **kwargs ):
     """
     Solves an initial value problem and returns the solutions in 32-bit precision.
+    Error checking is present to ensure that failed solves provide a solution
+    (i.e. NaN's) and have the same caller interface as successful solves.
+    In the case of solver failures a warning is issued reporting the inputs and
+    parameters to aide in debugging why the solve failed.
 
     NOTE: This is a wrapper around scipy.integrate.solve_ivp(), so it takes the
           same arguments and returns the same values.  See that function's
@@ -426,27 +431,56 @@ def solve_ivp_float32_outputs( dydt, t_span, y0, **kwargs ):
 
     Returns 1 value:
 
-      solution - Object containing fields related to the integration process,
-                 including:
-
-                   t - Vector of times, of length number_times, where dydt was
-                       evaluated.
-                   y - Array of solutions, shaped number_variables x numbe_times,
-                       where dydt was evaluated.
-
-                 Solutions will be returned according to the evaluation window,
-                 t_eval, either supplied via kwargs or selected as a default from
-                 t_span.
+      solution - NumPy array, shaped len( y0 ) x 1, containing the solution of
+                 dydt at t_span[1] using y0 as the initial conditions.  Will
+                 contain np.nan if solve_ivp() failed to provide a solution.
 
     """
 
-    # Solve the ODE in the precision supplied by the caller.
-    solution = solve_ivp( dydt, t_span, y0, **kwargs )
+    solution = np.empty( (len( y0 ),), dtype=np.float32 )
 
-    # Return the outputs as the requested precision when a solution was found.
-    if solution.success:
-        solution.t = solution.t.astype( "float32" )
-        solution.y = solution.y.astype( "float32" )
+    solve_failed_flag = False
+    failure_message   = None
+
+    # Solve the ODE in the precision supplied by the caller.
+    try:
+        ode_solution = solve_ivp( dydt, t_span, y0, **kwargs )
+
+        if ode_solution.success:
+            # If we could integrate, return the outputs as the requested
+            # precision.
+            solution[:] = ode_solution.y[:, 0].astype( "float32" )
+        else:
+            # Otherwise, capture useful information from the solution object to
+            # help in debugging.
+            solve_failed_flag = True
+            failure_message   = "failed integration - message: {:s}, status: {:d}, number_rhs_evals: {:d}".format(
+                ode_solution.message,
+                ode_solution.status,
+                ode_solution.nfev )
+    except Exception as e:
+        # Something went sideways, so report the exception.
+        solve_failed_flag = True
+        failure_message   = "exception - '{:s}'".format( str( e ) )
+
+    # Failed solves return NaNs and trigger a warning with all of the
+    # important details.
+    if solve_failed_flag:
+        solution[:] = np.nan
+
+        warnings.warn( "solve_ivp() failed for "
+                           "inputs=np.array( [{:.15g}, {:.15g}] ), "
+                           "parameters=np.array( [{:.15g}, {:.15g}, {:.15g}, {:.15g}] ), "
+                           "time={:15g}, kwargs={}\n{:s}.".format(
+                               y0[0],
+                               y0[1],
+                               kwargs["args"][0][0],
+                               kwargs["args"][0][1],
+                               kwargs["args"][0][2],
+                               kwargs["args"][0][3],
+                               t_span[-1],
+                               kwargs,
+                               failure_message ) )
 
     return solution
 
@@ -484,7 +518,7 @@ def timed_solve_ivp( *args, **kwargs ):
     some input parameter combinations result in incredibly small steps that
     results in the solution appearing to hang.
 
-    NOTE: This is a wrapper around scipy.integrate.solve_ivp(), so it takes the
+    NOTE: This is a wrapper around solve_ivp_float32_outputs(), so it takes the
           same arguments and returns the same values.  See that function's
           help for a (way more) detailed explanation of each argument and value.
 
@@ -500,17 +534,10 @@ def timed_solve_ivp( *args, **kwargs ):
 
     Returns 1 value:
 
-      solution - Object containing fields related to the integration process,
-                 including:
+      solution - NumPy array, shaped len( y0 ) x 1, containing the solution of
+                 dydt at t_span[1] using y0 as the initial conditions.  Will
+                 contain np.nan if solve_ivp() failed to provide a solution.
 
-                   t - Vector of times, of length number_times, where dydt was
-                       evaluated.
-                   y - Array of solutions, shaped number_variables x numbe_times,
-                       where dydt was evaluated.
-
-                 Solutions will be returned according to the evaluation window,
-                 t_eval, either supplied via kwargs or selected as a default from
-                 t_span.
     """
 
     return solve_ivp_float32_outputs( *args, **kwargs )

@@ -124,7 +124,12 @@ def do_bdf( input_parameters, times, **kwargs ):
                                                                       method="BDF",
                                                                       t_eval=[integration_times[time_index]],
                                                                       args=(input_parameters[time_index, 2:],),
-                                                                      **kwargs ).y[:, 0]
+                                                                      **kwargs )
+        #
+        # NOTE: We don't abort if this evaluation failed.  We hope that this
+        #       particular observation was problematic but future observations
+        #       aren't.
+        #
 
     return output_parameters
 
@@ -215,7 +220,7 @@ def do_iterative_bdf( input_parameters, times, **kwargs ):
     output_parameters       = np.zeros( (input_parameters.shape[0], 2), dtype=np.float32 )
     output_parameters[0, :] = input_parameters[0, :2]
 
-    # Evaluate
+    # Evaluate all but the first observation, as it's our input.
     for time_index in range( 1, input_parameters.shape[0] ):
         output_parameters[time_index, :] = solve_ivp_float32_outputs( dydt,
                                                                       [0, integration_times[time_index - 1]],
@@ -223,7 +228,14 @@ def do_iterative_bdf( input_parameters, times, **kwargs ):
                                                                       method="BDF",
                                                                       t_eval=[integration_times[time_index-1]],
                                                                       args=(input_parameters[time_index-1, 2:],),
-                                                                      **kwargs ).y[:, 0]
+                                                                      **kwargs )
+
+        # See if this evaluation failed to provide a solution.  If so, then we
+        # can short circuit the remaining evaluations since we don't have a way
+        # to continue.
+        if np.any( np.isnan( output_parameters[time_index, :] ) ):
+            output_parameters[time_index:, :] = np.nan
+            break
 
     return output_parameters
 
