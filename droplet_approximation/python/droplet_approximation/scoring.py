@@ -755,19 +755,7 @@ class ScoringReport():
 
         """
 
-        colormap = colors.ListedColormap( ["red",
-                                           "blue",
-                                           "green",
-                                           "orange",
-                                           "black",
-                                           "yellow",
-                                           "teal",
-                                           "gold",
-                                           "magenta",
-                                           "lightgreen",
-                                           "navy",
-                                           "dimgray",
-                                           "lightcoral"] )
+        colormap = plt.get_cmap("tab20")
 
         # Gather all of the data in the desired coordinates. Thin the data out based on thinning_ratio
         plot_data             = np.array( [np.log10( self.deviations[::thinning_ratio, 0] ),
