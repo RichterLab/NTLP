@@ -3529,8 +3529,8 @@ CONTAINS
 	    if ( (part%Tp.lt.TEMPERATURE_RANGE(1)) .or. (part%Tp.gt.TEMPERATURE_RANGE(2))) then
 		    write(*,'(a8,3e15.6)') 'DHR2:',part%Tp,TEMPERATURE_RANGE(1),TEMPERATURE_RANGE(2)
            end if
-	   if ((log10(part%m_s).lt.SALINITY_LOG_RANGE(1)) .or. (log10(part%m_s).gt.SALINITY_LOG_RANGE(2))) then
-		   write(*,'(a8,4e15.6)') 'DHR3:',part%m_s,log10(part%m_s),SALINITY_LOG_RANGE(1),SALINITY_LOG_RANGE(2)
+	   if ((log10(part%m_s).lt.SALT_MASS_LOG_RANGE(1)) .or. (log10(part%m_s).gt.SALT_MASS_LOG_RANGE(2))) then
+		   write(*,'(a8,4e15.6)') 'DHR3:',part%m_s,log10(part%m_s),SALT_MASS_LOG_RANGE(1),SALT_MASS_LOG_RANGE(2)
             end if
 	    if ( (part%Tf.lt.AIR_TEMPERATURE_RANGE(1)) .or. (part%Tf.gt.AIR_TEMPERATURE_RANGE(2))) then
 		 write(*,'(a8,3e15.6)') 'DHR4:',part%Tf,AIR_TEMPERATURE_RANGE(1),AIR_TEMPERATURE_RANGE(2)   
