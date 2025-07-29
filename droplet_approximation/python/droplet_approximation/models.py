@@ -951,7 +951,7 @@ def load_model_checkpoint( checkpoint_path, model, optimizer=None ):
 
     # Load the checkpoint's Tensors as a dictionary and figure out which version
     # it is.
-    checkpoint         = torch.load( checkpoint_path )
+    checkpoint         = torch.load( checkpoint_path, weights_only=False )
     checkpoint_version = checkpoint.get( "checkpoint_version", 1 )
 
     # Load the checkpoint based on its reported version.  Complain if we don't
