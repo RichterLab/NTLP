@@ -93,16 +93,19 @@ def parse_parameter_ranges( parameter_ranges_str ):
 
     return parameter_ranges
 
-def create_training_file_with_seed_and_ranges( output_path, number_droplets, seed, parameter_ranges ):
+def create_training_file_with_seed_and_ranges( output_path, log_path, number_droplets, seed, parameter_ranges ):
     """
     Sets the NumPy RNG seed and the droplet parameter ranges and creates a file
     of random droplets.  After completion a summary message is printed to
-    standard output.
+    standard output.  Standard error is logged to file so failed ODE solves can
+    be analyzed.
 
-    Takes 4 arguments:
+    Takes 5 arguments:
 
       output_path      - Path to the file to create.  This is overwritten if it
                          already exists.
+      log_path         - Path to the log file to create.  Standard output is
+                         redirected here.
       number_droplets  - The number of droplets to generate.
       seed             - Integral seed for NumPy's RNG.
       parameter_ranges - Dictionary of parameter ranges for to set with
@@ -122,9 +125,13 @@ def create_training_file_with_seed_and_ranges( output_path, number_droplets, see
 
     droplet_approximation.set_parameter_ranges( parameter_ranges )
 
-    droplet_approximation.create_training_file( output_path,
-                                                number_droplets,
-                                                quiet_flag=False )
+    # Redirect standard error to the log and create the training file.
+    with open( log_path, "w" ) as log_fp:
+        sys.stderr = log_fp
+
+        droplet_approximation.create_training_file( output_path,
+                                                    number_droplets,
+                                                    quiet_flag=False )
 
     print( "Wrote '{:s}' with {:d} droplet{:s}.".format(
         output_path,
@@ -222,8 +229,9 @@ def main( argv ):
 
         for process_index in range( number_processes ):
 
-            # Build this process' path.
+            # Build this process' pathes.
             output_path = "{:s}-{:d}.training_data".format( output_prefix, process_index )
+            log_path    = "{:s}-{:d}.log".format( output_prefix, process_index )
 
             # Adjust the provided seed by this process' rank so it has a
             # distinct stream of values from its brethren.  If no seed is
@@ -234,6 +242,7 @@ def main( argv ):
                 current_rng_seed = None
 
             args_list.append( (output_path,
+                               log_path,
                                number_droplets,
                                current_rng_seed,
                                parameter_ranges ) )
