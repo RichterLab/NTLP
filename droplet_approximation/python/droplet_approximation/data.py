@@ -7,7 +7,9 @@ import warnings
 import numpy as np
 import pandas as pd
 
-from .physics import TimeoutError, \
+from .physics import BDF_TOLERANCE_ABSOLUTE, \
+                     BDF_TOLERANCE_RELATIVE, \
+                     TimeoutError, \
                      dydt, \
                      get_parameter_ranges, \
                      scale_droplet_parameters, \
@@ -352,7 +354,7 @@ def convert_NTLP_trace_to_particle_files( trace_path, particles_root, dirs_per_l
     # Return the unique identifiers seen in this trace.
     return np.unique( np.hstack( particle_ids_list ) )
 
-def create_droplet_batch( number_droplets, number_evaluations=1 ):
+def create_droplet_batch( number_droplets, number_evaluations=1, solve_ivp_atol=None, solve_ivp_rtol=None ):
     """
     Creates a batch of random droplets' input parameters, with t_final.  t_final is sampled
     from a slightly larger distribution than the anticipated use cases (spanning [1e-3, 1e1])
@@ -387,12 +389,21 @@ def create_droplet_batch( number_droplets, number_evaluations=1 ):
           decent performance on both DNS time scales and LES time scales (i.e. t_final
           in [1e-1, 1e1]).
 
-    Takes 3 arguments:
+    Takes 4 arguments:
 
-      number_droplets                     - Number of droplets to generate parameters for.
-      number_evaluations                  - Optional number of integration times to evaluate each
-                                            parameter at so that a temporal window can be learned.  If
-                                            omitted defaults to a single point in time per parameter.
+      number_droplets    - Number of droplets to generate parameters for.
+      number_evaluations - Optional number of integration times to evaluate each
+                           parameter at so that a temporal window can be learned.  If
+                           omitted defaults to a single point in time per parameter.
+      solve_ivp_atol     - Optional scalar or pair of floating point values specifying
+                           the absolute tolerance used by solve_ivp().  If a scalar is
+                           provided, then both the radius and temperature tolerances
+                           are set to solve_ivp_atol.  Otherwise, the first value
+                           is the radius tolerance and the second is the temperature
+                           tolerance.  If omitted, defaults to physics.BDF_TOLERANCE_ABSOLUTE.
+      solve_ivp_rtol     - Scalar floating point value specifying the relative
+                           tolerance used by solve_ivp().  If omitted, defaults to
+                           physics.BDF_TOLERANCE_RELATIVE.
 
     Returns 5 values:
 
@@ -409,6 +420,16 @@ def create_droplet_batch( number_droplets, number_evaluations=1 ):
                           key represents a category of "weird".
 
     """
+
+    if solve_ivp_atol is None:
+        absolute_tolerance = BDF_TOLERANCE_ABSOLUTE
+    else:
+        absolute_tolerance = solve_ivp_atol
+
+    if solve_ivp_rtol is None:
+        relative_tolerance = BDF_TOLERANCE_RELATIVE
+    else:
+        relative_tolerance = solve_ivp_rtol
 
     # Promote run-time warnings to errors so we get an exception whenever the ODEs
     # are evaluated in problematic corners of the parameter space.  This not only
@@ -503,7 +524,9 @@ def create_droplet_batch( number_droplets, number_evaluations=1 ):
                                                                     y0,
                                                                     method="BDF",
                                                                     t_eval=[t_final],
-                                                                    args=(parameters,) )
+                                                                    args=(parameters,),
+                                                                    atol=absolute_tolerance,
+                                                                    rtol=relative_tolerance )
 
                 # Did the solve fail (e.g. dydt's exponentials overflowed, BDF's
                 # LU solve failed, etc)?
