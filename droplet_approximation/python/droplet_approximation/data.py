@@ -425,7 +425,7 @@ def create_droplet_batch( number_droplets, number_evaluations=1 ):
 
     # Fix the particle temperature based on air temperature.
     random_inputs[::number_evaluations, 1] = (random_inputs[::number_evaluations, 3] +
-                                              np.random.uniform( -3, 3 ))
+                                              np.random.uniform( -3, 3, number_droplets ))
 
     # Duplicate each unique droplet parameter once for each evaluation.
     # This keeps them in parameter order.
@@ -568,6 +568,10 @@ def create_droplet_batch( number_droplets, number_evaluations=1 ):
             # this droplet and try again.
             random_inputs[droplet_index, :] = scale_droplet_parameters(
                 np.random.uniform( -1, 1, 6 ).astype( "float32" ) )
+
+            # Fix the particle temperature based on air temperature.
+            random_inputs[droplet_index, 1] = (random_inputs[droplet_index, 3] +
+                                               np.random.uniform( -3, 3 ))
 
     # XXX: Warn users if there were strange droplets?  No simple way to see if any
     #      of the lists associated with weird_*'s keys are non-empty.
