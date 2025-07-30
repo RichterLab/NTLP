@@ -7,17 +7,55 @@
 # NOTE: This currently expects the particle evaluation script to live in the
 #       same directory as this script!
 #
-USAGE_STR="$0 <simulation_name> <particles_root> <job_count> [<testing_flag>]"
+USAGE_STR="$0 <simulation_name> <particles_root> <job_count> <process_count> <iterative_flag> bdf <extension> <atol_radii> <atol_temps> <rtol> [<testing_flag>]
+$0 <simulation_name> <particles_root> <job_count> <process_count> <iterative_flag> mlp <extension> <model_class> <device> <checkpoint_path> [<testing_flag>]"
+
+if [ $# -lt 10 -o $# -gt 11 ]; then
+    echo "Incorrect number of arguments supplied.  Expected 10 or 11 but received $#."
+    echo
+    #
+    # NOTE: Our usage string has multiple lines so we must evaluate escape
+    #       sequences.
+    #
+    /usr/bin/echo -e "${USAGE_STR}"
+    exit 1
+fi
 
 # Parse the command line arguments.
-SIMULATION_NAME=${1?${USAGE_STR}}
-PARTICLES_ROOT=${2?${USAGE_STR}}
-JOB_COUNT=${3?${USAGE_STR}}
+SIMULATION_NAME=${1}
+PARTICLES_ROOT=${2}
+JOB_COUNT=${3}
+PROCESS_COUNT=${4}
+ITERATIVE_FLAG=${5}
+EVALUATION_TYPE=${6}
+FILE_EXTENSION=${7}
 
-if [ $# -gt 3 ]; then
-    TESTING_FLAG="yes"
+# Eliminate the common arguments so we can access the remaining by positional
+# variables.
+shift 7
+
+#
+# NOTE: We keep these conditionals separate so as to make it easier to update
+#       the script when the evaluation types' parameter counts change.
+#
+if [ "${EVALUATION_TYPE}" = "bdf" ]; then
+    ARG8=${1}
+    ARG9=${2}
+    ARG10=${3}
+elif [ "${EVALUATION_TYPE}" = "mlp" ]; then
+    ARG8=${1}
+    ARG9=${2}
+    ARG10=${3}
 else
-    TESTING_FLAG="no"
+    echo "Unknown evaluation type ('${EVALUATION_TYPE}')!  Must be either 'bdf' or 'mlp'." >&2
+    exit 1
+fi
+
+# Grab the testing flag if it's present, otherwise default to testing.
+if [ $# -gt 3 ]; then
+    TESTING_FLAG=${4}
+else
+    TESTING_FLAG="yes"
 fi
 
 # Takes a count and the number of chunks to break the count up into.  Echoes an
@@ -68,14 +106,6 @@ SCRIPTS_DIRECTORY=`dirname $0`
 # Path to the evaluation script.
 EVALUATE_PARTICLES="${SCRIPTS_DIRECTORY}/evaluate_particles.py"
 
-# Specify the number of processes to use for each job.
-#
-# NOTE: This is hardcoded to the AMD Epyc cluster's nodes' core count.  We don't
-#       compute this via lscpu as we're running on a head node which isn't
-#       representative of the cluster's nodes (48 vs 64 cores).
-#
-NUMBER_CORES=64
-
 # Path to the particles index.
 PARTICLES_INDEX="${PARTICLES_ROOT}/particles.index"
 if [ ! -d ${PARTICLES_ROOT} ]; then
@@ -103,7 +133,13 @@ for INDEX in "${INDEX_ARRAY[@]}"; do
     SCHEDULE_COMMAND="echo ${EVALUATE_PARTICLES} \
                               ${PARTICLES_ROOT} \
                               ${INDEX} \
-                              ${NUMBER_CORES} | \
+                              ${PROCESS_COUNT} \
+                              ${ITERATIVE_FLAG} \
+                              ${EVALUATION_TYPE} \
+                              ${FILE_EXTENSION} \
+                              ${ARG8} \
+                              ${ARG9} \
+                              ${ARG10} | \
                       qsub \
                           -V \
                           ${SCHEDULER_ARGUMENTS} \
