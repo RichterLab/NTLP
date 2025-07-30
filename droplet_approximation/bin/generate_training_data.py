@@ -247,8 +247,8 @@ def main( argv ):
                                current_rng_seed,
                                parameter_ranges ) )
 
-            pool.starmap( create_training_file_with_seed_and_ranges,
-                          args_list )
+        pool.starmap( create_training_file_with_seed_and_ranges,
+                      args_list )
 
     return 0
 
