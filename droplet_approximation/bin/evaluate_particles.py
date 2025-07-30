@@ -198,26 +198,27 @@ def launch_evaluation_pipeline( particles_root, particle_indices_range_str,
 
     # Break the requested indices up into process-sized chunks.
     # The last process gets the remainder.
-    particles_chunk_size = (len( particle_indices ) + number_processes - 1) // number_processes
+    particles_chunk_size   = len( particle_indices ) // number_processes
+    number_extra_particles = len( particle_indices ) % number_processes
 
     args_list             = []
     particle_indices_list = []
+    start_index           = particle_indices[0]
     for process_index in range( number_processes ):
-        start_index = particle_indices[0] + particles_chunk_size * process_index
+        end_index = (start_index + particles_chunk_size +
+                     int( process_index < number_extra_particles ))
 
-        # Find the end of this process' range.  Take care to not exceed the last
-        # requested particle while also handling any remaining particles if the
-        # number of processes doesn't evenly divide the particle count.
-        #
-        # NOTE: We must add one to the last particle index to maintain Python's
-        #       open upper bound, otherwise we'll trim off the last requested
-        #       particle.
-        #
-        if process_index == number_processes - 1:
-            end_index = min( len( particle_ids ),
-                             particle_indices[-1] + 1 )
-        else:
-            end_index = start_index + particles_chunk_size
+        # Check to see if we've run out of work for the remaining processes.
+        # This occurs when there are fewer particles than processes.
+        if start_index == end_index:
+            print( "Only {:d} particle{:s} to process.  Reducing the number of processes from {:d} to {:d})".format(
+                len( particle_indices ),
+                "" if len( particle_indices ) == 1 else "s",
+                number_processes,
+                process_index  ) )
+            number_processes = process_index
+
+            break
 
         particle_indices_list.append( (start_index, end_index) )
 
@@ -230,10 +231,14 @@ def launch_evaluation_pipeline( particles_root, particle_indices_range_str,
                 parameters)
         args_list.append( args )
 
+        # Thanks to Python's exclusive indexing, the beginning of the next
+        # processes' range is the end of this range.
+        start_index = end_index
+
     # Report what we're processing.  Report particle numbers here.
     print( "Processing particles {:d}-{:d} from '{:s}'.".format(
         particle_indices[0] + 1,
-        particle_indices[-1],
+        particle_indices[-1] + 1,
         particles_index_path ) )
 
     print( "\n"
