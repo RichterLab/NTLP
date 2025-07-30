@@ -2928,12 +2928,6 @@ CONTAINS
       part => first_particle
       do while (associated(part))     
 
-         if (istage.eq.1) then
-            part%vp_old(1:3) = part%vp(1:3)
-       	    part%Tp_old = part%Tp
-            part%radius_old = part%radius
-         end if
-
          !First, interpolate to get the fluid velocity part%uf(1:3):
          if (ilin .eq. 1) then
             call uf_interp_lin   !Use trilinear interpolation
@@ -2950,13 +2944,23 @@ CONTAINS
          else
              rhoa = surf_rho
          end if
-           
-
 
          if (it .LE. 1 ) then 
             part%vp(1:3) = part%uf
             part%Tp = part%Tf
          endif
+
+        !If the particle was just introduced, set its temperature
+        !equal to its surroundings
+        if (part%res .le. 1.0e-10) then
+           part%Tp = part%Tf
+        end if
+
+        if (istage.eq.1) then
+           part%vp_old(1:3) = part%vp(1:3)
+       	   part%Tp_old = part%Tp
+           part%radius_old = part%radius
+        end if
 
          !Now advance the particle and position via RK3 (same as velocity)
         
@@ -3102,11 +3106,6 @@ CONTAINS
       do while (associated(part))
          i = i + 1
 
-	 !Store original values for two-way coupling
-         part%vp_old(1:3) = part%vp(1:3)
-         part%Tp_old = part%Tp
-         part%radius_old = part%radius
-
         !First, interpolate to get the fluid velocity part%uf(1:3):
         if (ilin .eq. 1) then
            call uf_interp_lin   !Use trilinear interpolation
@@ -3114,10 +3113,20 @@ CONTAINS
            call uf_interp       !Use 6th order Lagrange interpolation
         end if
 
-
         if (it .LE. 1) then
            part%vp(1:3) = part%uf
         end if
+
+        !If the particle was just introduced, set its temperature
+        !equal to its surroundings
+        if (part%res .le. 1.0e-10) then
+           part%Tp = part%Tf
+        end if
+
+        !Store original value of vp for two-way coupling
+        part%Tp_old = part%Tp
+        part%radius_old = part%radius
+        part%vp_old(1:3) = part%vp(1:3)
 
         if (iexner .eq. 1) then
            !Compute using the base-state pressure at the particle height
@@ -3468,10 +3477,20 @@ CONTAINS
            call uf_interp       !Use 6th order Lagrange interpolation
         end if
 
-
         if (it .LE. 1) then
            part%vp(1:3) = part%uf
         end if
+
+        !If the particle was just introduced, set its temperature
+        !equal to its surroundings
+        if (part%res .le. 1.0e-10) then
+           part%Tp = part%Tf
+        end if
+
+        !Store original value of vp for two-way coupling
+        part%Tp_old = part%Tp
+        part%radius_old = part%radius
+        part%vp_old(1:3) = part%vp(1:3)
 
         if (iexner .eq. 1) then
            !Compute using the base-state pressure at the particle height
