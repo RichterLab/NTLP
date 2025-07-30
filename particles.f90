@@ -2836,7 +2836,8 @@ CONTAINS
                !With these parameters, get m_s and rad_init from distribution
                call lognormal_dist(rad_init,m_s,kappa_s,M,S)
 
-               call create_particle(xp_init,vp_init,Tp_init,m_s,kappa_s,mult,rad_init,idx_old,procidx_old)
+               call create_particle(xp_init,vp_init,Tp_init,m_s,kappa_s,mult,rad_init,ngidx,myid)
+               ngidx = ngidx + 1
 
           else
 
@@ -2846,7 +2847,7 @@ CONTAINS
           end if
        
           if (icase.eq.5 .or. icase.eq.3) then
-             call new_particle(idx_old,procidx_old)
+             call new_particle(ngidx,myid)
           end if
 
        end if ! icase to decide whether to reflect
