@@ -1269,12 +1269,11 @@ def read_particles_data( particles_root, particle_ids, dirs_per_level, quiet_fla
         "relative humidities",
         "air densities"
     ]
-    
+
     # Rearrange the evaluations map into arrays of tags and extensions for
     # easier access.
     evaluation_tags       = list( evaluations.keys() )
     evaluation_extensions = list( evaluations.values() )
-
 
     data_dict    = {"particle id": particle_ids}
     particles_df = pd.DataFrame( data_dict ).set_index( "particle id" )
