@@ -1062,43 +1062,60 @@ def _read_particles_data_wrapper( particles_root, particle_ids, dirs_per_level, 
                                 dirs_per_level,
                                 **kwargs )
 
-def read_particles_data( particles_root, particle_ids, dirs_per_level, quiet_flag=True, cold_threshold=-np.inf, time_range=[-np.inf, np.inf], evaluations={} ):
+def read_particles_data( particles_root, particle_ids, dirs_per_level, quiet_flag=True, cold_threshold=-np.inf, filter_be_failures=False, time_range=[-np.inf, np.inf], evaluations={} ):
     """
     Reads one or more raw particle files and creates a particle-centric
-    DataFrame with one row per particle read.  Each row contains all of the
+    DataFrame with one row per particle read.  Each row file contains all of the
     observations stored as 1D NumPy arrays making it easy to operate on the
     entirety of individual particle's lifetimes.
 
-    Takes 7 arguments:
+    Filtering out outlier observations due to NTLP's backward Euler (BE)
+    implementation is possible, discarding either or both "cold" particles and
+    those that explicitly failed to converge during BE.
 
-      particles_root - Path to the top-level directory to read raw particle
-                       files from.
-      particle_ids   - Sequence of particle identifiers to read the associated
-                       raw particle files.
-      dirs_per_level - Number of subdirectories per level in the particle files
-                       directory hierarchy.
-      quiet_flag     - Optional flag specifying whether DataFrame creation
-                       should be quiet or not.  If omitted, defaults to True and
-                       creation does not generate outputs unless an error
-                       occurs.
-      cold_threshold - Optional floating point value specifying the lower bound
-                       for particle temperatures before they're considered "cold"
-                       and should be trimmed from the DataFrame.  Cold particles
-                       are invalid from the NTLP simulation's standpoint but were
-                       not flagged as such.  If omitted, all particles are retained.
-      time_range     - Optional sequence of two values specifying the start and
-                       end simulation times to crop particle observations to.
-                       Observations outside of the window are discarded.  If
-                       omitted, defaults to [-np.inf, np.inf] and all observations
-                       are retained.
-      evaluations    - Optional dictionary containing a map of tags to evaluation
-                       file extensions to read and incorporate into the DataFrame.
-                       If omitted, defaults to an empty dictionary and no
-                       evaluations are processed.
+    NOTE: Filtering observations does not remove them from evaluations!
+          To ensure that evaluations are aligned to observations, evaluations
+          are computed on *unfiltered* observations and then filters out
+          outliers.  To properly remove them from analysis, these need to be
+          pruned from the raw particle files which is currently not implemented.
 
-                       NOTE: If an evaluation file is missing, DataFrame
-                             construction is aborted so the issue can be
-                             remedied.
+          As a result, this is provided as a way to simplify downstream analysis
+          by factoring out outlier removal.
+
+    Takes 8 arguments:
+
+      particles_root     - Path to the top-level directory to read raw particle
+                           files from.
+      particle_ids       - Sequence of particle identifiers to read the associated
+                           raw particle files.
+      dirs_per_level     - Number of subdirectories per level in the particle files
+                           directory hierarchy.
+      quiet_flag         - Optional flag specifying whether DataFrame creation
+                           should be quiet or not.  If omitted, defaults to True and
+                           creation does not generate outputs unless an error
+                           occurs.
+      cold_threshold     - Optional floating point value specifying the lower bound
+                           for particle temperatures before they're considered "cold"
+                           and should be trimmed from the DataFrame.  Cold particles
+                           are invalid from the NTLP simulation's standpoint but were
+                           not flagged as such.  If omitted, all particles are retained.
+      filter_be_failures - Optional boolean flag specifying whether observations
+                           resulting from a backward Euler (BE) failure should be trimmed
+                           from the DataFrame.  BE failures result in an output that
+                           matches its input.  If omitted, all particles are retained.
+      time_range         - Optional sequence of two values specifying the start and
+                           end simulation times to crop particle observations to.
+                           Observations outside of the window are discarded.  If
+                           omitted, defaults to [-np.inf, np.inf] and all observations
+                           are retained.
+      evaluations        - Optional dictionary containing a map of tags to evaluation
+                           file extensions to read and incorporate into the DataFrame.
+                           If omitted, defaults to an empty dictionary and no
+                           evaluations are processed.
+
+                           NOTE: If an evaluation file is missing, DataFrame
+                                 construction is aborted so the issue can be
+                                 remedied.
 
     Returns 1 value:
 
@@ -1376,9 +1393,42 @@ def read_particles_data( particles_root, particle_ids, dirs_per_level, quiet_fla
             particles_df.at[particle_id, evaluation_radii_name]        = evaluation_radii[timeline_mask[1:]]
             particles_df.at[particle_id, evaluation_temperatures_name] = evaluation_temperatures[timeline_mask[1:]]
 
-        # Excise cold observations if requested.  These are an artifact
-        # of backward Euler that produces extremely cold temperatures
-        # when the process should have failed.
+        # Excise failed backward Euler (BE) evaluations if requested.  This
+        # removes evaluations whose inputs match their BE outputs.
+        if filter_be_failures and particles_df.at[particle_id, "number be failures"] > 0:
+
+            # BE failures typically occur at the beginning of a particle's life
+            # though have been observed throughout simulations.
+
+            be_failure_mask = (particles_df.at[particle_id, "be statuses"] > 0)
+
+            # Count the number of successive failures at the beginning so we can
+            # adjust the particle's birth time accordingly.
+            if particles_df.at[particle_id, "be statuses"][0] > 0:
+
+                # Compute the index of the first non-failed observation so we
+                # can use it's simulation time as the start of this particle's
+                # life.
+                number_starting_failures = 1
+                for observation_index in range( 1, particles_df.at[particle_id, "number observations"] ):
+                    if particles_df.at[particle_id, "be statuses"][observation_index] == 0:
+                        break
+
+                    number_starting_failures += 1
+
+                particles_df.at[particle_id, "birth time"] = particles_df.at[particle_id, "times"][number_starting_failures]
+
+            # Reduce the number of observations we have.
+            particles_df.at[particle_id, "number observations"] -= be_failure_mask.sum()
+            particles_df.at[particle_id, "number be failures"]  -= be_failure_mask.sum()
+
+            # Excise the failed BE observations.
+            for observation_name in OBSERVATION_NAMES:
+                particles_df.at[particle_id, observation_name] = particles_df.at[particle_id, observation_name][~be_failure_mask]
+
+        # Excise cold observations if requested.  These are an artifact of
+        # backward Euler that produces extremely cold temperatures when the
+        # process should have failed.
         if particles_df.at[particle_id, "input be temperatures"].min() < cold_threshold:
 
             # Cold particles occur once toward the beginning of their lifetime
@@ -1394,8 +1444,9 @@ def read_particles_data( particles_root, particle_ids, dirs_per_level, quiet_fla
             # Subtract the trimmed observations and pretend that the particle
             # sprang into existence after our cut.
             particles_df.at[particle_id, "number observations"] -= trim_index + 1
-            particles_df.at[particle_id, "birth time"]          += particles_df.at[particle_id, "integration times"][:trim_index].sum()
+            particles_df.at[particle_id, "birth time"]           = particles_df.at[particle_id, "times"][trim_index]
 
+            # Excise the observations in question.
             for observation_name in OBSERVATION_NAMES:
                 particles_df.at[particle_id, observation_name] = particles_df.at[particle_id, observation_name][trim_index:]
 
