@@ -58,7 +58,8 @@ DEBUG_FLAGS = -g
 # Enable all compilation warnings except for when temporary arrays are created
 # when passing to a subroutine or Fortran.  Temporary arrays occur throughout
 # the code base and will be addressed at a later date.
-DEBUG_FLAGS += -check all,noarg_temp_created
+#DEBUG_FLAGS += -check all,noarg_temp_created
+DEBUG_FLAGS += -check bounds -check pointers
 
 # Exit with a SIGFPE whenever a floating point exception (FPE) is detected.
 # This is useful for identifying precisely where an invalid value (infinities

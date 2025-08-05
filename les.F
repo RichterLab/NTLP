@@ -9381,8 +9381,10 @@ c ----------- build file names for velocity, pressure, and constants
 c
       use pars
       use con_data
+      implicit none
       include 'mpif.h'
       character cgrid*10, num*3
+      integer iblnk
 c
 c --------------- build character strings for file name
 c
