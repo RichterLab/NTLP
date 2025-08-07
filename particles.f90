@@ -2680,8 +2680,8 @@ CONTAINS
 
     !Now each process figures out how many to create
 
-    !t_reint = 1800.0  !Time after which to start injecting
-    t_reint = 20.0  !Time after which to start injecting
+    t_reint = 1800.0  !Time after which to start injecting
+    !t_reint = 2.0  !Time after which to start injecting
     it_delay = 200    !Num of time steps between injection events (sometimes too few are produced and if it's < numprocs then it gets rounded to zero)
     
     
@@ -2799,9 +2799,12 @@ CONTAINS
           call add_histogram(bins_rad,hist_raddeath,histbins+2,part%radius,part%mult)
 
 	  !Store the spatial location of this mass crossing the surface -- surface precipitation
+	  !NOTE: THIS NEGLECTS PARTICLES THAT CHANGE PROCESSORS BEFORE DYING! ASSUMING THIS IS A SMALL CONTRIBUTION
           ipt = floor(part%xp(1)/dx) + 1
           jpt = floor(part%xp(2)/dy) + 1
+	  if (ipt .ge. mxs .and. ipt .le. mxe .and. jpt .ge. iys .and. jpt .le. iye) then
 	  surf_precip(ipt,jpt) = surf_precip(ipt,jpt) + real(part%mult)*(rhow*2.0/3.0*pi2*part%radius**3)
+	  end if
 
 
           if (ireintro.eq.1 .and. inewpart.eq.6) then  !FATIMA can reintroduce particle of the same type
