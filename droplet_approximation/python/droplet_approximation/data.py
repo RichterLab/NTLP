@@ -296,7 +296,7 @@ def convert_NTLP_trace_to_particle_files( trace_path, particles_root, dirs_per_l
         # Iterate through the file reading a chunk of records at
         # a time.
         while True:
-            raw_buffer = trace_fp.read( ParticleRecord.SIZE_BYTES * NUMBER_RECORDS_PER_CHUNK )
+            raw_buffer = trace_fp.read( ParticleRecord.SIZE_BYTES.value * NUMBER_RECORDS_PER_CHUNK )
 
             # We reached the end of the file in the previous iteration.
             if not raw_buffer:
