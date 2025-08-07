@@ -113,7 +113,7 @@ def plot_droplet_size_temperatures( times, size_temperatures, background_paramet
                                    linestyle="dashed" )
 
         # Label the graphs
-        ax_h[1][0].set_title( "Relative and Absolute Radius Error against {:s}".format( reference_label ) )
+        ax_h[1][0].set_title( "Radius Error against {:s}".format( reference_label ) )
         ax_h[1][1].set_title( "Temperature Error against {:s}".format( reference_label ) )
         ax_h[1][0].set_ylabel( "Relative Difference (%)" )
         ax_h[1][1].set_ylabel( "Relative Difference (%)" )
@@ -139,6 +139,11 @@ def plot_droplet_size_temperatures( times, size_temperatures, background_paramet
         ax_h[1][0].legend( loc=(0.05, 0.75) )
         ax_h[1][1].legend()
         ax_h_twin_radius.legend( loc=(0.05, 0.85) )
+
+        # Turn on minor ticks for the twins to match what we do for the other
+        # axes below.
+        ax_h_twin_radius.minorticks_on()
+        ax_h_twin_temperature.minorticks_on()
 
     # Plot background parameters onto remaining subplots
     starting_index = 4 if compare else 2
