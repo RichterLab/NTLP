@@ -1411,10 +1411,8 @@ def read_particles_data( particles_root, particle_ids, dirs_per_level, quiet_fla
         particles_df.at[particle_id, "relative humidities"]    = observations_fp32[:-1, ParticleRecord.RELATIVE_HUMIDITY_INDEX.value][timeline_mask[:-1]]
         particles_df.at[particle_id, "air densities"]          = observations_fp32[:-1, ParticleRecord.AIR_DENSITY_INDEX.value][timeline_mask[:-1]]
 
-        # Construct the particle's time line.
-        particles_df.at[particle_id, "times"]                  = (particles_df.at[particle_id, "birth time"] +
-                                                                  np.cumsum( particles_df.at[particle_id, "integration times"] ) -
-                                                                  particles_df.at[particle_id, "integration times"][0])
+        # The particle's time line.
+        particles_df.at[particle_id, "times"]                  = observations_fp32[:-1, ParticleRecord.TIME_INDEX.value][timeline_mask[:-1]]
 
         # Get the evaluation file paths to read and the corresponding columns.
         evaluation_file_paths = get_evaluation_file_path( particle_path,
