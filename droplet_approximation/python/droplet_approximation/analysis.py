@@ -114,11 +114,27 @@ def plot_droplet_size_temperatures( times, size_temperatures, background_paramet
 
         # Label the graphs
         ax_h[1][0].set_title( "Relative and Absolute Radius Error against {:s}".format( reference_label ) )
-        ax_h[1][1].set_title( "Relative and Absolute Temperature Error against {:s}".format( reference_label ) )
+        ax_h[1][1].set_title( "Temperature Error against {:s}".format( reference_label ) )
         ax_h[1][0].set_ylabel( "Relative Difference (%)" )
         ax_h[1][1].set_ylabel( "Relative Difference (%)" )
         ax_h_twin_temperature.set_ylabel( "Absolute Difference (K)" )
         ax_h_twin_radius.set_ylabel( "Absolute Difference (m)" )
+
+        # Set the temperature graph's absolute difference axes to match the
+        # relative axes since we didn't plot anything.
+        #
+        # NOTE: We take care to compute the extrema without NaN's by using masks
+        #       as we're not interested in .nanmin()/.nanmax()'s RuntimeWarning.
+        #       It's also worth noting that we're guaranteed a finite range here
+        #       as all NaN's will have already exploded above.  As a result we
+        #       provide a bogus initial argument as it won't be used.
+        #
+        temperature_relative_limits = ax_h[1][1].get_ylim()
+        reference_minimum           = np.amin( reference_data[:, 1], where=~np.isnan( reference_data[:, 1] ), initial=0.0 )
+        reference_maximum           = np.amax( reference_data[:, 1], where=~np.isnan( reference_data[:, 1] ), initial=0.0 )
+        temperature_absolute_limits = (temperature_relative_limits[0] / 100.0 * reference_minimum,
+                                       temperature_relative_limits[1] / 100.0 * reference_maximum)
+        ax_h_twin_temperature.set_ylim( temperature_absolute_limits )
 
         ax_h[1][0].legend( loc=(0.05, 0.75) )
         ax_h[1][1].legend()
