@@ -12,7 +12,7 @@ from .scoring import calculate_nrmse
 from itertools import islice
 
 def plot_droplet_size_temperatures( times, size_temperatures, background_parameters={},
-                                   compare=None, ax_h=None, title_string=None ):
+                                    compare=None, ax_h=None, title_string=None ):
     """
     Generic function for plotting radius/temperature data alongside background parameters.
     Can graph one or more time series of radius/temperature data and compare them for
@@ -20,6 +20,7 @@ def plot_droplet_size_temperatures( times, size_temperatures, background_paramet
     the baseline for comparison.
 
     Takes 6 Arguments:
+
       times                 - Array, contains the times corresponding to the provided
                               time series data.
       size_temperatures     - Dictionary contains key:value pairs of
@@ -36,10 +37,13 @@ def plot_droplet_size_temperatures( times, size_temperatures, background_paramet
                               and Temperature."
 
     Returns 2 Values:
+
       fig_h - Figure generated for the plots. Equals none if ax_h is provided
               since no new plot is generated.
       ax_h  - Array of axes that were used for plotting.
+
     """
+
     if compare is None:
         compare = len( size_temperatures ) > 1
     if title_string is None:
@@ -55,7 +59,7 @@ def plot_droplet_size_temperatures( times, size_temperatures, background_paramet
 
     if ax_h is None:
         fig_h, ax_h = plt.subplots( subplot_height, 2, figsize=(10, 3.2*subplot_height + 0.5), sharex=True,
-                                    layout="constrained")
+                                    layout="constrained" )
         # If there's only one row, wrap ax_h so we can iterate
         fig_h.suptitle( title_string )
     else:
@@ -65,14 +69,14 @@ def plot_droplet_size_temperatures( times, size_temperatures, background_paramet
     # array to treat single and multi row graphs
     # the same.
     if subplot_height == 1:
-        ax_h = np.array([ax_h])
+        ax_h = np.array( [ax_h] )
 
     # Graph radius/temperature data
-    cmap   = plt.get_cmap("Set1")
+    cmap   = plt.get_cmap( "Set1" )
     colors = cmap( np.linspace( 0.0, 1.0, time_series_count ) )
-    for color, ( label, time_series_data ) in zip( colors, size_temperatures.items() ):
-        ax_h[0][0].plot( times, time_series_data[..., 0], label=label, color=color  )
-        ax_h[0][1].plot( times, time_series_data[..., 1], label=label, color=color  )
+    for color, (label, time_series_data) in zip( colors, size_temperatures.items() ):
+        ax_h[0][0].plot( times, time_series_data[..., 0], label=label, color=color )
+        ax_h[0][1].plot( times, time_series_data[..., 1], label=label, color=color )
 
     ax_h[0][0].set_ylabel( "Radius (m)" )
     ax_h[0][0].set_yscale( "log" )
@@ -83,27 +87,27 @@ def plot_droplet_size_temperatures( times, size_temperatures, background_paramet
 
     if compare:
         if time_series_count == 1:
-            raise( Exception("Error: compare flag true but no other time series to compare!") )
+            raise( Exception( "Error: compare flag true but no other time series to compare!" ) )
 
         # Aboslute difference between truth and model.
-        ax_h_twin_radius = ax_h[1][0].twinx()
+        ax_h_twin_radius      = ax_h[1][0].twinx()
         ax_h_twin_temperature = ax_h[1][1].twinx()
 
         # Get the first label/datapoint and plot absolute/relative difference data
         reference_label, reference_data = next( iter( size_temperatures.items() ) )
         for color, (label, comparison_data) in islice( zip( colors, size_temperatures.items() ), 1, None ):
             ax_h[1][0].plot( times,
-                            np.abs( reference_data[:, 0] - comparison_data[:, 0] )
+                             np.abs( reference_data[:, 0] - comparison_data[:, 0] )
                                 / reference_data[:, 0] * 100,
-                            color=color,
-                            label="{:s} relative error".format( label ) )
+                             color=color,
+                             label="{:s} relative error".format( label ) )
             ax_h[1][1].plot( times,
                              np.abs( reference_data[:, 1] - comparison_data[:, 1] )
                                 / reference_data[:, 1] * 100,
                              color=color,
                              label="{:s} error".format( label ) )
-            ax_h_twin_radius.plot( times, 
-                                   np.abs( reference_data[:, 0] - comparison_data[:, 0] ), 
+            ax_h_twin_radius.plot( times,
+                                   np.abs( reference_data[:, 0] - comparison_data[:, 0] ),
                                    c=color,
                                    label="{:s} absolute error".format( label ),
                                    linestyle="dashed" )
@@ -116,21 +120,21 @@ def plot_droplet_size_temperatures( times, size_temperatures, background_paramet
         ax_h_twin_temperature.set_ylabel( "Absolute Difference (K)" )
         ax_h_twin_radius.set_ylabel( "Absolute Difference (m)" )
 
-        ax_h[1][0].legend(loc=(0.05, 0.75))
+        ax_h[1][0].legend( loc=(0.05, 0.75) )
         ax_h[1][1].legend()
-        ax_h_twin_radius.legend(loc=(0.05, 0.85))
+        ax_h_twin_radius.legend( loc=(0.05, 0.85) )
 
     # Plot background parameters onto remaining subplots
     starting_index = 4 if compare else 2
-    for index, ( label, time_series ) in enumerate( background_parameters.items() ):
-       axis_row_index    = ( starting_index + index ) // 2
-       axis_column_index = ( starting_index + index ) % 2
-       current_axis  = ax_h[axis_row_index][axis_column_index]
+    for index, (label, time_series) in enumerate( background_parameters.items() ):
+       axis_row_index    = (starting_index + index) // 2
+       axis_column_index = (starting_index + index) % 2
+       current_axis      = ax_h[axis_row_index][axis_column_index]
 
        current_axis.set_title( label )
        current_axis.plot( times, time_series )
        current_axis.set_ylabel( label )
-       
+
     # Format all subplots
     for current_axis in ax_h.flat:
         current_axis.minorticks_on()
@@ -139,30 +143,34 @@ def plot_droplet_size_temperatures( times, size_temperatures, background_paramet
 
     return fig_h, ax_h
 
-def plot_droplet_size_temperatures_dataframe( particle_dataframe, evaluation_tags, **kwargs):
+def plot_droplet_size_temperatures_dataframe( particle_dataframe, evaluation_tags, **kwargs ):
     """
     Wrapper for plot_droplet_size_temperatures. Plots radius/temperatures from a dataframe
     for specified evaluation tags.
 
     Takes 2 Arguments:
+
       particle_dataframe - Pandas DataFrame containing the row for the particle to plot.
       evaluation_tags     - String List or String containing the evaluation tags to compare.
       **kwargs            - Additional arguments to pass to plot_droplet_size_temperatures.
 
     Returns 2 Values:
+
       fig_h - Figure generated for the plots. Equals none if ax_h is provided
               since no new plot is generated.
       ax_h  - Array of axes that were used for plotting.
+
     """
+
     # If just one tag was provided, wrap it into an array
     if type( evaluation_tags ) == str:
         evaluation_tags = [evaluation_tags]
 
     if "title_string" not in kwargs:
-        evaluation_string = ", ".join( [evaluation_tag for evaluation_tag in evaluation_tags ] )
+        evaluation_string = ", ".join( [evaluation_tag for evaluation_tag in evaluation_tags] )
         particle_id       = particle_dataframe.name
         kwargs["title_string"] = "Droplet size/temperatures for {:s}\nOn particle {:d}".format( evaluation_string, particle_id )
-    
+
     times             = particle_dataframe["times"]
     size_temperatures = {
         evaluation_tag: np.stack( particle_dataframe[["output {:s} radii".format( evaluation_tag ),
@@ -175,7 +183,6 @@ def plot_droplet_size_temperatures_dataframe( particle_dataframe, evaluation_tag
 
     return fig_h, ax_h
 
-
 def plot_droplet_size_temperatures_domain( input_parameters, model=None, dt=None, final_time=10.0, **kwargs ):
     """
     Wrapper for plot_droplet_size_temperatures. Evaluates the BDF radius/temperature solution
@@ -183,27 +190,31 @@ def plot_droplet_size_temperatures_domain( input_parameters, model=None, dt=None
     iteratively with a time step of dt. Plots the resulting radius/temperature data.
 
     Takes 5 Arugments:
+
       input_parameters - Array sized 6 containing the initial droplet parameters.
       model            - Optional PyTorch model to compare with BDF.
       dt               - Optional float determining the time step for model evaluation.
                          Defaults to the mean of the log time range.
       final_time       - Float determining the time range of the trajectory. Defaults to 10s.
       **kwargs         - Additional parameters to pass to plot_droplet_size_temperatures.
-        
+
     Returns 2 Values:
+
       fig_h - Figure generated for the plots. Equals none if ax_h is provided
               since no new plot is generated.
       ax_h  - Array of axes that were used for plotting.
+
     """
+
     # If dt is none, set it to the exponent of the
     # mean of the time range (geometric mean).
     if dt is None:
-        dt = 10 ** ( np.mean( get_parameter_ranges()["time"] ) )
+        dt = 10**(np.mean( get_parameter_ranges()["time"] ))
 
     NUMBER_TIME_POINTS = int( final_time // dt )
-    t_eval = dt * np.arange( 0, NUMBER_TIME_POINTS )
+    t_eval             = dt * np.arange( 0, NUMBER_TIME_POINTS )
 
-    print( "Inputs: {}\ndt: {}".format( input_parameters, dt) )
+    print( "Inputs: {}\ndt: {}".format( input_parameters, dt ) )
 
     # Get truth from the ODEs.
     y0                = (input_parameters[0], input_parameters[1])
@@ -248,42 +259,47 @@ def plot_droplet_size_temperatures_scoring( particle_dataframe, score_report, **
     in score_report alongside the corresponding radius/temperature data.
 
     Takes 3 Arguments:
+
       particle_dataframe - Pandas DataFrame containing the row for the particle to plot.
       score_report       - ScoringReport object to plot deviations from.
       **kwargs           - Additional parameters to pass to plot_droplet_size_temperatures.
 
     Returns 2 Values:
+
       fig_h - Figure generated for the plots. Equals none if ax_h is provided
               since no new plot is generated.
       ax_h  - Array of axes that were used for plotting.
+
     """
+
     reference_evaluation_tag  = next( iter( score_report.reference_evaluation ) )
     comparison_evaluation_tag = next( iter( score_report.comparison_evaluation ) )
-    
+
     if "title_string" not in kwargs:
         particle_id    = particle_dataframe.name
         particle_nrmse = score_report.per_particle_nrmse[particle_id]
-        kwargs["title_string"] = ( "Scoring Particle {:d} for {:s} vs. {:s}".format( particle_id,
-                                                                                     reference_evaluation_tag,
-                                                                                     comparison_evaluation_tag )
-                                 + "\nNRMSE: {:.3e}".format( particle_nrmse ) 
-                                 + "\nCUSUM Tolerance: {}, CUSUM Threshold: {}".format ( score_report.cusum_error_tolerance,
-                                                                                         score_report.cusum_error_threshold ) )
+        kwargs["title_string"] = ("Scoring Particle {:d} for {:s} vs. {:s}".format( particle_id,
+                                                                                    reference_evaluation_tag,
+                                                                                    comparison_evaluation_tag )
+                                  + "\nNRMSE: {:.3e}".format( particle_nrmse )
+                                  + "\nCUSUM Tolerance: {}, CUSUM Threshold: {}".format ( score_report.cusum_error_tolerance,
+                                                                                         score_report.cusum_error_threshold ))
 
     fig_h, ax_h = plot_droplet_size_temperatures_dataframe( particle_dataframe,
-                                                          [reference_evaluation_tag,
-                                                           comparison_evaluation_tag],
-                                                           **kwargs )
+                                                            [reference_evaluation_tag,
+                                                             comparison_evaluation_tag],
+                                                            **kwargs )
 
     # Graph deviations
-    cmap = plt.get_cmap("tab20")
+    cmap = plt.get_cmap( "tab20" )
     for deviation_index in np.where( score_report.deviation_particle_ids == particle_dataframe.name )[0]:
         deviation_parameter = score_report.deviation_parameters[deviation_index]
         deviation_time      = score_report.deviation_times[deviation_index]
         deviation_cluster   = score_report.deviation_clusters[deviation_index]
         deviation_label     = f"{deviation_parameter.name.lower()} deviation, cluster {deviation_cluster}"
+
         for ax in ax_h.flat:
-            ax.axvline( x=deviation_time,linewidth=1, linestyle="--", label=deviation_label,
+            ax.axvline( x=deviation_time, linewidth=1, linestyle="--", label=deviation_label,
                         color=cmap( deviation_cluster ) )
 
     # Regenerate legend for top column
