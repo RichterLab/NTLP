@@ -69,7 +69,7 @@ def batch_convert_NTLP_traces_to_particle_files( trace_paths, particles_root, di
 
     """
 
-    particles_index_path = "{:s}/particles.index".format( particles_root )
+    particles_index_path = get_particles_index_path( particles_root )
 
     # Default to the number of cores on the system.
     #
@@ -88,8 +88,8 @@ def batch_convert_NTLP_traces_to_particle_files( trace_paths, particles_root, di
 
     # Serialize each of the unique particle identifiers seen to the index.  This
     # provides discoverability to the raw particle files written above.
-    unique_particle_ids = np.unique( np.hstack( particle_ids_list ) )
-    unique_particle_ids.tofile( particles_index_path )
+    unique_particle_ids = write_particles_index( particles_index_path,
+                                                 particle_ids_list )
 
     return particles_index_path, unique_particle_ids
 
@@ -240,6 +240,91 @@ def clean_training_data( file_name ):
     # Return the counts of good and bad data so the caller knows what was done.
     return input_parameters.shape[0], bad_data_mask.sum()
 
+def convert_NTLP_trace_array_to_particle_files( trace_array, particles_root, dirs_per_level ):
+    """
+    Converts an array of NTLP trace observations into a one or more raw particle
+    files.  The trace array contain observations of any particles that were seen
+    by the MPI rank that created the trace though it is easier to analyze
+    particles when they are stored in files dedicated to individual particle
+    observations.
+
+    NOTE: This does not generate a unique particle identifier index!
+
+    Takes 3 arguments:
+
+      trace_array    - NumPy array, shaped (number_observations,
+                       ParticleRecord.SIZE), containing particle observations as
+                       32-bit floating point values.
+      particles_root - Path to the top-level directory to write raw particle
+                       files beneath.
+      dirs_per_level - Number of subdirectories per level in the particle files
+                       directory hierarchy.
+
+    Returns 1 value:
+
+      particle_ids - NumPy array of the unique particle identifiers in trace_path.
+
+    """
+
+    def _make_particle_file_directories( particle_path ):
+        """
+        Creates all of the intermediate directories in the supplied raw particle
+        file path.  This helper function
+
+        Takes 1 argument:
+
+          particle_path - Path to the raw particle file.
+
+        Returns nothing.
+
+        """
+
+        # Create a directory for a (non-existent) file, but do not do anything
+        # when provided a directory.
+        if not os.path.isdir( particle_path ):
+            parent_path = "/".join( particle_path.split( "/" )[:-1] )
+            os.makedirs( parent_path, exist_ok=True )
+
+        return
+
+    # Create a 32-bit integer array of the records provided.  We need this to
+    # determine which particles are present.
+    trace_array_int32 = trace_array.view( np.int32 )
+
+    # Loop through each of the unique particles and append their records
+    # into a separate file.
+    particle_ids = np.unique( trace_array_int32[:, ParticleRecord.PARTICLE_ID.value] )
+    for particle_index, particle_id in enumerate( particle_ids ):
+        particle_path = get_particle_file_path( particles_root,
+                                                particle_id,
+                                                dirs_per_level )
+        _make_particle_file_directories( particle_path )
+
+        with open( particle_path, "ab" ) as particle_fp:
+            particle_mask = (trace_array_int32[:, ParticleRecord.PARTICLE_ID.value] == particle_id)
+
+            try:
+                # Grab the lock so we can write our particles.  This
+                # blocks until we acquire it.  We need this to ensure
+                # correct operation when processing multiple NTLP
+                # particle trace files in parallel as the same particle
+                # may occur in different MPI ranks' traces.
+                fcntl.flock( particle_fp.fileno(), fcntl.LOCK_EX )
+
+                # Append our records to the file.
+                trace_array[particle_mask, :].tofile( particle_fp )
+
+            except IOError as e:
+                raise RuntimeError( "Failed to lock '{:s}' for write: {:s}".format(
+                    particle_path,
+                    str( e ) ) )
+
+            finally:
+                # Unlock the file for the next writer.
+                fcntl.flock( particle_fp.fileno(), fcntl.LOCK_UN )
+
+    return particle_ids
+
 def convert_NTLP_trace_to_particle_files( trace_path, particles_root, dirs_per_level ):
     """
     Converts an NTLP trace file into a one or more raw particle files.  NTLP
@@ -262,27 +347,6 @@ def convert_NTLP_trace_to_particle_files( trace_path, particles_root, dirs_per_l
       particle_ids - NumPy array of the unique particle identifiers in trace_path.
 
     """
-
-    def make_particle_file_directories( particle_path ):
-        """
-        Creates all of the intermediate directories in the supplied raw particle
-        file path.  This helper function
-
-        Takes 1 argument:
-
-          particle_path - Path to the raw particle file.
-
-        Returns nothing.
-
-        """
-
-        # Create a directory for a (non-existent) file, but do not do anything
-        # when provided a directory.
-        if not os.path.isdir( particle_path ):
-            parent_path = "/".join( particle_path.split( "/" )[:-1] )
-            os.makedirs( parent_path, exist_ok=True )
-
-        return
 
     # Read in a large block of records at once.
     NUMBER_RECORDS_PER_CHUNK = 1024 * 1024
@@ -309,44 +373,13 @@ def convert_NTLP_trace_to_particle_files( trace_path, particles_root, dirs_per_l
 
             number_records = len( raw_buffer ) // ParticleRecord.SIZE_BYTES.value
 
-            # Create a 32-bit float array of the records read along with a
-            # 32-bit integer view so we can access both halves of the record.
-            # We make a 32-bit integer view on this data below.
-            chunk_array_fp32  = np.frombuffer( raw_buffer[:(number_records * ParticleRecord.SIZE_BYTES.value)],
-                                               dtype=np.float32 ).reshape( -1, ParticleRecord.SIZE.value )
-            chunk_array_int32 = chunk_array_fp32.view( np.int32 )
-
-            # Loop through each of the unique particles and append their records
-            # into a separate file.
-            particle_ids = np.unique( chunk_array_int32[:, ParticleRecord.PARTICLE_ID.value] )
-            for particle_index, particle_id in enumerate( particle_ids ):
-                particle_path = get_particle_file_path( particles_root,
-                                                        particle_id,
-                                                        dirs_per_level )
-                make_particle_file_directories( particle_path )
-
-                with open( particle_path, "ab" ) as particle_fp:
-                    particle_mask = (chunk_array_int32[:, ParticleRecord.PARTICLE_ID.value] == particle_id)
-
-                    try:
-                        # Grab the lock so we can write our particles.  This
-                        # blocks until we acquire it.  We need this to ensure
-                        # correct operation when processing multiple NTLP
-                        # particle trace files in parallel as the same particle
-                        # may occur in different MPI ranks' traces.
-                        fcntl.flock( particle_fp.fileno(), fcntl.LOCK_EX )
-
-                        # Append our records to the file.
-                        chunk_array_fp32[particle_mask, :].tofile( particle_fp )
-
-                    except IOError as e:
-                        raise RuntimeError( "Failed to lock '{:s}' for write: {:s}".format(
-                            particle_path,
-                            str( e ) ) )
-
-                    finally:
-                        # Unlock the file for the next writer.
-                        fcntl.flock( particle_fp.fileno(), fcntl.LOCK_UN )
+            # Create a NumPy array from our bytes, extract the particle
+            # observations, and write them to disk.
+            chunk_array_fp32 = np.frombuffer( raw_buffer[:(number_records * ParticleRecord.SIZE_BYTES.value)],
+                                              dtype=np.float32 ).reshape( -1, ParticleRecord.SIZE.value )
+            particle_ids     = convert_NTLP_trace_array_to_particle_files( chunk_array_fp32,
+                                                                           particles_root,
+                                                                           dirs_per_level )
 
             # Add these particle identifiers to the list of seen identifiers.
             particle_ids_list.append( particle_ids )
@@ -822,6 +855,22 @@ def get_particle_file_path( particles_root, particle_id, dirs_per_level ):
         level_1,
         level_2,
         particle_id )
+
+def get_particles_index_path( particles_root ):
+    """
+    Gets a particle directory's index file path.
+
+    Takes 1 argument:
+
+      particles_root - Path to the top-level of a particle's directory.
+
+    Returns 1 value:
+
+      particle_index_path - Path to the particles directory's index.
+
+    """
+
+    return "{:s}/particles.index".format( particles_root )
 
 def merge_weird_parameters( parameters_1, parameters_2 ):
     """
@@ -1551,3 +1600,94 @@ def read_training_file( file_name ):
     outputs        = inputs_outputs[:, 7:]
 
     return inputs, outputs, times
+
+def write_particles_index( particles_index_path, particle_ids, merge_flag=False ):
+    """
+    Creates or updates a particles index file using the supplied particle
+    identifiers.  The unique set of particle identifiers provided is written to
+    the supplied particles index.  If requested, an existing index file's
+    contents can be merged with the supplied identifiers facilitating
+    incremental updates to a particles directory hierarchy.
+
+    This function handles concurrent access by locking the particle index.
+
+    Takes 3 arguments:
+
+      particles_index_path - Path to the particles index file to write.  This
+                             file is overwritten when not merging particle
+                             indices.
+      particle_ids         - Array of particle identifiers to write to the
+                             index.  Can also be a list of arrays.
+      merge_flag           - Optional Boolean specifying whether particle_ids
+                             should be merged into an existing index (True) or a
+                             new index created from particle_ids (False).  If
+                             omitted, defaults to False and a new index is
+                             created, overwriting particles_index_path if it
+                             exists.
+
+    Returns 1 value:
+
+      unique_particle_ids - A NumPy array of unique particle identifiers in the
+                            index.  If merge_flag is True then this also
+                            includes the identifiers that were previously in
+                            particles_index_path.
+
+    """
+
+    # Help the caller and convert a list of arrays into a single array.
+    if isinstance( particle_ids, list ):
+        particle_ids = np.hstack( particle_ids )
+
+    # Open the file for read/write, creating it if necessary, but not truncating
+    # it if it exists.  This allows us to lock the file once while we update the
+    # index which is more efficient when we are merging indices with the
+    # contents of the index (i.e. two lock/unlocks).
+    with open( particles_index_path, "ab+" ) as index_fp:
+
+        try:
+            fcntl.flock( index_fp.fileno(), fcntl.LOCK_EX )
+
+            # Seek to the beginning and read the index if we're merging
+            # our particles in.
+            if merge_flag:
+
+                # Determine the file's length.  If it's non-zero then
+                # we have an existing set of particles to merge with.
+                index_fp.seek( 0, os.SEEK_END )
+                if index_fp.tell() > 0:
+                    index_fp.seek( 0 )
+
+                    # Read the current index.
+                    #
+                    # NOTE: We have at least one particle (for well-formed
+                    #       indices) since the file size is non-zero.
+                    #
+                    existing_particle_ids = np.fromfile( index_fp,
+                                                         dtype=np.int32 )
+
+                    # Add our particles to the end of the current index.
+                    particle_ids = np.hstack( [existing_particle_ids,
+                                               particle_ids] )
+
+            # De-duplicate the particles.
+            unique_particle_ids = np.unique( particle_ids )
+
+            # Overwrite the index with the unique particles.
+            index_fp.seek( 0 )
+            index_fp.truncate()
+            unique_particle_ids.tofile( index_fp )
+
+            # Attempt to flush any buffered data to disk before releasing our
+            # lock.
+            index_fp.flush()
+
+        except IOError as e:
+            raise RuntimeError( "Failed to lock '{:s}': {:s}".format(
+                particles_index_path,
+                str( e ) ) )
+
+        finally:
+            # Ensure the file is unlocked for the next read/writer.
+            fcntl.flock( index_fp.fileno(), fcntl.LOCK_UN )
+
+    return unique_particle_ids
