@@ -4,464 +4,291 @@ import pandas as pd
 from scipy.integrate import solve_ivp
 
 from .data import BE_TAG_NAME, \
-                  create_droplet_batch, \
                   get_evaluation_column_names
-from .models import do_inference, do_iterative_inference
-from .physics import dydt
-from .scoring import calculate_nrmse, identity_norm
+from .models import do_iterative_inference
+from .physics import dydt, get_parameter_ranges
+from .scoring import calculate_nrmse
 
-def analyze_model_iterative_performance( model, input_parameters=None, dt=0.05, final_time=10.0, figure_size=None ):
+from itertools import islice
+
+def plot_droplet_size_temperatures( times, size_temperatures, background_parameters={},
+                                   compare=None, ax_h=None, title_string=None ):
     """
-    Creates a figure with four plots to qualitatively assess the supplied model's
-    iterative performance on a single droplet's parameters. For both the radius and
-    temperature variables the ODE outputs are plotted against the model's estimates.
-    Additionally, the relative and absolute differences of each variable are
-    plotted so fine-grained differences in the solutions can be reviewed.
+    Generic function for plotting radius/temperature data alongside background parameters.
+    Can graph one or more time series of radius/temperature data and compare them for
+    relative/absolute difference. The first entry is `size_temperatures` is treated as
+    the baseline for comparison.
 
-    The model output is calculated iteratively. For instance, if `dt=0.5`, the model
-    output radius/temperature from the input parameters for `dt=0.5` will be used as
-    the input to calculate the radius/temperature for `t=1` and so on.
+    Takes 6 Arguments:
+      times                 - Array, contains the times corresponding to the provided
+                              time series data.
+      size_temperatures     - Dictionary contains key:value pairs of
+                              time_series_label:time_series_data to graph/compare.
+      background_parameters - Optional dictionary, contains key:value pairs of
+                              data_label:time_series_data for additional background
+                              parameters to plot.
+      compare               - Optional Boolean, determines whether to generate
+                              absolute/relative difference plots between radius/temperature
+                              data provided. Defaults to False if one radius/temperature
+                              time series is provided and True if two or more are provided.
+      ax_h                  - Optional axes array to graph onto.
+      title_string          - Optional String to title the plot. Defaults to "Droplet Size
+                              and Temperature."
 
-    Takes 5 arguments:
-
-      model            - PyTorch model to compare against the ODEs.
-      input_parameters - Optional NumPy array of input parameters to evaluate performance
-                         on.  If omitted, a random set of input parameters are sampled.
-                         The last four parameters will be fixed throughout the integration
-                         while the first two will be replace with the model output
-                         at each time step.
-      dt               - Optional float specifying the timestep to evaluate successive
-                         particles at.  If omitted, defaults to 0.05 seconds.
-      final_time       - Optional float fixing how long to integrate out to in seconds.
-                         If omitted, defaults to 10 seconds.
-      figure_size      - Optional sequence, of length 2, containing the width
-                         and height of the figure created.  If omitted, defaults
-                         to something big enough to comfortably assess a single
-                         model's outputs.
-
-    Returns nothing.
-
+    Returns 2 Values:
+      fig_h - Figure generated for the plots. Equals none if ax_h is provided
+              since no new plot is generated.
+      ax_h  - Array of axes that were used for plotting.
     """
+    if compare is None:
+        compare = len( size_temperatures ) > 1
+    if title_string is None:
+        title_string = "Droplet Size and Temperature"
 
-    # Default to something that fits a set of four plots (in a 2x2 grid) comfortably.
-    if figure_size is None:
-        figure_size = (9, 8)
+    time_series_count = len( size_temperatures )
 
-    # Smoothly evaluate the solution for 10 seconds into the future.
-    NUMBER_TIME_POINTS = int( np.floor( final_time / dt ) )
+    # Determine programmatically how many rows are needed
+    # for the plot.
+    subplot_height = 2 if compare else 1
+    if background_parameters is not None:
+        subplot_height += (len( background_parameters ) + 1) // 2
 
-    # Specify the colors/styles in our plots.
-    TRUTH_COLOR    = "b"
-    MODEL_COLOR    = "g."
-    RELATIVE_COLOR = "darkmagenta"
-    ABSOLUTE_COLOR = "dodgerblue"
+    if ax_h is None:
+        fig_h, ax_h = plt.subplots( subplot_height, 2, figsize=(10, 3.2*subplot_height + 0.5), sharex=True,
+                                    layout="constrained")
+        # If there's only one row, wrap ax_h so we can iterate
+        fig_h.suptitle( title_string )
+    else:
+        fig_h = None
 
-    # Sample the times in log-space so we get good coverage in both the DNS and
-    # LES regions.
-    t_eval = np.linspace( 0, final_time, NUMBER_TIME_POINTS )
+    # If axis array is 1D, wrap in another
+    # array to treat single and multi row graphs
+    # the same.
+    if subplot_height == 1:
+        ax_h = np.array([ax_h])
 
-    # Get a random droplet if we weren't provided one.
-    if input_parameters is None:
-        # XXX: This is wasteful.  Just call np.random.uniform()
-        (input_parameters,
-         _,
-         _,
-         _,
-         _) = create_droplet_batch( 1 )
-
-    # Report the droplet we're evaluating in case we randomly sampled it.
-    print( "Inputs: {}".format( input_parameters ) )
-
-    # Get truth from the ODEs.
-    y0           = (input_parameters[0], input_parameters[1])
-    solution     = solve_ivp( dydt, [0, final_time], y0, method="BDF", t_eval=t_eval, args=(input_parameters[2:],) )
-    truth_output = np.vstack( (solution.y[0][:], solution.y[1][:]) ).T
-
-    # Get the model's estimate.
-    model_output = do_iterative_inference( input_parameters,
-                                           t_eval,
-                                           model,
-                                           "cpu" )
-
-    # Removed fined-grained (DNS vs. LES) analysis since dt is constant
-
-    # Create our figure and embed the parameters that were evaluated.
-    fig_h, ax_h = plt.subplots( 2, 2, figsize=figure_size, sharex=True )
-    fig_h.suptitle( "Droplet Size and Temperature\nRadius={:g}, Temperature={:g}, m_s={:g}, Air Temp={:g}, RH={:g}, rhoa={:g}".format(
-        input_parameters[0],
-        input_parameters[1],
-        input_parameters[2],
-        input_parameters[3],
-        input_parameters[4],
-        input_parameters[5]
-    ) )
-
-    # Truth vs model predictions.
-    ax_h[0][0].plot( t_eval, truth_output[:, 0], TRUTH_COLOR,
-                     t_eval, model_output[:, 0], MODEL_COLOR )
-    ax_h[0][1].plot( t_eval, truth_output[:, 1], TRUTH_COLOR,
-                     t_eval, model_output[:, 1], MODEL_COLOR )
-
-    # Relative difference between truth and model.
-    ax_h[1][0].plot( t_eval,
-                     np.abs( truth_output[:, 0] - model_output[:, 0] ) / truth_output[:, 0] * 100,
-                     color=RELATIVE_COLOR )
-    ax_h[1][0].tick_params( axis="y", labelcolor=RELATIVE_COLOR )
-    ax_h[1][1].plot( t_eval,
-                     np.abs( truth_output[:, 1] - model_output[:, 1] ) / truth_output[:, 1] * 100,
-                     color=RELATIVE_COLOR )
-    ax_h[1][1].tick_params( axis="y", labelcolor=RELATIVE_COLOR )
-
-    # Aboslute difference between truth and model.
-    ax_h_twin_radius = ax_h[1][0].twinx()
-    ax_h_twin_radius.plot( t_eval, np.abs( truth_output[:, 0] - model_output[:, 0] ), color=ABSOLUTE_COLOR )
-    ax_h_twin_radius.set_ylabel( "Absolute Difference (m)" )
-    ax_h_twin_radius.tick_params( axis="y", labelcolor=ABSOLUTE_COLOR )
-
-    ax_h_twin_temperature = ax_h[1][1].twinx()
-    ax_h_twin_temperature.plot( t_eval, np.abs( truth_output[:, 1] - model_output[:, 1] ), color=ABSOLUTE_COLOR )
-    ax_h_twin_temperature.set_ylabel( "Absolute Difference (K)" )
-    ax_h_twin_temperature.tick_params( axis="y", labelcolor=ABSOLUTE_COLOR )
-
-    # Label the comparison plots' lines.
-    ax_h[0][0].legend( ["Truth", "Model"] )
-    ax_h[0][1].legend( ["Truth", "Model"] )
-
-    # Label the columns of plots.
-    ax_h[0][0].set_title( "Radius" )
-    ax_h[0][1].set_title( "Temperature" )
+    # Graph radius/temperature data
+    cmap   = plt.get_cmap("Set1")
+    colors = cmap( np.linspace( 0.0, 1.0, time_series_count ) )
+    for color, ( label, time_series_data ) in zip( colors, size_temperatures.items() ):
+        ax_h[0][0].plot( times, time_series_data[..., 0], label=label, color=color  )
+        ax_h[0][1].plot( times, time_series_data[..., 1], label=label, color=color  )
 
     ax_h[0][0].set_ylabel( "Radius (m)" )
-    ax_h[0][1].set_ylabel( "Temperature (K)" )
-    ax_h[1][0].set_ylabel( "Relative Difference (%)" )
-    ax_h[1][0].set_xlabel( "Time (s)" )
-    ax_h[1][1].set_ylabel( "Relative Difference (%)" )
-    ax_h[1][1].set_xlabel( "Time (s)" )
-
-    # Show time in log-scale as well as the droplets' radius.
-    ax_h[0][0].set_xscale( "log" )
     ax_h[0][0].set_yscale( "log" )
-    ax_h[0][1].set_xscale( "log" )
-    ax_h[0][1].set_yscale( "log" )
-    ax_h[1][0].set_xscale( "log" )
-    ax_h[1][1].set_xscale( "log" )
-
-    fig_h.tight_layout()
-
-def analyze_model_performance( model, input_parameters=None, figure_size=None ):
-    """
-    Creates a figure with four plots to qualitatively assess the supplied model's
-    performance on a single droplet's parameters.  For both the radius and
-    temperature variables the ODE outputs are plotted against the model's estimates.
-    Additionally, the relative and absolute differences of each variable are
-    plotted so fine-grained differences in the solutions can be reviewed.
-
-    XXX: This should return the normalized RMSE for radius and temperature.
-
-    Takes 3 arguments:
-
-      model            - PyTorch model to compare against the ODEs.
-      input_parameters - Optional NumPy array of input parameters to evaluate performance
-                         on.  If omitted, a random set of input parameters are sampled.
-      figure_size      - Optional sequence, of length 2, containing the width
-                         and height of the figure created.  If omitted, defaults
-                         to something big enough to comfortably assess a single
-                         model's outputs.
-
-    Returns nothing.
-
-    """
-
-    # Default to something that fits a set of four plots (in a 2x2 grid) comfortably.
-    if figure_size is None:
-        figure_size = (9, 8)
-
-    # Smoothly evaluate the solution for 10 seconds into the future.
-    FINAL_TIME         = 10.0
-    NUMBER_TIME_POINTS = 1000
-
-    # Specify the colors/styles in our plots.
-    TRUTH_COLOR    = "b"
-    MODEL_COLOR    = "r."
-    RELATIVE_COLOR = "darkmagenta"
-    ABSOLUTE_COLOR = "dodgerblue"
-
-    # Sample the times in log-space so we get good coverage in both the DNS and
-    # LES regions.
-    t_eval = np.logspace( -3, np.log10( FINAL_TIME ), NUMBER_TIME_POINTS )
-
-    # Get a random droplet if we weren't provided one.
-    if input_parameters is None:
-        # XXX: This is wasteful.  Just call np.random.uniform()
-        (input_parameters,
-         _,
-         _,
-         _,
-         _) = create_droplet_batch( 1 )
-
-    # Report the droplet we're evaluating in case we randomly sampled it.
-    print( "Inputs: {}".format( input_parameters ) )
-
-    # Get truth from the ODEs.
-    y0           = (input_parameters[0, 0], input_parameters[0, 1])
-    solution     = solve_ivp( dydt, [0, FINAL_TIME], y0, method="Radau", t_eval=t_eval, args=(input_parameters[0, 2:],) )
-    truth_output = np.vstack( (solution.y[0][:], solution.y[1][:]) ).T
-
-    # Get the model's estimate.
-    model_output = do_inference( np.tile( input_parameters, (t_eval.shape[0], 1) ),
-                                 t_eval,
-                                 model,
-                                 "cpu" )
-
-    # Compute the normalized RMSE across the entire time scale.
-    rmse_0 = np.sqrt( np.mean( (truth_output[:, 0] - model_output[:, 0])**2 ) ) / np.mean( truth_output[:, 0] )
-    rmse_1 = np.sqrt( np.mean( (truth_output[:, 1] - model_output[:, 1])**2 ) ) / np.mean( truth_output[:, 1] )
-    print( "NRMSE: {:g}%, {:g}%".format( rmse_0 * 100, rmse_1 * 100) )
-
-    # Compute the normalized RMSE for different regions (DNS and LES) for
-    # finer-grained performance assessment.
-    t_eval_mask = np.empty( (NUMBER_TIME_POINTS, 4),
-                            dtype=np.bool_ )
-    t_eval_mask[:, 0] = (t_eval  < 1e-2)
-    t_eval_mask[:, 1] = (t_eval >= 1e-2) & (t_eval < 1e-1)
-    t_eval_mask[:, 2] = (t_eval >= 1e-1) & (t_eval < 1e0)
-    t_eval_mask[:, 3] = (t_eval >= 1e0)
-
-    rmse_0 = np.empty( (4,), dtype=np.float32 )
-    rmse_1 = np.empty( (4,), dtype=np.float32 )
-
-    for scale_index in np.arange( t_eval_mask.shape[1] ):
-        rmse_0[scale_index] = (np.sqrt( np.mean( (truth_output[t_eval_mask[:, scale_index], 0] -
-                                                 model_output[t_eval_mask[:, scale_index], 0])**2 ) ) /
-                               np.mean( truth_output[t_eval_mask[:, scale_index], 0] ))
-        rmse_1[scale_index] = (np.sqrt( np.mean( (truth_output[t_eval_mask[:, scale_index], 1] -
-                                                  model_output[t_eval_mask[:, scale_index], 1])**2 ) ) /
-                               np.mean( truth_output[t_eval_mask[:, scale_index], 1] ))
-
-    print( "NRMSE: {}%, {}%".format( rmse_0 * 100, rmse_1 * 100 ) )
-
-    # Create our figure and embed the parameters that were evaluated.
-    fig_h, ax_h = plt.subplots( 2, 2, figsize=figure_size, sharex=True )
-    fig_h.suptitle( "Droplet Size and Temperature\nRadius={:g}, Temperature={:g}, m_s={:g}, Air Temp={:g}, RH={:g}, rhoa={:g}".format(
-        input_parameters[0, 0],
-        input_parameters[0, 1],
-        input_parameters[0, 2],
-        input_parameters[0, 3],
-        input_parameters[0, 4],
-        input_parameters[0, 5]
-    ) )
-
-    # Truth vs model predictions.
-    ax_h[0][0].plot( t_eval, truth_output[:, 0], TRUTH_COLOR,
-                     t_eval, model_output[:, 0], MODEL_COLOR )
-    ax_h[0][1].plot( t_eval, truth_output[:, 1], TRUTH_COLOR,
-                     t_eval, model_output[:, 1], MODEL_COLOR )
-
-    # Relative difference between truth and model.
-    ax_h[1][0].plot( t_eval,
-                     np.abs( truth_output[:, 0] - model_output[:, 0] ) / truth_output[:, 0] * 100,
-                     color=RELATIVE_COLOR )
-    ax_h[1][0].tick_params( axis="y", labelcolor=RELATIVE_COLOR )
-    ax_h[1][1].plot( t_eval,
-                     np.abs( truth_output[:, 1] - model_output[:, 1] ) / truth_output[:, 1] * 100,
-                     color=RELATIVE_COLOR )
-    ax_h[1][1].tick_params( axis="y", labelcolor=RELATIVE_COLOR )
-
-    # Aboslute difference between truth and model.
-    ax_h_twin_radius = ax_h[1][0].twinx()
-    ax_h_twin_radius.plot( t_eval, np.abs( truth_output[:, 0] - model_output[:, 0] ), color=ABSOLUTE_COLOR )
-    ax_h_twin_radius.set_ylabel( "Absolute Difference (m)" )
-    ax_h_twin_radius.tick_params( axis="y", labelcolor=ABSOLUTE_COLOR )
-
-    ax_h_twin_temperature = ax_h[1][1].twinx()
-    ax_h_twin_temperature.plot( t_eval, np.abs( truth_output[:, 1] - model_output[:, 1] ), color=ABSOLUTE_COLOR )
-    ax_h_twin_temperature.set_ylabel( "Absolute Difference (K)" )
-    ax_h_twin_temperature.tick_params( axis="y", labelcolor=ABSOLUTE_COLOR )
-
-    # Label the comparison plots' lines.
-    ax_h[0][0].legend( ["Truth", "Model"] )
-    ax_h[0][1].legend( ["Truth", "Model"] )
-
-    # Label the columns of plots.
-    ax_h[0][0].set_title( "Radius" )
-    ax_h[0][1].set_title( "Temperature" )
-
-    ax_h[0][0].set_ylabel( "Radius (m)" )
     ax_h[0][1].set_ylabel( "Temperature (K)" )
-    ax_h[1][0].set_ylabel( "Relative Difference (%)" )
-    ax_h[1][0].set_xlabel( "Time (s)" )
-    ax_h[1][1].set_ylabel( "Relative Difference (%)" )
-    ax_h[1][1].set_xlabel( "Time (s)" )
 
-    # Show time in log-scale as well as the droplets' radius.
-    ax_h[0][0].set_xscale( "log" )
-    ax_h[0][0].set_yscale( "log" )
-    ax_h[0][1].set_xscale( "log" )
-    ax_h[0][1].set_yscale( "log" )
-    ax_h[1][0].set_xscale( "log" )
-    ax_h[1][1].set_xscale( "log" )
+    ax_h[0][0].legend()
+    ax_h[0][1].legend()
 
-    fig_h.tight_layout()
+    if compare:
+        if time_series_count == 1:
+            raise( Exception("Error: compare flag true but no other time series to compare!") )
 
-def analyze_model_particle_performance( times, truth_output, model_output, norm=None, title_string=None, figure_size=None, time_range=None ):
-    """
-    Creates a figure with four plots to qualitatively assess the supplied model's
-    performance on a particular particle's trajectory from an NTLP dump. For both
-    the radius and temperature variables the ODE outputs are plotted against the
-    model's estimates.
+        # Aboslute difference between truth and model.
+        ax_h_twin_radius = ax_h[1][0].twinx()
+        ax_h_twin_temperature = ax_h[1][1].twinx()
 
-    The NRMSE is calculated to assess overall model performance. Additionally, the
-    relative and absolute differences of each variable are plotted so fine-grained
-    differences in the solutions can be reviewed.
+        # Get the first label/datapoint and plot absolute/relative difference data
+        reference_label, reference_data = next( iter( size_temperatures.items() ) )
+        for color, (label, comparison_data) in islice( zip( colors, size_temperatures.items() ), 1, None ):
+            ax_h[1][0].plot( times,
+                            np.abs( reference_data[:, 0] - comparison_data[:, 0] )
+                                / reference_data[:, 0] * 100,
+                            color=color,
+                            label="{:s} relative error".format( label ) )
+            ax_h[1][1].plot( times,
+                             np.abs( reference_data[:, 1] - comparison_data[:, 1] )
+                                / reference_data[:, 1] * 100,
+                             color=color,
+                             label="{:s} error".format( label ) )
+            ax_h_twin_radius.plot( times, 
+                                   np.abs( reference_data[:, 0] - comparison_data[:, 0] ), 
+                                   c=color,
+                                   label="{:s} absolute error".format( label ),
+                                   linestyle="dashed" )
 
-    Requires a dataframe with both the mlp output and distance already calculated.
+        # Label the graphs
+        ax_h[1][0].set_title( "Relative and Absolute Radius Error against {:s}".format( reference_label ) )
+        ax_h[1][1].set_title( "Relative and Absolute Temperature Error against {:s}".format( reference_label ) )
+        ax_h[1][0].set_ylabel( "Relative Difference (%)" )
+        ax_h[1][1].set_ylabel( "Relative Difference (%)" )
+        ax_h_twin_temperature.set_ylabel( "Absolute Difference (K)" )
+        ax_h_twin_radius.set_ylabel( "Absolute Difference (m)" )
 
-    Takes 7 arguments:
+        ax_h[1][0].legend(loc=(0.05, 0.75))
+        ax_h[1][1].legend()
+        ax_h_twin_radius.legend(loc=(0.05, 0.85))
 
-      times           - NumPy array, contains an array of the simulation
-                        times being analyzed
-      truth_ouput     - NumPy array, shaped 2 x len( times ). Contains an
-                        array of the particle's actual radius and temperature
-                        at index 0 and 1 respectively.
-      model_output    - NumPy array, shaped 2 x len( times ). Contains an
-                        array of the particle's estimated radius and temperature
-                        at index 0 and 1 respectively.
-      norm            - Optional user provided norm to apply to all
-                        data before calculating nrmse. Accepts an array
-                        sized number_observations x 2 and returns a normed
-                        array of the same length. Defaults to `identity_norm`.
-      title_string    - Optional string to append to plot title
-      figure_size     - Optional sequence, of length 2, containing the width
-                        and height of the figure created.  If omitted, defaults
-                        to something big enough to comfortably assess a single
-                        model's outputs.
-      time_range      - Optional sequence, of length 2, specifying the start and
-                        end time to display performance for.  If omitted, defaults
-                        to None and the times input is used for the X axis.
+    # Plot background parameters onto remaining subplots
+    starting_index = 4 if compare else 2
+    for index, ( label, time_series ) in enumerate( background_parameters.items() ):
+       axis_row_index    = ( starting_index + index ) // 2
+       axis_column_index = ( starting_index + index ) % 2
+       current_axis  = ax_h[axis_row_index][axis_column_index]
 
-    Returns nothing.
-
-    """
-
-    # Default to identity norm
-    if norm is None:
-        norm = identity_norm
-
-    # Default to something that fits a set of four plots (in a 2x2 grid) comfortably.
-    if figure_size is None:
-        figure_size = (9, 8)
-
-    # Specify the colors/styles in our plots.
-    TRUTH_COLOR    = "b"
-    MODEL_COLOR    = "r."
-    RELATIVE_COLOR = "darkmagenta"
-    ABSOLUTE_COLOR = "dodgerblue"
-
-    # Sort the dataframe by time
-    t_eval = times
-
-    normed_truth_output = norm( truth_output )
-    normed_model_output = norm( model_output )
-
-    # Compute the normalized RMSE across the entire time scale.
-    nrmse = calculate_nrmse( normed_truth_output, normed_model_output )
-
-    # Create our figure and embed the parameters that were evaluated.
-    fig_h, ax_h = plt.subplots( 2, 2, figsize=figure_size, sharex=True )
-    fig_h.suptitle( "Droplet Size and Temperature\n NRMSE={:g}%\n{}".format( nrmse * 100, title_string) )
-
-    # Truth vs model predictions.
-    ax_h[0][0].plot( t_eval, truth_output[:, 0], TRUTH_COLOR,
-                     t_eval, model_output[:, 0], MODEL_COLOR,
-                     ms=2 )
-    ax_h[0][1].plot( t_eval, truth_output[:, 1], TRUTH_COLOR,
-                     t_eval, model_output[:, 1], MODEL_COLOR,
-                     ms=2 )
-
-    # Relative difference between truth and model.
-    ax_h[1][0].plot( t_eval,
-                     np.abs( truth_output[:, 0] - model_output[:, 0] ) / truth_output[:, 0] * 100,
-                     color=RELATIVE_COLOR )
-    ax_h[1][0].tick_params( axis="y", labelcolor=RELATIVE_COLOR )
-    ax_h[1][1].plot( t_eval,
-                     np.abs( truth_output[:, 1] - model_output[:, 1] ) / truth_output[:, 1] * 100,
-                     color=RELATIVE_COLOR )
-    ax_h[1][1].tick_params( axis="y", labelcolor=RELATIVE_COLOR )
-
-    # Aboslute difference between truth and model.
-    ax_h_twin_radius = ax_h[1][0].twinx()
-    ax_h_twin_radius.plot( t_eval, np.abs( truth_output[:, 0] - model_output[:, 0] ), color=ABSOLUTE_COLOR )
-    ax_h_twin_radius.set_ylabel( "Absolute Difference (m)" )
-    ax_h_twin_radius.tick_params( axis="y", labelcolor=ABSOLUTE_COLOR )
-
-    ax_h_twin_temperature = ax_h[1][1].twinx()
-    ax_h_twin_temperature.plot( t_eval, np.abs( truth_output[:, 1] - model_output[:, 1] ), color=ABSOLUTE_COLOR )
-    ax_h_twin_temperature.set_ylabel( "Absolute Difference (K)" )
-    ax_h_twin_temperature.tick_params( axis="y", labelcolor=ABSOLUTE_COLOR )
-
-    # Label the comparison plots' lines.
-    ax_h[0][0].legend( ["Truth", "Model"] )
-    ax_h[0][1].legend( ["Truth", "Model"] )
-
-    # Label the columns of plots.
-    ax_h[0][0].set_title( "Radius" )
-    ax_h[0][1].set_title( "Temperature" )
-
-    ax_h[0][0].set_ylabel( "Radius (m)" )
-    ax_h[0][1].set_ylabel( "Temperature (K)" )
-    ax_h[1][0].set_ylabel( "Relative Difference (%)" )
-    ax_h[1][0].set_xlabel( "Time (s)" )
-    ax_h[1][1].set_ylabel( "Relative Difference (%)" )
-    ax_h[1][1].set_xlabel( "Time (s)" )
-
-    # Show time in log-scale as well as the droplets' radius.
-    ax_h[0][0].set_yscale( "log" )
-    ax_h[0][1].set_yscale( "log" )
-
-    if time_range is not None:
-        ax_h[0][0].set_xlim( time_range )
-        ax_h[0][1].set_xlim( time_range )
-        ax_h[1][0].set_xlim( time_range )
-        ax_h[1][1].set_xlim( time_range )
-
-    fig_h.tight_layout()
+       current_axis.set_title( label )
+       current_axis.plot( times, time_series )
+       current_axis.set_ylabel( label )
+       
+    # Format all subplots
+    for current_axis in ax_h.flat:
+        current_axis.minorticks_on()
+        current_axis.grid( color="b", alpha=0.1 )
+        current_axis.set_xlabel( "Time (s)" )
 
     return fig_h, ax_h
 
-def plot_droplet_size_temperature( size_temperatures, times ):
+def plot_droplet_size_temperatures_dataframe( particle_dataframe, evaluation_tags, **kwargs):
     """
-    Plots a droplet's size and temperature as a function of time.
+    Wrapper for plot_droplet_size_temperatures. Plots radius/temperatures from a dataframe
+    for specified evaluation tags.
 
-    Takes 2 arguments:
+    Takes 2 Arguments:
+      particle_dataframe - Pandas DataFrame containing the row for the particle to plot.
+      evaluation_tags     - String List or String containing the evaluation tags to compare.
+      **kwargs            - Additional arguments to pass to plot_droplet_size_temperatures.
 
-      size_temperatures - NumPy array, sized 2 x number_times, containing
-                          droplet radii and temperatures in the first and second
-                          columns, respectively.
-      times             - NumPy vector, of length number_times, containing the
-                          times corresponding to each entry in size_temperatures.
-
-    Returns 2 values:
-
-      fig_h - Figure handle created.
-      ax_h  - Sequence of two axes handles, one for the size plot and another
-              for the temperature plot.
-
+    Returns 2 Values:
+      fig_h - Figure generated for the plots. Equals none if ax_h is provided
+              since no new plot is generated.
+      ax_h  - Array of axes that were used for plotting.
     """
+    # If just one tag was provided, wrap it into an array
+    if type( evaluation_tags ) == str:
+        evaluation_tags = [evaluation_tags]
 
-    fig_h, ax_h = plt.subplots( 1, 2, figsize=(9, 4), sharex=True )
+    if "title_string" not in kwargs:
+        evaluation_string = ", ".join( [evaluation_tag for evaluation_tag in evaluation_tags ] )
+        particle_id       = particle_dataframe.name
+        kwargs["title_string"] = "Droplet size/temperatures for {:s}\nOn particle {:d}".format( evaluation_string, particle_id )
+    
+    times             = particle_dataframe["times"]
+    size_temperatures = {
+        evaluation_tag: np.stack( particle_dataframe[["output {:s} radii".format( evaluation_tag ),
+                                                      "output {:s} temperatures".format( evaluation_tag )]],
+                                  axis=-1 )
+        for evaluation_tag in evaluation_tags
+    }
 
-    fig_h.suptitle( "Droplet Size and Temperature (Truth)" )
+    fig_h, ax_h = plot_droplet_size_temperatures( times, size_temperatures, **kwargs )
 
-    ax_h[0].plot( times, size_temperatures[0, :], label="radius" )
-    ax_h[0].set_xlabel( "Time (s)" )
-    ax_h[0].set_ylabel( "Radius (m)" )
-    ax_h[0].set_xscale( "log" )
-    ax_h[0].set_yscale( "log" )
+    return fig_h, ax_h
 
-    ax_h[1].plot( times, size_temperatures[1, :], label="temp" )
-    ax_h[1].set_xlabel( "Time (s)" )
-    ax_h[1].set_ylabel( "Temperature (K)" )
-    ax_h[1].set_xscale( "log" )
+
+def plot_droplet_size_temperatures_domain( input_parameters, model=None, dt=None, final_time=10.0, **kwargs ):
+    """
+    Wrapper for plot_droplet_size_temperatures. Evaluates the BDF radius/temperature solution
+    for the given background conditions until final_time. If a model is provided, evalutes the model
+    iteratively with a time step of dt. Plots the resulting radius/temperature data.
+
+    Takes 5 Arugments:
+      input_parameters - Array sized 6 containing the initial droplet parameters.
+      model            - Optional PyTorch model to compare with BDF.
+      dt               - Optional float determining the time step for model evaluation.
+                         Defaults to the mean of the log time range.
+      final_time       - Float determining the time range of the trajectory. Defaults to 10s.
+      **kwargs         - Additional parameters to pass to plot_droplet_size_temperatures.
+        
+    Returns 2 Values:
+      fig_h - Figure generated for the plots. Equals none if ax_h is provided
+              since no new plot is generated.
+      ax_h  - Array of axes that were used for plotting.
+    """
+    # If dt is none, set it to the exponent of the
+    # mean of the time range (geometric mean).
+    if dt is None:
+        dt = 10 ** ( np.mean( get_parameter_ranges()["time"] ) )
+
+    NUMBER_TIME_POINTS = int( final_time // dt )
+    t_eval = dt * np.arange( 0, NUMBER_TIME_POINTS )
+
+    print( "Inputs: {}\ndt: {}".format( input_parameters, dt) )
+
+    # Get truth from the ODEs.
+    y0                = (input_parameters[0], input_parameters[1])
+    solution          = solve_ivp( dydt, [0, final_time], y0, method="BDF",
+                                   t_eval=t_eval, args=(input_parameters[2:],),
+                                   atol=1.0e-10, rtol=1.0e-7 )
+    bdf_output        = np.vstack( (solution.y[0][:], solution.y[1][:]) ).T
+    size_temperatures = {
+        "bdf": bdf_output
+    }
+
+    # Get the model's estimate if provided
+    if model is not None:
+        model_output               = do_iterative_inference( np.tile( input_parameters,
+                                                                      (NUMBER_TIME_POINTS, 1) ),
+                                                             t_eval,
+                                                             model,
+                                                             "cpu" )
+        model_nrmse                = calculate_nrmse( bdf_output, model_output )
+        size_temperatures["model"] = model_output
+
+    # Create our figure with the parameters that were evaluated.
+    if "title_string" not in kwargs:
+        kwargs["title_string"] = "Droplet Size and Temperature\nRadius={:g}, Temperature={:g}, m_s={:g}, Air Temp={:g}, RH={:g}, rhoa={:g}".format(
+            input_parameters[0],
+            input_parameters[1],
+            input_parameters[2],
+            input_parameters[3],
+            input_parameters[4],
+            input_parameters[5],
+        )
+        if model is not None:
+            kwargs["title_string"] += "\nModel NRMSE: {:.3e}".format( model_nrmse )
+
+    fig_h, ax_h = plot_droplet_size_temperatures( t_eval, size_temperatures, **kwargs )
+
+    return fig_h, ax_h
+
+def plot_droplet_size_temperatures_scoring( particle_dataframe, score_report, **kwargs ):
+    """
+    Wrapper for plot_droplet_size_temperature_dataframe. Plots the deviations recorded
+    in score_report alongside the corresponding radius/temperature data.
+
+    Takes 3 Arguments:
+      particle_dataframe - Pandas DataFrame containing the row for the particle to plot.
+      score_report       - ScoringReport object to plot deviations from.
+      **kwargs           - Additional parameters to pass to plot_droplet_size_temperatures.
+
+    Returns 2 Values:
+      fig_h - Figure generated for the plots. Equals none if ax_h is provided
+              since no new plot is generated.
+      ax_h  - Array of axes that were used for plotting.
+    """
+    reference_evaluation_tag  = next( iter( score_report.reference_evaluation ) )
+    comparison_evaluation_tag = next( iter( score_report.comparison_evaluation ) )
+    
+    if "title_string" not in kwargs:
+        particle_id    = particle_dataframe.name
+        particle_nrmse = score_report.per_particle_nrmse[particle_id]
+        kwargs["title_string"] = ( "Scoring Particle {:d} for {:s} vs. {:s}".format( particle_id,
+                                                                                     reference_evaluation_tag,
+                                                                                     comparison_evaluation_tag )
+                                 + "\nNRMSE: {:.3e}".format( particle_nrmse ) 
+                                 + "\nCUSUM Tolerance: {}, CUSUM Threshold: {}".format ( score_report.cusum_error_tolerance,
+                                                                                         score_report.cusum_error_threshold ) )
+
+    fig_h, ax_h = plot_droplet_size_temperatures_dataframe( particle_dataframe,
+                                                          [reference_evaluation_tag,
+                                                           comparison_evaluation_tag],
+                                                           **kwargs )
+
+    # Graph deviations
+    cmap = plt.get_cmap("tab20")
+    for deviation_index in np.where( score_report.deviation_particle_ids == particle_dataframe.name )[0]:
+        deviation_parameter = score_report.deviation_parameters[deviation_index]
+        deviation_time      = score_report.deviation_times[deviation_index]
+        deviation_cluster   = score_report.deviation_clusters[deviation_index]
+        deviation_label     = f"{deviation_parameter.name.lower()} deviation, cluster {deviation_cluster}"
+        for ax in ax_h.flat:
+            ax.axvline( x=deviation_time,linewidth=1, linestyle="--", label=deviation_label,
+                        color=cmap( deviation_cluster ) )
+
+    # Regenerate legend for top column
+    for ax in ax_h[0]:
+        ax.legend()
 
     return fig_h, ax_h
 

@@ -5,10 +5,10 @@
 #       update!
 #
 
-from .analysis import analyze_model_iterative_performance, \
-                      analyze_model_particle_performance, \
-                      analyze_model_performance, \
-                      plot_droplet_size_temperature, \
+from .analysis import plot_droplet_size_temperatures, \
+                      plot_droplet_size_temperatures_dataframe, \
+                      plot_droplet_size_temperatures_domain, \
+                      plot_droplet_size_temperatures_scoring, \
                       plot_particles, \
                       plot_particle_history
 from .data import BE_TAG_NAME, \
