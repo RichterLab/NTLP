@@ -333,10 +333,9 @@ def plot_droplet_size_temperatures_scoring( particle_dataframe, score_report, **
                                                              comparison_evaluation_tag],
                                                             **kwargs )
 
-    # We use a qualitative colormap with 20 colors (10 pairs of light/dark
-    # shades) so we have enough distinct colors for datasets with a large number
-    # of deviation clusters.
-    cmap = plt.get_cmap( "tab20" )
+    # We use a qualitative colormap with 9 distinct colors so we have enough for
+    # datasets with a large number of deviation clusters.
+    cmap = plt.get_cmap( "Set1" )
 
     # Plot each of the deviations found.
     for deviation_index in np.where( score_report.deviation_particle_ids == particle_dataframe.name )[0]:
