@@ -198,7 +198,8 @@ def plot_droplet_size_temperatures_dataframe( particle_dataframe, evaluation_tag
     if "title_string" not in kwargs:
         evaluation_string = ", ".join( [evaluation_tag for evaluation_tag in evaluation_tags] )
         particle_id       = particle_dataframe.name
-        kwargs["title_string"] = "Droplet size/temperatures for {:s}\nOn particle {:d}".format( evaluation_string, particle_id )
+        kwargs["title_string"] = ("Droplet size/temperatures for {:s}\n" +
+                                  "Particle {:d}").format( evaluation_string, particle_id )
 
     # Get the data to plot as series.
     times             = particle_dataframe["times"]
@@ -244,7 +245,10 @@ def plot_droplet_size_temperatures_domain( input_parameters, model=None, dt=None
     NUMBER_TIME_POINTS = int( final_time // dt )
     t_eval             = dt * np.arange( 0, NUMBER_TIME_POINTS )
 
-    print( "Inputs: {}\ndt: {}".format( input_parameters, dt ) )
+    print( "Inputs: {}\n"
+           "dt: {}".format(
+               input_parameters,
+               dt ) )
 
     # Get truth from the ODEs.
     y0                = (input_parameters[0], input_parameters[1])
@@ -268,16 +272,17 @@ def plot_droplet_size_temperatures_domain( input_parameters, model=None, dt=None
 
     # Add a default title to the figure if the user did not provide one.
     if "title_string" not in kwargs:
-        kwargs["title_string"] = "Droplet Size and Temperature\nRadius={:g}, Temperature={:g}, m_s={:g}, Air Temp={:g}, RH={:g}, rhoa={:g}".format(
-            input_parameters[0],
-            input_parameters[1],
-            input_parameters[2],
-            input_parameters[3],
-            input_parameters[4],
-            input_parameters[5],
-        )
+        kwargs["title_string"] = ("Droplet Size and Temperature\n" +
+                                  "Radius={:g}, Temperature={:g}, m_s={:g}, Air Temp={:g}, RH={:g}, rhoa={:g}").format(
+                                      input_parameters[0],
+                                      input_parameters[1],
+                                      input_parameters[2],
+                                      input_parameters[3],
+                                      input_parameters[4],
+                                      input_parameters[5])
         if model is not None:
-            kwargs["title_string"] += "\nModel NRMSE: {:.3e}".format( model_nrmse )
+            kwargs["title_string"] += ("\n" +
+                                       "Model NRMSE: {:.3e}").format( model_nrmse )
 
     fig_h, ax_h = plot_droplet_size_temperatures( t_eval, size_temperatures, **kwargs )
 
@@ -313,12 +318,15 @@ def plot_droplet_size_temperatures_scoring( particle_dataframe, score_report, **
         particle_nrmse = score_report.per_particle_nrmse[particle_id]
 
         # Provide the comparison's details and results.
-        kwargs["title_string"] = ("Scoring Particle {:d} for {:s} vs. {:s}".format( particle_id,
-                                                                                    reference_evaluation_tag,
-                                                                                    comparison_evaluation_tag )
-                                  + "\nNRMSE: {:.3e}".format( particle_nrmse )
-                                  + "\nCUSUM Tolerance: {}, CUSUM Threshold: {}".format ( score_report.cusum_error_tolerance,
-                                                                                         score_report.cusum_error_threshold ))
+        kwargs["title_string"] = ("Scoring Particle {:d} for {:s} vs. {:s}\n" +
+                                  "NRMSE: {:.3e}\n" +
+                                  "CUSUM Tolerance: {}, CUSUM Threshold: {}").format(
+                                      particle_id,
+                                      reference_evaluation_tag,
+                                      comparison_evaluation_tag,
+                                      particle_nrmse,
+                                      score_report.cusum_error_tolerance,
+                                      score_report.cusum_error_threshold )
 
     fig_h, ax_h = plot_droplet_size_temperatures_dataframe( particle_dataframe,
                                                             [reference_evaluation_tag,
@@ -335,7 +343,8 @@ def plot_droplet_size_temperatures_scoring( particle_dataframe, score_report, **
         deviation_parameter = score_report.deviation_parameters[deviation_index]
         deviation_time      = score_report.deviation_times[deviation_index]
         deviation_cluster   = score_report.deviation_clusters[deviation_index]
-        deviation_label     = f"{deviation_parameter.name.lower()} deviation, cluster {deviation_cluster}"
+        deviation_label     = "{:s} deviation, cluster {:d}".format( deviation_parameter.name.lower(),
+                                                                     deviation_cluster )
 
         for ax in ax_h.flat:
             ax.axvline( x=deviation_time, linewidth=1, linestyle="--", label=deviation_label,
