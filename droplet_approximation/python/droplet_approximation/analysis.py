@@ -51,8 +51,7 @@ def plot_droplet_size_temperatures( times, size_temperatures, background_paramet
 
     time_series_count = len( size_temperatures )
 
-    # Determine programmatically how many rows are needed
-    # for the plot.
+    # Determine programmatically how many rows are needed for the plot.
     subplot_height = 2 if compare else 1
     if background_parameters is not None:
         subplot_height += (len( background_parameters ) + 1) // 2
@@ -60,18 +59,17 @@ def plot_droplet_size_temperatures( times, size_temperatures, background_paramet
     if ax_h is None:
         fig_h, ax_h = plt.subplots( subplot_height, 2, figsize=(10, 3.2*subplot_height + 0.5), sharex=True,
                                     layout="constrained" )
-        # If there's only one row, wrap ax_h so we can iterate
         fig_h.suptitle( title_string )
     else:
         fig_h = None
 
-    # If axis array is 1D, wrap in another
-    # array to treat single and multi row graphs
-    # the same.
+    # If there's only one row of axes, make it a singleton list so it can be
+    # handled like a multi-row figure.
     if subplot_height == 1:
         ax_h = np.array( [ax_h] )
 
-    # Graph radius/temperature data
+    # Plot the radius and temperature data.  Use a qualitative colormap with 9
+    # darker colors so each of the evaluations is distinct from each other.
     cmap   = plt.get_cmap( "Set1" )
     colors = cmap( np.linspace( 0.0, 1.0, time_series_count ) )
     for color, (label, time_series_data) in zip( colors, size_temperatures.items() ):
@@ -89,11 +87,13 @@ def plot_droplet_size_temperatures( times, size_temperatures, background_paramet
         if time_series_count == 1:
             raise( Exception( "Error: compare flag true but no other time series to compare!" ) )
 
-        # Aboslute difference between truth and model.
+        # Setup twin axes so we can see both relative and absolute differences
+        # between the reference and each comparison with a single plot.
         ax_h_twin_radius      = ax_h[1][0].twinx()
         ax_h_twin_temperature = ax_h[1][1].twinx()
 
-        # Get the first label/datapoint and plot absolute/relative difference data
+        # Get the first label and datapoint to use a reference in the
+        # comparisons.  Plot the remaining relative to it.
         reference_label, reference_data = next( iter( size_temperatures.items() ) )
         for color, (label, comparison_data) in islice( zip( colors, size_temperatures.items() ), 1, None ):
             ax_h[1][0].plot( times,
@@ -112,7 +112,7 @@ def plot_droplet_size_temperatures( times, size_temperatures, background_paramet
                                    label="{:s} absolute error".format( label ),
                                    linestyle="dashed" )
 
-        # Label the graphs
+        # Label the axes.
         ax_h[1][0].set_title( "Radius Error against {:s}".format( reference_label ) )
         ax_h[1][1].set_title( "Temperature Error against {:s}".format( reference_label ) )
         ax_h[1][0].set_ylabel( "Relative Difference (%)" )
@@ -145,7 +145,7 @@ def plot_droplet_size_temperatures( times, size_temperatures, background_paramet
         ax_h_twin_radius.minorticks_on()
         ax_h_twin_temperature.minorticks_on()
 
-    # Plot background parameters onto remaining subplots
+    # Plot background parameters in the remaining subplots.
     starting_index = 4 if compare else 2
     for index, (label, time_series) in enumerate( background_parameters.items() ):
        axis_row_index    = (starting_index + index) // 2
@@ -156,7 +156,10 @@ def plot_droplet_size_temperatures( times, size_temperatures, background_paramet
        current_axis.plot( times, time_series )
        current_axis.set_ylabel( label )
 
-    # Format all subplots
+    # Format all subplots.
+    #
+    # NOTE: This does not update the comparisons' twin axes!
+    #
     for current_axis in ax_h.flat:
         current_axis.minorticks_on()
         current_axis.grid( color="b", alpha=0.1 )
@@ -187,11 +190,13 @@ def plot_droplet_size_temperatures_dataframe( particle_dataframe, evaluation_tag
     if type( evaluation_tags ) == str:
         evaluation_tags = [evaluation_tags]
 
+    # Add a default title to the figure if the user did not provide one.
     if "title_string" not in kwargs:
         evaluation_string = ", ".join( [evaluation_tag for evaluation_tag in evaluation_tags] )
         particle_id       = particle_dataframe.name
         kwargs["title_string"] = "Droplet size/temperatures for {:s}\nOn particle {:d}".format( evaluation_string, particle_id )
 
+    # Get the data to plot as series.
     times             = particle_dataframe["times"]
     size_temperatures = {
         evaluation_tag: np.stack( particle_dataframe[["output {:s} radii".format( evaluation_tag ),
@@ -227,8 +232,8 @@ def plot_droplet_size_temperatures_domain( input_parameters, model=None, dt=None
 
     """
 
-    # If dt is none, set it to the exponent of the
-    # mean of the time range (geometric mean).
+    # Use a default integration time in the middle of our temporal range if one
+    # wasn't provided.
     if dt is None:
         dt = 10**(np.mean( get_parameter_ranges()["time"] ))
 
@@ -247,7 +252,7 @@ def plot_droplet_size_temperatures_domain( input_parameters, model=None, dt=None
         "bdf": bdf_output
     }
 
-    # Get the model's estimate if provided
+    # Plot the model's estimate if a model was provided.
     if model is not None:
         model_output               = do_iterative_inference( np.tile( input_parameters,
                                                                       (NUMBER_TIME_POINTS, 1) ),
@@ -257,7 +262,7 @@ def plot_droplet_size_temperatures_domain( input_parameters, model=None, dt=None
         model_nrmse                = calculate_nrmse( bdf_output, model_output )
         size_temperatures["model"] = model_output
 
-    # Create our figure with the parameters that were evaluated.
+    # Add a default title to the figure if the user did not provide one.
     if "title_string" not in kwargs:
         kwargs["title_string"] = "Droplet Size and Temperature\nRadius={:g}, Temperature={:g}, m_s={:g}, Air Temp={:g}, RH={:g}, rhoa={:g}".format(
             input_parameters[0],
@@ -293,12 +298,17 @@ def plot_droplet_size_temperatures_scoring( particle_dataframe, score_report, **
 
     """
 
+    # The score report has the evaluation tags for our DataFrame.
     reference_evaluation_tag  = next( iter( score_report.reference_evaluation ) )
     comparison_evaluation_tag = next( iter( score_report.comparison_evaluation ) )
 
+    # Add a default title to the figure if the user did not provide one.
     if "title_string" not in kwargs:
+
         particle_id    = particle_dataframe.name
         particle_nrmse = score_report.per_particle_nrmse[particle_id]
+
+        # Provide the comparison's details and results.
         kwargs["title_string"] = ("Scoring Particle {:d} for {:s} vs. {:s}".format( particle_id,
                                                                                     reference_evaluation_tag,
                                                                                     comparison_evaluation_tag )
@@ -311,8 +321,12 @@ def plot_droplet_size_temperatures_scoring( particle_dataframe, score_report, **
                                                              comparison_evaluation_tag],
                                                             **kwargs )
 
-    # Graph deviations
+    # We use a qualitative colormap with 20 colors (10 pairs of light/dark
+    # shades) so we have enough distinct colors for datasets with a large number
+    # of deviation clusters.
     cmap = plt.get_cmap( "tab20" )
+
+    # Plot each of the deviations found.
     for deviation_index in np.where( score_report.deviation_particle_ids == particle_dataframe.name )[0]:
         deviation_parameter = score_report.deviation_parameters[deviation_index]
         deviation_time      = score_report.deviation_times[deviation_index]
@@ -323,7 +337,7 @@ def plot_droplet_size_temperatures_scoring( particle_dataframe, score_report, **
             ax.axvline( x=deviation_time, linewidth=1, linestyle="--", label=deviation_label,
                         color=cmap( deviation_cluster ) )
 
-    # Regenerate legend for top column
+    # Update the legends, if any, so as to include the deviations' labels.
     for ax in ax_h[0]:
         ax.legend()
 
