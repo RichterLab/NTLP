@@ -254,27 +254,29 @@ def plot_droplet_size_temperatures_domain( input_parameters, model=None, dt=None
                dt ) )
 
     # Get truth from the ODEs.
-    y0                = (input_parameters[0], input_parameters[1])
-    bdf_output        = timed_solve_ivp( dydt,
-                                         [0, final_time],
-                                         y0,
-                                         method="BDF",
-                                         t_eval=t_eval,
-                                         args=(input_parameters[2:],),
-                                         atol=BDF_TOLERANCE_ABSOLUTE,
-                                         rtol=BDF_TOLERANCE_RELATIVE )
-    size_temperatures = {
-        "bdf": bdf_output
-    }
+    y0         = (input_parameters[0], input_parameters[1])
+    bdf_output = timed_solve_ivp( dydt,
+                                  [0, final_time],
+                                  y0,
+                                  method="BDF",
+                                  t_eval=t_eval,
+                                  args=(input_parameters[2:],),
+                                  atol=BDF_TOLERANCE_ABSOLUTE,
+                                  rtol=BDF_TOLERANCE_RELATIVE )
+
+    # Package the BDF outputs for visualization.
+    size_temperatures = { "bdf": bdf_output }
 
     # Plot the model's estimate if a model was provided.
     if model is not None:
-        model_output               = do_iterative_inference( np.tile( input_parameters,
-                                                                      (NUMBER_TIME_POINTS, 1) ),
-                                                             t_eval,
-                                                             model,
-                                                             "cpu" )
-        model_nrmse                = calculate_nrmse( bdf_output, model_output )
+        model_output = do_iterative_inference( np.tile( input_parameters,
+                                                        (NUMBER_TIME_POINTS, 1) ),
+                                               t_eval,
+                                               model,
+                                               "cpu" )
+        model_nrmse  = calculate_nrmse( bdf_output, model_output )
+
+        # Add the MLP output to the visualization.
         size_temperatures["model"] = model_output
 
     # Add a default title to the figure if the user did not provide one.
