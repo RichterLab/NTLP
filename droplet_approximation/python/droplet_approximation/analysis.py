@@ -17,33 +17,59 @@ from itertools import islice
 def plot_droplet_size_temperatures( times, size_temperatures, background_parameters={},
                                     compare_flag=None, ax_h=None, title_string=None ):
     """
-    Generic function for plotting radius/temperature data alongside background parameters.
-    Can graph one or more time series of radius/temperature data and compare them for
-    relative/absolute difference. The first entry is `size_temperatures` is treated as
-    the baseline for comparison.
+    Plots a single particle's radius and temperature data and, optionally, their
+    associated background parameters.  Also plots the absolute and relative
+    differences (errors) relative to the first radius and temperature time series
+    when multiple are provided, one per additional time series.
 
-    Takes 6 Arguments:
+    Data are plotted as a grid of N x 2, rows by columns, with the following
+    layout:
 
-      times                 - Array, contains the times corresponding to the provided
-                              time series data.
-      size_temperatures     - Dictionary contains key:value pairs of
-                              time_series_label:time_series_data to graph/compare.
-      background_parameters - Optional dictionary, contains key:value pairs of
-                              data_label:time_series_data for additional background
-                              parameters to plot.
+                         Columns
+     Row        1                         2                         Notes
+     ---   ------------            -------------------       ----------------------
+      1    Radii series            Temperature series
+      2    Radii differences       Temperature differences   Not present when compare_flag == False,
+      i    Background series 1     Background series 2
+     i+1   Background series 3     Background series 4       Only when len( background_parameters ) > 2
+     ...
+     i+j   Background series J-1   Background series J       j = (J+1) // 2 - 1
+
+    More succinctly, the total number of rows is defined:
+
+        N = 1 + int( compare_flag ) + ((J + 1) // 2)
+
+    Where there are J background time series.
+
+    Takes 6 arguments:
+
+      times                 - 1D array, containing the times corresponding to the
+                              provided time series data.
+      size_temperatures     - Dictionary contains timeseries labels and their
+                              associated data to graph.  Each timeseries is an array
+                              shaped N x 2, where N is the length of times.
+      background_parameters - Optional dictionary, contains labels and time series
+                              data for additional background parameters to plot.
+                              If omitted, only time series in size_temperatures are
+                              visualized.
       compare_flag          - Optional Boolean, determines whether to generate
-                              absolute/relative difference plots between radius/temperature
-                              data provided. Defaults to False if one radius/temperature
-                              time series is provided and True if two or more are provided.
-      ax_h                  - Optional axes array to graph onto.
-      title_string          - Optional String to title the plot. Defaults to "Droplet Size
-                              and Temperature."
+                              absolute/relative difference plots between
+                              radius/temperature data provided.  If omitted,
+                              defaults to False when one radius/temperature time
+                              series is provided and True if two or more are
+                              provided.
+      ax_h                  - Optional axes array to use.  If omitted, defaults to None
+                              and a new figure with N * 2 axes is created.
+      title_string          - Optional string to title the plot with.  If omitted,
+                              defaults to "Droplet Size and Temperature."
 
-    Returns 2 Values:
+    Returns 2 values:
 
-      fig_h - Figure generated for the plots. Equals none if ax_h is provided
-              since no new plot is generated.
-      ax_h  - Array of axes that were used for plotting.
+      fig_h - Figure generated for the plots.  None if ax_h is provided since a new
+              figure isn't created.
+      ax_h  - List of list of axes that were used for plotting.  The outer list
+              (first index) specifies the row while the inner list (second
+              index) specifies the column.
 
     """
 
@@ -176,20 +202,27 @@ def plot_droplet_size_temperatures( times, size_temperatures, background_paramet
 
 def plot_droplet_size_temperatures_dataframe( particle_dataframe, evaluation_tags, **kwargs ):
     """
-    Wrapper for plot_droplet_size_temperatures. Plots radius/temperatures from a dataframe
-    for specified evaluation tags.
+    Wrapper for plot_droplet_size_temperatures() that plots a single particle's
+    radius and temperatures provided in a DataFrame.  Time series columns are
+    specified by one or more evaluation tags.
 
-    Takes 2 Arguments:
+    Takes 2 arguments:
 
-      particle_dataframe - Pandas DataFrame containing the row for the particle to plot.
-      evaluation_tags     - String List or String containing the evaluation tags to compare.
-      **kwargs            - Additional arguments to pass to plot_droplet_size_temperatures.
+      particle_dataframe - Pandas DataFrame-like containing the evaluation timeseries
+                           to plot.
+      evaluation_tags    - List of evaluation tag strings to visualize, with the
+                           first being the reference for comparison if two or
+                           more tags are supplied.  As a convenience, may be
+                           specified as a scalar string which is treated as if
+                           it was a list with one element.
+      **kwargs           - Optional keyword arguments to pass to plot_droplet_size_temperatures().
 
-    Returns 2 Values:
+    Returns 2 values:
 
-      fig_h - Figure generated for the plots. Equals none if ax_h is provided
-              since no new plot is generated.
-      ax_h  - Array of axes that were used for plotting.
+      fig_h - Figure generated for the plots.  See
+              plot_droplet_size_temperatures() for details.
+      ax_h  - Array of axes that were used for plotting.  See
+              plot_droplet_size_temperatures() for details.
 
     """
 
@@ -219,24 +252,32 @@ def plot_droplet_size_temperatures_dataframe( particle_dataframe, evaluation_tag
 
 def plot_droplet_size_temperatures_domain( input_parameters, model=None, dt=None, final_time=10.0, **kwargs ):
     """
-    Wrapper for plot_droplet_size_temperatures. Evaluates the BDF radius/temperature solution
-    for the given background conditions until final_time. If a model is provided, evalutes the model
-    iteratively with a time step of dt. Plots the resulting radius/temperature data.
+    Wrapper for plot_droplet_size_temperatures() that evaluates the BDF for the
+    supplied radii and temperatures time series with the given background
+    conditions.  Solutions are evaluated from zero until a fixed end time.  When
+    a MLP model is provided then its evaluation for the same radii,
+    temperatures, and backgrounds is plotted for comparison.
 
-    Takes 5 Arugments:
+    Takes 5 arguments:
 
-      input_parameters - Array sized 6 containing the initial droplet parameters.
-      model            - Optional PyTorch model to compare with BDF.
-      dt               - Optional float determining the time step for model evaluation.
-                         Defaults to the mean of the log time range.
-      final_time       - Float determining the time range of the trajectory. Defaults to 10s.
-      **kwargs         - Additional parameters to pass to plot_droplet_size_temperatures.
+      input_parameters - 1D array, of length 6, containing the initial droplet parameters.
+      model            - Optional PyTorch model to compare with BDF.  If omitted,
+                         defaults to None, the MLP evaluation is skipped, and only
+                         the BDF evaluation is visualized.
+      dt               - Optional float determining the time step for model
+                         evaluation.  If omitted, defaults to the 10 to the mean
+                         of the log time range's exponent.  Must be positive.
+      final_time       - Optional positive float specifying the end of time
+                         range to evaluate.  If omitted, defaults to 10 seconds.
+                         Must be no smaller than dt.
+      **kwargs         - Optional keyword arguments to pass to plot_droplet_size_temperatures().
 
-    Returns 2 Values:
+    Returns 2 values:
 
-      fig_h - Figure generated for the plots. Equals none if ax_h is provided
-              since no new plot is generated.
-      ax_h  - Array of axes that were used for plotting.
+      fig_h - Figure generated for the plots.  See
+              plot_droplet_size_temperatures() for details.
+      ax_h  - Array of axes that were used for plotting.  See
+              plot_droplet_size_temperatures() for details.
 
     """
 
@@ -299,20 +340,27 @@ def plot_droplet_size_temperatures_domain( input_parameters, model=None, dt=None
 
 def plot_droplet_size_temperatures_scoring( particle_dataframe, score_report, **kwargs ):
     """
-    Wrapper for plot_droplet_size_temperature_dataframe. Plots the deviations recorded
-    in score_report alongside the corresponding radius/temperature data.
+    Wrapper for plot_droplet_size_temperature_dataframe() that plots the
+    a single particle's differences between a reference and an evaluation, and
+    overlays a scoring report's deviations.  The supplied DataFrame must contain
+    columns for the evaluation tags present in the scoring report.
 
     Takes 3 Arguments:
 
-      particle_dataframe - Pandas DataFrame containing the row for the particle to plot.
-      score_report       - ScoringReport object to plot deviations from.
-      **kwargs           - Additional parameters to pass to plot_droplet_size_temperatures.
+      particle_dataframe - Pandas DataFrame-like containing the evaluation timeseries
+                           to plot.
+      score_report       - ScoringReport object to plot deviations from.  The
+                           .reference_evaluation and .comparison_evaluation tags
+                           must exist in particles_dataframe.
+      **kwargs           - Optional keyword arguments to pass to
+                           plot_droplet_size_temperatures_dataframe().
 
     Returns 2 Values:
 
-      fig_h - Figure generated for the plots. Equals none if ax_h is provided
-              since no new plot is generated.
-      ax_h  - Array of axes that were used for plotting.
+      fig_h - Figure generated for the plots.  See
+              plot_droplet_size_temperatures() for details.
+      ax_h  - Array of axes that were used for plotting.  See
+              plot_droplet_size_temperatures() for details.
 
     """
 
