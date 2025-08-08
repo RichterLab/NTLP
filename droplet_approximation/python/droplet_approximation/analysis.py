@@ -15,7 +15,7 @@ from .scoring import calculate_nrmse
 from itertools import islice
 
 def plot_droplet_size_temperatures( times, size_temperatures, background_parameters={},
-                                    compare=None, ax_h=None, title_string=None ):
+                                    compare_flag=None, ax_h=None, title_string=None ):
     """
     Generic function for plotting radius/temperature data alongside background parameters.
     Can graph one or more time series of radius/temperature data and compare them for
@@ -31,7 +31,7 @@ def plot_droplet_size_temperatures( times, size_temperatures, background_paramet
       background_parameters - Optional dictionary, contains key:value pairs of
                               data_label:time_series_data for additional background
                               parameters to plot.
-      compare               - Optional Boolean, determines whether to generate
+      compare_flag          - Optional Boolean, determines whether to generate
                               absolute/relative difference plots between radius/temperature
                               data provided. Defaults to False if one radius/temperature
                               time series is provided and True if two or more are provided.
@@ -47,15 +47,15 @@ def plot_droplet_size_temperatures( times, size_temperatures, background_paramet
 
     """
 
-    if compare is None:
-        compare = len( size_temperatures ) > 1
+    if compare_flag is None:
+        compare_flag = len( size_temperatures ) > 1
     if title_string is None:
         title_string = "Droplet Size and Temperature"
 
     time_series_count = len( size_temperatures )
 
     # Determine programmatically how many rows are needed for the plot.
-    subplot_height = 2 if compare else 1
+    subplot_height = 2 if compare_flag else 1
     if background_parameters is not None:
         subplot_height += (len( background_parameters ) + 1) // 2
 
@@ -88,7 +88,7 @@ def plot_droplet_size_temperatures( times, size_temperatures, background_paramet
     ax_h[0][0].legend()
     ax_h[0][1].legend()
 
-    if compare:
+    if compare_flag:
         if time_series_count == 1:
             raise( Exception( "Error: compare flag true but no other time series to compare!" ) )
 
@@ -153,7 +153,7 @@ def plot_droplet_size_temperatures( times, size_temperatures, background_paramet
         ax_h_twin_temperature.minorticks_on()
 
     # Plot background parameters in the remaining subplots.
-    starting_index = 4 if compare else 2
+    starting_index = 4 if compare_flag else 2
     for index, (label, time_series) in enumerate( background_parameters.items() ):
        axis_row_index    = (starting_index + index) // 2
        axis_column_index = (starting_index + index) % 2
