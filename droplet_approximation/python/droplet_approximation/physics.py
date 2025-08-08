@@ -437,7 +437,13 @@ def solve_ivp_float32_outputs( dydt, t_span, y0, **kwargs ):
 
     """
 
-    solution = np.empty( (len( y0 ),), dtype=np.float32 )
+    # Figure out how many points we're solving for.
+    if "t_eval" in kwargs:
+        number_outputs = len( kwargs["t_eval"] )
+    else:
+        number_outputs = 1
+
+    solution = np.empty( (number_outputs, len( y0 ),), dtype=np.float32 )
 
     solve_failed_flag = False
     failure_message   = None
@@ -466,7 +472,7 @@ def solve_ivp_float32_outputs( dydt, t_span, y0, **kwargs ):
     # Failed solves return NaNs and trigger a warning with all of the
     # important details.
     if solve_failed_flag:
-        solution[:] = np.nan
+        solution[:, :] = np.nan
 
         warnings.warn( "solve_ivp() failed for "
                            "inputs=np.array( [{:.15g}, {:.15g}] ), "
