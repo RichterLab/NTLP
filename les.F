@@ -221,6 +221,9 @@ c
       write(*,'(a15,3e15.6)') 'radmin,radmax:',time,radmin,radmax
       write(*,'(a15,3e15.6)') 'tempmin,tempmax:',time,tempmin,tempmax
       write(*,'(a15,3e15.6)') 'qmin,qmax:',time,qmin,qmax
+      write(*,'(a15,3e15.6)') 'vp1min,vp1max:',time,vp1min,vp1max
+      write(*,'(a15,3e15.6)') 'vp2min,vp2max:',time,vp2min,vp2max
+      write(*,'(a15,3e15.6)') 'vp2min,vp2max:',time,vp2min,vp2max
       write(*,'(a15,3e15.6)') 'time,radavg:',time,radavg
       write(*,'(a15,e15.6,3i)'),'time,100,impos:',time,tnum100,tnumimpos
       end if
