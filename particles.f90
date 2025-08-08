@@ -32,6 +32,7 @@ module particles
 
   real :: Rep_avg,part_grav(3)
   real :: radavg,radmin,radmax,radmsqr,tempmin,tempmax,qmin,qmax
+  real :: vp1min,vp1max,vp2min,vp2max,vp3min,vp3max
   real :: twmass,tpmass,tpvol
   real :: vp_init(3),Tp_init,radius_init,radius_std,kappas_init,kappas_std
   real :: pdf_factor,pdf_prob
@@ -1219,10 +1220,16 @@ CONTAINS
      iy = jpt+j
      iz = kpt+k
 
-     if (ix .gt. mxe+1) write(*,*) 'proc',myid,'has ix = ',ix
-     if (ix .lt. mxs) write(*,*) 'proc',myid,'has ix = ',ix
-     if (iy .gt. iye+1) write(*,*) 'proc',myid,'has iy = ',iy
-     if (iy .lt. iys) write(*,*) 'proc',myid,'has iy = ',iy
+     !if (ix .gt. mxe+1) write(*,*) 'proc',myid,'has ix = ',ix
+     !if (ix .lt. mxs) write(*,*) 'proc',myid,'has ix = ',ix
+     !if (iy .gt. iye+1) write(*,*) 'proc',myid,'has iy = ',iy
+     !if (iy .lt. iys) write(*,*) 'proc',myid,'has iy = ',iy
+
+     if (ix .gt. mxe+1) write(*,'(a10,3i,15e15.6)') 'ERROR1:',myid,ix,mxe+1,part%xp(1:3),xmin,xmax,ymin,ymax,part%vp(1:3),part%vp_old(1:3),part%radius,part%Tp
+     if (ix .lt. mxs) write(*,'(a10,3i,15e15.6)') 'ERROR2:',myid,ix,mxs,part%xp(1:3),xmin,xmax,ymin,ymax,part%vp(1:3),part%vp_old(1:3),part%radius,part%Tp
+     if (iy .gt. iye+1) write(*,'(a10,3i,15e15.6)') 'ERROR3:',myid,iy,iye+1,part%xp(1:3),xmin,xmax,ymin,ymax,part%vp(1:3),part%vp_old(1:3),part%radius,part%Tp
+     if (iy .lt. iys) write(*,'(a10,3i,15e15.6)') 'ERROR4:',myid,iy,iys,part%xp(1:3),xmin,xmax,ymin,ymax,part%vp(1:3),part%vp_old(1:3),part%radius,part%Tp
+
      if (iz .gt. nnz+1) write(*,*) 'proc',myid,'has iz = ',iz
      if (iz .lt. 0) then
          write(*,*) 'proc',myid,'has iz = ',iz,part%radius,part%xp(3),part%mult,part%vp(3)
@@ -2700,7 +2707,12 @@ CONTAINS
     !perfectly elastic collisions on top, bottom walls
     !i.e. location is reflected, w-velocity is negated
 
-    top = z(nnz)-part%radius
+    if (icase.eq.4) then  !Spray case needs to have them bounce off earlier due to numerical issues
+        top = z(nnz-1)-part%radius
+    else
+        top = z(nnz)-part%radius
+    end if
+
     bot = 0.0 + part%radius
 
     if (part%xp(3) .GT. top) then
@@ -3060,11 +3072,11 @@ CONTAINS
         end if
 
         if (part%qinf .lt. 0.0) then
-          write(*,'(a30,2i,12e15.6)') 'WARNING: NEG QINF',  &
+          write(*,'(a30,2i,16e15.6)') 'WARNING: NEG QINF',  &
           part%pidx,part%procidx, &
           part%radius,part%qinf,part%Tp,part%Tf,part%xp(3), &
           part%kappa_s,part%m_s,part%vp(1),part%vp(2),part%vp(3), &
-          part%res,part%sigm_s
+          part%res,part%sigm_s,part%xp(1),xmax,xmin,part%xp(2),ymax,ymin
         end if
 
 
@@ -3366,7 +3378,7 @@ CONTAINS
       integer :: ierr
       real :: rhop,pi,rhoa,func_rho_base,func_p_base,exner
       
-      integer,parameter :: num0_int=8,num0_real=6,num0_max=3,num0_min=3  !Number of 0-dimensional particle statistics
+      integer,parameter :: num0_int=8,num0_real=6,num0_max=6,num0_min=6  !Number of 0-dimensional particle statistics
       integer,parameter :: num1 = 24  !Number of 1-dimensional particle statistics
 
       real :: partcount(maxnz)
@@ -3397,6 +3409,12 @@ CONTAINS
       mytempmin = 1000.0
       mytempmax = 0.0
       myqmin = 1000.0
+      vp1min = 1000.0
+      vp1max = -1000.0
+      vp2min = 1000.0
+      vp2max = -1000.0
+      vp3min = 1000.0
+      vp3max = -1000.0
       myqmax = 0.0
       myRep_avg = 0.0
       mywmass = 0.0
@@ -3421,7 +3439,14 @@ CONTAINS
 	 mytempmax = max(mytempmax,part%Tp)
 	 mytempmin = min(mytempmin,part%Tp)
 	 myqmax = max(myqmax,part%qinf)
-	 myqmin = max(myqmin,part%qinf)
+	 myqmin = min(myqmin,part%qinf)
+	 vp1min = min(vp1min,part%vp(1))
+	 vp1max = max(vp1max,part%vp(1))
+	 vp2min = min(vp2min,part%vp(2))
+	 vp2max = max(vp2max,part%vp(2))
+	 vp3min = min(vp3min,part%vp(3))
+	 vp3max = max(vp3max,part%vp(3))
+
 
 
 	 Volp = pi2*2.0/3.0*part%radius**3
@@ -3494,24 +3519,37 @@ CONTAINS
       statsvec0_max(1) = myradmax
       statsvec0_max(2) = mytempmax
       statsvec0_max(3) = myqmax
+      statsvec0_max(4) = vp1max
+      statsvec0_max(5) = vp2max
+      statsvec0_max(6) = vp3max
 
       call mpi_allreduce(mpi_in_place,statsvec0_max,num0_max,mpi_real8,mpi_max,mpi_comm_world,ierr)
 
       radmax = statsvec0_max(1)
       tempmax = statsvec0_max(2)
       qmax = statsvec0_max(3)
+      vp1max = statsvec0_max(4)
+      vp2max = statsvec0_max(5)
+      vp3max = statsvec0_max(6)
  
 
       !Compute mins
       statsvec0_min(1) = myradmin
       statsvec0_min(2) = mytempmin
       statsvec0_min(3) = myqmin
+      statsvec0_min(4) = vp1min
+      statsvec0_min(5) = vp2min
+      statsvec0_min(6) = vp3min
 
       call mpi_allreduce(mpi_in_place,statsvec0_min,num0_min,mpi_real8,mpi_min,mpi_comm_world,ierr)
 
       radmin = statsvec0_min(1)
       tempmin = statsvec0_min(2)
       qmin = statsvec0_min(3)
+      vp1min = statsvec0_min(4)
+      vp2min = statsvec0_min(5)
+      vp3min = statsvec0_min(6)
+
 
 
 
@@ -3596,6 +3634,10 @@ CONTAINS
 
       qstarm(kpt) = qstarm(kpt) + part%qstar
 
+     if (ipt .gt. mxe+1) write(*,'(a10,3i,18e15.6)') 'LWP1:',myid,ipt,mxe+1,part%xp(1:3),xmin,xmax,ymin,ymax,part%vp(1:3),part%vp_old(1:3),part%radius,part%Tp,part%u_sub(1:3)
+     if (ipt .lt. mxs) write(*,'(a10,3i,18e15.6)') 'LWP2:',myid,ipt,mxs,part%xp(1:3),xmin,xmax,ymin,ymax,part%vp(1:3),part%vp_old(1:3),part%radius,part%Tp,part%u_sub(1:3)
+     if (jpt .gt. iye+1) write(*,'(a10,3i,18e15.6)') 'LWP3:',myid,jpt,iye+1,part%xp(1:3),xmin,xmax,ymin,ymax,part%vp(1:3),part%vp_old(1:3),part%radius,part%Tp,part%u_sub(1:3)
+     if (jpt .lt. iys) write(*,'(a10,3i,18e15.6)') 'LWP4:',myid,jpt,iys,part%xp(1:3),xmin,xmax,ymin,ymax,part%vp(1:3),part%vp_old(1:3),part%radius,part%Tp,part%u_sub(1:3)
 
       !While we're at it, compute LWP
       LWP(ipt,jpt) = LWP(ipt,jpt) + real(part%mult)*(rhow*4.0/3.0*pi*part%radius**3)
@@ -4512,6 +4554,7 @@ CONTAINS
     do ind = 1,3
       part%xp(ind) = part%xp(ind) + part%u_sub(ind)*dt
     end do
+
 !     ---------------------------------        
 
     Volp = pi2*2.0/3.0*part%radius**3
