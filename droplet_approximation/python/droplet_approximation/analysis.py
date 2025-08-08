@@ -57,7 +57,9 @@ def plot_droplet_size_temperatures( times, size_temperatures, background_paramet
         subplot_height += (len( background_parameters ) + 1) // 2
 
     if ax_h is None:
-        fig_h, ax_h = plt.subplots( subplot_height, 2, figsize=(10, 3.2*subplot_height + 0.5), sharex=True,
+        fig_h, ax_h = plt.subplots( subplot_height, 2,
+                                    figsize=(10, 3.2*subplot_height + 0.5),
+                                    sharex=True,
                                     layout="constrained" )
         fig_h.suptitle( title_string )
     else:
@@ -95,15 +97,17 @@ def plot_droplet_size_temperatures( times, size_temperatures, background_paramet
         # Get the first label and datapoint to use a reference in the
         # comparisons.  Plot the remaining relative to it.
         reference_label, reference_data = next( iter( size_temperatures.items() ) )
-        for color, (label, comparison_data) in islice( zip( colors, size_temperatures.items() ), 1, None ):
+        for color, (label, comparison_data) in islice( zip( colors, size_temperatures.items() ),
+                                                       1,
+                                                       None ):
             ax_h[1][0].plot( times,
-                             np.abs( reference_data[:, 0] - comparison_data[:, 0] )
-                                / reference_data[:, 0] * 100,
+                             (np.abs( reference_data[:, 0] - comparison_data[:, 0] ) /
+                              reference_data[:, 0] * 100),
                              color=color,
                              label="{:s} relative error".format( label ) )
             ax_h[1][1].plot( times,
-                             np.abs( reference_data[:, 1] - comparison_data[:, 1] )
-                                / reference_data[:, 1] * 100,
+                             (np.abs( reference_data[:, 1] - comparison_data[:, 1] ) /
+                              reference_data[:, 1] * 100),
                              color=color,
                              label="{:s} error".format( label ) )
             ax_h_twin_radius.plot( times,
