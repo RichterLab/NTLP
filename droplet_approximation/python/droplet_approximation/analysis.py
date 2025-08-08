@@ -1,12 +1,15 @@
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-from scipy.integrate import solve_ivp
 
 from .data import BE_TAG_NAME, \
                   get_evaluation_column_names
 from .models import do_iterative_inference
-from .physics import BDF_TOLERANCE_ABSOLUTE, BDF_TOLERANCE_RELATIVE, dydt, get_parameter_ranges
+from .physics import BDF_TOLERANCE_ABSOLUTE, \
+                     BDF_TOLERANCE_RELATIVE, \
+                     dydt, \
+                     get_parameter_ranges, \
+                     timed_solve_ivp
 from .scoring import calculate_nrmse
 
 from itertools import islice
@@ -252,11 +255,14 @@ def plot_droplet_size_temperatures_domain( input_parameters, model=None, dt=None
 
     # Get truth from the ODEs.
     y0                = (input_parameters[0], input_parameters[1])
-    solution          = solve_ivp( dydt, [0, final_time], y0, method="BDF",
-                                   t_eval=t_eval, args=(input_parameters[2:],),
-                                   atol=BDF_TOLERANCE_ABSOLUTE,
-                                   rtol=BDF_TOLERANCE_RELATIVE )
-    bdf_output        = np.vstack( (solution.y[0][:], solution.y[1][:]) ).T
+    bdf_output        = timed_solve_ivp( dydt,
+                                         [0, final_time],
+                                         y0,
+                                         method="BDF",
+                                         t_eval=t_eval,
+                                         args=(input_parameters[2:],),
+                                         atol=BDF_TOLERANCE_ABSOLUTE,
+                                         rtol=BDF_TOLERANCE_RELATIVE )
     size_temperatures = {
         "bdf": bdf_output
     }
