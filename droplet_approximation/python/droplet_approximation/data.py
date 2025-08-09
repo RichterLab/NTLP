@@ -744,9 +744,9 @@ def get_evaluation_column_names( evaluation_tag ):
 
     Returns 1 value:
 
-      column_names - A pair of DataFrame column names, the first component is
-                     for radii and the second for the temperatures.  Will be a
-                     sequence of pairs if evaluation_tag is a sequence.
+      column_names - A list of two DataFrame column names, the first component
+                     is for radii and the second for the temperatures.  Will be
+                     a sequence of pairs if evaluation_tag is a sequence.
 
     """
 
@@ -766,8 +766,8 @@ def get_evaluation_column_names( evaluation_tag ):
     # Build the column names for each tag.
     column_names = []
     for evaluation_tag in evaluation_tag:
-        column_names.append( (RADII_TEMPLATE.format( evaluation_tag ),
-                              TEMPERATURES_TEMPLATE.format( evaluation_tag )) )
+        column_names.append( [RADII_TEMPLATE.format( evaluation_tag ),
+                              TEMPERATURES_TEMPLATE.format( evaluation_tag )] )
 
     # Return the same data type as received from the caller.
     if scalar_flag:
