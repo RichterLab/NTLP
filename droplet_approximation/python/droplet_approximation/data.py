@@ -1206,6 +1206,9 @@ def read_particles_data( particles_root, particle_ids, dirs_per_level, quiet_fla
                                                   6 - BE generated a particle
                                                       with a radius larger than
                                                       10 millimeters (1e-2m)
+                                                  7 - BE was skipped due to
+                                                      the particle having a
+                                                      negative qinf value
 
                       "input be radii":         1D NumPy array of particle
                                                 radii before backward Euler, in

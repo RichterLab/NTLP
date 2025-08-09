@@ -3318,8 +3318,10 @@ CONTAINS
                !Redimensionalize
                part%radius = rt_zeroes(1)*part%radius
                part%Tp = rt_zeroes(2)*part%Tp
-      else !! Evaporation is turned off
-
+      else !! Evaporation is turned off or particle has negative qinf
+            if (part%qinf .lt. 0.0) then
+                failure_be_status = 7
+            end if
 
             !Compute Nusselt number for particle:
             !Ranz-Marshall relation
