@@ -1163,7 +1163,7 @@ def train_model( model, criterion, optimizer, device, number_epochs, training_fi
         if callable( epoch_callback ):
             epoch_callbacks.append( epoch_callback )
         # Blow up if we didn't have a callback or a list of them.
-        elif type( epoch_callback ) is not list:
+        elif not isinstance( epoch_callback, list ):
             raise ValueError( "Epoch callback is neither callable nor a list ({:s})!".format(
                 type( epoch_callback ) ) )
         elif not all( map( lambda x: callable( x ), epoch_callback ) ):

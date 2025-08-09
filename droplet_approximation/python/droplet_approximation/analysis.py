@@ -227,7 +227,7 @@ def plot_droplet_size_temperatures_dataframe( particle_dataframe, evaluation_tag
     """
 
     # If just one tag was provided, wrap it into an array
-    if type( evaluation_tags ) == str:
+    if isinstance( evaluation_tags, str ):
         evaluation_tags = [evaluation_tags]
 
     # Add a default title to the figure if the user did not provide one.
