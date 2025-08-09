@@ -41,6 +41,9 @@ def plot_droplet_size_temperatures( times, size_temperatures, background_paramet
 
     Where there are J background time series.
 
+    Raises ValueError if only a single radius and temperature time series are
+    provided but comparison was requested.
+
     Takes 6 arguments:
 
       times                 - 1D array, containing the times corresponding to the
@@ -116,7 +119,7 @@ def plot_droplet_size_temperatures( times, size_temperatures, background_paramet
 
     if compare_flag:
         if time_series_count == 1:
-            raise( Exception( "Error: compare flag true but no other time series to compare!" ) )
+            raise( ValueError( "Error: compare flag true but no other time series to compare!" ) )
 
         # Setup twin axes so we can see both relative and absolute differences
         # between the reference and each comparison with a single plot.
