@@ -238,13 +238,19 @@ def plot_droplet_size_temperatures_dataframe( particle_dataframe, evaluation_tag
                                   "Particle {:d}").format( evaluation_string, particle_id )
 
     # Get the data to plot as series.
-    times             = particle_dataframe["times"]
-    size_temperatures = {
-        evaluation_tag: np.stack( particle_dataframe[["output {:s} radii".format( evaluation_tag ),
-                                                      "output {:s} temperatures".format( evaluation_tag )]],
-                                  axis=-1 )
-        for evaluation_tag in evaluation_tags
-    }
+    times = particle_dataframe["times"]
+
+    size_temperatures = {}
+    for evaluation_tag in evaluation_tags:
+        # Get this evaluation's radii and temperatures column names.
+        column_names = get_evaluation_column_names( evaluation_tag )
+
+        # Convert the columns into a two column array.
+        #
+        # NOTE: We have to stack columns to get a NumPy array as the DataFrame's
+        #       .values will return a list of 1D NumPy arrays.
+        #
+        size_temperatures[evaluation_tag] = np.column_stack( particle_dataframe[column_names].values )
 
     fig_h, ax_h = plot_droplet_size_temperatures( times, size_temperatures, **kwargs )
 
