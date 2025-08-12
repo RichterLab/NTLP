@@ -3096,6 +3096,8 @@ CONTAINS
       call fill_ext
       call end_phase(measurement_id_particle_fill_ext)
 
+      i = 0
+
       pflux = 0.0
       pmassflux = 0.0
       penegflux = 0.0
@@ -3106,13 +3108,11 @@ CONTAINS
       num100 = 0
       numimpos = 0
 
-
       ! If dumping be data, initialize buffer indexes
       if (iwritebe .eq. 1) then
          be_dump_iu = 300 + myid 
 
          be_write_buffer_index = 0
-         i = 0
       end if
 
 
