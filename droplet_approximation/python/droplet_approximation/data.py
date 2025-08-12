@@ -1,4 +1,4 @@
-from enum import Enum
+from enum import Enum, IntEnum
 import fcntl
 import multiprocessing
 import os
@@ -18,6 +18,46 @@ from .physics import BDF_TOLERANCE_ABSOLUTE, \
 # "Evaluation" tag for backward Euler (BE) so it may be handled programmatically
 # along with other evaluations.
 BE_TAG_NAME = "be"
+
+class BEStatus( IntEnum ):
+    """
+    Container for constants describing the backward Euler (BE) status flags
+    recorded in NTLP particle traces.
+    """
+
+    # BE was skipped due to the particle having a negative qinf value.  BE has
+    # failed when this occurs (since BE could not complete successfully).
+    NEG_QINF           = 1
+
+    # The particle's radius was in equilibrium prior to BE.
+    EQUILIBRIUM_RADIUS = 2
+
+    # Gauss-Newton failed to converge, forcing at least one iteration of
+    # Levenberg-Marquardt to execute.
+    GN_FAILED          = 4
+
+    # Levenberg-Marquardt failed to converge.  BE has failed when this occurred.
+    LM_FAILED          = 8
+
+    # Levenberg-Marquardt incorrectly converged and produced an invalid value.
+    # This includes NaN and negative values for either radius or temperature,
+    # as well as large radii.
+    INVALID_OUTPUT     = 16
+
+    # Flags locating the particle's position within the vertical domain
+    # according to its input height.  One of the four flags is set based on
+    # which quarter of the domain the particle was located (Q1 in [0, 25),
+    # Q2 in [25, 50), Q3 in [50, 75), and Q4 in [75, 100]).
+    HEIGHT_Q1          = 32
+    HEIGHT_Q2          = 64
+    HEIGHT_Q3          = 128
+    HEIGHT_Q4          = 256
+
+    # BE has failed when it could not successfully update the particle's radius
+    # and temperature to a valid value.  Note that Levenberg-Marquardt runs if
+    # Gauss-Newton fails to converge, so we only consider its failure as
+    # critical.
+    FAILED_UPDATE      = (NEG_QINF | LM_FAILED | INVALID_OUTPUT)
 
 class ParticleRecord( Enum ):
     """
@@ -1185,30 +1225,57 @@ def read_particles_data( particles_root, particle_ids, dirs_per_level, quiet_fla
                                                 size.
                       "number be failures":     Non-negative number of backward
                                                 Euler failures across a
-                                                particle's observations.
+                                                particle's observations.  See
+                                                "be statuses" column for what
+                                                constitutes a failure.
                       "be statuses":            1D NumPy array of integral
                                                 backward Euler (BE) status
-                                                codes, one per observation:
+                                                codes, one per observation.
+                                                Status is encoded as one or
+                                                more bit flags:
 
-                                                  0 - BE succeeded
-                                                  1 - Gauss-Newton and
-                                                      Levenberg-Marquardt both
-                                                      failed to converge
-                                                  2 - BE generated a NaN
-                                                      particle radius
-                                                  3 - BE generated a negative
-                                                      particle radius
-                                                  4 - BE generated a NaN
-                                                      particle temperature
-                                                  5 - BE generated a freezing
-                                                      particle temperature (less
-                                                      than 273.15K)
-                                                  6 - BE generated a particle
-                                                      with a radius larger than
-                                                      10 millimeters (1e-2m)
-                                                  7 - BE was skipped due to
+                                                  1 - BE was skipped due to
                                                       the particle having a
                                                       negative qinf value
+                                                  2 - The particle had an
+                                                      equilibrium radius going
+                                                      into BE
+                                                  4 - BE's Gauss-Newton solve
+                                                      failed
+                                                  8 - Levenberg-Marquardt
+                                                      failed to converge
+                                                 16 - BE produced an invalid
+                                                      value for either the
+                                                      radius or temperature.
+                                                      This represents the
+                                                      cases where 1) NaNs for
+                                                      either radius or
+                                                      temperature, 2) radius or
+                                                      temperature are negative,
+                                                      or 3) radius is too large
+                                                      (e.g. 10mm or larger).
+                                                 32 - The particle was located
+                                                      in the bottom 25% of the
+                                                      vertical domain (1st
+                                                      quartile)
+                                                 64 - The particle was located
+                                                      in the 25-50% of the
+                                                      vertical domain (2nd
+                                                      quartile)
+                                                128 - The particle was located
+                                                      in the 50-75% of the
+                                                      vertical domain (3rd
+                                                      quartile)
+                                                256 - The particle was located
+                                                      in the top 25% of the
+                                                      vertical domain (4th
+                                                      quartile)
+
+                                                BE failed when the status
+                                                has any of bits 1 (negative
+                                                qinf), 4 (Levenberg-Marquardt
+                                                failed), or 5 (invalid output)
+                                                set.
 
                       "input be radii":         1D NumPy array of particle
                                                 radii before backward Euler, in
@@ -1393,7 +1460,7 @@ def read_particles_data( particles_root, particle_ids, dirs_per_level, quiet_fla
             continue
 
         # Backward Euler failures for this particle.
-        particles_df.at[particle_id, "number be failures"]     = (observations_int32[:-1, ParticleRecord.BE_STATUS_INDEX.value][timeline_mask[:-1]] > 0).sum()
+        particles_df.at[particle_id, "number be failures"]     = (observations_int32[:-1, ParticleRecord.BE_STATUS_INDEX.value][timeline_mask[:-1]] & BEStatus.FAILED_UPDATE).sum()
         particles_df.at[particle_id, "be statuses"]            = observations_int32[:-1, ParticleRecord.BE_STATUS_INDEX.value][timeline_mask[:-1]]
 
         # Simulation timeline.

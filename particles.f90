@@ -90,6 +90,11 @@ module particles
   ! [7] Time
   integer, parameter :: BE_BUFFER_LENGTH = 6000
 
+  !Indices into the zz grid identifying 25%, 50%, and 75% of the vertical
+  !domain's height.  The ith entry specifies the index in zz corresponding
+  !to the first cell in the ith quartile.
+  integer :: zz_quartile_indices(3)
+
   integer(kind=4) :: be_int32_write_buffer (NUMBER_BE_BUFFER_INT_32S, BE_BUFFER_LENGTH)
   real(kind=4) :: be_float32_write_buffer (NUMBER_BE_BUFFER_FLOAT_32S, BE_BUFFER_LENGTH)
 
@@ -1880,6 +1885,7 @@ CONTAINS
 
       use pars
       use droplet_model
+      use con_stats
       implicit none 
       include 'mpif.h'
 
@@ -1913,6 +1919,11 @@ CONTAINS
       open(ntraj,file=path_traj,form='formatted',status='replace')
       end if
 
+      !Locate the vertical grid's quartiles' indices.  We use these to flag
+      !traced particles for downstream analysis.
+      zz_quartile_indices(1) = minloc( zz, mask=(zz >   zl/4), dim=1 )
+      zz_quartile_indices(2) = minloc( zz, mask=(zz >   zl/2), dim=1 )
+      zz_quartile_indices(3) = minloc( zz, mask=(zz > 3*zl/4), dim=1 )
 
       if (icase.eq.6) then !FATIMA
 
@@ -3245,6 +3256,9 @@ CONTAINS
                if (mflag == 0) then
                 rt_start(1) = guess/part%radius
                 rt_start(2) = part%Tf/part%Tp
+
+                !Track particles in equilibrium going into the BE solve.
+                failure_be_status = ior( failure_be_status, 2 )
                else
                 rt_start(1) = 1.0
                 rt_start(2) = 1.0
@@ -3253,9 +3267,16 @@ CONTAINS
                call gauss_newton_2d(part%vp,dt_taup0,rhoa,rt_start, rt_zeroes,flag)
 
                if (flag==1) then
-               num100 = num100+1
+                   num100 = num100+1
 
-               call LV_solver(part%vp,dt_taup0,rhoa,rt_start, rt_zeroes,flag)
+                   !Track Gauss-Newton failures.  This will be upgraded to
+                   !a Levenberg-Marquardt failure below if it also fails,
+                   !otherwise this is a soft failure where BE produces an
+                   !acceptable radius and temperature but we track when the
+                   !algorithm struggled.
+                   failure_be_status = ior( failure_be_status, 4 )
+
+                   call LV_solver(part%vp,dt_taup0,rhoa,rt_start, rt_zeroes,flag)
                
                end if
 
@@ -3273,17 +3294,9 @@ CONTAINS
                !part%res,part%sigm_s,rt_zeroes(1),rt_zeroes(2)
 
                    if( flag == 1 ) then
-                       failure_be_status = 1
-                   else if( isnan( rt_zeroes(1) ) ) then
-                       failure_be_status = 2
-                   else if( rt_zeroes(1)*part%radius < 0 ) then
-                       failure_be_status = 3
-                   else if( isnan( rt_zeroes(2) ) ) then
-                       failure_be_status = 4
-                   else if( rt_zeroes(2) < 273.15 ) then
-                       failure_be_status = 5
-                   else if( rt_zeroes(1)*part%radius > 1.0e-2 ) then
-                       failure_be_status = 6
+                       failure_be_status = ior( failure_be_status, 8 )
+                   else
+                       failure_be_status = ior( failure_be_status, 16 )
                    end if
 
                 flag = 1
@@ -3320,7 +3333,7 @@ CONTAINS
                part%Tp = rt_zeroes(2)*part%Tp
       else !! Evaporation is turned off or particle has negative qinf
             if (part%qinf .lt. 0.0) then
-                failure_be_status = 7
+                failure_be_status = ior( failure_be_status, 1 )
             end if
 
             !Compute Nusselt number for particle:
@@ -3332,6 +3345,18 @@ CONTAINS
             part%Tp = (part%Tp + tmp_coeff*dt*part%Tf)/(1+dt*tmp_coeff)
 
        end if 
+
+       !Track where the particle is in the domain.  Record the domain quartile
+       !where it is located.
+       if (part%xp(3) < zz(zz_quartile_indices(1))) then
+           failure_be_status = ior( failure_be_status, 32 )
+       elseif (part%xp(3) < zz(zz_quartile_indices(2))) then
+           failure_be_status = ior( failure_be_status, 64 )
+       elseif (part%xp(3) < zz(zz_quartile_indices(3))) then
+           failure_be_status = ior( failure_be_status, 128 )
+       else
+           failure_be_status = ior( failure_be_status, 256 )
+       endif
 
        if (iwritebe .eq. 1 .and. keep_particle_flag) then
             be_int32_write_buffer(2,be_write_buffer_index) = failure_be_status

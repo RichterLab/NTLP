@@ -12,6 +12,7 @@ from .analysis import plot_droplet_size_temperatures, \
                       plot_particles, \
                       plot_particle_history
 from .data import BE_TAG_NAME, \
+                  BEStatus, \
                   batch_convert_NTLP_traces_to_particle_files, \
                   batch_read_particles_data, \
                   be_success_mask, \
