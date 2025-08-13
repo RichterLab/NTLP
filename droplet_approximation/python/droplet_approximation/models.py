@@ -289,7 +289,7 @@ def do_iterative_inference( input_parameters, times, model, device ):
 
     return scale_droplet_parameters( normalized_data[:, :2].to( "cpu" ).numpy() )
 
-def generate_fortran_module( output_path, model_name, model_state ):
+def generate_fortran_module( output_path, model_name, model_state, parameter_ranges={} ):
     """
     Creates a Fortran 2003 module that allows use of the supplied model with a
     batch size of 1 during inference.
@@ -297,12 +297,15 @@ def generate_fortran_module( output_path, model_name, model_state ):
     NOTE: This currently expects the supplied model state to represent a 4-layer
           MLP with a specific set weights/biases names.
 
-    Takes 3 arguments:
+    Takes 4 arguments:
 
-      output_path     - File to write to.  If this exists it is overwritten.
-      model_name      - Name of the model to write in the generated module's comments
-                        so as to identify where the weights came from.
-      model_state     - PyTorch model state dictionary for the module to expose.
+      output_path      - File to write to.  If this exists it is overwritten.
+      model_name       - Name of the model to write in the generated module's comments
+                         so as to identify where the weights came from.
+      model_state      - PyTorch model state dictionary for the module to expose.
+      parameter_ranges - Optional dictionary of parameter ranges.  If omitted, defaults
+                         to an empty dictionary and uses the current parameter ranges
+                         returned by get_parameter_ranges().
 
     Returns nothing.
 
@@ -321,6 +324,13 @@ def generate_fortran_module( output_path, model_name, model_state ):
                         "fc2.bias",
                         "fc3.bias",
                         "fc4.bias"]
+
+    # Keep track of the parameter ranges for this model so we can report them at
+    # run-time.
+    if len( parameter_ranges ) == 0:
+        model_parameter_ranges = get_parameter_ranges()
+    else:
+        model_parameter_ranges = parameter_ranges
 
     def write_module_prolog( model_name, model_state, output_fp ):
         """
@@ -367,9 +377,6 @@ def generate_fortran_module( output_path, model_name, model_state ):
         # created.
         right_now             = datetime.datetime.now()
         current_date_time_str = right_now.strftime( "%Y/%m/%d at %H:%M:%S" )
-
-        # Get the current particle data ranges.
-        parameter_ranges = get_parameter_ranges()
 
         preamble_str = """!
 ! NOTE: This module was generated from {model_name:s} on {creation_date:s}.
@@ -560,18 +567,18 @@ module droplet_model
     number_layer1_neurons=model_state["fc1.weight"].shape[0],
     number_layer2_neurons=model_state["fc2.weight"].shape[0],
     number_layer3_neurons=model_state["fc3.weight"].shape[0],
-    radius_start=parameter_ranges["radius"][0],
-    radius_end=parameter_ranges["radius"][1],
-    temperature_start=parameter_ranges["temperature"][0],
-    temperature_end=parameter_ranges["temperature"][1],
-    salt_mass_start=parameter_ranges["salt_mass"][0],
-    salt_mass_end=parameter_ranges["salt_mass"][1],
-    air_temperature_start=parameter_ranges["air_temperature"][0],
-    air_temperature_end=parameter_ranges["air_temperature"][1],
-    rh_start=parameter_ranges["relative_humidity"][0],
-    rh_end=parameter_ranges["relative_humidity"][1],
-    rhoa_start=parameter_ranges["rhoa"][0],
-    rhoa_end=parameter_ranges["rhoa"][1]
+    radius_start=model_parameter_ranges["radius"][0],
+    radius_end=model_parameter_ranges["radius"][1],
+    temperature_start=model_parameter_ranges["temperature"][0],
+    temperature_end=model_parameter_ranges["temperature"][1],
+    salt_mass_start=model_parameter_ranges["salt_mass"][0],
+    salt_mass_end=model_parameter_ranges["salt_mass"][1],
+    air_temperature_start=model_parameter_ranges["air_temperature"][0],
+    air_temperature_end=model_parameter_ranges["air_temperature"][1],
+    rh_start=model_parameter_ranges["relative_humidity"][0],
+    rh_end=model_parameter_ranges["relative_humidity"][1],
+    rhoa_start=model_parameter_ranges["rhoa"][0],
+    rhoa_end=model_parameter_ranges["rhoa"][1]
         )
 
         print( preamble_str, file=output_fp )

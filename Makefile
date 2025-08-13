@@ -169,6 +169,7 @@ benchmark_approximation.x: $(BENCHMARK_OBJS) measurement.o data_structures.o dro
 	$(FORTRAN) $(FLAGS) $(DEBUG_FLAGS) $(MODEL_FLAGS) $(OUTPUTLIB) $(LINKOPTS) -o $@ $^
 
 # Dependencies between the individual objects.
+droplet_model.o: defs.o
 les.o: defs.o measurement.o netcdf_io.o particles.o tec_io.o
 measurement.o: data_structures.o
 particles.o: defs.o measurement.o
