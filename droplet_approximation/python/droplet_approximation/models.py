@@ -332,7 +332,7 @@ def generate_fortran_module( output_path, model_name, model_state, parameter_ran
     else:
         model_parameter_ranges = parameter_ranges
 
-    def write_module_prolog( model_name, model_state, output_fp ):
+    def _write_module_prolog( model_name, model_state, output_fp ):
         """
         Writes the module's prolog to the supplied file handle.
 
@@ -583,7 +583,7 @@ module droplet_model
 
         print( preamble_str, file=output_fp )
 
-    def write_model_initializaiton_routine( model_state, output_fp, indentation_str ):
+    def _write_model_initializaiton_routine( model_state, output_fp, indentation_str ):
         """
         Writes the model's initialization routine to the supplied file handle with
         a specific amount of indentation.
@@ -598,7 +598,7 @@ module droplet_model
 
         """
 
-        def write_model_biases( model_state, output_fp, indentation_str ):
+        def _write_model_biases( model_state, output_fp, indentation_str ):
             """
             Internal routine that generates the biases initialization expressions for
             all of the biases in the supplied model state.  This does not generate
@@ -654,7 +654,7 @@ module droplet_model
                     bias_values_str ),
                       file=output_fp )
 
-        def write_model_weights( model_state, output_fp, indentation_str ):
+        def _write_model_weights( model_state, output_fp, indentation_str ):
             """
             Internal routine that generates the weight initialization expressions for
             all of the weights in the supplied model state.  This does not generate
@@ -724,7 +724,7 @@ module droplet_model
                     weights_reshape_dimensions_str ),
                       file=output_fp )
 
-        def write_model_parameter_ranges( model_parameter_ranges, output_fp, indentation_str ):
+        def _write_model_parameter_ranges( model_parameter_ranges, output_fp, indentation_str ):
             """
             Internal routine that generates code for the root MPI rank to pretty
             print the model's parameter ranges to standard output so it is
@@ -796,14 +796,14 @@ end if
                 file=output_fp )
 
         # Write the weights and biases separated by an empty line.
-        write_model_weights( model_state, output_fp, inner_indentation_str )
+        _write_model_weights( model_state, output_fp, inner_indentation_str )
         print( "", file=output_fp )
-        write_model_biases( model_state, output_fp, inner_indentation_str )
+        _write_model_biases( model_state, output_fp, inner_indentation_str )
 
         # Report the parameter ranges at run-time so users have an idea of where
         # the model should perform well.
         print( "", file=output_fp )
-        write_model_parameter_ranges( model_parameter_ranges, output_fp, inner_indentation_str )
+        _write_model_parameter_ranges( model_parameter_ranges, output_fp, inner_indentation_str )
 
         # Write the subroutine's epilog.
         for initialization_line in initialization_epilog_str.splitlines():
@@ -812,7 +812,7 @@ end if
                 initialization_line ),
                 file=output_fp )
 
-    def write_model_inference_routine( model_state, output_fp, indentation_str ):
+    def _write_model_inference_routine( model_state, output_fp, indentation_str ):
         """
         Writes the model's inference routine to the supplied file handle with
         a specific amount of indentation.
@@ -894,7 +894,7 @@ end subroutine estimate
                 inference_line ),
                    file=output_fp )
 
-    def write_module_epilog( model_state, output_fp ):
+    def _write_module_epilog( model_state, output_fp ):
         """
         Writes the module's epilog to the supplied file handle.
 
@@ -917,14 +917,14 @@ end subroutine estimate
     with open( output_path, "w" ) as output_fp:
         # Write out the beginning of the module.  This includes the definitions for
         # the layers' weights and biases but not the method that initializes them.
-        write_module_prolog( model_name, model_state, output_fp )
+        _write_module_prolog( model_name, model_state, output_fp )
 
         # Write out both of the subroutines that comprise this model.
-        write_model_initializaiton_routine( model_state, output_fp, indentation_str )
-        write_model_inference_routine( model_state, output_fp, indentation_str )
+        _write_model_initializaiton_routine( model_state, output_fp, indentation_str )
+        _write_model_inference_routine( model_state, output_fp, indentation_str )
 
         # Write out the end of the module.
-        write_module_epilog( model_state, output_fp )
+        _write_module_epilog( model_state, output_fp )
 
 def load_model_checkpoint( checkpoint_path, model, optimizer=None ):
     """
