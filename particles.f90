@@ -3228,7 +3228,7 @@ CONTAINS
             be_float32_write_buffer(3,be_write_buffer_index) = part%Tp
             be_float32_write_buffer(4,be_write_buffer_index) = part%m_s
             be_float32_write_buffer(5,be_write_buffer_index) = part%Tf
-            be_float32_write_buffer(6,be_write_buffer_index) = part%qinf/(Mw*mod_magnus(part%Tf)/Ru/part%Tf) ! formula for RH
+            be_float32_write_buffer(6,be_write_buffer_index) = part%qinf/(Mw*mod_magnus(part%Tf)/Ru/part%Tf)*rhoa ! formula for RH
             be_float32_write_buffer(7,be_write_buffer_index) = rhoa
          endif
 
@@ -3608,7 +3608,7 @@ CONTAINS
             droplet_parameters(2) = part%Tp
             droplet_parameters(3) = part%m_s
             droplet_parameters(4) = part%Tf
-            droplet_parameters(5) = part%qinf/(Mw*mod_magnus(part%Tf)/Ru/part%Tf)
+            droplet_parameters(5) = part%qinf/(Mw*mod_magnus(part%Tf)/Ru/part%Tf)*rhoa
             droplet_parameters(6) = rhoa
             droplet_parameters(7) = dt
 
