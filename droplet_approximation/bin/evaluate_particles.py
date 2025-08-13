@@ -296,15 +296,6 @@ def main( argv ):
 
     testing_flag = True
 
-    #
-    # NOTE: We track BDF and MLP separately to handle the (likely) event that
-    #       they will require different numbers of arguments.
-    #
-    NUMBER_BDF_ARGUMENTS = 9
-    NUMBER_MLP_ARGUMENTS = 9
-
-    number_arguments = len( argv[1:] )
-
     # We have two different calling interfaces, one for BDF and one for MLP.
     # We print them on separate lines instead of trying to show them
     # on one and confusing everyone.
@@ -314,10 +305,6 @@ def main( argv ):
             argv[0],
             "",
             len( argv[0] ) )
-
-    if (number_arguments != NUMBER_BDF_ARGUMENTS) and (number_arguments != NUMBER_MLP_ARGUMENTS):
-        print( usage_string )
-        return 1
 
     # Parse any options to handle the case where we're "forced" to execute.
     try:
@@ -331,10 +318,23 @@ def main( argv ):
         return 1
 
     for option, option_value in options:
-        if opt == "-f":
+        if option == "-f":
             testing_flag = False
         else:
             raise NotImplementedError( "Unhandled option '{:s}'!".format( option ) )
+
+    #
+    # NOTE: We track BDF and MLP separately to handle the (likely) event that
+    #       they will require different numbers of arguments.
+    #
+    NUMBER_BDF_ARGUMENTS = 9
+    NUMBER_MLP_ARGUMENTS = 9
+
+    number_arguments = len( arguments )
+
+    if (number_arguments != NUMBER_BDF_ARGUMENTS) and (number_arguments != NUMBER_MLP_ARGUMENTS):
+        print( usage_string )
+        return 1
 
     particles_root   = arguments[0]
     indices_range    = arguments[1]
