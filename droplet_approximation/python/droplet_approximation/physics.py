@@ -455,7 +455,7 @@ def solve_ivp_float32_outputs( dydt, t_span, y0, **kwargs ):
         if ode_solution.success:
             # If we could integrate, return the outputs as the requested
             # precision.
-            solution[:] = ode_solution.y[:, 0].astype( "float32" )
+            solution[:] = ode_solution.y.T.astype( "float32" )
         else:
             # Otherwise, capture useful information from the solution object to
             # help in debugging.
