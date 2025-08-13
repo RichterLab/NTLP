@@ -57,7 +57,7 @@ def generate_fortran_module_with_suffix( droplet_model_save_prefix, model_name, 
 
     generate_fortran_module( droplet_model_save_path,
                              model_name,
-                             model.state_dict() )
+                             model )
 
 def main( argv ):
     if len( argv ) == 4:

@@ -11,40 +11,6 @@ from .physics import dydt,\
                      scale_droplet_parameters, \
                      solve_ivp_float32_outputs
 
-class ResidualNet( nn.Module ):
-    """
-    4-layer multi-layer perceptron (MLP) with ReLU activations.  This aims to
-    balance parameter count vs computational efficiency so that inferencing with
-    it is faster than Gauss-Newton iterative solvers.
-
-    This residual network learns the delta between the input particle size and
-    temperature and the outputs, given the provided background conditions.
-    """
-
-    def __init__( self ):
-        super().__init__()
-
-        #
-        # NOTE: These sizes were chosen without any consideration other than creating
-        #       a small network (wrt parameter count) and should have good computational
-        #       efficiency (wrt memory alignment and cache lines).  No effort has been
-        #       spent to improve upon the initial guess.
-        #
-        self.fc1 = nn.Linear( 7, 32 )
-        self.fc2 = nn.Linear( 32, 32 )
-        self.fc3 = nn.Linear( 32, 32 )
-        self.fc4 = nn.Linear( 32, 2 )
-
-    def forward( self, x ):
-        out = torch.relu( self.fc1( x ) )
-        out = torch.relu( self.fc2( out ) )
-        out = torch.relu( self.fc3( out ) )
-        out = self.fc4( out )
-
-        out += x[..., 0:2]
-
-        return out
-
 class SimpleNet( nn.Module ):
     """
     4-layer multi-layer perceptron (MLP) with ReLU activations.  This aims to
@@ -73,6 +39,27 @@ class SimpleNet( nn.Module ):
         x = self.fc4( x )
 
         return x
+
+class ResidualNet( SimpleNet ):
+    """
+    4-layer multi-layer perceptron (MLP) with ReLU activations.  This aims to
+    balance parameter count vs computational efficiency so that inferencing with
+    it is faster than Gauss-Newton iterative solvers.
+
+    This residual network learns the delta between the input particle size and
+    temperature and the outputs, given the provided background conditions.
+    """
+
+    def __init__( self ):
+        super().__init__()
+
+    def forward( self, x ):
+        # Add the input to the final result to force the model to learn the
+        # delta instead of the approximation itself.
+        out  = super().forward( x )
+        out += x[..., 0:2]
+
+        return out
 
 def do_bdf( input_parameters, times, **kwargs ):
     """
@@ -289,7 +276,7 @@ def do_iterative_inference( input_parameters, times, model, device ):
 
     return scale_droplet_parameters( normalized_data[:, :2].to( "cpu" ).numpy() )
 
-def generate_fortran_module( output_path, model_name, model_state, parameter_ranges={} ):
+def generate_fortran_module( output_path, model_name, model, parameter_ranges={} ):
     """
     Creates a Fortran 2003 module that allows use of the supplied model with a
     batch size of 1 during inference.
@@ -302,7 +289,7 @@ def generate_fortran_module( output_path, model_name, model_state, parameter_ran
       output_path      - File to write to.  If this exists it is overwritten.
       model_name       - Name of the model to write in the generated module's comments
                          so as to identify where the weights came from.
-      model_state      - PyTorch model state dictionary for the module to expose.
+      model            - PyTorch model object for the module to expose.
       parameter_ranges - Optional dictionary of parameter ranges.  If omitted, defaults
                          to an empty dictionary and uses the current parameter ranges
                          returned by get_parameter_ranges().
@@ -310,6 +297,11 @@ def generate_fortran_module( output_path, model_name, model_state, parameter_ran
     Returns nothing.
 
     """
+
+    # Ensure we have a model we know how to serialize.
+    if not isinstance( model, SimpleNet ):
+        raise ValueError( "Provided model is type '{:s}' and not a subclass of SimpleNet!".format(
+            str( type( model ) ) ) )
 
     #
     # NOTE: This is hard coded against the SimpleNet class' implementation.  This
@@ -827,6 +819,17 @@ end if
 
         """
 
+        residual_inference_str = """
+    ! Add the model's input to its output since it's learned to compute a delta rather
+    ! than the final answer.
+    output(RADIUS_INDEX)      = output(RADIUS_INDEX)      + normalized_input(RADIUS_INDEX)
+    output(TEMPERATURE_INDEX) = output(TEMPERATURE_INDEX) + normalized_input(TEMPERATURE_INDEX)
+"""
+
+        # Only include the residual if the model supports it.
+        if not isinstance( model, ResidualNet ):
+            residual_inference_str = ""
+
         inference_str = """
 ! Estimates a droplet's future size and temperature based on it's current size
 ! and temperature, as well as key parameters from the environment its in.
@@ -879,14 +882,16 @@ subroutine estimate( input, output )
     do output_index = 1, NUMBER_OUTPUTS
         output(output_index) = sum( layer3_intermediate(:) * output_weights(:, output_index) ) + output_biases(output_index)
     end do
-
+{residual_inference:s}
     ! Scale the outputs to the expected ranges.
     output(RADIUS_INDEX)      = 10.0**(output(RADIUS_INDEX) * RADIUS_LOG_WIDTH + RADIUS_LOG_MEAN)
     output(TEMPERATURE_INDEX) = output(TEMPERATURE_INDEX) * TEMPERATURE_WIDTH + TEMPERATURE_MEAN
 
 end subroutine estimate
 
-"""
+""".format(
+    residual_inference=residual_inference_str
+)
 
         for inference_line in inference_str.splitlines():
             print( "{:s}{:s}".format(
@@ -913,6 +918,10 @@ end subroutine estimate
 
     # Module subroutines, inside of a "contains" block, are indented twice.
     indentation_str = " " * 8
+
+    # Convenience variable for the internal methods that take the model weights
+    # instead of the model itself.
+    model_state = model.state_dict()
 
     with open( output_path, "w" ) as output_fp:
         # Write out the beginning of the module.  This includes the definitions for
