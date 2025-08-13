@@ -370,6 +370,12 @@ def generate_fortran_module( output_path, model_name, model, parameter_ranges={}
         right_now             = datetime.datetime.now()
         current_date_time_str = right_now.strftime( "%Y/%m/%d at %H:%M:%S" )
 
+        # Build a short string that describes the model's origins that can be
+        # reported at run-time.
+        model_metadata = "{:s} ({:s})".format(
+            model_name,
+            current_date_time_str )
+
         preamble_str = """!
 ! NOTE: This module was generated from {model_name:s} on {creation_date:s}.
 !       Do not modify this directly!  Update the module generator's template and
@@ -477,6 +483,16 @@ module droplet_model
     !       code!  Do not modify this unless you really know what you're doing!
     !
 
+    ! Model metadata to help with debugging.
+    !
+    ! NOTE: This is restricted to 128 characters to avoid running afoul of modern
+    !       Fortran's 132 character limit.  We start the actual string literal on
+    !       its own line to avoid generating a compiler warning when we have a
+    !       long string.
+    !
+    character(len=128), parameter :: model_metadata = &
+ "{model_metadata:s}"
+
     ! Indices into the input and output vectors.  The input vector uses all of
     ! the indices while the output vector only uses the first two.
     integer, parameter :: RADIUS_INDEX          = 1
@@ -553,6 +569,7 @@ module droplet_model
     #      thoroughly tested since the target model had identical sizes
     #      throughout.
     model_name=model_name,
+    model_metadata=model_metadata,
     creation_date=current_date_time_str,
     number_inputs=model_state["fc1.weight"].shape[1],
     number_outputs=model_state["fc4.weight"].shape[0],
@@ -716,12 +733,14 @@ module droplet_model
                     weights_reshape_dimensions_str ),
                       file=output_fp )
 
-        def _write_model_parameter_ranges( model_parameter_ranges, output_fp, indentation_str ):
+        def _write_model_metadata( model_parameter_ranges, output_fp, indentation_str ):
             """
-            Internal routine that generates code for the root MPI rank to pretty
-            print the model's parameter ranges to standard output so it is
-            available in a simulation's log.  This is key for debugging issues
-            with MLP inference.
+            Internal routine that generates code for the root MPI rank to report
+            information about the MLP model.  This prints the Fortran
+            droplet_model's model_metadata variable as well as pretty prints the
+            model's parameter ranges to standard output so it is available in a
+            simulation's log.  These aim to improve debugging issues with MLP
+            inference.
 
             Takes 3 arguments:
 
@@ -741,8 +760,11 @@ module droplet_model
             #
             print_ranges_str = \
 """
-! Pretty print a table of parameter ranges and their units to the log.
+! Write the model's metadata and pretty print a table of parameter
+! ranges and their units to the log.
 if( myid == 0 ) then
+write(*, "(A,A,/)" ) "MLP model metadata: ", model_metadata
+
 write(*, "(/,A,/,/,A,F5.2,A,F5.2,A,/,A,F6.2,A,F6.2,A,/,A,F6.2,A,F6.2,A)" ) &
                      "MLP was trained with the following parameter ranges:", &
                      "    Log10(Radius):     [ ", RADIUS_LOG_RANGE(1), ",  ", RADIUS_LOG_RANGE(2), "] m", &
@@ -795,7 +817,7 @@ end if
         # Report the parameter ranges at run-time so users have an idea of where
         # the model should perform well.
         print( "", file=output_fp )
-        _write_model_parameter_ranges( model_parameter_ranges, output_fp, inner_indentation_str )
+        _write_model_metadata( model_parameter_ranges, output_fp, inner_indentation_str )
 
         # Write the subroutine's epilog.
         for initialization_line in initialization_epilog_str.splitlines():
