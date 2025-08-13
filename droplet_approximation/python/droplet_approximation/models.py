@@ -724,14 +724,69 @@ module droplet_model
                     weights_reshape_dimensions_str ),
                       file=output_fp )
 
+        def write_model_parameter_ranges( model_parameter_ranges, output_fp, indentation_str ):
+            """
+            Internal routine that generates code for the root MPI rank to pretty
+            print the model's parameter ranges to standard output so it is
+            available in a simulation's log.  This is key for debugging issues
+            with MLP inference.
+
+            Takes 3 arguments:
+
+              model_parameter_ranges - Dictionary of parameter ranges the model was trained on.
+                                       See get_parameter_ranges() for details.
+              output_fp              - File handle to write to.
+              indentation_str        - String prepended to each line of the subroutine written.
+
+            Returns nothing.
+            """
+
+            # Report a pretty printed table of parameter ranges along with their units.
+            #
+            # NOTE: The lack of indentation is intentional as these lines are long and we attempt
+            #       to keep them under the 132 character limit by skipping indentation inside of
+            #       the rank check conditional.
+            #
+            print_ranges_str = \
+"""
+! Pretty print a table of parameter ranges and their units to the log.
+if( myid == 0 ) then
+write(*, "(/,A,/,/,A,F5.2,A,F5.2,A,/,A,F6.2,A,F6.2,A,/,A,F6.2,A,F6.2,A)" ) &
+                     "MLP was trained with the following parameter ranges:", &
+                     "    Log10(Radius):     [ ", RADIUS_LOG_RANGE(1), ",  ", RADIUS_LOG_RANGE(2), "] m", &
+                     "    Temperature:       [", TEMPERATURE_RANGE(1), ", ", TEMPERATURE_RANGE(2), "] K", &
+                     "    log10(Salt mass):  [", SALT_MASS_LOG_RANGE(1), ", ", SALT_MASS_LOG_RANGE(2), "] kg"
+write(*, "(A,F6.2,A,F6.2,A,/,A,F6.2,A,F6.2,A,/,A,F4.2,A,F4.2,A,/)" ) &
+                     "    Air temperatures:  [", AIR_TEMPERATURE_RANGE(1), ", ", AIR_TEMPERATURE_RANGE(2), "] K", &
+                     "    Relative humidity: [", RH_RANGE(1) * 100.0, ", ", RH_RANGE(2) * 100.0, "] %", &
+                     "    Air density:       [  ", RHOA_RANGE(1), ",   ", RHOA_RANGE(2), "] kg/m^3"
+end if
+"""
+
+            for print_ranges_line in print_ranges_str.splitlines():
+                print( "{:s}{:s}".format(
+                    indentation_str if len( print_ranges_line ) > 0 else "",
+                    print_ranges_line ),
+                       file=output_fp )
+
         # Our initialization routine is inside of a "contains" block so we're
         # indented one level deeper than the caller.
         inner_indentation_str = "    {:s}".format( indentation_str )
 
         # Prolog and epilog of our initialization routine, along with extra
         # newlines so we survive the application of .splitlines() below.
-        initialization_prolog_str = "subroutine initialize_model()\n\n    implicit none\n\n"
-        initialization_epilog_str = "\nend subroutine initialize_model"
+        #
+        # NOTE: We need the current MPI rank from the pars module so we can
+        #       properly report our state from a single rank.
+        #
+        initialization_prolog_str = ("subroutine initialize_model()\n" +
+                                     "\n" +
+                                     "    use pars, only:    myid\n" +
+                                     "\n"
+                                     "    implicit none\n" +
+                                     "\n")
+        initialization_epilog_str = ("\n" +
+                                     "end subroutine initialize_model")
 
         # Write the subroutine's prolog.
         for initialization_line in initialization_prolog_str.splitlines():
@@ -744,6 +799,11 @@ module droplet_model
         write_model_weights( model_state, output_fp, inner_indentation_str )
         print( "", file=output_fp )
         write_model_biases( model_state, output_fp, inner_indentation_str )
+
+        # Report the parameter ranges at run-time so users have an idea of where
+        # the model should perform well.
+        print( "", file=output_fp )
+        write_model_parameter_ranges( model_parameter_ranges, output_fp, inner_indentation_str )
 
         # Write the subroutine's epilog.
         for initialization_line in initialization_epilog_str.splitlines():
