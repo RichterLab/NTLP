@@ -3226,7 +3226,7 @@ CONTAINS
             be_float32_write_buffer(1,be_write_buffer_index) = time
             be_float32_write_buffer(2,be_write_buffer_index) = part%radius
             be_float32_write_buffer(3,be_write_buffer_index) = part%Tp
-            be_float32_write_buffer(4,be_write_buffer_index) = part%m_s
+            be_float32_write_buffer(4,be_write_buffer_index) = part%kappa_s * part%m_s * rhow / rhos
             be_float32_write_buffer(5,be_write_buffer_index) = part%Tf
             be_float32_write_buffer(6,be_write_buffer_index) = part%qinf/(Mw*mod_magnus(part%Tf)/Ru/part%Tf)*rhoa ! formula for RH
             be_float32_write_buffer(7,be_write_buffer_index) = rhoa
