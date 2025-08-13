@@ -586,20 +586,20 @@ CONTAINS
   use con_stats
   use con_data
   implicit none
-       
+
   integer :: ix,iy,izuv,izw,iz,i,k,j
   integer :: first,last
   real :: xkval,xjval,pj,dxvec(2)
   integer :: ijpts(2,6),kuvpts(6),kwpts(6)
   real :: wt(4,6)
   real :: ran2
-      
-  !get the "leftmost" node
-  !This is just the minimum (i,j,k) on the volume 
 
-  ijpts(1,3) = floor(part%xp(1)/dx) + 1 
+  !get the "leftmost" node
+  !This is just the minimum (i,j,k) on the volume
+
+  ijpts(1,3) = floor(part%xp(1)/dx) + 1
   ijpts(2,3) = floor(part%xp(2)/dy) + 1
- 
+
   !Fill in the neighbors:
   ijpts(1,2) = ijpts(1,3)-1
   ijpts(1,1) = ijpts(1,2)-1
@@ -612,11 +612,11 @@ CONTAINS
   ijpts(2,4) = ijpts(2,3)+1
   ijpts(2,5) = ijpts(2,4)+1
   ijpts(2,6) = ijpts(2,5)+1
- 
+
   !Finding the k-lhnode is different since grid may be stretched
   !AND since (u,v) and w stored differently
   !Will get a k-index for (u,v) and one for w
-  
+
   !Do (u,v) loop first:
   kuvpts(3) = minloc(zz,1,mask=(zz.gt.part%xp(3))) - 2
   !Then fill in the rest:
@@ -653,10 +653,10 @@ CONTAINS
      wt(iz,j) = pj
    end do
    end do
-  
-     
+
+
    !Now compute weights in z-dir
-   !There are 2 sections: weights at (u,v) nodes (kuvpts) 
+   !There are 2 sections: weights at (u,v) nodes (kuvpts)
    !And weights computed at w nodes (kwpts)
 
    !Compute weights at kuvpts
@@ -674,10 +674,10 @@ CONTAINS
       kuvpts(1) = 1
       kuvpts(2) = 1
       kuvpts(3) = 1
-   elseif (kuvpts(3) .LT. 0) then 
+   elseif (kuvpts(3) .LT. 0) then
       first = 0
       last = 0
-   elseif (kuvpts(3) == 2) then 
+   elseif (kuvpts(3) == 2) then
       first = 2
       last = 5
    !Between top cell center and the domain boundary
@@ -725,13 +725,13 @@ CONTAINS
       last = 4
       kwpts(1) = 1
       kwpts(2) = 1
-   elseif (kwpts(3) .LT. 0) then 
+   elseif (kwpts(3) .LT. 0) then
       first = 0
       last = 0
       kwpts(1) = 1
       kwpts(2) = 1
       kwpts(3) = 1
-   elseif (kwpts(3) == 1) then 
+   elseif (kwpts(3) == 1) then
       first = 2
       last = 5
       kwpts(1) = 1
@@ -782,16 +782,16 @@ CONTAINS
         izuv = kuvpts(k)
         izw = kwpts(k)
 
-        part%uf(1) = part%uf(1)+uext(izuv,iy,ix)*wt(1,i)*wt(2,j)*wt(3,k) 
-        part%uf(2) = part%uf(2)+vext(izuv,iy,ix)*wt(1,i)*wt(2,j)*wt(3,k) 
-        part%uf(3) = part%uf(3)+wext(izw,iy,ix)*wt(1,i)*wt(2,j)*wt(4,k) 
+        part%uf(1) = part%uf(1)+uext(izuv,iy,ix)*wt(1,i)*wt(2,j)*wt(3,k)
+        part%uf(2) = part%uf(2)+vext(izuv,iy,ix)*wt(1,i)*wt(2,j)*wt(3,k)
+        part%uf(3) = part%uf(3)+wext(izw,iy,ix)*wt(1,i)*wt(2,j)*wt(4,k)
         part%Tf = part%Tf+Text(izuv,iy,ix)*wt(1,i)*wt(2,j)*wt(3,k)
-        part%qinf = part%qinf+T2ext(izuv,iy,ix)*wt(1,i)*wt(2,j)*wt(3,k) 
+        part%qinf = part%qinf+T2ext(izuv,iy,ix)*wt(1,i)*wt(2,j)*wt(3,k)
      end do
-     end do 
+     end do
      end do
 
-  end subroutine uf_interp 
+  end subroutine uf_interp
 
   subroutine uf_interp_lin
   use pars
@@ -799,20 +799,20 @@ CONTAINS
   use con_stats
   use con_data
   implicit none
-   
+
   integer :: ix,iy,izuv,izw,iz,i,k,j
   integer :: ipt,jpt,kpt,kwpt
   real :: wtx,wty,wtz,wtzw,wtt
   real :: xv,yv,zv,zwv
-  
 
-  ipt = floor(part%xp(1)/dx) + 1 
+
+  ipt = floor(part%xp(1)/dx) + 1
   jpt = floor(part%xp(2)/dy) + 1
- 
+
   !Finding the k-lhnode is different since grid may be stretched
   !AND since (u,v) and w stored differently
   !Will get a k-index for (u,v) and one for w
-  
+
   kpt = minloc(zz,1,mask=(zz.gt.part%xp(3))) - 2
   kwpt = minloc(z,1,mask=(z.gt.part%xp(3))) - 2
 
@@ -1108,7 +1108,7 @@ CONTAINS
       crbuf_s=0.0;ctbuf_s=0.0
       clbuf_r=0.0;cbbuf_r=0.0
 
-      !First send top: 
+      !First send top:
       !get send buffer ready:
       ctbuf_s(1:nnz+2,1:iye-iys+2,1:3)=partsrc_t(0:nnz+1,iys:iye+1,mxe+1,1:3)
       ctbuf_s(1:nnz+2,1:iye-iys+2,4)=partTsrc_t(0:nnz+1,iys:iye+1,mxe+1)
@@ -1145,7 +1145,7 @@ CONTAINS
       partTEsrc_t(0:nnz+1,iys,mxs:mxe) = partTEsrc_t(0:nnz+1,iys,mxs:mxe) + clbuf_r(1:nnz+2,1:mxe-mxs+1,6)
 
 
-      !Now that coupling and statistics arrays are filled, 
+      !Now that coupling and statistics arrays are filled,
       !Transpose them back to align with the velocities:
       call ztox_trans(partsrc_t(0:nnz+1,iys:iye,mxs:mxe,1), &
                      partsrc(1:nnx,iys:iye,izs-1:ize+1,1),nnx,nnz,mxs, &
@@ -1205,7 +1205,7 @@ CONTAINS
   !First, as done in uf_interp, must find the "leftmost" node
   !of volume where particle belongs:
   !(must repeat since now particle locations have been updated)
- 
+
   ipt = floor(part%xp(1)/dx) + 1
   jpt = floor(part%xp(2)/dy) + 1
   kpt = minloc(zz,1,mask=(zz.gt.part%xp(3))) - 2
@@ -1213,7 +1213,7 @@ CONTAINS
 
 
   !Calculate locally based on new minus old
-  vrhs(1:3) = (part%vp(1:3)-part%vp_old(1:3))/dt 
+  vrhs(1:3) = (part%vp(1:3)-part%vp_old(1:3))/dt
   radrhs = (part%radius-part%radius_old)/dt
   Tprhs_L = 3.0*Lv/Cpp/part%radius*radrhs
   Tprhs_s = (part%Tp-part%Tp_old)/dt - Tprhs_L
@@ -1243,7 +1243,7 @@ CONTAINS
      end if
      rhop = (part%m_s+pi2*2.0/3.0*part%radius**3*rhow)/(pi2*2.0/3.0*part%radius**3)
      partmass = rhop*2.0/3.0*pi2*(part%radius)**3
-     taup_i = 18.0*rhoa*nuf/rhop/(2.0*part%radius)**2 
+     taup_i = 18.0*rhoa*nuf/rhop/(2.0*part%radius)**2
 
      ix = ipt+i
      iy = jpt+j
@@ -1333,7 +1333,7 @@ CONTAINS
           t(ix,iy,1,iz) = t(ix,iy,1,iz) + dt*partTEsrc(ix,iy,iz)
           t(ix,iy,2,iz) = t(ix,iy,2,iz) + dt*partHsrc(ix,iy,iz)
        end if
-       
+
 
       end do
       end do
@@ -1345,19 +1345,19 @@ CONTAINS
   subroutine assign_nbrs
         use pars
         include 'mpif.h'
-      !Figure out which processors lie to all sides: 
-      !NOTE: For this updated case, where particles lie in columns not 
+      !Figure out which processors lie to all sides:
+      !NOTE: For this updated case, where particles lie in columns not
       !aligning with the velocity, there will be no MPI_PROC_NULL since
       !x and y are BOTH periodic
-     
+
       !On right boundary:
       if ( mod(myid+1,ncpu_s) == 0 ) then
          !On the top:
          if ( myid .GE. ncpu_s*(ncpu_z-1) ) then
             rproc = myid-ncpu_s+1
-            trproc = 0 
-            tproc = ncpu_s-1 
-            tlproc = ncpu_s-2 
+            trproc = 0
+            tproc = ncpu_s-1
+            tlproc = ncpu_s-2
             lproc = myid-1
             blproc = myid-ncpu_s-1
             bproc = myid-ncpu_s
@@ -1369,11 +1369,11 @@ CONTAINS
             tproc = myid+ncpu_s
             tlproc = myid+ncpu_s-1
             lproc = myid-1
-            blproc = myid+ncpu_s*(ncpu_z-1)-1 
-            bproc = myid+ncpu_s*(ncpu_z-1) 
-            brproc = ncpu_s*(ncpu_z-1) 
+            blproc = myid+ncpu_s*(ncpu_z-1)-1
+            bproc = myid+ncpu_s*(ncpu_z-1)
+            brproc = ncpu_s*(ncpu_z-1)
          !In the middle of right side:
-         else 
+         else
             rproc = myid-ncpu_s+1
             trproc = myid+1
             tproc = myid+ncpu_s
@@ -1382,15 +1382,15 @@ CONTAINS
             blproc = myid-ncpu_s-1
             bproc = myid-ncpu_s
             brproc = myid-ncpu_s - ncpu_s+1
-         end if 
+         end if
 
       !On the left boundary:
       elseif ( mod(myid,ncpu_s) == 0) then
          !On the top:
          if ( myid .GE. ncpu_s*(ncpu_z-1) ) then
             rproc = myid+1
-            trproc = 1 
-            tproc = 0 
+            trproc = 1
+            tproc = 0
             tlproc = ncpu_s-1
             lproc = myid+ncpu_s-1
             blproc = myid-1
@@ -1403,9 +1403,9 @@ CONTAINS
             tproc = myid+ncpu_s
             tlproc = myid+ncpu_s+ncpu_s-1
             lproc = myid+ncpu_s-1
-            blproc = numprocs-1 
-            bproc = ncpu_s*(ncpu_z-1) 
-            brproc = ncpu_s*(ncpu_z-1)+1 
+            blproc = numprocs-1
+            bproc = ncpu_s*(ncpu_z-1)
+            brproc = ncpu_s*(ncpu_z-1)+1
          !In the middle of left side:
          else
             rproc = myid+1
@@ -1423,15 +1423,15 @@ CONTAINS
          if ( .NOT. ( mod(myid,ncpu_s) == 0) ) then
             if ( .NOT. (mod(myid+1,ncpu_s) == 0) ) then
                rproc = myid+1
-               trproc = myid-(ncpu_s*(ncpu_z-1))+1 
-               tproc = myid-(ncpu_s*(ncpu_z-1)) 
-               tlproc = myid-(ncpu_s*(ncpu_z-1))-1 
+               trproc = myid-(ncpu_s*(ncpu_z-1))+1
+               tproc = myid-(ncpu_s*(ncpu_z-1))
+               tlproc = myid-(ncpu_s*(ncpu_z-1))-1
                lproc = myid-1
                blproc = myid-ncpu_s-1
                bproc = myid-ncpu_s
                brproc = myid-ncpu_s+1
             end if
-         end if 
+         end if
       !On the bottom boundary
       elseif ( myid .LT. ncpu_s) then
          if ( .NOT. ( mod(myid,ncpu_s) == 0) ) then
@@ -1442,12 +1442,12 @@ CONTAINS
                tlproc = myid+ncpu_s-1
                lproc = myid-1
                blproc = myid+ncpu_s*(ncpu_z-1)-1
-               bproc = myid+ncpu_s*(ncpu_z-1) 
-               brproc = myid+ncpu_s*(ncpu_z-1)+1 
+               bproc = myid+ncpu_s*(ncpu_z-1)
+               brproc = myid+ncpu_s*(ncpu_z-1)+1
             end if
          end if
       !Everywhere else:
-      else 
+      else
          rproc = myid+1
          trproc = myid+ncpu_s+1
          tproc = myid+ncpu_s
@@ -1482,17 +1482,17 @@ CONTAINS
       type(particle), allocatable :: lbuf_r(:),blbuf_r(:)
       type(particle), allocatable :: bbuf_r(:),brbuf_r(:)
       type(particle), allocatable :: totalbuf(:)
-      
+
       !Zero out the counters for how many particles to send each dir.
       pr_s=0;ptr_s=0;pt_s=0;ptl_s=0;pl_s=0;pbl_s=0;pb_s=0;pbr_s=0
-      
+
       !As soon as the location is updated, must check to see if it left the proc:
       !May be a better way of doing this, but it seems most reasonable:
       part => first_particle
-      do while (associated(part))     
+      do while (associated(part))
 
          !First get numbers being sent to all sides:
-         if (part%xp(2) .GT. ymax) then 
+         if (part%xp(2) .GT. ymax) then
             if (part%xp(1) .GT. xmax) then !top right
                ptr_s = ptr_s + 1
             elseif (part%xp(1) .LT. xmin) then !bottom right
@@ -1517,10 +1517,10 @@ CONTAINS
                   (part%xp(2) .GT. ymin) ) then !bottom
             pb_s = pb_s + 1
          end if
-         
+
          part => part%next
       end do
-      
+
       !Now allocate the send buffers based on these counts:
       allocate(rbuf_s(pr_s),trbuf_s(ptr_s),tbuf_s(pt_s),tlbuf_s(ptl_s))
       allocate(lbuf_s(pl_s),blbuf_s(pbl_s),bbuf_s(pb_s),brbuf_s(pbr_s))
@@ -1531,12 +1531,12 @@ CONTAINS
 
       part => first_particle
       do while (associated(part))
-         
-         if (part%xp(2) .GT. ymax) then 
+
+         if (part%xp(2) .GT. ymax) then
             if (part%xp(1) .GT. xmax) then !top right
                trbuf_s(itr) = part
                call destroy_particle
-               itr = itr + 1 
+               itr = itr + 1
             elseif (part%xp(1) .LT. xmin) then !bottom right
                brbuf_s(ibr) = part
                call destroy_particle
@@ -1571,11 +1571,11 @@ CONTAINS
                   (part%xp(2) .GT. ymin) ) then !bottom
             bbuf_s(ib) = part
             call destroy_particle
-            ib = ib + 1 
+            ib = ib + 1
          else
          part => part%next
-         end if 
-         
+         end if
+
       end do
 
       !Now everyone exchanges the counts with all neighbors:
@@ -1613,7 +1613,7 @@ CONTAINS
       !Allocate room to receive from each side
       allocate(rbuf_r(pr_r),trbuf_r(ptr_r),tbuf_r(pt_r),tlbuf_r(ptl_r))
       allocate(lbuf_r(pl_r),blbuf_r(pbl_r),bbuf_r(pb_r),brbuf_r(pbr_r))
-     
+
       !Send to right:
       if (pr_s .GT. 0) then
       call mpi_isend(rbuf_s,pr_s,particletype,rproc,11,mpi_comm_world,req(1),ierr)
@@ -1648,7 +1648,7 @@ CONTAINS
       else
       req(5) = mpi_request_null
       end if
-      
+
       !Receive from bottom:
       if (pb_r .GT. 0) then
       call mpi_irecv(bbuf_r,pb_r,particletype,bproc,13,mpi_comm_world,req(6),ierr)
@@ -1662,7 +1662,7 @@ CONTAINS
       else
       req(7) = mpi_request_null
       end if
-      
+
       !Recieve from top:
       if (pt_r .GT. 0) then
       call mpi_irecv(tbuf_r,pt_r,particletype,tproc,14,mpi_comm_world,req(8),ierr)
@@ -1676,49 +1676,49 @@ CONTAINS
       else
       req(9) = mpi_request_null
       end if
-     
+
       !Receive from bottom left:
       if (pbl_r .GT. 0) then
       call mpi_irecv(blbuf_r,pbl_r,particletype,blproc,15,mpi_comm_world,req(10),ierr)
-      else 
+      else
       req(10) = mpi_request_null
       end if
-    
+
       !Send to bottom left:
       if (pbl_s .GT. 0) then
       call mpi_isend(blbuf_s,pbl_s,particletype,blproc,16,mpi_comm_world,req(11),ierr)
       else
       req(11) = mpi_request_null
       end if
-     
+
       !Receive from top right:
       if (ptr_r .GT. 0) then
       call mpi_irecv(trbuf_r,ptr_r,particletype,trproc,16,mpi_comm_world,req(12),ierr)
-      else 
+      else
       req(12) = mpi_request_null
       end if
 
       !Send to top left:
       if (ptl_s .GT. 0) then
       call mpi_isend(tlbuf_s,ptl_s,particletype,tlproc,17,mpi_comm_world,req(13),ierr)
-      else 
+      else
       req(13) = mpi_request_null
       end if
-    
+
       !Receive from bottom right:
       if (pbr_r .GT. 0) then
       call mpi_irecv(brbuf_r,pbr_r,particletype,brproc,17,mpi_comm_world,req(14),ierr)
-      else 
+      else
       req(14) = mpi_request_null
       end if
-  
+
       !Send to bottom right:
       if (pbr_s .GT. 0) then
       call mpi_isend(brbuf_s,pbr_s,particletype,brproc,18,mpi_comm_world,req(15),ierr)
       else
       req(15) = mpi_request_null
       end if
-  
+
       !Receive from top left:
       if (ptl_r .GT. 0) then
       call mpi_irecv(tlbuf_r,ptl_r,particletype,tlproc,18,mpi_comm_world,req(16),ierr)
@@ -1735,35 +1735,35 @@ CONTAINS
       psum = pr_r+ptr_r+pt_r+ptl_r+pl_r+pbl_r+pb_r+pbr_r
       csum = 0
       allocate(totalbuf(psum))
-      if (pr_r .GT. 0) then 
+      if (pr_r .GT. 0) then
          totalbuf(1:pr_r) = rbuf_r(1:pr_r)
-         csum = csum + pr_r 
+         csum = csum + pr_r
       end if
-      if (ptr_r .GT. 0) then 
+      if (ptr_r .GT. 0) then
          totalbuf(csum+1:csum+ptr_r) = trbuf_r(1:ptr_r)
          csum = csum + ptr_r
       end if
-      if (pt_r .GT. 0) then 
+      if (pt_r .GT. 0) then
          totalbuf(csum+1:csum+pt_r) = tbuf_r(1:pt_r)
          csum = csum + pt_r
       end if
-      if (ptl_r .GT. 0) then 
+      if (ptl_r .GT. 0) then
          totalbuf(csum+1:csum+ptl_r) = tlbuf_r(1:ptl_r)
          csum = csum + ptl_r
       end if
-      if (pl_r .GT. 0) then 
+      if (pl_r .GT. 0) then
          totalbuf(csum+1:csum+pl_r) = lbuf_r(1:pl_r)
          csum = csum + pl_r
       end if
-      if (pbl_r .GT. 0) then 
+      if (pbl_r .GT. 0) then
          totalbuf(csum+1:csum+pbl_r) = blbuf_r(1:pbl_r)
          csum = csum + pbl_r
       end if
-      if (pb_r .GT. 0) then 
+      if (pb_r .GT. 0) then
          totalbuf(csum+1:csum+pb_r) = bbuf_r(1:pb_r)
          csum = csum + pb_r
       end if
-      if (pbr_r .GT. 0) then 
+      if (pbr_r .GT. 0) then
          totalbuf(csum+1:csum+pbr_r) = brbuf_r(1:pbr_r)
          csum = csum + pbr_r
       end if
@@ -1782,8 +1782,8 @@ CONTAINS
            first_particle => tmp
            nullify(tmp)
         end if
-      end do  
-      
+      end do
+
       deallocate(rbuf_s,trbuf_s,tbuf_s,tlbuf_s)
       deallocate(lbuf_s,blbuf_s,bbuf_s,brbuf_s)
       deallocate(rbuf_r,trbuf_r,tbuf_r,tlbuf_r)
@@ -1792,7 +1792,7 @@ CONTAINS
 
   end subroutine particle_exchange
 
-  subroutine set_bounds  
+  subroutine set_bounds
         use pars
         use con_data
         use con_stats
@@ -1803,7 +1803,7 @@ CONTAINS
       ymin = dy*(iys-1)
       ymax = dy*(iye)
       zmin = z(izs-1)
-      zmax = z(ize)  
+      zmax = z(ize)
       xmin = dx*(mxs-1)
       xmax = dx*(mxe)
 
@@ -1813,7 +1813,7 @@ CONTAINS
       use pars
       use con_data
       implicit none
-      include 'mpif.h' 
+      include 'mpif.h'
       integer :: values(8)
       integer :: idx,ierr
 
@@ -1842,7 +1842,7 @@ CONTAINS
 
       !Initialize the linked list of particles:
       nullify(part,first_particle)
-      
+
 
       do idx=1,numpart
 
@@ -1866,7 +1866,7 @@ CONTAINS
          be_write_buffer_index = 0
          be_float32_write_buffer = 0
          be_int32_write_buffer = 0
-         be_dump_iu = 300 + myid 
+         be_dump_iu = 300 + myid
 
          write(be_id_char,'(i4.4)') myid
          be_dump_filename = trim(adjustl(path_seed))//"particle_traj/be_dump_"//be_id_char//".data"
@@ -1886,7 +1886,7 @@ CONTAINS
       use pars
       use droplet_model
       use con_stats
-      implicit none 
+      implicit none
       include 'mpif.h'
 
       integer :: blcts(3),types(3)
@@ -1897,7 +1897,7 @@ CONTAINS
       integer :: num_reals,num_integers,num_longs
       character*4 :: myid_char
       character*80 :: traj_file
-      
+
 
       ! Initialize the weights and biases of the MLP droplet model
       call initialize_model()
@@ -2003,12 +2003,12 @@ CONTAINS
       num_reals = 6*3+21
       num_integers = 4
       num_longs = 3
-      
+
       blcts(1:3) = (/num_integers,num_reals,num_longs/)
       displs(1) = 0
       types(1) = mpi_integer
       call mpi_type_get_extent(mpi_integer,lb,extent,ierr)
-      
+
       !Displace num_integers*mpi_integer
       displs(2) = extent*num_integers
       types(2) = mpi_real8
@@ -2030,9 +2030,9 @@ CONTAINS
           write(*,*) 'mpi_type_get_extent(particletype) = ',extent
           end if
        end if
-      
+
       !Need to compute any padding which may exist in particle struct:
-      pad_diff = extent-extent2 
+      pad_diff = extent-extent2
       if (myid==0) then
       write(*,*) 'mpi_get_extent = ',extent
       write(*,*) 'mpi_get_true_extent = ',extent2
@@ -2044,7 +2044,7 @@ CONTAINS
         call mpi_finalize(ierr)
         stop
       end if
-      
+
       if (myid==0) then
       write(*,*) 'huge(tnumpart) = ',huge(tnumpart)
       write(*,*) 'huge(part%pidx) = ',huge(part%pidx)
@@ -2095,11 +2095,11 @@ CONTAINS
       end if
 
       zoffset = zoffset + 4
-     
+
       !Now compute the offset (in bytes!):
-      offset = zoffset 
+      offset = zoffset
       do iproc = 0,myid-1
-         offset = offset + pnum_vec(iproc+1)*(sizeof(tmp)-pad_diff) 
+         offset = offset + pnum_vec(iproc+1)*(sizeof(tmp)-pad_diff)
       end do
 
       !Now everyone else write, ONLY if numpart > 0
@@ -2123,11 +2123,11 @@ CONTAINS
 
       integer :: istatus(mpi_status_size), ierr, fh
       integer(kind=mpi_offset_kind) :: zoffset,offset
-      integer :: myp,totalp 
+      integer :: myp,totalp
       integer :: iproc,i,pidxmax,numloop,partloop,readpart
       type(particle), allocatable :: readbuf(:)
 
-      if (myid==0) write(*,7000) path_part 
+      if (myid==0) write(*,7000) path_part
  7000 format(' READING PARTICLE DATA FROM  ',a80)
 
 
@@ -2140,7 +2140,7 @@ CONTAINS
       offset = 0
       call mpi_file_read_at_all(fh,offset,tnumpart,1,mpi_integer,istatus,ierr)
       if (myid==0) write(*,*) 'read tnumpart = ',tnumpart
-    
+
       offset = 4
 
       !For many particles (above ~10 million), I can't read them all
@@ -2167,7 +2167,7 @@ CONTAINS
         if (readbuf(i)%xp(2) .GT. ymin .AND. &
             readbuf(i)%xp(2) .LT. ymax .AND. &
             readbuf(i)%xp(1) .GT. xmin .AND. &
-            readbuf(i)%xp(1) .LT. xmax) then 
+            readbuf(i)%xp(1) .LT. xmax) then
             if (.NOT. associated(first_particle)) then
                allocate(first_particle)
                first_particle = readbuf(i)
@@ -2191,9 +2191,9 @@ CONTAINS
       end do
 
       call mpi_file_close(fh,ierr)
-      
+
       !Now just check how many each processor obtained:
-      !At the same time, figure out max(pidx) and set ngidx 
+      !At the same time, figure out max(pidx) and set ngidx
       !to one plus this value:
       pidxmax = 0
       part => first_particle
@@ -2208,7 +2208,7 @@ CONTAINS
       ngidx = pidxmax + 1
 
       numpart = myp
-     
+
       call mpi_allreduce(myp,totalp,1,mpi_integer,mpi_sum,mpi_comm_world,ierr)
 
       write(*,*) 'proc',myid,'read in numpart:',myp
@@ -2235,7 +2235,7 @@ CONTAINS
       !!Sea spray, given by Andreas SSGF 98, augmented by Ortiz-Suslow 2016
 
          call inject_spray
-      
+
 
       elseif (inewpart.eq.2) then
       !!Pi Chamber, given by constant injection rate (nprime)
@@ -2256,7 +2256,7 @@ CONTAINS
 
                !Update this processor's global ID for each one created:
                ngidx = ngidx + 1
-   
+
             end do
 
          else !No injection this time step
@@ -2304,7 +2304,7 @@ CONTAINS
       end if
 
       pi = 4.0*atan(1.0)
-  
+
       part%xp(1:3) = xp(1:3)
       part%vp(1:3) = vp(1:3)
       part%vp_old = part%vp
@@ -2318,11 +2318,11 @@ CONTAINS
       part%dist = 0.0
       part%Tf = Tp
       part%xrhs(1:3) = 0.0
-      part%vrhs(1:3) = 0.0 
+      part%vrhs(1:3) = 0.0
       part%Tprhs_s = 0.0
       part%Tprhs_L = 0.0
       part%radrhs = 0.0
-      part%pidx = idx 
+      part%pidx = idx
       part%procidx = procidx
       part%nbr_pidx = -1
       part%nbr_procidx = -1
@@ -2337,12 +2337,12 @@ CONTAINS
 
       !Critical radius, computed based on initial temp
       if (ievap.eq.1) then
-         part%rc = crit_radius(part%m_s,part%kappa_s,part%Tp) 
+         part%rc = crit_radius(part%m_s,part%kappa_s,part%Tp)
       else
          part%rc = 0.0
       end if
 
-      
+
   end subroutine create_particle
 
   subroutine new_particle(idx,procidx)
@@ -2364,7 +2364,7 @@ CONTAINS
       xv = ran2(iseed)*(xmax-xmin) + xmin
       yv = ran2(iseed)*(ymax-ymin) + ymin
       zv = ran2(iseed)*zl
-      xp_init = (/xv,yv,zv/) 
+      xp_init = (/xv,yv,zv/)
 
       m_s = radius_init**3*pi2*2.0/3.0*rhow*Sal  !Using the salinity specified in params.in
 
@@ -2380,7 +2380,7 @@ CONTAINS
       yv = ran2(iseed)*(ymax-ymin) + ymin
       !zv = ran2(iseed)*(zmax-zmin) + zmin
       zv = zl/2.0   !Midplane of the Pi Chamber domain
-      xp_init = (/xv,yv,zv/) 
+      xp_init = (/xv,yv,zv/)
 
       ! Set distribution for initial radius
       radius_dinit = abs(radius_std*sqrt(-2*log(ran2(iseed)))*cos(pi2*ran2(iseed)) + radius_init)
@@ -2400,7 +2400,7 @@ CONTAINS
       xv = ran2(iseed)*(xmax-xmin) + xmin
       yv = ran2(iseed)*(ymax-ymin) + ymin
       zv = ran2(iseed)*(zi-zw1) + zw1
-      xp_init = (/xv,yv,zv/) 
+      xp_init = (/xv,yv,zv/)
 
 
       !Generate
@@ -2423,7 +2423,7 @@ CONTAINS
          !With these parameters, get m_s and rad_init from distribution
          call lognormal_dist(rad_init,m_s,kappa_s,M,S)
 
-      end if      
+      end if
 
       !Force the output particle to be a coarse mode particle
       if (idx==1 .and. procidx==0) then
@@ -2444,20 +2444,20 @@ CONTAINS
 
 
    elseif (inewpart.eq.5) then !Special for Sc: still working on it
-      
+
       xv = ran2(iseed)*(xmax-xmin) + xmin
       yv = ran2(iseed)*(ymax-ymin) + ymin
       zv = ran2(iseed)*zl
       xp_init = (/xv,yv,zv/)
-      
-      
+
+
       !Generate
       if (zv.lt.zi) then
          S = 0.45
          M = 0.0
          kappa_s = 1.2
          mult = mult_init
-      
+
          !With these parameters, get m_s and rad_init from distribution
          call lognormal_dist(rad_init,m_s,kappa_s,M,S)
 
@@ -2471,15 +2471,15 @@ CONTAINS
          !With these parameters, get m_s and rad_init from distribution
          call lognormal_dist(rad_init,m_s,kappa_s,M,S)
       end if
-       
+
       call create_particle(xp_init,vp_init,Tp_init,m_s,kappa_s,mult,rad_init,idx,procidx)
-      
+
    elseif (inewpart.eq.6) then !FATIMA IOP-5
-      
+
       xv = ran2(iseed)*(xmax-xmin) + xmin
       yv = ran2(iseed)*(ymax-ymin) + ymin
       zv = ran2(iseed)*(zi-zw1) + zw1
-      
+
       xp_init = (/xv,yv,zv/)
 
 
@@ -2701,8 +2701,8 @@ CONTAINS
     t_reint = 1800.0  !Time after which to start injecting
     !t_reint = 2.0  !Time after which to start injecting
     it_delay = 200    !Num of time steps between injection events (sometimes too few are produced and if it's < numprocs then it gets rounded to zero)
-    
-    
+
+
     if (time .gt. t_reint) then
        my_reintro = xl*yl*dt*real(it_delay)*totdrops/(numprocs*mult_init)
        tot_reintro = 0
@@ -2821,13 +2821,13 @@ CONTAINS
           !Also record the size and temperature of the dead droplet
           call add_histogram(bins_rad,hist_raddeath,histbins+2,part%radius,part%mult)
 
-	  !Store the spatial location of this mass crossing the surface -- surface precipitation
-	  !NOTE: THIS NEGLECTS PARTICLES THAT CHANGE PROCESSORS BEFORE DYING! ASSUMING THIS IS A SMALL CONTRIBUTION
+          !Store the spatial location of this mass crossing the surface -- surface precipitation
+          !NOTE: THIS NEGLECTS PARTICLES THAT CHANGE PROCESSORS BEFORE DYING! ASSUMING THIS IS A SMALL CONTRIBUTION
           ipt = floor(part%xp(1)/dx) + 1
           jpt = floor(part%xp(2)/dy) + 1
-	  if (ipt .ge. mxs .and. ipt .le. mxe .and. jpt .ge. iys .and. jpt .le. iye) then
-	  surf_precip(ipt,jpt) = surf_precip(ipt,jpt) + real(part%mult)*(rhow*2.0/3.0*pi2*part%radius**3)
-	  end if
+          if (ipt .ge. mxs .and. ipt .le. mxe .and. jpt .ge. iys .and. jpt .le. iye) then
+          surf_precip(ipt,jpt) = surf_precip(ipt,jpt) + real(part%mult)*(rhow*2.0/3.0*pi2*part%radius**3)
+          end if
 
 
           if (ireintro.eq.1 .and. inewpart.eq.6) then  !FATIMA can reintroduce particle of the same type
@@ -2839,7 +2839,7 @@ CONTAINS
 
                ! acummulation mode
                if (part%mult .eq. mult_a) then
-   
+
                    S = 0.2403
                    M = -1.7570
                    kappa_s = 0.6
@@ -2858,7 +2858,7 @@ CONTAINS
                ! destroy old particle before creating new one
                call destroy_particle
                num_destroy = num_destroy + 1
-   
+
                !With these parameters, get m_s and rad_init from distribution
                call lognormal_dist(rad_init,m_s,kappa_s,M,S)
 
@@ -2871,7 +2871,7 @@ CONTAINS
                num_destroy = num_destroy + 1
 
           end if
-       
+
           if (icase.eq.5 .or. icase.eq.3) then
              call new_particle(ngidx,myid)
           end if
@@ -2889,16 +2889,16 @@ CONTAINS
 
   subroutine particle_bcs_periodic
       use pars
-      implicit none 
+      implicit none
 
-      !Assumes domain goes from [0,xl),[0,yl),[0,zl] 
+      !Assumes domain goes from [0,xl),[0,yl),[0,zl]
       !Also maintain the number of particles on each proc
-      
+
       part => first_particle
       do while (associated(part))
 
       !x,y periodic
-   
+
       if (part%xp(1) .GT. xl) then
          part%xp(1) = part%xp(1)-xl
       elseif (part%xp(1) .LT. 0) then
@@ -2938,118 +2938,118 @@ CONTAINS
       real :: mod_magnus,exner,func_p_base,rhoa,func_rho_base
 
 
-      call fill_ext 
+      call fill_ext
 
 
       !If you want, you can have the particles calculate nearest neighbor
       !Brute is there for checking, but WAY slower
       if (ineighbor) then
 
-      call particle_neighbor_search_kd
-      !call particle_neighbor_search_brute
+          call particle_neighbor_search_kd
+          !call particle_neighbor_search_brute
 
       end if
 
 
       !Loop over the linked list of particles:
       part => first_particle
-      do while (associated(part))     
+      do while (associated(part))
 
-         !First, interpolate to get the fluid velocity part%uf(1:3):
-         if (ilin .eq. 1) then
-            call uf_interp_lin   !Use trilinear interpolation
-         else
-            call uf_interp       !Use 6th order Lagrange interpolation
-         end if
+          !First, interpolate to get the fluid velocity part%uf(1:3):
+          if (ilin .eq. 1) then
+              call uf_interp_lin   !Use trilinear interpolation
+          else
+              call uf_interp       !Use 6th order Lagrange interpolation
+          end if
 
-         if (iexner .eq. 1) then
-             !Compute using the base-state pressure at the particle height
-             !Neglects any turbulence or other fluctuating pressure sources
-             part%Tf = part%Tf*exner(surf_p,func_p_base(surf_p,tsfcc(1),part%xp(3)))
-             !rhoa = func_rho_base(surf_p,tsfcc(1),part%xp(3))
-             rhoa = func_p_base(surf_p,tsfcc(1),part%xp(3))/Rd/part%Tf
-         else
-             rhoa = surf_rho
-         end if
+          if (iexner .eq. 1) then
+              !Compute using the base-state pressure at the particle height
+              !Neglects any turbulence or other fluctuating pressure sources
+              part%Tf = part%Tf*exner(surf_p,func_p_base(surf_p,tsfcc(1),part%xp(3)))
+              !rhoa = func_rho_base(surf_p,tsfcc(1),part%xp(3))
+              rhoa = func_p_base(surf_p,tsfcc(1),part%xp(3))/Rd/part%Tf
+          else
+              rhoa = surf_rho
+          end if
 
-         if (it .LE. 1 ) then 
-            part%vp(1:3) = part%uf
-            part%Tp = part%Tf
-         endif
+          if (it .LE. 1 ) then
+              part%vp(1:3) = part%uf
+              part%Tp = part%Tf
+          endif
 
-        !If the particle was just introduced, set its temperature
-        !equal to its surroundings
-        if (part%res .le. 1.0e-10) then
-           part%Tp = part%Tf
-        end if
+          !If the particle was just introduced, set its temperature
+          !equal to its surroundings
+          if (part%res .le. 1.0e-10) then
+              part%Tp = part%Tf
+          end if
 
-        if (istage.eq.1) then
-           part%vp_old(1:3) = part%vp(1:3)
-       	   part%Tp_old = part%Tp
-           part%radius_old = part%radius
-        end if
+          if (istage.eq.1) then
+              part%vp_old(1:3) = part%vp(1:3)
+              part%Tp_old = part%Tp
+              part%radius_old = part%radius
+          end if
 
-         !Now advance the particle and position via RK3 (same as velocity)
-        
-         !Intermediate Values
-         pi = 4.0*atan(1.0)  
-         diff(1:3) = part%vp - part%uf
-         diffnorm = sqrt(diff(1)**2 + diff(2)**2 + diff(3)**2)
-         Rep = 2.0*part%radius*diffnorm/nuf  
-         Volp = pi2*2.0/3.0*part%radius**3
-         rhop = (part%m_s+Volp*rhow)/Volp
-         taup_i = 18.0*rhoa*nuf/rhop/(2.0*part%radius)**2 
+          !Now advance the particle and position via RK3 (same as velocity)
 
-         corrfac = (1.0 + 0.15*Rep**(0.687))
+          !Intermediate Values
+          pi = 4.0*atan(1.0)
+          diff(1:3) = part%vp - part%uf
+          diffnorm = sqrt(diff(1)**2 + diff(2)**2 + diff(3)**2)
+          Rep = 2.0*part%radius*diffnorm/nuf
+          Volp = pi2*2.0/3.0*part%radius**3
+          rhop = (part%m_s+Volp*rhow)/Volp
+          taup_i = 18.0*rhoa*nuf/rhop/(2.0*part%radius)**2
 
-
-         !Compute Nusselt number for particle:
-         !Ranz-Marshall relation
-         Nup = 2.0 + 0.6*Rep**(1.0/2.0)*Pra**(1.0/3.0)
-         Shp = 2.0 + 0.6*Rep**(1.0/2.0)*Sc**(1.0/3.0)
+          corrfac = (1.0 + 0.15*Rep**(0.687))
 
 
-         !Mass Transfer calculations
-         einf = mod_magnus(part%Tf)
-         Eff_C = 2.0*Mw*Gam/(Ru*rhow*part%radius*part%Tp)
-         Eff_S = part%kappa_s*part%m_s*rhow/rhos/(Volp*rhop-part%m_s)
-         estar = einf*exp(Mw*Lv/Ru*(1.0/part%Tf-1.0/part%Tp)+Eff_C-Eff_S)
-         part%qstar = Mw/Ru*estar/part%Tp/rhoa
-
-  
-         xtmp(1:3) = part%xp(1:3) + dt*zetas(istage)*part%xrhs(1:3)
-         vtmp(1:3) = part%vp(1:3) + dt*zetas(istage)*part%vrhs(1:3) 
-         Tptmp = part%Tp + dt*zetas(istage)*part%Tprhs_s
-         Tptmp = Tptmp + dt*zetas(istage)*part%Tprhs_L
-         radiustmp = part%radius + dt*zetas(istage)*part%radrhs
-
-         part%xrhs(1:3) = part%vp(1:3)
-         part%vrhs(1:3) = corrfac*taup_i*(part%uf(1:3)-part%vp(1:3)) + part_grav(1:3)
-
-         if (ievap .EQ. 1) then      
-            part%radrhs = Shp/9.0/Sc*rhop/rhow*part%radius*taup_i*(part%qinf-part%qstar) !assumes qinf=rhov/rhoa rather than rhov/rhom
-         else
-            part%radrhs = 0.0
-         end if
+          !Compute Nusselt number for particle:
+          !Ranz-Marshall relation
+          Nup = 2.0 + 0.6*Rep**(1.0/2.0)*Pra**(1.0/3.0)
+          Shp = 2.0 + 0.6*Rep**(1.0/2.0)*Sc**(1.0/3.0)
 
 
-         part%Tprhs_s = -Nup/3.0/Pra*CpaCpp*rhop/rhow*taup_i*(part%Tp-part%Tf)
-         part%Tprhs_L = 3.0*Lv/Cpp/part%radius*part%radrhs
+          !Mass Transfer calculations
+          einf = mod_magnus(part%Tf)
+          Eff_C = 2.0*Mw*Gam/(Ru*rhow*part%radius*part%Tp)
+          Eff_S = part%kappa_s*part%m_s*rhow/rhos/(Volp*rhop-part%m_s)
+          estar = einf*exp(Mw*Lv/Ru*(1.0/part%Tf-1.0/part%Tp)+Eff_C-Eff_S)
+          part%qstar = Mw/Ru*estar/part%Tp/rhoa
+
+
+          xtmp(1:3) = part%xp(1:3) + dt*zetas(istage)*part%xrhs(1:3)
+          vtmp(1:3) = part%vp(1:3) + dt*zetas(istage)*part%vrhs(1:3)
+          Tptmp = part%Tp + dt*zetas(istage)*part%Tprhs_s
+          Tptmp = Tptmp + dt*zetas(istage)*part%Tprhs_L
+          radiustmp = part%radius + dt*zetas(istage)*part%radrhs
+
+          part%xrhs(1:3) = part%vp(1:3)
+          part%vrhs(1:3) = corrfac*taup_i*(part%uf(1:3)-part%vp(1:3)) + part_grav(1:3)
+
+          if (ievap .EQ. 1) then
+              part%radrhs = Shp/9.0/Sc*rhop/rhow*part%radius*taup_i*(part%qinf-part%qstar) !assumes qinf=rhov/rhoa rather than rhov/rhom
+          else
+              part%radrhs = 0.0
+          end if
+
+
+          part%Tprhs_s = -Nup/3.0/Pra*CpaCpp*rhop/rhow*taup_i*(part%Tp-part%Tf)
+          part%Tprhs_L = 3.0*Lv/Cpp/part%radius*part%radrhs
 
 
 
-  
-         part%xp(1:3) = xtmp(1:3) + dt*gama(istage)*part%xrhs(1:3)
-         part%vp(1:3) = vtmp(1:3) + dt*gama(istage)*part%vrhs(1:3)
-         part%Tp = Tptmp + dt*gama(istage)*part%Tprhs_s
-         part%Tp = part%Tp + dt*gama(istage)*part%Tprhs_L
-         part%radius = radiustmp + dt*gama(istage)*part%radrhs
+
+          part%xp(1:3) = xtmp(1:3) + dt*gama(istage)*part%xrhs(1:3)
+          part%vp(1:3) = vtmp(1:3) + dt*gama(istage)*part%vrhs(1:3)
+          part%Tp = Tptmp + dt*gama(istage)*part%Tprhs_s
+          part%Tp = part%Tp + dt*gama(istage)*part%Tprhs_L
+          part%radius = radiustmp + dt*gama(istage)*part%radrhs
 
 
-         if (istage .eq. 3) part%res = part%res + dt
+          if (istage .eq. 3) part%res = part%res + dt
 
 
-        part => part%next
+          part => part%next
       end do
 
 
@@ -3059,7 +3059,7 @@ CONTAINS
       !If they did, remove from one list and add to another
       call particle_exchange
 
-      !Now enforce periodic bcs 
+      !Now enforce periodic bcs
       !just updates x,y locations if over xl,yl or under 0
       call particle_bcs_periodic
 
@@ -3068,10 +3068,10 @@ CONTAINS
       numpart = 0
       part => first_particle
       do while (associated(part))
-      numpart = numpart + 1
-      part => part%next
+          numpart = numpart + 1
+          part => part%next
       end do
- 
+
       call mpi_allreduce(numpart,tnumpart,1,mpi_integer,mpi_sum,mpi_comm_world,ierr)
 
 
@@ -3121,9 +3121,9 @@ CONTAINS
 
       ! If dumping be data, initialize buffer indexes
       if (iwritebe .eq. 1) then
-         be_dump_iu = 300 + myid 
+          be_dump_iu = 300 + myid
 
-         be_write_buffer_index = 0
+          be_write_buffer_index = 0
       end if
 
 
@@ -3131,286 +3131,286 @@ CONTAINS
       !loop over the linked list of particles
       part => first_particle
       do while (associated(part))
-         i = i + 1
-
-        !First, interpolate to get the fluid velocity part%uf(1:3):
-        if (ilin .eq. 1) then
-           call uf_interp_lin   !Use trilinear interpolation
-        else
-           call uf_interp       !Use 6th order Lagrange interpolation
-        end if
-
-        if (it .LE. 1) then
-           part%vp(1:3) = part%uf
-        end if
-
-        !If the particle was just introduced, set its temperature
-        !equal to its surroundings
-        if (part%res .le. 1.0e-10) then
-           part%Tp = part%Tf
-        end if
-
-        !Store original value of vp for two-way coupling
-        part%Tp_old = part%Tp
-        part%radius_old = part%radius
-        part%vp_old(1:3) = part%vp(1:3)
-
-        if (iexner .eq. 1) then
-           !Compute using the base-state pressure at the particle height
-           !Neglects any turbulence or other fluctuating pressure sources
-           part%Tf = part%Tf*exner(surf_p,func_p_base(surf_p,tsfcc(1),part%xp(3)))
-           !rhoa = func_rho_base(surf_p,tsfcc(1),part%xp(3))
-           rhoa = func_p_base(surf_p,tsfcc(1),part%xp(3))/Rd/part%Tf
-        else
-           rhoa = surf_rho
-        end if
-
-        if (part%qinf .lt. 0.0) then
-          write(*,'(a30,2i,12e15.6)') 'WARNING: NEG QINF',  &
-          part%pidx,part%procidx, &
-          part%radius,part%Tf,part%xp(3), &
-          part%kappa_s,part%m_s,part%vp(1),part%vp(2),part%vp(3), &
-          part%res,part%sigm_s
-        end if
-
-
-        diff(1:3) = part%vp - part%uf
-        diffnorm = sqrt(diff(1)**2 + diff(2)**2 + diff(3)**2)
-        Volp = pi2*2.0/3.0*part%radius**3
-        rhop = (part%m_s+Volp*rhow)/Volp
-        taup_i = 18.0*rhoa*nuf/rhop/(2.0*part%radius)**2
-        Rep = 2.0*part%radius*diffnorm/nuf
-        corrfac = (1.0 + 0.15*Rep**(0.687))
-
-        corrfac = 1.0
-
-        xp3i = part%xp(3)   !Store this to do flux calculation
-
-
-        !Now start updating particle position, velocity, temperature, radius
-
-         failure_be_status = 0
-
-         ! Keep the portion of particles requested.
-         !
-         ! NOTE: We have to be careful in selecting a subset of particles to
-         !       avoid introducing bias in the particles retained.  Filtering
-         !       out particles on every rank (via the local particle index) is
-         !       fine as they're randomly distributed through in this ranks
-         !       vertical volume.  Filtering particles by rank will result in
-         !       localized pockets of particles with gaps in between.
-         !
-         keep_particle_flag = (mod(part%pidx, iwritebe_proportion) .eq. 0)
-
-         if (iwritebe .eq. 1 .and. keep_particle_flag ) then
-
-            ! Is the trace buffer full?  We need to write it out so we don't
-            ! overwrite older particles.  This occurs when the buffer is smaller
-            ! than the number of particles present.
-            if (be_write_buffer_index == BE_BUFFER_LENGTH) then
-
-                ! Write out every record we've accumulated.
-                do i = 1, BE_BUFFER_LENGTH
-                    write(be_dump_iu) be_int32_write_buffer(:, i)
-                    write(be_dump_iu) be_float32_write_buffer(:, i)
-                end do
-
-                ! Reset the buffer index so we start filling at its beginning.
-                be_write_buffer_index = 0
-            end if
-
-            be_write_buffer_index = be_write_buffer_index + 1
-
-            be_int32_write_buffer(1,be_write_buffer_index) = numprocs*part%pidx + part%procidx
-
-            be_float32_write_buffer(1,be_write_buffer_index) = time
-            be_float32_write_buffer(2,be_write_buffer_index) = part%radius
-            be_float32_write_buffer(3,be_write_buffer_index) = part%Tp
-            be_float32_write_buffer(4,be_write_buffer_index) = part%kappa_s * part%m_s * rhow / rhos
-            be_float32_write_buffer(5,be_write_buffer_index) = part%Tf
-            be_float32_write_buffer(6,be_write_buffer_index) = part%qinf/(Mw*mod_magnus(part%Tf)/Ru/part%Tf)*rhoa ! formula for RH
-            be_float32_write_buffer(7,be_write_buffer_index) = rhoa
-         endif
-
-        !implicitly calculates next velocity and position
-        part%xp(1:3) = part%xp(1:3) + dt*part%vp(1:3)
-        part%vp(1:3) = (part%vp(1:3)+taup_i*dt*corrfac*part%uf(1:3)+dt*part_grav(1:3))/(1+dt*corrfac*taup_i)
+          i = i + 1
+
+          !First, interpolate to get the fluid velocity part%uf(1:3):
+          if (ilin .eq. 1) then
+              call uf_interp_lin   !Use trilinear interpolation
+          else
+              call uf_interp       !Use 6th order Lagrange interpolation
+          end if
+
+          if (it .LE. 1) then
+              part%vp(1:3) = part%uf
+          end if
+
+          !If the particle was just introduced, set its temperature
+          !equal to its surroundings
+          if (part%res .le. 1.0e-10) then
+              part%Tp = part%Tf
+          end if
+
+          !Store original value of vp for two-way coupling
+          part%Tp_old = part%Tp
+          part%radius_old = part%radius
+          part%vp_old(1:3) = part%vp(1:3)
+
+          if (iexner .eq. 1) then
+              !Compute using the base-state pressure at the particle height
+              !Neglects any turbulence or other fluctuating pressure sources
+              part%Tf = part%Tf*exner(surf_p,func_p_base(surf_p,tsfcc(1),part%xp(3)))
+              !rhoa = func_rho_base(surf_p,tsfcc(1),part%xp(3))
+              rhoa = func_p_base(surf_p,tsfcc(1),part%xp(3))/Rd/part%Tf
+          else
+              rhoa = surf_rho
+          end if
+
+          if (part%qinf .lt. 0.0) then
+              write(*,'(a30,2i,12e15.6)') 'WARNING: NEG QINF',  &
+                   part%pidx,part%procidx, &
+                   part%radius,part%Tf,part%xp(3), &
+                   part%kappa_s,part%m_s,part%vp(1),part%vp(2),part%vp(3), &
+                   part%res,part%sigm_s
+          end if
+
+
+          diff(1:3) = part%vp - part%uf
+          diffnorm = sqrt(diff(1)**2 + diff(2)**2 + diff(3)**2)
+          Volp = pi2*2.0/3.0*part%radius**3
+          rhop = (part%m_s+Volp*rhow)/Volp
+          taup_i = 18.0*rhoa*nuf/rhop/(2.0*part%radius)**2
+          Rep = 2.0*part%radius*diffnorm/nuf
+          corrfac = (1.0 + 0.15*Rep**(0.687))
+
+          corrfac = 1.0
+
+          xp3i = part%xp(3)   !Store this to do flux calculation
+
+
+          !Now start updating particle position, velocity, temperature, radius
+
+          failure_be_status = 0
+
+          ! Keep the portion of particles requested.
+          !
+          ! NOTE: We have to be careful in selecting a subset of particles to
+          !       avoid introducing bias in the particles retained.  Filtering
+          !       out particles on every rank (via the local particle index) is
+          !       fine as they're randomly distributed through in this ranks
+          !       vertical volume.  Filtering particles by rank will result in
+          !       localized pockets of particles with gaps in between.
+          !
+          keep_particle_flag = (mod(part%pidx, iwritebe_proportion) .eq. 0)
+
+          if (iwritebe .eq. 1 .and. keep_particle_flag ) then
+
+              ! Is the trace buffer full?  We need to write it out so we don't
+              ! overwrite older particles.  This occurs when the buffer is smaller
+              ! than the number of particles present.
+              if (be_write_buffer_index == BE_BUFFER_LENGTH) then
+
+                  ! Write out every record we've accumulated.
+                  do i = 1, BE_BUFFER_LENGTH
+                      write(be_dump_iu) be_int32_write_buffer(:, i)
+                      write(be_dump_iu) be_float32_write_buffer(:, i)
+                  end do
+
+                  ! Reset the buffer index so we start filling at its beginning.
+                  be_write_buffer_index = 0
+              end if
+
+              be_write_buffer_index = be_write_buffer_index + 1
+
+              be_int32_write_buffer(1,be_write_buffer_index) = numprocs*part%pidx + part%procidx
+
+              be_float32_write_buffer(1,be_write_buffer_index) = time
+              be_float32_write_buffer(2,be_write_buffer_index) = part%radius
+              be_float32_write_buffer(3,be_write_buffer_index) = part%Tp
+              be_float32_write_buffer(4,be_write_buffer_index) = part%kappa_s * part%m_s * rhow / rhos
+              be_float32_write_buffer(5,be_write_buffer_index) = part%Tf
+              be_float32_write_buffer(6,be_write_buffer_index) = part%qinf/(Mw*mod_magnus(part%Tf)/Ru/part%Tf)*rhoa ! formula for RH
+              be_float32_write_buffer(7,be_write_buffer_index) = rhoa
+          endif
+
+          !implicitly calculates next velocity and position
+          part%xp(1:3) = part%xp(1:3) + dt*part%vp(1:3)
+          part%vp(1:3) = (part%vp(1:3)+taup_i*dt*corrfac*part%uf(1:3)+dt*part_grav(1:3))/(1+dt*corrfac*taup_i)
 
 
-        ! non-dimensionalizes particle radius and temperature before
-        ! iteratively solving for next radius and temperature
+          ! non-dimensionalizes particle radius and temperature before
+          ! iteratively solving for next radius and temperature
 
-        taup0 = (((part%m_s)/((2./3.)*pi2*radius_init**3) + rhow)*(radius_init*2)**2)/(18*rhoa*nuf)
+          taup0 = (((part%m_s)/((2./3.)*pi2*radius_init**3) + rhow)*(radius_init*2)**2)/(18*rhoa*nuf)
 
-        dt_taup0 = dt/taup0
+          dt_taup0 = dt/taup0
 
-        if (ievap .EQ. 1 .and. part%qinf .gt. 0.0) then
+          if (ievap .EQ. 1 .and. part%qinf .gt. 0.0) then
 
-               numpart_processed = numpart_processed + 1
+              numpart_processed = numpart_processed + 1
 
-               !Gives initial guess into nonlinear solver
-               !mflag = 0, has equilibrium radius; mflag = 1, no
-               !equilibrium (uses itself as initial guess)
-               call rad_solver2(guess,rhoa,mflag)
-
-               if (mflag == 0) then
-                rt_start(1) = guess/part%radius
-                rt_start(2) = part%Tf/part%Tp
-
-                !Track particles in equilibrium going into the BE solve.
-                failure_be_status = ior( failure_be_status, 2 )
-               else
-                rt_start(1) = 1.0
-                rt_start(2) = 1.0
-               end if
+              !Gives initial guess into nonlinear solver
+              !mflag = 0, has equilibrium radius; mflag = 1, no
+              !equilibrium (uses itself as initial guess)
+              call rad_solver2(guess,rhoa,mflag)
 
-               call gauss_newton_2d(part%vp,dt_taup0,rhoa,rt_start, rt_zeroes,flag)
-
-               if (flag==1) then
-                   num100 = num100+1
-
-                   !Track Gauss-Newton failures.  This will be upgraded to
-                   !a Levenberg-Marquardt failure below if it also fails,
-                   !otherwise this is a soft failure where BE produces an
-                   !acceptable radius and temperature but we track when the
-                   !algorithm struggled.
-                   failure_be_status = ior( failure_be_status, 4 )
+              if (mflag == 0) then
+                  rt_start(1) = guess/part%radius
+                  rt_start(2) = part%Tf/part%Tp
 
-                   call LV_solver(part%vp,dt_taup0,rhoa,rt_start, rt_zeroes,flag)
-               
-               end if
+                  !Track particles in equilibrium going into the BE solve.
+                  failure_be_status = ior( failure_be_status, 2 )
+              else
+                  rt_start(1) = 1.0
+                  rt_start(2) = 1.0
+              end if
 
-               if ((flag == 1)  &
-	          .OR. isnan(rt_zeroes(1)) &
-                  .OR. (rt_zeroes(1)*part%radius<0) &
-                  .OR. isnan(rt_zeroes(2)) &
-                  .OR. (rt_zeroes(2)<0) &
-                  .OR. (rt_zeroes(1)*part%radius>1.0e-2)) & 
-               then
+              call gauss_newton_2d(part%vp,dt_taup0,rhoa,rt_start, rt_zeroes,flag)
 
-               ! write(*,'(a30,14e15.6)') 'WARNING: CONVERGENCE',  &
-               !part%radius,part%qinf,part%Tp,part%Tf,part%xp(3), &
-               !part%kappa_s,part%m_s,part%vp(1),part%vp(2),part%vp(3), &
-               !part%res,part%sigm_s,rt_zeroes(1),rt_zeroes(2)
+              if (flag==1) then
+                  num100 = num100+1
 
-                   if( flag == 1 ) then
-                       failure_be_status = ior( failure_be_status, 8 )
-                   else
-                       failure_be_status = ior( failure_be_status, 16 )
-                   end if
+                  !Track Gauss-Newton failures.  This will be upgraded to
+                  !a Levenberg-Marquardt failure below if it also fails,
+                  !otherwise this is a soft failure where BE produces an
+                  !acceptable radius and temperature but we track when the
+                  !algorithm struggled.
+                  failure_be_status = ior( failure_be_status, 4 )
 
-                flag = 1
-                numimpos = numimpos + 1  !How many have failed?
-                !If they failed (should be very small number), radius,
-                !temp remain unchanged
-                rt_zeroes(1) = 1.0
-                rt_zeroes(2) = part%Tf/part%Tp
+                  call LV_solver(part%vp,dt_taup0,rhoa,rt_start, rt_zeroes,flag)
 
-               end if
+              end if
 
-               !Get the critical radius based on old temp
-               !part%rc = crit_radius(part%m_s,part%kappa_s,part%Tp) 
+              if ((flag == 1)  &
+                   .OR. isnan(rt_zeroes(1)) &
+                   .OR. (rt_zeroes(1)*part%radius<0) &
+                   .OR. isnan(rt_zeroes(2)) &
+                   .OR. (rt_zeroes(2)<0) &
+                   .OR. (rt_zeroes(1)*part%radius>1.0e-2)) &
+                   then
 
-               !Count if activated/deactivated
-               if (part%radius > part%rc .AND. part%radius*rt_zeroes(1) < part%rc) then
-                   denum = denum + 1
+                  ! write(*,'(a30,14e15.6)') 'WARNING: CONVERGENCE',  &
+                  !part%radius,part%qinf,part%Tp,part%Tf,part%xp(3), &
+                  !part%kappa_s,part%m_s,part%vp(1),part%vp(2),part%vp(3), &
+                  !part%res,part%sigm_s,rt_zeroes(1),rt_zeroes(2)
 
-                   !Also add activated lifetime to histogram
-               call add_histogram(bins_actres,hist_actres,histbins+2,part%actres,part%mult)
-                   
+                  if( flag == 1 ) then
+                      failure_be_status = ior( failure_be_status, 8 )
+                  else
+                      failure_be_status = ior( failure_be_status, 16 )
+                  end if
 
-               elseif (part%radius < part%rc .AND. part%radius*rt_zeroes(1) > part%rc) then
-                   actnum = actnum + 1
-                   part%numact = part%numact + 1.0
+                  flag = 1
+                  numimpos = numimpos + 1  !How many have failed?
+                  !If they failed (should be very small number), radius,
+                  !temp remain unchanged
+                  rt_zeroes(1) = 1.0
+                  rt_zeroes(2) = part%Tf/part%Tp
 
-                   !Reset the activation lifetime
-                   part%actres = 0.0
+              end if
 
-               endif
+              !Get the critical radius based on old temp
+              !part%rc = crit_radius(part%m_s,part%kappa_s,part%Tp)
 
-               !Redimensionalize
-               part%radius = rt_zeroes(1)*part%radius
-               part%Tp = rt_zeroes(2)*part%Tp
-      else !! Evaporation is turned off or particle has negative qinf
-            if (part%qinf .lt. 0.0) then
-                failure_be_status = ior( failure_be_status, 1 )
-            end if
+              !Count if activated/deactivated
+              if (part%radius > part%rc .AND. part%radius*rt_zeroes(1) < part%rc) then
+                  denum = denum + 1
 
-            !Compute Nusselt number for particle:
-            !Ranz-Marshall relation
-            Nup = 2.0 + 0.6*Rep**(1.0/2.0)*Pra**(1.0/3.0)
+                  !Also add activated lifetime to histogram
+                  call add_histogram(bins_actres,hist_actres,histbins+2,part%actres,part%mult)
 
-            !Update the temperature directly using BE:
-            tmp_coeff = Nup/3.0/Pra*CpaCpp*rhop/rhow*taup_i
-            part%Tp = (part%Tp + tmp_coeff*dt*part%Tf)/(1+dt*tmp_coeff)
 
-       end if 
+              elseif (part%radius < part%rc .AND. part%radius*rt_zeroes(1) > part%rc) then
+                  actnum = actnum + 1
+                  part%numact = part%numact + 1.0
 
-       !Track where the particle is in the domain.  Record the domain quartile
-       !where it is located.
-       if (part%xp(3) < zz(zz_quartile_indices(1))) then
-           failure_be_status = ior( failure_be_status, 32 )
-       elseif (part%xp(3) < zz(zz_quartile_indices(2))) then
-           failure_be_status = ior( failure_be_status, 64 )
-       elseif (part%xp(3) < zz(zz_quartile_indices(3))) then
-           failure_be_status = ior( failure_be_status, 128 )
-       else
-           failure_be_status = ior( failure_be_status, 256 )
-       endif
+                  !Reset the activation lifetime
+                  part%actres = 0.0
 
-       if (iwritebe .eq. 1 .and. keep_particle_flag) then
-            be_int32_write_buffer(2,be_write_buffer_index) = failure_be_status
-       endif
+              endif
 
+              !Redimensionalize
+              part%radius = rt_zeroes(1)*part%radius
+              part%Tp = rt_zeroes(2)*part%Tp
+          else !! Evaporation is turned off or particle has negative qinf
+              if (part%qinf .lt. 0.0) then
+                  failure_be_status = ior( failure_be_status, 1 )
+              end if
 
-         !New volume and particle density
-         Volp = pi2*2.0/3.0*part%radius**3
-         rhop = (part%m_s+Volp*rhow)/Volp
+              !Compute Nusselt number for particle:
+              !Ranz-Marshall relation
+              Nup = 2.0 + 0.6*Rep**(1.0/2.0)*Pra**(1.0/3.0)
 
-         einf = mod_magnus(part%Tf)
+              !Update the temperature directly using BE:
+              tmp_coeff = Nup/3.0/Pra*CpaCpp*rhop/rhow*taup_i
+              part%Tp = (part%Tp + tmp_coeff*dt*part%Tf)/(1+dt*tmp_coeff)
 
-	 !Compute just to have for statistics
-	 part%qstar = (Mw/(Ru*part%Tp*rhoa))*einf*exp(((Lv*Mw/Ru)*((1./part%Tf) - (1./part%Tp))) + ((2.*Mw*Gam)/(Ru*rhow*part%radius*part%Tp)) - ((part%kappa_s*part%m_s*rhow/rhos)/(Volp*rhop-part%m_s)))
+          end if
 
+          !Track where the particle is in the domain.  Record the domain quartile
+          !where it is located.
+          if (part%xp(3) < zz(zz_quartile_indices(1))) then
+              failure_be_status = ior( failure_be_status, 32 )
+          elseif (part%xp(3) < zz(zz_quartile_indices(2))) then
+              failure_be_status = ior( failure_be_status, 64 )
+          elseif (part%xp(3) < zz(zz_quartile_indices(3))) then
+              failure_be_status = ior( failure_be_status, 128 )
+          else
+              failure_be_status = ior( failure_be_status, 256 )
+          endif
 
-        part%res = part%res + dt
-        part%actres = part%actres + dt
+          if (iwritebe .eq. 1 .and. keep_particle_flag) then
+              be_int32_write_buffer(2,be_write_buffer_index) = failure_be_status
+          endif
 
 
-        !Store the particle flux now that everything has been updated
-        if (part%xp(3) .gt. zl) then   !This will get treated in particle_bcs_nonperiodic, but record here
-           fluxloc = nnz+1
-           fluxloci = minloc(z,1,mask=(z.gt.xp3i))-1
-        elseif (part%xp(3) .lt. 0.0) then !This will get treated in particle_bcs_nonperiodic, but record here
-           fluxloci = minloc(z,1,mask=(z.gt.xp3i))-1
-           fluxloc = 0
-        else
+          !New volume and particle density
+          Volp = pi2*2.0/3.0*part%radius**3
+          rhop = (part%m_s+Volp*rhow)/Volp
 
-        fluxloc = minloc(z,1,mask=(z.gt.part%xp(3)))-1
-        fluxloci = minloc(z,1,mask=(z.gt.xp3i))-1
+          einf = mod_magnus(part%Tf)
 
-        end if  !Only apply flux calc to particles in domain
+          !Compute just to have for statistics
+          part%qstar = (Mw/(Ru*part%Tp*rhoa))*einf*exp(((Lv*Mw/Ru)*((1./part%Tf) - (1./part%Tp))) + ((2.*Mw*Gam)/(Ru*rhow*part%radius*part%Tp)) - ((part%kappa_s*part%m_s*rhow/rhos)/(Volp*rhop-part%m_s)))
 
-        if (xp3i .lt. part%xp(3)) then !Particle moved up
 
-        do iz=fluxloci,fluxloc-1
-           pflux(iz) = pflux(iz) + part%mult
-           pmassflux(iz) = pmassflux(iz) + rhop*Volp*part%mult
-           penegflux(iz) = penegflux(iz) + rhop*Volp*Cpp*part%Tp*part%mult
-        end do
+          part%res = part%res + dt
+          part%actres = part%actres + dt
 
-        elseif (xp3i .gt. part%xp(3)) then !Particle moved down
 
-        do iz=fluxloc,fluxloci-1
-           pflux(iz) = pflux(iz) - part%mult
-           pmassflux(iz) = pmassflux(iz) - rhop*Volp*part%mult
-           penegflux(iz) = penegflux(iz) - rhop*Volp*Cpp*part%Tp*part%mult
-        end do
+          !Store the particle flux now that everything has been updated
+          if (part%xp(3) .gt. zl) then   !This will get treated in particle_bcs_nonperiodic, but record here
+              fluxloc = nnz+1
+              fluxloci = minloc(z,1,mask=(z.gt.xp3i))-1
+          elseif (part%xp(3) .lt. 0.0) then !This will get treated in particle_bcs_nonperiodic, but record here
+              fluxloci = minloc(z,1,mask=(z.gt.xp3i))-1
+              fluxloc = 0
+          else
 
-        end if  !Up/down conditional statement
+              fluxloc = minloc(z,1,mask=(z.gt.part%xp(3)))-1
+              fluxloci = minloc(z,1,mask=(z.gt.xp3i))-1
 
+          end if  !Only apply flux calc to particles in domain
 
-      part => part%next
+          if (xp3i .lt. part%xp(3)) then !Particle moved up
+
+              do iz=fluxloci,fluxloc-1
+                  pflux(iz) = pflux(iz) + part%mult
+                  pmassflux(iz) = pmassflux(iz) + rhop*Volp*part%mult
+                  penegflux(iz) = penegflux(iz) + rhop*Volp*Cpp*part%Tp*part%mult
+              end do
+
+          elseif (xp3i .gt. part%xp(3)) then !Particle moved down
+
+              do iz=fluxloc,fluxloci-1
+                  pflux(iz) = pflux(iz) - part%mult
+                  pmassflux(iz) = pmassflux(iz) - rhop*Volp*part%mult
+                  penegflux(iz) = penegflux(iz) - rhop*Volp*Cpp*part%Tp*part%mult
+              end do
+
+          end if  !Up/down conditional statement
+
+
+          part => part%next
       end do
       call end_phase(measurement_id_particle_loop)
 
@@ -3426,7 +3426,7 @@ CONTAINS
       call particle_exchange
       call end_phase(measurement_id_particle_exchange)
 
-      !Now enforce periodic bcs 
+      !Now enforce periodic bcs
       !just updates x,y locations if over xl,yl or under 0
       call start_phase(measurement_id_particle_bcs)
       call particle_bcs_periodic
@@ -3439,9 +3439,9 @@ CONTAINS
 
       part => first_particle
       do while (associated(part))
-      numpart = numpart + 1
+          numpart = numpart + 1
 
-      part => part%next
+          part => part%next
       end do
 
 
@@ -3450,11 +3450,11 @@ CONTAINS
 
       ! Dump data to the myid file
       if (iwritebe .eq. 1 .and. be_write_buffer_index .gt. 0) then
-         ! Annoying inefficient - rewrite later
-         do i = 1,be_write_buffer_index
-            write(be_dump_iu) be_int32_write_buffer(:, i)
-            write(be_dump_iu) be_float32_write_buffer(:, i)
-         enddo
+          ! Annoying inefficient - rewrite later
+          do i = 1,be_write_buffer_index
+              write(be_dump_iu) be_int32_write_buffer(:, i)
+              write(be_dump_iu) be_float32_write_buffer(:, i)
+          enddo
       endif
 
 
@@ -3503,255 +3503,253 @@ CONTAINS
       part => first_particle
       do while (associated(part))
 
-	 !Store original values for two-way coupling
-         part%vp_old(1:3) = part%vp(1:3)
-         part%Tp_old = part%Tp
-         !if (part%radius .gt. 2.62e-5) then
-         !   write(*,*) "OVERSIZED PARTICLE: ", part%radius, part%qinf, part%radius_old
-         !endif
-         part%radius_old = part%radius
+          !Store original values for two-way coupling
+          part%vp_old(1:3) = part%vp(1:3)
+          part%Tp_old = part%Tp
+          !if (part%radius .gt. 2.62e-5) then
+          !   write(*,*) "OVERSIZED PARTICLE: ", part%radius, part%qinf, part%radius_old
+          !endif
+          part%radius_old = part%radius
+
+          !First, interpolate to get the fluid velocity part%uf(1:3):
+          if (ilin .eq. 1) then
+              call uf_interp_lin   !Use trilinear interpolation
+          else
+              call uf_interp       !Use 6th order Lagrange interpolation
+          end if
+
+          if (it .LE. 1) then
+              part%vp(1:3) = part%uf
+          end if
+
+          !If the particle was just introduced, set its temperature
+          !equal to its surroundings
+          if (part%res .le. 1.0e-10) then
+              part%Tp = part%Tf
+          end if
+
+          !Store original value of vp for two-way coupling
+          part%Tp_old = part%Tp
+          part%radius_old = part%radius
+          part%vp_old(1:3) = part%vp(1:3)
+
+          if (iexner .eq. 1) then
+              !Compute using the base-state pressure at the particle height
+              !Neglects any turbulence or other fluctuating pressure sources
+              part%Tf = part%Tf*exner(surf_p,func_p_base(surf_p,tsfcc(1),part%xp(3)))
+              !rhoa = func_rho_base(surf_p,tsfcc(1),part%xp(3))
+              rhoa = func_p_base(surf_p,tsfcc(1),part%xp(3))/Rd/part%Tf
+          else
+              rhoa = surf_rho
+          end if
+
+          if (part%qinf .lt. 0.0) then
+              write(*,'(a30,2i,16e15.6)') 'WARNING: NEG QINF',  &
+                   part%pidx,part%procidx, &
+                   part%radius,part%qinf,part%Tp,part%Tf,part%xp(3), &
+                   part%kappa_s,part%m_s,part%vp(1),part%vp(2),part%vp(3), &
+                   part%res,part%sigm_s,part%xp(1),xmax,xmin,part%xp(2),ymax,ymin
+          end if
 
 
+          diff(1:3) = part%vp - part%uf
+          diffnorm = sqrt(diff(1)**2 + diff(2)**2 + diff(3)**2)
+          Volp = pi2*2.0/3.0*part%radius**3
+          rhop = (part%m_s+Volp*rhow)/Volp
+          taup_i = 18.0*rhoa*nuf/rhop/(2.0*part%radius)**2
+          Rep = 2.0*part%radius*diffnorm/nuf
+          corrfac = (1.0 + 0.15*Rep**(0.687))
 
-        !First, interpolate to get the fluid velocity part%uf(1:3):
-        if (ilin .eq. 1) then
-           call uf_interp_lin   !Use trilinear interpolation
-        else
-           call uf_interp       !Use 6th order Lagrange interpolation
-        end if
+          corrfac = 1.0
 
-        if (it .LE. 1) then
-           part%vp(1:3) = part%uf
-        end if
-
-        !If the particle was just introduced, set its temperature
-        !equal to its surroundings
-        if (part%res .le. 1.0e-10) then
-           part%Tp = part%Tf
-        end if
-
-        !Store original value of vp for two-way coupling
-        part%Tp_old = part%Tp
-        part%radius_old = part%radius
-        part%vp_old(1:3) = part%vp(1:3)
-
-        if (iexner .eq. 1) then
-           !Compute using the base-state pressure at the particle height
-           !Neglects any turbulence or other fluctuating pressure sources
-           part%Tf = part%Tf*exner(surf_p,func_p_base(surf_p,tsfcc(1),part%xp(3)))
-           !rhoa = func_rho_base(surf_p,tsfcc(1),part%xp(3))
-           rhoa = func_p_base(surf_p,tsfcc(1),part%xp(3))/Rd/part%Tf
-        else
-           rhoa = surf_rho
-        end if
-
-        if (part%qinf .lt. 0.0) then
-          write(*,'(a30,2i,16e15.6)') 'WARNING: NEG QINF',  &
-          part%pidx,part%procidx, &
-          part%radius,part%qinf,part%Tp,part%Tf,part%xp(3), &
-          part%kappa_s,part%m_s,part%vp(1),part%vp(2),part%vp(3), &
-          part%res,part%sigm_s,part%xp(1),xmax,xmin,part%xp(2),ymax,ymin
-        end if
+          xp3i = part%xp(3)   !Store this to do flux calculation
 
 
-        diff(1:3) = part%vp - part%uf
-        diffnorm = sqrt(diff(1)**2 + diff(2)**2 + diff(3)**2)
-        Volp = pi2*2.0/3.0*part%radius**3
-        rhop = (part%m_s+Volp*rhow)/Volp
-        taup_i = 18.0*rhoa*nuf/rhop/(2.0*part%radius)**2
-        Rep = 2.0*part%radius*diffnorm/nuf
-        corrfac = (1.0 + 0.15*Rep**(0.687))
+          !Now start updating particle position, velocity, temperature, radius
 
-        corrfac = 1.0
+          !implicitly calculates next velocity and position
+          part%xp(1:3) = part%xp(1:3) + dt*part%vp(1:3)
+          part%vp(1:3) = (part%vp(1:3)+taup_i*dt*corrfac*part%uf(1:3)+dt*part_grav(1:3))/(1+dt*corrfac*taup_i)
 
-        xp3i = part%xp(3)   !Store this to do flux calculation
+          if (ievap .EQ. 1 .and. part%qinf .gt. 0.0) then
 
+              numpart_processed = numpart_processed + 1
 
-	!Now start updating particle position, velocity, temperature, radius
+              !Uses externally-trained ANN (MLP) to update the particle radius/temp
+              !Inputs: radius, Tp, m_s, Tf, qinf, rhoa, dt
+              !Outputs: Normalized radius and temperature, stored in rt_zeroes
 
-        !implicitly calculates next velocity and position
-        part%xp(1:3) = part%xp(1:3) + dt*part%vp(1:3)
-        part%vp(1:3) = (part%vp(1:3)+taup_i*dt*corrfac*part%uf(1:3)+dt*part_grav(1:3))/(1+dt*corrfac*taup_i)
+              !Pack the parameters required by the model into a single array.
+              !
+              ! NOTE: This converts from double precision to single.
+              !
+              if ((log10(part%radius).lt.RADIUS_LOG_RANGE(1)) .or. (log10(part%radius).gt.RADIUS_LOG_RANGE(2))) then
+                  write(*,'(a8,4e15.6)') 'DHR1:',part%radius,log10(part%radius),RADIUS_LOG_RANGE(1),RADIUS_LOG_RANGE(2)
+              end if
+              if ( (part%Tp.lt.TEMPERATURE_RANGE(1)) .or. (part%Tp.gt.TEMPERATURE_RANGE(2))) then
+                  write(*,'(a8,3e15.6)') 'DHR2:',part%Tp,TEMPERATURE_RANGE(1),TEMPERATURE_RANGE(2)
+              end if
+              if ((log10(part%m_s).lt.SALT_MASS_LOG_RANGE(1)) .or. (log10(part%m_s).gt.SALT_MASS_LOG_RANGE(2))) then
+                  write(*,'(a8,4e15.6)') 'DHR3:',part%m_s,log10(part%m_s),SALT_MASS_LOG_RANGE(1),SALT_MASS_LOG_RANGE(2)
+              end if
+              if ( (part%Tf.lt.AIR_TEMPERATURE_RANGE(1)) .or. (part%Tf.gt.AIR_TEMPERATURE_RANGE(2))) then
+                  write(*,'(a8,3e15.6)') 'DHR4:',part%Tf,AIR_TEMPERATURE_RANGE(1),AIR_TEMPERATURE_RANGE(2)
+              end if
 
-        if (ievap .EQ. 1 .and. part%qinf .gt. 0.0) then
+              if ( (rhoa.lt.RHOA_RANGE(1)) .or. (rhoa.gt.RHOA_RANGE(2))) then
+                  write(*,'(a8,3e15.6)') 'DHR5:',rhoa,RHOA_RANGE(1),RHOA_RANGE(2)
 
-            numpart_processed = numpart_processed + 1
-
-	    !Uses externally-trained ANN (MLP) to update the particle radius/temp
-            !Inputs: radius, Tp, m_s, Tf, qinf, rhoa, dt
-            !Outputs: Normalized radius and temperature, stored in rt_zeroes
-
-            !Pack the parameters required by the model into a single array.
-            !
-            ! NOTE: This converts from double precision to single.
-            !
-	    if ((log10(part%radius).lt.RADIUS_LOG_RANGE(1)) .or. (log10(part%radius).gt.RADIUS_LOG_RANGE(2))) then
-		    write(*,'(a8,4e15.6)') 'DHR1:',part%radius,log10(part%radius),RADIUS_LOG_RANGE(1),RADIUS_LOG_RANGE(2)
-            end if
-	    if ( (part%Tp.lt.TEMPERATURE_RANGE(1)) .or. (part%Tp.gt.TEMPERATURE_RANGE(2))) then
-		    write(*,'(a8,3e15.6)') 'DHR2:',part%Tp,TEMPERATURE_RANGE(1),TEMPERATURE_RANGE(2)
-           end if
-	   if ((log10(part%m_s).lt.SALT_MASS_LOG_RANGE(1)) .or. (log10(part%m_s).gt.SALT_MASS_LOG_RANGE(2))) then
-		   write(*,'(a8,4e15.6)') 'DHR3:',part%m_s,log10(part%m_s),SALT_MASS_LOG_RANGE(1),SALT_MASS_LOG_RANGE(2)
-            end if
-	    if ( (part%Tf.lt.AIR_TEMPERATURE_RANGE(1)) .or. (part%Tf.gt.AIR_TEMPERATURE_RANGE(2))) then
-		 write(*,'(a8,3e15.6)') 'DHR4:',part%Tf,AIR_TEMPERATURE_RANGE(1),AIR_TEMPERATURE_RANGE(2)   
-            end if
-
-	    if ( (rhoa.lt.RHOA_RANGE(1)) .or. (rhoa.gt.RHOA_RANGE(2))) then
-		    write(*,'(a8,3e15.6)') 'DHR5:',rhoa,RHOA_RANGE(1),RHOA_RANGE(2)
-		     
-	    end if
-	    
-
-            droplet_parameters(1) = part%radius
-            droplet_parameters(2) = part%Tp
-            droplet_parameters(3) = part%m_s
-            droplet_parameters(4) = part%Tf
-            droplet_parameters(5) = part%qinf/(Mw*mod_magnus(part%Tf)/Ru/part%Tf)*rhoa
-            droplet_parameters(6) = rhoa
-            droplet_parameters(7) = dt
+              end if
 
 
-            if (part%radius .gt. 1.8e-7 .and. part%Tp .gt. 278.0 .and. droplet_parameters(5) .gt. 0.85) then
-               call estimate( droplet_parameters, rt_zeroes )
-            else
-               write(*,*) "Weird input radius/temperature/RH: ", part%radius_old, part%Tp_old, droplet_parameters(5)
-               rt_zeroes(1) = part%radius
-               rt_zeroes(2) = part%Tp
-               !if (part%radius .lt. 1.8e-7) then
-               !   part%radius = 1.8e-7
-               !endif 
-               !if (part%Tp .lt. 282.0) then
-               !   part%Tp = 282.0
-               !endif
-               !if (part%qinf .lt. 0.85) then
-               !   part%qinf = 0.85
-               !endif
-            end if
-
-            !if (rt_zeroes(0) .lt. 1.8e-7) then
-            !   write(*,*) "Bad output radius", rt_zeroes(0)
-            !   rt_zeroes(0) = 1.75e-7
-            ! Bound on the boundaries of training data (0.02% percentile)
-            !if (rt_zeroes(1) .gt. 5.5e-5 .or. rt_zeroes(1) .lt. 2.0e-7) then 
-            !   write(*,*) "Bounding radius", rt_zeroes(1), droplet_parameters
-            !   rt_zeroes(1) = part%radius
-            !endif 
-            !if (rt_zeroes(2) .gt. 298.9 .or. rt_zeroes(2) .lt. 284.9) then
-            !   write(*,*) "Bounding temperature ", rt_zeroes(2), droplet_parameters
-            !   rt_zeroes(2) = part%Tp
-            !endif
-            ! SEEMS TO BE THAT A HUGE PARTICLE IS SPAWNED, RUINING THE SIM
-            !if (rt_zeroes(1) .lt. 279.0) then
-            !   write(*,*) "Bad output temperature", rt_zeroes(1)
-            !   rt_zeroes(1) = 279.2
-            !elseif (rt_zeroes(1) .gt. 300.0) then
-            !   write(*,*) "Bad output temperature", rt_zeroes(1)
-            !   rt_zeroes(1) = 299.8
-            !endif
-
-            if (isnan(rt_zeroes(1)) &
-               .OR. (rt_zeroes(1)<0) &
-               .OR. isnan(rt_zeroes(2)) &
-               .OR. (rt_zeroes(2)<0) &
-               .OR. (rt_zeroes(1)>1.0e-2)) & 
-            then
+              droplet_parameters(1) = part%radius
+              droplet_parameters(2) = part%Tp
+              droplet_parameters(3) = part%m_s
+              droplet_parameters(4) = part%Tf
+              droplet_parameters(5) = part%qinf/(Mw*mod_magnus(part%Tf)/Ru/part%Tf)*rhoa
+              droplet_parameters(6) = rhoa
+              droplet_parameters(7) = dt
 
 
-                numimpos = numimpos + 1  !How many have failed?
-                !If they failed (should be very small number), radius,
-                !temp remain unchanged
-                rt_zeroes(1) = part%radius
-                rt_zeroes(2) = part%Tp
+              if (part%radius .gt. 1.8e-7 .and. part%Tp .gt. 278.0 .and. droplet_parameters(5) .gt. 0.85) then
+                  call estimate( droplet_parameters, rt_zeroes )
+              else
+                  write(*,*) "Weird input radius/temperature/RH: ", part%radius_old, part%Tp_old, droplet_parameters(5)
+                  rt_zeroes(1) = part%radius
+                  rt_zeroes(2) = part%Tp
+                  !if (part%radius .lt. 1.8e-7) then
+                  !   part%radius = 1.8e-7
+                  !endif
+                  !if (part%Tp .lt. 282.0) then
+                  !   part%Tp = 282.0
+                  !endif
+                  !if (part%qinf .lt. 0.85) then
+                  !   part%qinf = 0.85
+                  !endif
+              end if
 
-            end if
+              !if (rt_zeroes(0) .lt. 1.8e-7) then
+              !   write(*,*) "Bad output radius", rt_zeroes(0)
+              !   rt_zeroes(0) = 1.75e-7
+              ! Bound on the boundaries of training data (0.02% percentile)
+              !if (rt_zeroes(1) .gt. 5.5e-5 .or. rt_zeroes(1) .lt. 2.0e-7) then
+              !   write(*,*) "Bounding radius", rt_zeroes(1), droplet_parameters
+              !   rt_zeroes(1) = part%radius
+              !endif
+              !if (rt_zeroes(2) .gt. 298.9 .or. rt_zeroes(2) .lt. 284.9) then
+              !   write(*,*) "Bounding temperature ", rt_zeroes(2), droplet_parameters
+              !   rt_zeroes(2) = part%Tp
+              !endif
+              ! SEEMS TO BE THAT A HUGE PARTICLE IS SPAWNED, RUINING THE SIM
+              !if (rt_zeroes(1) .lt. 279.0) then
+              !   write(*,*) "Bad output temperature", rt_zeroes(1)
+              !   rt_zeroes(1) = 279.2
+              !elseif (rt_zeroes(1) .gt. 300.0) then
+              !   write(*,*) "Bad output temperature", rt_zeroes(1)
+              !   rt_zeroes(1) = 299.8
+              !endif
 
-            !Get the critical radius based on old temp
-            !part%rc = crit_radius(part%m_s,part%kappa_s,part%Tp) 
-
-            !Count if activated/deactivated
-            if (part%radius > part%rc .AND. rt_zeroes(1) < part%rc) then
-                denum = denum + 1
-
-                !Also add activated lifetime to histogram
-                call add_histogram(bins_actres,hist_actres,histbins+2,part%actres,part%mult)
-
-            elseif (part%radius < part%rc .AND. rt_zeroes(1) > part%rc) then
-                actnum = actnum + 1
-                part%numact = part%numact + 1.0
-
-                !Reset the activation lifetime
-                part%actres = 0.0
-
-            endif
-
-            !Redimensionalize
-            part%radius = rt_zeroes(1)
-            part%Tp = rt_zeroes(2)
-
-        else !! Evaporation is turned off
-
-
-            !Compute Nusselt number for particle:
-            !Ranz-Marshall relation
-            Nup = 2.0 + 0.6*Rep**(1.0/2.0)*Pra**(1.0/3.0)
-
-            !Update the temperature directly using BE:
-            tmp_coeff = Nup/3.0/Pra*CpaCpp*rhop/rhow*taup_i
-            part%Tp = (part%Tp + tmp_coeff*dt*part%Tf)/(1+dt*tmp_coeff)
-
-        end if 
-
-
-         !New volume and particle density
-         Volp = pi2*2.0/3.0*part%radius**3
-         rhop = (part%m_s+Volp*rhow)/Volp
-
-         einf = mod_magnus(part%Tf)
-
-	 !Compute just to have for statistics
-	 part%qstar = (Mw/(Ru*part%Tp*rhoa))*einf*exp(((Lv*Mw/Ru)*((1./part%Tf) - (1./part%Tp))) + ((2.*Mw*Gam)/(Ru*rhow*part%radius*part%Tp)) - ((part%kappa_s*part%m_s*rhow/rhos)/(Volp*rhop-part%m_s)))
+              if (isnan(rt_zeroes(1)) &
+                   .OR. (rt_zeroes(1)<0) &
+                   .OR. isnan(rt_zeroes(2)) &
+                   .OR. (rt_zeroes(2)<0) &
+                   .OR. (rt_zeroes(1)>1.0e-2)) &
+                   then
 
 
-        part%res = part%res + dt
-        part%actres = part%actres + dt
+                  numimpos = numimpos + 1  !How many have failed?
+                  !If they failed (should be very small number), radius,
+                  !temp remain unchanged
+                  rt_zeroes(1) = part%radius
+                  rt_zeroes(2) = part%Tp
+
+              end if
+
+              !Get the critical radius based on old temp
+              !part%rc = crit_radius(part%m_s,part%kappa_s,part%Tp)
+
+              !Count if activated/deactivated
+              if (part%radius > part%rc .AND. rt_zeroes(1) < part%rc) then
+                  denum = denum + 1
+
+                  !Also add activated lifetime to histogram
+                  call add_histogram(bins_actres,hist_actres,histbins+2,part%actres,part%mult)
+
+              elseif (part%radius < part%rc .AND. rt_zeroes(1) > part%rc) then
+                  actnum = actnum + 1
+                  part%numact = part%numact + 1.0
+
+                  !Reset the activation lifetime
+                  part%actres = 0.0
+
+              endif
+
+              !Redimensionalize
+              part%radius = rt_zeroes(1)
+              part%Tp = rt_zeroes(2)
+
+          else !! Evaporation is turned off
 
 
-        !Store the particle flux now that everything has been updated
-        if (part%xp(3) .gt. zl) then   !This will get treated in particle_bcs_nonperiodic, but record here
-           fluxloc = nnz+1
-           fluxloci = minloc(z,1,mask=(z.gt.xp3i))-1
-        elseif (part%xp(3) .lt. 0.0) then !This will get treated in particle_bcs_nonperiodic, but record here
-           fluxloci = minloc(z,1,mask=(z.gt.xp3i))-1
-           fluxloc = 0
-        else
+              !Compute Nusselt number for particle:
+              !Ranz-Marshall relation
+              Nup = 2.0 + 0.6*Rep**(1.0/2.0)*Pra**(1.0/3.0)
 
-        fluxloc = minloc(z,1,mask=(z.gt.part%xp(3)))-1
-        fluxloci = minloc(z,1,mask=(z.gt.xp3i))-1
+              !Update the temperature directly using BE:
+              tmp_coeff = Nup/3.0/Pra*CpaCpp*rhop/rhow*taup_i
+              part%Tp = (part%Tp + tmp_coeff*dt*part%Tf)/(1+dt*tmp_coeff)
 
-        end if  !Only apply flux calc to particles in domain
-
-        if (xp3i .lt. part%xp(3)) then !Particle moved up
-
-        do iz=fluxloci,fluxloc-1
-           pflux(iz) = pflux(iz) + part%mult
-           pmassflux(iz) = pmassflux(iz) + rhop*Volp*part%mult
-           penegflux(iz) = penegflux(iz) + rhop*Volp*Cpp*part%Tp*part%mult
-        end do
-
-        elseif (xp3i .gt. part%xp(3)) then !Particle moved down
-
-        do iz=fluxloc,fluxloci-1
-           pflux(iz) = pflux(iz) - part%mult
-           pmassflux(iz) = pmassflux(iz) - rhop*Volp*part%mult
-           penegflux(iz) = penegflux(iz) - rhop*Volp*Cpp*part%Tp*part%mult
-        end do
-
-        end if  !Up/down conditional statement
+          end if
 
 
-      part => part%next
+          !New volume and particle density
+          Volp = pi2*2.0/3.0*part%radius**3
+          rhop = (part%m_s+Volp*rhow)/Volp
+
+          einf = mod_magnus(part%Tf)
+
+          !Compute just to have for statistics
+          part%qstar = (Mw/(Ru*part%Tp*rhoa))*einf*exp(((Lv*Mw/Ru)*((1./part%Tf) - (1./part%Tp))) + ((2.*Mw*Gam)/(Ru*rhow*part%radius*part%Tp)) - ((part%kappa_s*part%m_s*rhow/rhos)/(Volp*rhop-part%m_s)))
+
+
+          part%res = part%res + dt
+          part%actres = part%actres + dt
+
+
+          !Store the particle flux now that everything has been updated
+          if (part%xp(3) .gt. zl) then   !This will get treated in particle_bcs_nonperiodic, but record here
+              fluxloc = nnz+1
+              fluxloci = minloc(z,1,mask=(z.gt.xp3i))-1
+          elseif (part%xp(3) .lt. 0.0) then !This will get treated in particle_bcs_nonperiodic, but record here
+              fluxloci = minloc(z,1,mask=(z.gt.xp3i))-1
+              fluxloc = 0
+          else
+
+              fluxloc = minloc(z,1,mask=(z.gt.part%xp(3)))-1
+              fluxloci = minloc(z,1,mask=(z.gt.xp3i))-1
+
+          end if  !Only apply flux calc to particles in domain
+
+          if (xp3i .lt. part%xp(3)) then !Particle moved up
+
+              do iz=fluxloci,fluxloc-1
+                  pflux(iz) = pflux(iz) + part%mult
+                  pmassflux(iz) = pmassflux(iz) + rhop*Volp*part%mult
+                  penegflux(iz) = penegflux(iz) + rhop*Volp*Cpp*part%Tp*part%mult
+              end do
+
+          elseif (xp3i .gt. part%xp(3)) then !Particle moved down
+
+              do iz=fluxloc,fluxloci-1
+                  pflux(iz) = pflux(iz) - part%mult
+                  pmassflux(iz) = pmassflux(iz) - rhop*Volp*part%mult
+                  penegflux(iz) = penegflux(iz) - rhop*Volp*Cpp*part%Tp*part%mult
+              end do
+
+          end if  !Up/down conditional statement
+
+
+          part => part%next
       end do
       call end_phase(measurement_id_particle_loop)
 
@@ -3767,7 +3765,7 @@ CONTAINS
       call particle_exchange
       call end_phase(measurement_id_particle_exchange)
 
-      !Now enforce periodic bcs 
+      !Now enforce periodic bcs
       !just updates x,y locations if over xl,yl or under 0
       call start_phase(measurement_id_particle_bcs)
       call particle_bcs_periodic
@@ -3780,9 +3778,9 @@ CONTAINS
 
       part => first_particle
       do while (associated(part))
-      numpart = numpart + 1
+          numpart = numpart + 1
 
-      part => part%next
+          part => part%next
       end do
 
 
@@ -3817,7 +3815,7 @@ CONTAINS
            deallocate(tmp)
         end if
       end if
-   
+
   end subroutine destroy_particle
 
   subroutine calc_tauc_min
@@ -3840,7 +3838,7 @@ CONTAINS
       tauc_min = 1.0e10
 
       part => first_particle
-      do while (associated(part))     
+      do while (associated(part))
 
       ipt = floor(part%xp(1)/dx) + 1
       jpt = floor(part%xp(2)/dy) + 1
@@ -3890,7 +3888,7 @@ CONTAINS
       integer :: iz,ipt,jpt,kpt
       integer :: ierr
       real :: rhop,pi,rhoa,func_rho_base,func_p_base,exner
-      
+
       integer,parameter :: num0_int=8,num0_real=6,num0_max=6,num0_min=6  !Number of 0-dimensional particle statistics
       integer,parameter :: num1 = 24  !Number of 1-dimensional particle statistics
 
@@ -3937,7 +3935,7 @@ CONTAINS
       part => first_particle
       do while (associated(part))
          numpart = numpart + 1
-	 
+
          if (part%radius .gt. part%rc) then
             numdrop = numdrop + 1
          else
@@ -4032,7 +4030,7 @@ CONTAINS
          radavg = radavg/tnumpart
          radmsqr = radmsqr/tnumpart
       end if
-      
+
       !Compute maxes
       statsvec0_max(1) = myradmax
       statsvec0_max(2) = mytempmax
@@ -4049,7 +4047,7 @@ CONTAINS
       vp1max = statsvec0_max(4)
       vp2max = statsvec0_max(5)
       vp3max = statsvec0_max(6)
- 
+
 
       !Compute mins
       statsvec0_min(1) = myradmin
@@ -4105,9 +4103,9 @@ CONTAINS
 
       !For each particle, add its attribute to a running sum of the stats of interest at the correct z-location
       part => first_particle
-      do while (associated(part))     
+      do while (associated(part))
 
-      
+
       ipt = floor(part%xp(1)/dx) + 1
       jpt = floor(part%xp(2)/dy) + 1
       kpt = minloc(z,1,mask=(z.gt.part%xp(3))) - 1
@@ -4260,7 +4258,7 @@ CONTAINS
 	   uf1msqr(iz) = statsvec1(iz,12)/partcount(iz) - uf1mean(iz)**2
 	   uf2msqr(iz) = statsvec1(iz,13)/partcount(iz) - uf2mean(iz)**2
 	   uf3msqr(iz) = statsvec1(iz,14)/partcount(iz) - uf3mean(iz)**2
-	   
+
 	   Tpmean(iz) = statsvec1(iz,15)/partcount(iz)
 	   Tpmsqr(iz) = statsvec1(iz,16)/partcount(iz) - Tpmean(iz)**2
 	   Tfmean(iz) = statsvec1(iz,17)/partcount(iz)
@@ -4282,7 +4280,7 @@ CONTAINS
 
 
      end do
-	 
+
 
 
   end subroutine particle_xy_stats
@@ -4294,10 +4292,10 @@ CONTAINS
 
    integer :: be_dump_iu
 
-   
+
    part => first_particle
    do while (associated(part))
-      
+
       if (mod(part%pidx,4000) .eq. 0) then
           write(ntraj,'(2i,14e15.6)') part%pidx,part%procidx,time,part%xp(1),part%xp(2),part%xp(3),part%vp(1),part%vp(2),part%vp(3),part%radius,part%Tp,part%Tf,part%qinf,part%qstar,part%rc,part%numact
       end if
@@ -4321,7 +4319,7 @@ CONTAINS
       use kd_tree
       use pars
       use con_data
-      implicit none 
+      implicit none
 
       type(particle), pointer :: part_tmp
       type(tree_master_record), pointer :: tree
@@ -4358,7 +4356,7 @@ CONTAINS
       part_tmp => first_particle
       do while (associated(part_tmp))
 
-         xp_data(i,1:3) = part_tmp%xp(1:3) 
+         xp_data(i,1:3) = part_tmp%xp(1:3)
          index_data(i,1) = part_tmp%pidx
          index_data(i,2) = part_tmp%procidx
 
@@ -4371,12 +4369,12 @@ CONTAINS
 
          vel_data(i,1:3) = part_tmp%vp(1:3)
 
-      i = i+1   
+      i = i+1
       part_tmp => part_tmp%next
       end do
 
       !Build the kd-tree
-      tree => create_tree(xp_data) 
+      tree => create_tree(xp_data)
 
       !Do the search for each of the particles
       part_tmp => first_particle
@@ -4385,7 +4383,7 @@ CONTAINS
          qv(1:3) = xp_data(i,1:3)
          call n_nearest_to(tree,qv,nq,indexes,distances)
          !call n_nearest_to_brute_force(tree,qv,nq,indexes,distances)
- 
+
          !Go back through and assign the shortest distance and index
          !NOTE: Must use 2nd one since it finds itself as nearest neighbor
          !Keep this turned on despite "ineighbor" flag -- consider it a bonus
@@ -4406,7 +4404,7 @@ CONTAINS
          !Get a random permutation of this array
          do j=2,nq-1
             ran_idx = floor(ran2(iseed)*(nq-3)) + 2 !Get a number between 2 and nq-1
-            tmp_int = ran_nq(j) 
+            tmp_int = ran_nq(j)
             ran_nq(j) = ran_nq(ran_idx)
             ran_nq(ran_idx) = tmp_int
          end do
@@ -4420,19 +4418,19 @@ CONTAINS
                 coal_idx = indexes(ran_nq(j))              !The index of the coalescence candidate in the arrays
                 goto 101
              end if
-         
+
          end do
          end if !coal_data = 0
-   
+
 101   continue
 
 
       !Now apply the coalescence rules to the pair (i,coal_idx) assuming a coal_idx was found (.ne. -1)
       if (coal_idx .ge. 1) then
 
-         phi = ran2(iseed) 
+         phi = ran2(iseed)
          dV = 2*pi2/3.0*(sqrt(distances(nq-1)))**3  !The volume will be the sphere formed by outermost droplet considered
-         
+
          veldiff = sqrt( (vel_data(i,1)-vel_data(coal_idx,1))**2 +  &
                          (vel_data(i,2)-vel_data(coal_idx,2))**2 +  &
                          (vel_data(i,3)-vel_data(coal_idx,3))**2 )
@@ -4491,7 +4489,7 @@ CONTAINS
 
 
          if (gm .gt. 0) then  !Only update radii and multiplicities if the coin flip indicates
-       
+
             gam_til = min(gm,floor(real(xi_j)/real(xi_k)))
 
 
@@ -4499,7 +4497,7 @@ CONTAINS
 
                !Update particle j's multiplicity
                mult_data(j_idx) = mult_data(j_idx)-gam_til*mult_data(k_idx)
-               
+
                !Update particle k's radius
                rad_data(k_idx) = (gam_til*rad_data(j_idx)**3 + rad_data(k_idx)**3)**(1.0/3.0)
 
@@ -4507,7 +4505,7 @@ CONTAINS
 			      !We can use the mass mixing rule for now (will be updated to volume mixing rule)
 			      kappa_s_data(k_idx) = gam_til*ms_data(j_idx)*kappa_s_data(j_idx)/( gam_til*ms_data(j_idx) + ms_data(k_idx))  +   &
                 ms_data(k_idx)*kappa_s_data(k_idx) / ( gam_til*ms_data(j_idx) + ms_data(k_idx))
- 
+
                !Update particle k's solute mass
                ms_data(k_idx) = gam_til*ms_data(j_idx) + ms_data(k_idx)
 
@@ -4515,7 +4513,7 @@ CONTAINS
 
                mult_tmp_j = floor(real(mult_data(k_idx))/2.0)
                mult_tmp_k = mult_data(k_idx) - floor(real(mult_data(k_idx))/2.0)
-       
+
                mult_data(j_idx) = mult_tmp_j
                mult_data(k_idx) = mult_tmp_k
 
@@ -4528,17 +4526,17 @@ CONTAINS
                !Update kappa coefficients
                kappa_s_j_temp = gam_til*ms_data(j_idx)*kappa_s_data(j_idx)/(gam_til*ms_data(j_idx) + ms_data(k_idx)) +  &
                 ms_data(k_idx)*kappa_s_data(k_idx) / ( gam_til*ms_data(j_idx) + ms_data(k_idx))
-   
+
                kappa_s_k_temp = gam_til*ms_data(j_idx)*kappa_s_data(j_idx)/(gam_til*ms_data(j_idx) + ms_data(k_idx)) +  &
                 ms_data(k_idx)*kappa_s_data(k_idx) / ( gam_til*ms_data(j_idx) + ms_data(k_idx))
-   
+
                kappa_s_data(j_idx) = kappa_s_j_temp
                kappa_s_data(k_idx) = kappa_s_k_temp
-   
+
                !Update particle's solute masses
                ms_j_temp = gam_til*ms_data(j_idx) + ms_data(k_idx)
                ms_k_temp = gam_til*ms_data(j_idx) + ms_data(k_idx)
-   
+
                ms_data(j_idx) = ms_j_temp
                ms_data(k_idx) = ms_k_temp
 
@@ -4549,7 +4547,7 @@ CONTAINS
        coal_data(coal_idx) = 1
        coal_data(i) = 1
       end if  !coal_idx .gt. 1
- 
+
       part_tmp => part_tmp%next
       end do
 
@@ -4566,7 +4564,7 @@ CONTAINS
          part_tmp%kappa_s = kappa_s_data(i)
          part_tmp%m_s = ms_data(i)
 
-      i = i+1   
+      i = i+1
       part_tmp => part_tmp%next
       end do
 
@@ -4609,7 +4607,7 @@ CONTAINS
         error = 1.0e-8
 
         v1 = vec1
-        fv2 = (/1., 1./) 
+        fv2 = (/1., 1./)
         coeff = 0.1
         correct = 0.0
         iteration_max = 50
@@ -4938,7 +4936,7 @@ CONTAINS
 
 !       ------------------
 !       compute sigma squre (sigm_s) based on subgrid energy field
-!       -----------------       
+!       -----------------
   do iz =izs,ize
     izp1 = iz+1
     izm1 = iz-1
@@ -5080,7 +5078,7 @@ CONTAINS
       part%xp(ind) = part%xp(ind) + part%u_sub(ind)*dt
     end do
 
-!     ---------------------------------        
+!     ---------------------------------
 
     Volp = pi2*2.0/3.0*part%radius**3
     rhop = (part%m_s+Volp*rhow)/Volp
@@ -5160,7 +5158,7 @@ CONTAINS
 
 !       ------------------
 !       compute sigma squre (sigm_s) based on subgrid energy field
-!       -----------------       
+!       -----------------
     do iz =izs,ize
     izp1 = iz+1
     izm1 = iz-1
@@ -5254,7 +5252,7 @@ CONTAINS
   subroutine particle_neighbor_search_kd
   use pars
   use kd_tree
-  implicit none 
+  implicit none
 
   type(particle), pointer :: part_tmp
   type(tree_master_record), pointer :: tree
@@ -5277,16 +5275,16 @@ CONTAINS
   part_tmp => first_particle
   do while (associated(part_tmp))
 
-     xp_data(i,1:3) = part_tmp%xp(1:3) 
+     xp_data(i,1:3) = part_tmp%xp(1:3)
      index_data(i,1) = part_tmp%pidx
      index_data(i,2) = part_tmp%procidx
 
-     i = i+1   
+     i = i+1
      part_tmp => part_tmp%next
   end do
 
   !Build the kd-tree
-  tree => create_tree(xp_data) 
+  tree => create_tree(xp_data)
 
   !Do the search for each of the particles
   part_tmp => first_particle
@@ -5345,13 +5343,13 @@ CONTAINS
 
   subroutine particle_neighbor_search_brute
   use pars
-  implicit none 
+  implicit none
 
   type(particle), pointer :: part_ref,part_query
   real :: dist_tmp,xdist,ydist,zdist,distance
   integer :: nbr_pidx,nbr_procidx,ip
 
-  
+
   !Loop over the points that need to perform search
   part_query => first_particle
   do while (associated(part_query))
@@ -5384,7 +5382,7 @@ CONTAINS
      part_query%dist = distance
      part_query%nbr_pidx = nbr_pidx
      part_query%nbr_procidx = nbr_procidx
-     
+
 
      part_query => part_query%next
   end do
@@ -5408,7 +5406,7 @@ CONTAINS
 
   real :: rmin,rmax,rmin10,rmax10
 
-    nbin = histbins !From Module Particle 
+    nbin = histbins !From Module Particle
 
     rmin10 = log10(rmin)
     rmax10 = log10(rmax)
@@ -5416,7 +5414,7 @@ CONTAINS
 !       Calculate size of interval
     dh = (rmax10-rmin10)/(nbin-1)
 
-!       ===== update x-axis for each bin ===== 
+!       ===== update x-axis for each bin =====
     binsdata(1) = rmin10-dh
     do i = 1,histbins+1
       binsdata(i+1)= dh+binsdata(i)
@@ -5440,12 +5438,12 @@ CONTAINS
 
   real :: rmin
 
-    nbin = histbins !From Module Particle 
+    nbin = histbins !From Module Particle
 
 !       Calculate size of interval
     dh = 1.0
 
-!       ===== update x-axis for each bin ===== 
+!       ===== update x-axis for each bin =====
     binsdata(1) = rmin-dh
     do i = 1,histbins+1
       binsdata(i+1)= dh+binsdata(i)
@@ -5474,7 +5472,7 @@ CONTAINS
   real :: rmin,rmax,logval1
 
     rmin = binsdata(2)
-    nbin = histbins !From Module Particle 
+    nbin = histbins !From Module Particle
     rmax = binsdata(nbin+1)
 
 !       Calculate size of interval
@@ -5513,7 +5511,7 @@ CONTAINS
   real :: rmin,rmax
 
     rmin = binsdata(2)
-    nbin = histbins !From Module Particle 
+    nbin = histbins !From Module Particle
     rmax = binsdata(nbin+1)
 
 !       Calculate size of interval
@@ -5551,18 +5549,18 @@ CONTAINS
    ! USES balanc,hqr
    !Find all the roots of a polynomial with real coeﬃcients. The method is to construct an upper Hessenberg matrix
    !whose eigenvalues are the desired roots, and then use the routines balanc and hqr . The real and imaginary parts of the roots are returned in rtr(1:m) and rti(1:m) , respectively.
-   
+
       INTEGER :: m,MAXM
       real :: a(m+1),rtr(m),rti(m)
       PARAMETER (MAXM=50)
       INTEGER :: j,k
       real :: hess(MAXM,MAXM),xr,xi
-   
+
       if (m.gt.MAXM.or.a(m+1).eq.0.) then
          write(*,*)'bad args in zrhqr'
          stop
       end if
-   
+
       do k=1,m
          hess(1,k)=-a(m+1-k)/a(m+1)
          do j=2,m
@@ -5570,11 +5568,11 @@ CONTAINS
          enddo
          if (k.ne.m) hess(k+1,k)=1.
       enddo
-   
+
       call balanc(hess,m,MAXM)
-   
+
       call hqr(hess,m,MAXM,rtr,rti)
-   
+
       do j=2,m
          xr=rtr(j)
          xi=rti(j)
@@ -5583,15 +5581,15 @@ CONTAINS
             rtr(k+1)=rtr(k)
             rti(k+1)=rti(k)
          enddo
-   
+
          k=0
 1   		rtr(k+1)=xr
          rti(k+1)=xi
       enddo
       return
    end subroutine
-   
-   
+
+
    SUBROUTINE balanc(a,n,np)
    !Given an n by n matrix a stored in an array of physical dimensions np by np , this routine
    !replaces it by a balanced matrix with identical eigenvalues. A symmetric matrix is already
@@ -5602,9 +5600,9 @@ CONTAINS
       PARAMETER (RADIX=2.,SQRDX=RADIX**2)
       INTEGER i,j,last
       real c,f,g,r,s
-   
+
 2   	continue
-   
+
       last=1
       do i=1,n
          c=0.
@@ -5615,7 +5613,7 @@ CONTAINS
                r=r+abs(a(i,j))
             endif
          enddo
-   
+
          if(c.ne.0..and.r.ne.0.)then
             g=r/RADIX
             f=1.
@@ -5625,32 +5623,32 @@ CONTAINS
                c=c*SQRDX
                goto 3
             endif
-   
+
             g=r*RADIX
 4   			if(c.gt.g)then
                f=f/RADIX
                c=c/SQRDX
                goto 4
             endif
-   
+
             if((c+r)/f.lt.0.95*s)then
                last=0
                g=1./f
                do j=1,n
                   a(i,j)=a(i,j)*g
                enddo
-   
+
                do j=1,n
                   a(j,i)=a(j,i)*f
                enddo
             endif
          endif
       enddo
-   
+
       if(last.eq.0) goto 2
       return
    END subroutine
-   
+
    SUBROUTINE hqr(a,n,np,wr,wi)
    !Finds all eigenvalues of an n by n upper Hessenberg matrix a that is stored in an np by np
    !array. On input a can be exactly as output from elmhes; on output it is destroyed.
@@ -5659,18 +5657,18 @@ CONTAINS
       double precision a(np,np),wi(np),wr(np)
       INTEGER i,its,j,k,l,m,nn
       double precision anorm,p,q,r,s,t,u,v,w,x,y,z
-   
+
       anorm=0.
-   
+
       do i=1,n
          do j=max(i-1,1),n
             anorm=anorm+abs(a(i,j))
          enddo
       enddo
-   
+
       nn=n
       t=0.
-   
+
 5   	if(nn.ge.1)then
          its=0
 6   		do l=nn,2,-1
@@ -5678,11 +5676,11 @@ CONTAINS
             if(s.eq.0.)s=anorm
             if(abs(a(l,l-1))+s.eq.s)goto 7
          enddo
-   
+
          l=1
-   
+
 7   		x=a(nn,nn)
-   
+
          if(l.eq.nn)then
             wr(nn)=x+t
             wi(nn)=0.
@@ -5690,18 +5688,18 @@ CONTAINS
          else
             y=a(nn-1,nn-1)
             w=a(nn,nn-1)*a(nn-1,nn)
-   
+
             if(l.eq.nn-1)then
                p=0.5*(y-x)
                q=p**2+w
                z=sqrt(abs(q))
                x=x+t
-   
+
                if(q.ge.0.)then
                   z=p+sign(z,p)
                   wr(nn)=x+z
                   wr(nn-1)=wr(nn)
-   
+
                   if(z.ne.0.)wr(nn)=x-w/z
                      wi(nn)=0.
                      wi(nn-1)=0.
@@ -5711,30 +5709,30 @@ CONTAINS
                      wi(nn)=z
                      wi(nn-1)=-z
                   endif
-   
+
                   nn=nn-2
-   
+
                else
                   if(its.eq.30) then
                      write(*,*) 'too many iterations in hqr'
                      stop
                   endif
-   
+
                   if(its.eq.10.or.its.eq.20)then
                      t=t+x
-   
+
                      do i=1,nn
                         a(i,i)=a(i,i)-x
                      enddo
-   
+
                      s=abs(a(nn,nn-1))+abs(a(nn-1,nn-2))
                      x=0.75*s
                      y=x
                      w=-0.4375*s**2
                   endif
-   
+
                   its=its+1
-   
+
                   do m=nn-2,l,-1
                      z=a(m,m)
                      r=x-z
@@ -5751,18 +5749,18 @@ CONTAINS
                      v=abs(p)*(abs(a(m-1,m-1))+abs(z)+abs(a(m+1,m+1)))
                      if(u+v.eq.v)goto 8
                   enddo
-   
+
 8   					do i=m+2,nn
                      a(i,i-2)=0.
                      if (i.ne.m+2) a(i,i-3)=0.
                   enddo
-   
+
                   do k=m,nn-1
                      if(k.ne.m)then
                         p=a(k,k-1)
                         q=a(k+1,k-1)
                         r=0.
-   
+
                         if(k.ne.nn-1)r=a(k+2,k-1)
                         x=abs(p)+abs(q)+abs(r)
                         if(x.ne.0.)then
@@ -5771,23 +5769,23 @@ CONTAINS
                            r=r/x
                         endif
                      endif
-   
+
                      s=sign(sqrt(p**2+q**2+r**2),p)
-   
+
                      if(s.ne.0.)then
                         if(k.eq.m)then
                            if(l.ne.m)a(k,k-1)=-a(k,k-1)
                         else
                            a(k,k-1)=-s*x
                         endif
-   
+
                         p=p+s
                         x=p/s
                         y=q/s
                         z=r/s
                         q=q/p
                         r=r/p
-   
+
                         do j=k,nn
                            p=a(k,j)+q*a(k+1,j)
                            if(k.ne.nn-1)then
@@ -5797,7 +5795,7 @@ CONTAINS
                            a(k+1,j)=a(k+1,j)-p*y
                            a(k,j)=a(k,j)-p*x
                         enddo
-   
+
                         do i=l,min(nn,k+3)
                            p=x*a(i,k)+y*a(i,k+1)
                            if(k.ne.nn-1)then
@@ -5809,7 +5807,7 @@ CONTAINS
                         enddo
                      endif
                   enddo
-   
+
                   goto 6
                endif
             endif
