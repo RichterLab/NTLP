@@ -1061,7 +1061,7 @@ def load_model_checkpoint( checkpoint_path, model, optimizer=None ):
 
     # Load the checkpoint's Tensors as a dictionary and figure out which version
     # it is.
-    checkpoint         = torch.load( checkpoint_path, weights_only=False )
+    checkpoint         = torch.load( checkpoint_path, weights_only=False, map_location=torch.device('cpu') )
     checkpoint_version = checkpoint.get( "checkpoint_version", 1 )
 
     # Load the checkpoint based on its reported version.  Complain if we don't
@@ -1173,8 +1173,8 @@ def save_model_checkpoint( checkpoint_prefix, checkpoint_number, model, optimize
         "checkpoint_version":       CHECKPOINT_VERSION,
         "droplet_parameter_ranges": current_parameter_ranges,
         "loss_function":            loss_function,
-        "model_weights":            model.state_dict(),
-        "optimizer_state":          optimizer.state_dict(),
+        "model_weights":            model.state_dict().to( "cpu" ),
+        "optimizer_state":          optimizer.state_dict().to( "cpu" ),
         "training_loss":            training_loss
     }
 
