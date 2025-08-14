@@ -136,7 +136,7 @@ def plot_droplet_size_temperatures( times, size_temperatures, background_paramet
                              (np.abs( reference_data[:, 0] - comparison_data[:, 0] ) /
                               reference_data[:, 0] * 100),
                              color=color,
-                             label="{:s} relative error".format( label ) )
+                             label="{:s} relative".format( label ) )
             ax_h[1][1].plot( times,
                              (np.abs( reference_data[:, 1] - comparison_data[:, 1] ) /
                               reference_data[:, 1] * 100),
@@ -145,7 +145,7 @@ def plot_droplet_size_temperatures( times, size_temperatures, background_paramet
             ax_h_twin_radius.plot( times,
                                    np.abs( reference_data[:, 0] - comparison_data[:, 0] ),
                                    c=color,
-                                   label="{:s} absolute error".format( label ),
+                                   label="{:s} absolute".format( label ),
                                    linestyle="dashed" )
 
         # Label the axes.
@@ -172,9 +172,16 @@ def plot_droplet_size_temperatures( times, size_temperatures, background_paramet
                                        temperature_relative_limits[1] / 100.0 * reference_maximum)
         ax_h_twin_temperature.set_ylim( temperature_absolute_limits )
 
-        ax_h[1][0].legend( loc=(0.05, 0.75) )
+        # Collect the lines and labels from both radius comparison axes so we
+        # can create a single legend containing both.
+        radius_relative_lines, radius_relative_labels = ax_h[1][0].get_legend_handles_labels()
+        radius_absolute_lines, radius_absolute_labels = ax_h_twin_radius.get_legend_handles_labels()
+
+        radius_lines  = radius_relative_lines + radius_absolute_lines
+        radius_labels = radius_relative_labels + radius_absolute_labels
+
+        ax_h[1][0].legend( radius_lines, radius_labels )
         ax_h[1][1].legend()
-        ax_h_twin_radius.legend( loc=(0.05, 0.85) )
 
         # Turn on minor ticks for the twins to match what we do for the other
         # axes below.
