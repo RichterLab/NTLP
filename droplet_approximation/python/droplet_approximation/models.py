@@ -1386,6 +1386,15 @@ def train_model( model, criterion, optimizer, device, number_epochs, training_fi
                 training_loss_history.append( running_loss )
 
                 running_loss = 0.0
+        else:
+            # Handle the case where we don't have enough data to finish a
+            # mini-batch.
+            running_loss /= number_batches
+
+            training_loss.append( running_loss )
+            training_loss_history.append( running_loss )
+
+            running_loss = 0.0
 
         # We finished all of the batches.  Adjust the learning rate before we
         # checkpoint so it can be loaded and training resumed without additional
@@ -1435,6 +1444,10 @@ def train_model( model, criterion, optimizer, device, number_epochs, training_fi
             validation_loss = running_loss / number_validation_batches
 
             validation_loss_history.append( validation_loss )
+        else:
+            # Provide a placeholder for the validation loss but don't add it to
+            # the history.
+            validation_loss = np.nan
 
         # Execute each of the callbacks.
         for epoch_callback in epoch_callbacks:
@@ -1443,11 +1456,6 @@ def train_model( model, criterion, optimizer, device, number_epochs, training_fi
                             optimizer,
                             training_loss,
                             validation_loss )
-
-    # Handle the case where we didn't have enough data to complete a mini-batch.
-    if len( training_loss_history ) == 0:
-        running_loss /= number_epochs * number_batches
-        training_loss_history.append( running_loss )
 
     return training_loss_history, validation_loss_history
 
