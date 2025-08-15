@@ -131,6 +131,7 @@ for INDEX in "${INDEX_ARRAY[@]}"; do
     # maintain the user's submission environment (-V) for when the job is
     # launched and name it in a way that we can identify it later (-N).
     SCHEDULE_COMMAND="echo ${EVALUATE_PARTICLES} \
+                              -f \
                               ${PARTICLES_ROOT} \
                               ${INDEX} \
                               ${PROCESS_COUNT} \
