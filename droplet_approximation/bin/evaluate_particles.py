@@ -179,7 +179,7 @@ def launch_evaluation_pipeline( particles_root, particle_indices_range_str,
     if particle_indices_range_components[1] == -1:
         particle_indices_range_components[1] = len( particle_ids )
 
-        particle_indices = np.array( range( *particle_indices_range_components ) )
+    particle_indices = np.array( range( *particle_indices_range_components ) )
 
     if len( particle_indices ) == 0:
         raise ValueError( "Empty range specified! ({:s})".format(
