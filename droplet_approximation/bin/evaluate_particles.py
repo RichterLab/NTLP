@@ -286,9 +286,12 @@ def launch_evaluation_pipeline( particles_root, particle_indices_range_str,
         return 0
 
     # Otherwise, launch the workers.
-    with multiprocessing.Pool( number_processes ) as pool:
-        pool.starmap( droplet_approximation.particle_evaluation_pipeline,
-                      args_list )
+    if number_processes == 1:
+        droplet_approximation.particle_evaluation_pipeline( *args_list[0] )
+    else:
+        with multiprocessing.Pool( number_processes ) as pool:
+            pool.starmap( droplet_approximation.particle_evaluation_pipeline,
+                          args_list )
 
 def main( argv ):
     """

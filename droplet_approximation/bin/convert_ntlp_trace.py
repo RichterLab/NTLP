@@ -70,7 +70,7 @@ def main( arguments: List[str] ):
      record_end_index) = calculate_job_range( total_records, number_jobs, job_index )
 
     # Calculate how work will be distributed among worker processes.
-    number_processes = multiprocessing.cpu_count()
+    number_processes = 1 #multiprocessing.cpu_count()
     worker_ranges    = divide_range_among_workers( record_start_index,
                                                    record_end_index,
                                                    number_processes )
@@ -90,22 +90,29 @@ def main( arguments: List[str] ):
         return
 
     # Create a pool of worker processes to handle the work.
-    with multiprocessing.Pool( processes=number_processes ) as pool:
+    if number_processes == 1:
+        particle_ids_list = worker_process( 0,
+                                            worker_ranges[0][0],
+                                            worker_ranges[0][1],
+                                            trace_files,
+                                            particles_root )
+    else:
+        with multiprocessing.Pool( processes=number_processes ) as pool:
 
-        # Create the arguments for each of the workers.
-        args_list = []
-        for worker_id, (start_record_index, end_record_index) in enumerate( worker_ranges ):
-            args_list.append( (worker_id,
-                               start_record_index,
-                               end_record_index,
-                               trace_files,
-                               particles_root) )
+            # Create the arguments for each of the workers.
+            args_list = []
+            for worker_id, (start_record_index, end_record_index) in enumerate( worker_ranges ):
+                args_list.append( (worker_id,
+                                   start_record_index,
+                                   end_record_index,
+                                   trace_files,
+                                   particles_root) )
 
-        # Do particle extraction.
-        particle_ids_list = pool.starmap( worker_process, args_list )
+            # Do particle extraction.
+            particle_ids_list = pool.starmap( worker_process, args_list )
 
-        pool.close()
-        pool.join()
+            pool.close()
+            pool.join()
 
     # Merge the processed particle identifiers into the index, creating
     # it if necessary.
