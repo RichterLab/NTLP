@@ -1335,6 +1335,13 @@ def read_particles_data( particles_root, particle_ids, dirs_per_level, quiet_fla
                                                   evaluation, in Kelvin.
 
     """
+
+    # Maximum integration gap size, in simulation seconds, to consider.  This is
+    # chosen such that it is larger than the largest LES-based timestep that
+    # could occur in NTLP.  Differences in observation times larger than one
+    # maximum timestep are are due to missing observations.
+    MAXIMUM_DT_GAP_SIZE = 10.0
+
     # Remove "be" if it is an evaluation tag
     # to avoid attempted reading
     if "be" in evaluations.keys():
@@ -1470,10 +1477,24 @@ def read_particles_data( particles_root, particle_ids, dirs_per_level, quiet_fla
         particles_df.at[particle_id, "birth time"] = observations_fp32[0,  ParticleRecord.TIME_INDEX.value]
         particles_df.at[particle_id, "death time"] = observations_fp32[-1, ParticleRecord.TIME_INDEX.value]
 
-        # If this particle doesn't have observations set it to "empty" and move
-        # to the next.
-        if particles_df.at[particle_id, "number observations"] == 0:
-            particles_df.at[particle_id, "number be failures"] = 0
+        # Simulation timeline.
+        particles_df.at[particle_id, "integration times"] = np.diff( observations_fp32[:, ParticleRecord.TIME_INDEX.value][timeline_mask] )
+
+        # Skip particles that don't have any evaluations.  These are either
+        # because they have zero observations or because they have one
+        # evaluation with a large dt that implies there was a gap between the
+        # first and last observation.  In both cases we retain the birth and
+        # death times and wipe out the individual observations.
+        #
+        # NOTE: Observe the lack of subscript on the integration time as Pandas
+        #       has converted the singleton array to a scalar!
+        #
+        if ((particles_df.at[particle_id, "number observations"] == 0) or
+            (particles_df.at[particle_id, "number observations"] == 1 and
+             particles_df.at[particle_id, "integration times"] >= MAXIMUM_DT_GAP_SIZE)):
+
+            particles_df.at[particle_id, "number observations"] = 0
+            particles_df.at[particle_id, "number be failures"]  = 0
 
             for observation_name in OBSERVATION_NAMES:
                 particles_df.at[particle_id, observation_name] = np.array( [] )
@@ -1484,8 +1505,6 @@ def read_particles_data( particles_root, particle_ids, dirs_per_level, quiet_fla
         particles_df.at[particle_id, "number be failures"]     = BEStatus.get_failure_mask( observations_int32[:-1, ParticleRecord.BE_STATUS_INDEX.value][timeline_mask[:-1]] ).sum()
         particles_df.at[particle_id, "be statuses"]            = observations_int32[:-1, ParticleRecord.BE_STATUS_INDEX.value][timeline_mask[:-1]]
 
-        # Simulation timeline.
-        particles_df.at[particle_id, "integration times"]      = np.diff( observations_fp32[:, ParticleRecord.TIME_INDEX.value][timeline_mask] )
 
         # Observed radii.
         particles_df.at[particle_id, "input be radii"]         = observations_fp32[:-1, ParticleRecord.RADIUS_INDEX.value][timeline_mask[:-1]]
@@ -1529,6 +1548,133 @@ def read_particles_data( particles_root, particle_ids, dirs_per_level, quiet_fla
             #
             particles_df.at[particle_id, evaluation_radii_name]        = evaluation_radii[timeline_mask[1:]]
             particles_df.at[particle_id, evaluation_temperatures_name] = evaluation_temperatures[timeline_mask[1:]]
+
+        # Drop the evaluations that have crazy integration times under the
+        # assumption that we don't have a complete trace of this particle (some
+        # observations occurred on a MPI rank whose outputs were not processed).
+        # This manifests as outputs that appear to have a huge integration time
+        # because the intermediate observations are missing.
+        #
+        # The gap threshold is set at 5 times the median so we're robust to
+        # actual outliers in the observations, clamped at the maximum integration
+        # time seen in NTLP simulations.  Some simulations have larger time
+        # steps to begin with and are ratcheted down to small steps once a
+        # sufficient number of particles are present.  Median will step down to
+        # a smaller time step for particles with many observations while
+        # selecting a reasonable step size for small observation counts.
+        #
+        # We have to be careful to handle the extreme corner cases where taking
+        # the median breaks down, which is when we only have two evaluations.
+        # This leaves us to handle the following three cases:
+        #
+        #   1. Neither observation has a gap
+        #   2. One observation has a gap
+        #   3. Both observations have a gap
+        #
+        # Case #1 is handled by construction though case #2 requires us to
+        # compute the minimum integration time instead of the median, as
+        # this results in the average of the two integration times and yields
+        # a large threshold that doesn't detect the gap.  Taking the minimum
+        # at least flags the evaluation with a gap.  Keep in mind that we've
+        # already filtered out single evaluation particles with a large
+        # integration time above so we have at least two observations here.
+        #
+        # Noe that Case #3 cannot be detected from a single particle's
+        # evaluations alone.  We opt for simplicity instead of attempting to
+        # compute a running median across all particles because this is such
+        # an extreme corner case and, more importantly, it has not occurred
+        # yet.
+        #
+        # NOTE: This has not been tested on a wide range of simulations and
+        #       may not be sufficiently robust!
+        #
+        # NOTE: We perform gap detection after the DataFrame is setup to
+        #       simplify the logic throughout, albeit at the expense of some
+        #       performance.  Removing gaps after observations have been
+        #       combined into evaluations means we're eliminating gaps by
+        #       shifting potentially large swaths of evaluations around which is
+        #       memory bandwidth inefficient.
+        #
+        #       Handling this at the observation level would require more
+        #       complicated indexing in an already indexing-heavy portion of the
+        #       code.
+        #
+        if particles_df.at[particle_id, "number observations"] < 3:
+            selection_func = np.min
+        else:
+            selection_func = np.median
+
+        dt_threshold = min( 5 * selection_func( particles_df.at[particle_id, "integration times"] ),
+                            MAXIMUM_DT_GAP_SIZE )
+
+        gaps_mask = (particles_df.at[particle_id, "integration times"] > dt_threshold)
+        if np.any( gaps_mask ):
+            # We have at least one gap that we need to remove.  Since we're have
+            # evaluations with an input and an output we can simply drop those
+            # with large integration times.
+            #
+            # NOTE: We could do this earlier if we absolutely cared about every
+            #       last ounce of performance by carefully managing which
+            #       observations could be used as inputs but not outputs.  It is
+            #       much easier to do it this way, albeit at the expense of
+            #       shifting all of this particle's arrays over an element (or
+            #       few).
+            #
+            #       This shouldn't happen on fully evaluated datasets so we
+            #       don't consider this a priority just yet.
+            #
+            number_gaps = gaps_mask.sum()
+
+            # Move the birth time forward if we have a gap between the first two
+            # observations, which manifests itself in the first evaluation.
+            new_start_index = np.argmin( gaps_mask )
+            if new_start_index > 0:
+                particles_df.at[particle_id, "birth time"] = particles_df.at[particle_id, "times"][new_start_index]
+
+            # Move the death time backward if we have a gap between the last two
+            # observations, which manifests itself in the last evaluation.
+            new_end_index = -np.argmin( gaps_mask[::-1] )
+            if new_end_index < 0:
+                particles_df.at[particle_id, "death time"] = particles_df.at[particle_id, "times"][new_end_index]
+
+            # Reduce the count of BE failures that occurred on an observation
+            # preceding a gap.  When this occurs the output observation
+            # associated with the failure is in the gap and the evaluation
+            # incorrectly combines the BE failure input with the first
+            # observation after the gap.
+            #
+            # NOTE: We do this before removing the gaps so as to correctly count
+            #       how many evaluations are removed below.
+            #
+            number_gapped_be_failures = (gaps_mask & BEStatus.get_failure_mask( particles_df.at[particle_id, "be statuses"] )).sum()
+            particles_df.at[particle_id, "number be failures"] -= number_gapped_be_failures
+
+            # Remove the gaps from every observation.
+            for observation_name in OBSERVATION_NAMES:
+                particles_df.at[particle_id, observation_name] = particles_df.at[particle_id, observation_name][~gaps_mask]
+
+                # Once again, work around Pandas being "helpful" by converting
+                # a single element array into a scalar.  Without this, indexing
+                # this particle's columns will explode.
+                if number_gaps == (particles_df.at[particle_id, "number observations"] - 1):
+                     #
+                     # NOTE: We must create a 2D array, shaped 1x1, so that
+                     #       Pandas doesn't promote it to a Series object (and,
+                     #       thus, creating a Series within a Series which is
+                     #       functionally a 1D array but has an index that it
+                     #       likes to print out) and then abuse the fact that we
+                     #       can reshape a NumPy array by manipulating its
+                     #       .shape attribute.
+                     #
+                    particles_df.at[particle_id, observation_name] = np.array( [[particles_df.at[particle_id, observation_name]]] )
+                    particles_df.at[particle_id, observation_name].shape = [1]
+
+            # Finally, reduce the observation count by the gaps we've removed.
+            particles_df.at[particle_id, "number observations"] -= number_gaps
+
+            # Move to the next particle if we eliminated all of the evaluations.
+            if particles_df.at[particle_id, "number observations"] == 0:
+                continue
 
         # Excise failed backward Euler (BE) evaluations if requested.  This
         # removes evaluations whose inputs match their BE outputs.
