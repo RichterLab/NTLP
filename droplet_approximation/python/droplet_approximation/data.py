@@ -1516,18 +1516,18 @@ def read_particles_data( particles_root, particle_ids, dirs_per_level, quiet_fla
             # BE failures typically occur at the beginning of a particle's life
             # though have been observed throughout simulations.
 
-            be_failure_mask = (particles_df.at[particle_id, "be statuses"] > 0)
+            be_failure_mask = ((particles_df.at[particle_id, "be statuses"] & BEStatus.FAILED_UPDATE) > 0)
 
             # Count the number of successive failures at the beginning so we can
             # adjust the particle's birth time accordingly.
-            if particles_df.at[particle_id, "be statuses"][0] > 0:
+            if (particles_df.at[particle_id, "be statuses"][0] & BEStatus.FAILED_UPDATE) > 0:
 
                 # Compute the index of the first non-failed observation so we
                 # can use it's simulation time as the start of this particle's
                 # life.
                 number_starting_failures = 1
                 for observation_index in range( 1, particles_df.at[particle_id, "number observations"] ):
-                    if particles_df.at[particle_id, "be statuses"][observation_index] == 0:
+                    if (particles_df.at[particle_id, "be statuses"][observation_index] & BEStatus.FAILED_UPDATE) == 0:
                         break
 
                     number_starting_failures += 1
