@@ -209,6 +209,10 @@ def do_iterative_bdf( input_parameters, times, **kwargs ):
 
     # Evaluate all but the first observation, as it's our input.
     for time_index in range( 1, input_parameters.shape[0] ):
+        if integration_times[time_index - 1] < 1.0e-10:
+            output_parameters[time_index, :] = output_parameters[time_index - 1, :]
+            continue
+
         output_parameters[time_index, :] = solve_ivp_float32_outputs( dydt,
                                                                       [0, integration_times[time_index - 1]],
                                                                       output_parameters[time_index - 1, :],
@@ -272,6 +276,9 @@ def do_iterative_inference( input_parameters, times, model, device ):
 
     with torch.no_grad():
         for time_index in range( 1,  normalized_data.shape[0] ):
+            if integration_times[time_index - 1] < 1.0e-10:
+                normalized_data[time_index, :2] = normalized_data[time_index - 1, :2]
+                continue
             normalized_data[time_index, :2] = eval_model( normalized_data[time_index - 1, :] )
 
     return scale_droplet_parameters( normalized_data[:, :2].to( "cpu" ).numpy() )
