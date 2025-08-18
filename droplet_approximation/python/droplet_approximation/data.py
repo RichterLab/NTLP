@@ -1532,7 +1532,12 @@ def read_particles_data( particles_root, particle_ids, dirs_per_level, quiet_fla
 
                     number_starting_failures += 1
 
-                particles_df.at[particle_id, "birth time"] = particles_df.at[particle_id, "times"][number_starting_failures]
+                # Check the corner case where *ALL* of the observations are BE
+                # failures and excising them will result in an empty particle.
+                # We retain the original birth and death times in that case so
+                # as to be consistent with the time range filtering from above.
+                if number_starting_failures != particles_df.at[particle_id, "number observations"]:
+                    particles_df.at[particle_id, "birth time"] = particles_df.at[particle_id, "times"][number_starting_failures]
 
             # Reduce the number of observations we have.
             particles_df.at[particle_id, "number observations"] -= be_failure_mask.sum()
