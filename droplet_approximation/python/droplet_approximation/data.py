@@ -1654,7 +1654,7 @@ def _read_raw_particle_data( particle_path ):
 
     """
 
-    observations_fp32  = np.fromfile( particle_path, dtype=np.float32 ).reshape( -1, ParticleRecord.SIZE.value )
+    observations_fp32  = np.fromfile( particle_path, dtype=np.float32 ).reshape( -1, ParticleRecord.SIZE.value ).copy( order="F" )
 
     # Sort the observations by time.
     #
