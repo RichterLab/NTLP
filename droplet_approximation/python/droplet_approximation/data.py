@@ -59,6 +59,27 @@ class BEStatus( IntEnum ):
     # critical.
     FAILED_UPDATE      = (NEG_QINF | LM_FAILED | INVALID_OUTPUT)
 
+    def get_failure_mask( array, bit_mask=FAILED_UPDATE ):
+        """
+        Gets the Boolean array representing a bit mask applied to each element
+        of an array.
+
+        Takes 2 arguments:
+
+          array    - Array of BE statues to locate failures in.
+          bit_mask - Optional integral value, comprised of the logical OR of the
+                     class' constants, to construct boolean_mask with.  If
+                     omitted, defaults to FAILED_UPDATE.
+
+        Returns 1 value:
+
+          boolean_mask - Array of Boolean values indicating where the logical
+                         AND of array and bit_mask was non-zero.
+
+        """
+
+        return (array & bit_mask) > 0
+
 class ParticleRecord( Enum ):
     """
     Container for constants describing the format of a raw particle record.
@@ -1460,7 +1481,7 @@ def read_particles_data( particles_root, particle_ids, dirs_per_level, quiet_fla
             continue
 
         # Backward Euler failures for this particle.
-        particles_df.at[particle_id, "number be failures"]     = (observations_int32[:-1, ParticleRecord.BE_STATUS_INDEX.value][timeline_mask[:-1]] & BEStatus.FAILED_UPDATE).sum()
+        particles_df.at[particle_id, "number be failures"]     = BEStatus.get_failure_mask( observations_int32[:-1, ParticleRecord.BE_STATUS_INDEX.value][timeline_mask[:-1]] ).sum()
         particles_df.at[particle_id, "be statuses"]            = observations_int32[:-1, ParticleRecord.BE_STATUS_INDEX.value][timeline_mask[:-1]]
 
         # Simulation timeline.
@@ -1516,7 +1537,7 @@ def read_particles_data( particles_root, particle_ids, dirs_per_level, quiet_fla
             # BE failures typically occur at the beginning of a particle's life
             # though have been observed throughout simulations.
 
-            be_failure_mask = ((particles_df.at[particle_id, "be statuses"] & BEStatus.FAILED_UPDATE) > 0)
+            be_failure_mask = BEStatus.get_failure_mask( particles_df.at[particle_id, "be statuses"] )
 
             # Count the number of successive failures at the beginning so we can
             # adjust the particle's birth time accordingly.
