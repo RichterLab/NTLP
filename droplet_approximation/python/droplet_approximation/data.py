@@ -1536,7 +1536,6 @@ def read_particles_data( particles_root, particle_ids, dirs_per_level, quiet_fla
 
             # BE failures typically occur at the beginning of a particle's life
             # though have been observed throughout simulations.
-
             be_failure_mask = BEStatus.get_failure_mask( particles_df.at[particle_id, "be statuses"] )
 
             # Count the number of successive failures at the beginning so we can
