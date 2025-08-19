@@ -760,11 +760,8 @@ def plot_particles( particles_df, force_flag=False, time_range=[-np.inf, np.inf]
     for particle_index in range( len( particles_df ) ):
         particle = particles_df.iloc[particle_index]
 
-        # Build this particle's timeline.
-        times = particle["birth time"] + np.cumsum( particle["integration times"] ) - particle["integration times"][0]
-
         # Identify the observations of interest.
-        times_mask = (times >= time_range[0]) & (times <= time_range[1])
+        times_mask = (particle["times"] >= time_range[0]) & (particle["times"] <= time_range[1])
 
         # Skip this particle if it's observations aren't within the requested
         # range.
@@ -784,7 +781,7 @@ def plot_particles( particles_df, force_flag=False, time_range=[-np.inf, np.inf]
         particle_label = _get_particle_label( particle )
 
         # Plot our quantities with labels
-        ax_h[0].plot( times[times_mask],
+        ax_h[0].plot( particle["times"][times_mask],
                       particle["integration times"][times_mask],
                       color=colors_map[particle_label],
                       label=particle_label )
@@ -802,11 +799,11 @@ def plot_particles( particles_df, force_flag=False, time_range=[-np.inf, np.inf]
             #
             # NOTE: These are labeled with the evaluation tag as a suffix.
             #
-            ax_h[1].plot( times[times_mask],
+            ax_h[1].plot( particle["times"][times_mask],
                           particle[evaluation_radii_name][times_mask],
                           color=colors_map[evaluation_label],
                           label=evaluation_label )
-            ax_h[2].plot( times[times_mask],
+            ax_h[2].plot( particle["times"][times_mask],
                           particle[evaluation_temperatures_name][times_mask],
                           color=colors_map[evaluation_label],
                           label=evaluation_label )
@@ -818,28 +815,28 @@ def plot_particles( particles_df, force_flag=False, time_range=[-np.inf, np.inf]
         ax_h[2].set_ylabel( "Kelvin" )
 
         # Now plot the environments for the particle.
-        ax_h[3].plot( times[times_mask],
+        ax_h[3].plot( particle["times"][times_mask],
                       particle["air temperatures"][times_mask],
                       color=colors_map[particle_label],
                       label=particle_label )
         ax_h[3].set_title( "Air Temperature" )
         ax_h[3].set_ylabel( "Kelvin" )
 
-        ax_h[4].plot( times[times_mask],
+        ax_h[4].plot( particle["times"][times_mask],
                       particle["relative humidities"][times_mask] * 100,
                       color=colors_map[particle_label],
                       label=particle_label )
         ax_h[4].set_title( "Relative Humidity" )
         ax_h[4].set_ylabel( "Percentage (%)" )
 
-        ax_h[5].plot( times[times_mask],
+        ax_h[5].plot( particle["times"][times_mask],
                       particle["salt masses"][times_mask],
                       color=colors_map[particle_label],
                       label=particle_label )
         ax_h[5].set_title( "Salt Mass" )
         ax_h[5].set_ylabel( "kg" )
 
-        ax_h[6].plot( times[times_mask],
+        ax_h[6].plot( particle["times"][times_mask],
                       particle["air densities"][times_mask],
                       color=colors_map[particle_label],
                       label=particle_label )
