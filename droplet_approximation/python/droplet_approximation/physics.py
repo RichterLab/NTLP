@@ -302,6 +302,88 @@ def dydt( t, y, parameters ):
 
     return [dy1dt, dy2dt]
 
+def dydt_solute( t, y, parameters ):
+    """
+    Differential equations governing a water droplet's radius and temperature as
+    a function of time, given the specified physical parameters.
+
+    Adapted from code provided by David Richter (droplet_integrator.py) in August 2024.
+    Changes made include:
+
+      - Accepting NumPy arrays for the parameters instead of having hard-coded values.
+
+        NOTE: While it allows for multiple parameters to be specified via additional rows
+              this does not necessarily work with scipy.solve_ivp()!
+
+      - Parameters are promoted to 64-bit floating point values so all internal
+        calculations are performed at maximum precision, resulting in 64-bit outputs.
+        It is the caller's responsibility for casting the results to a different precision.
+
+    Takes 3 arguments:
+
+      t          - Unused argument.  Required for the use of scipy.solve_ivp().
+      y          - NumPy array of droplet radii and temperatures.  May be specified
+                   as either a 1D vector (of length 2), or a 2D array (sized
+                   number_droplets x 2) though must be shape compatible with the
+                   parameters array.
+      parameters - NumPy array of droplet parameters containing solute term, air temperature,
+                   relative humidity, and rhoa.  May be specified as either a
+                   1D vector (of length 4), or a 2D array (sized number_droplets x 4)
+                   though must be shape compatible with the y array.
+
+    Returns 2 values:
+
+      dradius_dt      - The derivative of the droplet's radius with respect to time, shaped
+                        number_droplets x 1.
+      dtemperature_dt - The derivative of the droplet's temperature with respect to time,
+                        shaped number_droplets x 1.
+
+    """
+
+    #
+    # NOTE: We work in 64-bit precision regardless of the input
+    #       so we get an as accurate as possible answer.
+    #
+    r    = y[..., 0].astype( "float64" )
+    Tp   = y[..., 1].astype( "float64" )
+
+    solute_term = parameters[..., 0].astype( "float64" )
+    Tf          = parameters[..., 1].astype( "float64" )
+    RH          = parameters[..., 2].astype( "float64" )
+    rhoa        = parameters[..., 3].astype( "float64" )
+
+    rhow = np.float64( 1000 )
+    #Cpp  = np.float64( 4190 )  #CM1
+    Cpp  = np.float64( 4179 )  #NTLP
+    Mw   = np.float64( 0.018015 )
+    Ru   = np.float64( 8.3144 )
+    Gam  = np.float64( 7.28e-2 )
+    Shp  = np.float64( 2 )
+    Sc   = np.float64( 0.615 )
+    Pra  = np.float64( 0.715 )
+    Cpa  = np.float64( 1006.0 )
+    nuf  = np.float64( 1.57e-5 )
+    Lv   = np.float64( (25.0 - 0.02274*26)*10**5 )
+    Nup  = np.float64( 2 )
+
+    Volp = 4/3*np.pi*r**3
+
+    term1     = Lv*Mw/Ru*(1/Tf - 1/Tp)
+    term2     = 2*Mw*Gam/Ru/rhow/r/Tp
+    term3     = solute_term/(Volp*rhow)
+    exp_stuff = term1 + term2  - term3
+
+    #einf = 611.2*np.exp(17.67*(Tf-273.15)/(Tf-29.65))  #CM1, Bolton (1980, MWR)
+    einf  = 610.94*np.exp((17.6257*(Tf-273.15))/(243.04+(Tf-273.15)))  #NTLP
+    qinf  = RH/rhoa*(einf*Mw/Ru/Tf)
+    qstar = einf*Mw/Ru/Tp/rhoa*np.exp(exp_stuff)
+
+    dy1dt = 1/2*Shp*nuf*rhoa/Sc/rhow/r*(qinf - qstar)
+    dy2dt = -3/2*Nup*nuf*rhoa/Pra*Cpa/Cpp/rhow/r**2*(Tp - Tf) + 3*Lv/r/Cpp*dy1dt
+
+    return [dy1dt, dy2dt]
+
+
 def get_parameter_ranges():
     """
     Gets the current droplet parameter ranges as a dictionary mapping

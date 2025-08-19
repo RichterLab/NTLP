@@ -50,6 +50,7 @@ from .physics import DisplayType, \
                      display_parameter_ranges, \
                      droplet_equilibrium, \
                      dydt, \
+                     dydt_solute, \
                      get_parameter_ranges, \
                      normalize_droplet_parameters, \
                      scale_droplet_parameters, \
