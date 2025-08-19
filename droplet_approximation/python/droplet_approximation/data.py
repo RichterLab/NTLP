@@ -1549,6 +1549,30 @@ def read_particles_data( particles_root, particle_ids, dirs_per_level, quiet_fla
             particles_df.at[particle_id, evaluation_radii_name]        = evaluation_radii[timeline_mask[1:]]
             particles_df.at[particle_id, evaluation_temperatures_name] = evaluation_temperatures[timeline_mask[1:]]
 
+        # Work around Pandas being "helpful" by converting a single element
+        # array into a scalar.  Without this, two observation/single evaluation
+        # particles explode on use as the assumption that we have arrays of
+        # evaluations is fundamental to this DataFrame.
+        #
+        # NOTE: We must evaluate the Series' shape's length as we cannot take
+        #       the length of a scalar value.  We also must recreate the
+        #       Series object as simply assigning a single element array gets
+        #       reduced to a scalar if the destination is already a scalar.
+        #
+        if len( particles_df.at[particle_id, "times"].shape ) == 0:
+            for observation_name in OBSERVATION_NAMES:
+                #
+                # NOTE: We must create a 2D array, shaped 1x1, so that
+                #       Pandas doesn't promote it to a Series object (and,
+                #       thus, creating a Series within a Series which is
+                #       functionally a 1D array but has an index that it
+                #       likes to print out) and then abuse the fact that we
+                #       can reshape a NumPy array by manipulating its
+                #       .shape attribute.
+                #
+                particles_df.at[particle_id, observation_name] = np.array( [[particles_df.at[particle_id, observation_name]]] )
+                particles_df.at[particle_id, observation_name].shape = [1]
+
         # Drop the evaluations that have crazy integration times under the
         # assumption that we don't have a complete trace of this particle (some
         # observations occurred on a MPI rank whose outputs were not processed).
