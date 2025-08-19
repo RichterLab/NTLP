@@ -14,6 +14,172 @@ from .scoring import calculate_nrmse
 
 from itertools import islice
 
+def average_particles_data( particles_df, evaluation_tags, simulation_times, background_columns=[] ):
+    """
+    Gives radius/temperatures averages for every each time step across all particles
+    for given list of evaluation tags.
+
+    Takes 4 Arguments:
+      particles_df       - Pandas DataFrame of particle data to average
+      evaluation_tags    - String list of evaluation tags to average 
+      simulation_times   - Numpy Array of the time steps in the simulation to average.
+      background_columns - Optional String List containing list of other columns
+                           to average
+    
+    Returns 2 Values:
+      rt_averages         - Dictionary of evaluation_tag: averages, where averages is an array with:
+                            at index 0: an array of radius averages for the given evaluation tag at
+                                each time step.
+                            at index 1: an array of temperature averages for the given evaluation tag
+                                at each time step.
+      background_averages - Dictionary of background column name: averages, where averages is an array
+                            of the average value of that variable at each time step.
+    """
+
+    rt_averages         = {
+        evaluation_tag: np.zeros( shape=(simulation_times.shape[0], 2) )
+        for evaluation_tag in evaluation_tags
+    }
+    background_averages = {
+        column: np.zeros( shape=( simulation_times.shape[0] ) )
+        for column in background_columns
+    }
+    particle_counts = np.zeros( shape=simulation_times.shape[0], dtype=np.int32 )
+    
+    # Adds up the values for each evaluation tag
+    # and each background column for a particle
+    # at each time step.
+    def _sum_particle( particle_df ):
+        EPSILON = 0.0005
+        
+        # Identify the time indexes in the particle's
+        # lifetime that are being averaged
+        time_indexes = np.searchsorted( simulation_times, particle_df["times"] - EPSILON )
+
+        mask = np.abs( simulation_times[[time_indexes]][0] - particle_df["times"] ) < EPSILON
+        time_indexes = time_indexes[mask]
+        
+        # Sum radius/temperature and background columns for
+        # relavent times
+        particle_counts[time_indexes] += 1
+        for evaluation_tag in evaluation_tags:
+                rt_averages[evaluation_tag][time_indexes, 0] += (
+                    particle_df["output {:s} radii".format( evaluation_tag )][mask])
+                rt_averages[evaluation_tag][time_indexes, 1] += (
+                    particle_df["output {:s} temperatures".format( evaluation_tag )][mask])
+
+        for column in background_columns:
+            background_averages[column][time_indexes] += particle_df[column][mask]
+
+    particles_df.apply( _sum_particle, axis=1 )
+
+    # Average the results
+    for evaluation_tag in evaluation_tags:
+        rt_averages[evaluation_tag][:, 0] /= particle_counts
+        rt_averages[evaluation_tag][:, 1] /= particle_counts
+        
+    for _, average in background_averages.items():
+        average /= particle_counts
+
+    return rt_averages, background_averages
+
+def bin_particles_data( particles_df, evaluation_tags, histogram_times, radbins, tempbins ):
+    """
+    Generates histogram counts for radius/temperature at the specified times.
+
+    Takes 5 arguments:
+      particles_df    - DataFrame row corresponding to a particular particle.
+      evaluation_tags - List of evaluation tags to average.
+      histogram_times - Array of times to generate histograms.
+      radbins         - Array of radius histogram bin edges.
+      tempbins        - Array of temperature histogram bin edges.
+
+    Returns 1 value:
+      histograms - Dictionary. Keys are evaluation tags. Values are each a list containing:
+                   At index 0: Radius histograms. Array sized histogram_times.shape[0] x radbins.shape[0].
+                               Contains the counts for each bin at each histogram time.
+                   At index 1: Temperature histograms. Array sized histogram_times.shape[0] x tempbins.shape[0].
+                               Contains the counts for each bin at each histogram time.
+    """
+    histograms = {
+            evaluation_tag: [np.zeros( shape=(histogram_times.shape[0], radbins.shape[0]) ),
+                             np.zeros( shape=(histogram_times.shape[0], tempbins.shape[0]) )]
+            for evaluation_tag in evaluation_tags
+    }
+
+    def _bin_particle( particle_df ):
+        """
+        Bins a particular particle's radius/temperature for each histogram time.
+        """
+
+        # Find the histogram times that fall in a particle's lifetime
+        # with some rounding to account for any rounding errors.
+        EPSILON = 0.0005
+        timewindow_start         = np.searchsorted( histogram_times,
+                                                    particle_df["times"][0]  + EPSILON ) - 1
+        timewindow_end           = np.searchsorted( histogram_times,
+                                                    particle_df["times"][-1] + EPSILON ) - 1
+        relavent_histogram_times = histogram_times[timewindow_start:timewindow_end]
+        
+        # Find the indexes in the particles lifetime that correspond to each histogram
+        time_indexes      = np.searchsorted( particle_df["times"], relavent_histogram_times)
+        histogram_indexes = np.arange( timewindow_start, timewindow_end )
+
+        # BE failures can cause misalignments in the times array. Remove any "matched" times that are
+        # more than EPISLON different from the stipulated histogram time
+        mask                     = np.where( np.abs( relavent_histogram_times
+                                                   - particle_df["times"][[time_indexes]][0] ) < EPSILON )
+        time_indexes             = time_indexes[mask]
+        relavent_histogram_times = relavent_histogram_times[mask]
+        histogram_indexes        = histogram_indexes[mask]
+
+        if relavent_histogram_times.shape[0] == 0:
+            return
+        
+        for evaluation_tag, hist in histograms.items():
+            # Record the radius/temperature for each histogram time
+            hist_radii        = particle_df["output {:s} radii".format( 
+                                            evaluation_tag )][[time_indexes]][0]
+            hist_temperatures = particle_df["output {:s} temperatures".format(
+                                            evaluation_tag )][[time_indexes]][0]
+
+            for data_index, histogram_index in enumerate( histogram_indexes ):
+                # Increment the bin corresponding to the radius/temperature
+                hist[0][histogram_index, np.searchsorted( radbins, hist_radii[data_index] )]         += 1
+                hist[1][histogram_index, np.searchsorted( tempbins, hist_temperatures[data_index] )] += 1
+
+    particles_df.apply( _bin_particle, axis=1 )
+
+    return histograms
+
+def get_particles_data_simulation_times( particles_df ):
+    """
+    Generates one "simulation times" numpy array that includes 
+    all the time steps for all of the particles supplied.
+
+    Takes 1 Argument:
+      particles_df - DataFrame containing all of the particles from
+                     which to construct a timeline.
+    
+    Returns 1 Argument:
+      simulation_times - Numpy Array containing all time steps present
+                         in the DataFrame.
+    """
+    simulation_times = particles_df.iloc[0]["times"]
+
+    def _extend_timeline( particle_df ):
+        # This used to be fancier - it would just extend the array if there were
+        # missing steps at the beginning or end. However, since there are occasionally
+        # gaps in our timelines due to bugs in Spray, we have to do the quick and
+        # dirty method of just intersecting all of the arrays.
+        nonlocal simulation_times
+        simulation_times = np.union1d( simulation_times, particle_df["times"] )
+
+    particles_df[1:].apply( _extend_timeline, axis=1 )
+
+    return np.array( simulation_times )
+
+
 def plot_droplet_size_temperatures( times, size_temperatures, background_parameters={},
                                     compare_flag=None, ax_h=None, title_string=None ):
     """
