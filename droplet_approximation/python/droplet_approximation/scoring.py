@@ -11,7 +11,8 @@ from sklearn.mixture import BayesianGaussianMixture
 
 from torch import multiprocessing
 
-from .data import ParticleRecord, \
+from .data import BE_TAG_NAME, \
+                  ParticleRecord, \
                   get_evaluation_file_path, \
                   get_particle_file_path, \
                   read_particles_data, \
@@ -470,14 +471,20 @@ def particle_scoring_pipeline( particles_root, particle_ids_batches, dirs_per_le
             p_df                = particles_df.iloc[particle_index]
             simulation_times    = p_df["times"]
             particle_parameters = np.stack( p_df[[
-                                      "input {:s} radii".format( reference_evaluation_tag ),
-                                      "input {:s} temperatures".format( reference_evaluation_tag ),
+                                      "input {:s} radii".format( BE_TAG_NAME ),
+                                      "input {:s} temperatures".format( BE_TAG_NAME ),
                                       "salt masses",
                                       "air temperatures",
                                       "relative humidities",
                                       "air densities",
                                       "integration times"
                                       ]].to_numpy(), axis=-1 )
+
+            # If there are no outputs to compare, ignore this particle
+            if p_df["output {:s} radii".format( reference_evaluation_tag )].shape == ():
+                continue
+            elif p_df["output {:s} radii".format( reference_evaluation_tag )].shape[0] == 0:
+                continue
 
             normed_reference_output  = norm( np.stack( p_df[["output {:s} radii".format( reference_evaluation_tag ), 
                                                               "output {:s} temperatures".format( reference_evaluation_tag )
@@ -486,17 +493,19 @@ def particle_scoring_pipeline( particles_root, particle_ids_batches, dirs_per_le
                                                               "output {:s} temperatures".format( comparison_evaluation_tag )
                                                              ]].to_numpy(), axis=-1 ) )
 
+            mask = ~np.isnan( normed_reference_output[:, 0] ) & ~np.isnan( normed_comparison_output[:, 0] )
             if filter_be_failures:
-                be_mask                  = p_df["be statuses"] == 0
-                particle_parameters      = particle_parameters[be_mask, :]
-                normed_reference_output  = normed_reference_output[be_mask, :]
-                normed_comparison_output = normed_comparison_output[be_mask, :]
-                simulation_times         = simulation_times[be_mask]
+                mask = mask & (p_df["be statuses"] == 0)
 
-            # If there are no trials to compare, ignore this particle
-            if normed_reference_output.shape[0] == 0:
+            # If we're masking out all remaining trials, ignore
+            if np.sum( mask ) == 0:
                 continue
 
+            particle_parameters      = particle_parameters[mask, :]
+            normed_reference_output  = normed_reference_output[mask, :]
+            normed_comparison_output = normed_comparison_output[mask, :]
+            simulation_times         = simulation_times[mask]
+ 
             # Calculating the overall NRMSE directly would require copying all of the particle
             # data frames together. Instead, we just copy the square error and the sum of the truth
             # parameters for each particle so that net NRMSE can be calculated later.
