@@ -254,53 +254,6 @@ def be_success_mask( radius_data ):
     #
     return np.append( mask, True )
 
-def clean_training_data( file_name ):
-    """
-    Removes invalid droplet parameters found in the supplied file and overwrites it
-    so it only contains valid parameters.  Currently this only filters output
-    parameters that are outside of the expected ranges by more than 3% on either end.
-
-    NOTE: This function isn't normally needed, but there may be times where invalid
-          outputs have been written but the vast majority are good and need to be
-          salvaged.
-
-    Takes 1 argument:
-
-      file_name - Path to the file containing droplet parameters written by
-                  create_training_file().  This file is overwritten with the
-                  filtered droplet parameters.
-
-    Returns 2 values:
-
-      number_parameters     - Number of droplet parameters in the original file.
-      number_bad_parameters - Number of droplet parameters that were filtered out.
-
-    """
-
-    # Get the current parameter ranges.
-    parameter_ranges = get_parameter_ranges()
-
-    #
-    # NOTE: This isn't terribly efficient and assumes there is enough RAM to
-    #       read, make a copy, and write back out.
-    #
-    input_parameters, output_parameters, times = read_training_file( file_name )
-
-    bad_data_mask = ((output_parameters[:, 0] < 10.0**parameter_ranges["radius"][0] * (100 - 3) / 100) |
-                     (output_parameters[:, 0] > 10.0**parameter_ranges["radius"][1] * (100 + 3) / 100) |
-                     (output_parameters[:, 1] < parameter_ranges["temperature"][0] * (100 - 3) / 100) |
-                     (output_parameters[:, 1] > parameter_ranges["temperature"][1] * (100 + 3) / 100))
-
-    input_outputs = np.hstack( (input_parameters,
-                                times.reshape( (-1, 1) ),
-                                output_parameters) )
-
-    # Overwrite the original file with only the good data.
-    input_outputs[~bad_data_mask, :].tofile( file_name )
-
-    # Return the counts of good and bad data so the caller knows what was done.
-    return input_parameters.shape[0], bad_data_mask.sum()
-
 def convert_NTLP_trace_array_to_particle_files( trace_array, particles_root, dirs_per_level ):
     """
     Converts an array of NTLP trace observations into a one or more raw particle
@@ -454,35 +407,6 @@ def create_droplet_batch( number_droplets, number_evaluations=1, solve_ivp_atol=
     from a slightly larger distribution than the anticipated use cases (spanning [1e-3, 1e1])
     so as to increase the performance at the edges of the range.
 
-    Weird parameters encountered, both as inputs to the ODEs and the outputs returned, are
-    logged and replaced with valid inputs and outputs to ensure the batch is suitable
-    for training.  Logging returns lists of parameters categorized by the reason they were
-    filtered out.
-
-    The following categories exist for weird input parameters:
-
-      evaluation_warning - The parameters generated a floating point exception during
-                           evaluation of the ODEs
-      failed_solve       - The ODEs failed to converge as a small enough timestep could
-                           not be identified
-      invalid_inputs     - XXX: Greg can't remember what triggered this and scipy.solve_ivp()
-                                can raise ValueError in a number of ways
-
-    The following categories exist for weird output parameters:
-
-      radius_nonpositive      - The ODEs generated a physically impossible, negative radius
-      radius_too_small        - The ODEs generated a radius smaller than the expected range
-      radius_too_large        - The ODEs generated a radius larger than the expected range
-      temperature_nonpositive - The ODEs generated a physically impossible, negative temperature
-      temperature_too_small   - The ODEs generated a temperature smaller than the expected range
-      temperature_too_large   - The ODEs generated a temperature larger than the expected range
-
-    NOTE: The use of linear_time_flag==True leads to a poorly sampled t_final parameter
-          that results in poor model performance for DNS time scales (i.e. t_final in
-          [1e-3, 1e-1]) unless trained on a *lot* of droplets.  The default leads to
-          decent performance on both DNS time scales and LES time scales (i.e. t_final
-          in [1e-1, 1e1]).
-
     Takes 4 arguments:
 
       number_droplets    - Number of droplets to generate parameters for.
@@ -499,7 +423,7 @@ def create_droplet_batch( number_droplets, number_evaluations=1, solve_ivp_atol=
                            tolerance used by solve_ivp().  If omitted, defaults to
                            physics.BDF_TOLERANCE_RELATIVE.
 
-    Returns 5 values:
+    Returns 3 values:
 
       random_inputs     - Array, sized number_droplets x 6, containing the droplets
                           radii, temperatures, salt mass, air temperature, relative
@@ -508,10 +432,6 @@ def create_droplet_batch( number_droplets, number_evaluations=1, solve_ivp_atol=
                           radii and temperatures.
       integration_times - Array, sized number_droplets, containing the times corresponding
                           to the associated random_inputs and random_outputs.
-      weird_inputs      - Dictionary containing lists of weird input parameters.  Each
-                          key represents a category of "weird".
-      weird_outputs     - Dictionary containing lists of weird output parameters.  Each
-                          key represents a category of "weird".
 
     """
 
@@ -581,20 +501,6 @@ def create_droplet_batch( number_droplets, number_evaluations=1, solve_ivp_atol=
                                                                                np.log10( TIME_RANGE[1] ) ),
                                                                           number_evaluations )
 
-    # We count the number of problematic parameters we encounter.  Additionally,
-    # track the reason why we found the parameters problematic along with the
-    # parameters themselves.
-    weird_inputs    = { "evaluation_warning": [],
-                        "failed_solve":       [],
-                        "invalid_inputs":     [],
-                        "timeout_inputs":     [] }
-    weird_outputs   = { "radius_nonpositive":      [],
-                        "radius_too_small":        [],
-                        "radius_too_large":        [],
-                        "temperature_nonpositive": [],
-                        "temperature_too_small":   [],
-                        "temperature_too_large":   [] }
-
     # XXX: Need to figure out if we can simply evaluate the ODEs at number_evaluations-many points
     #      and re-roll only the points that are outside the expected ranges.  Right now we evaluate
     #      the ODEs for every t_final even when we could evaluate it once for a list of multiple so
@@ -624,13 +530,11 @@ def create_droplet_batch( number_droplets, number_evaluations=1, solve_ivp_atol=
 
                 # Did the solve fail (e.g. dydt's exponentials overflowed, BDF's
                 # LU solve failed, etc)?
-                if np.any( np.isnan( random_outputs[droplet_index, :] ) ):
-                    weird_inputs["failed_solve"].append( [y0, parameters, t_final, "solve_ivp() failed"] )
-                else:
+                if not np.any( np.isnan( random_outputs[droplet_index, :] ) ):
                     good_parameters_flag = True
 
-                    # Check that we didn't get a physically impossible solution.  These
-                    # will be logged and we'll reroll the dice to replace them.
+                    # Check that we didn't get a physically impossible solution.
+                    # We reroll the dice to replace them.
                     #
                     # NOTE: We don't strictly need to check for negative temperatures as
                     #       that will get covered in validate_output_parameters() but
@@ -638,36 +542,27 @@ def create_droplet_batch( number_droplets, number_evaluations=1, solve_ivp_atol=
                     #       cases.
                     #
                     if random_outputs[droplet_index, 0] <= 0.0:
-                        weird_outputs["radius_nonpositive"].append( [y0, parameters, t_final, random_outputs[droplet_index, :]] )
                         good_parameters_flag = False
                     elif random_outputs[droplet_index, 1] <= 0.0:
-                        weird_outputs["temperature_nonpositive"].append( [y0, parameters, t_final, random_outputs[droplet_index, :]] )
                         good_parameters_flag = False
 
                     # Check that we didn't get strange solutions that are outside of the
                     # expected ranges.  These will also be logged and replaced.
                     if random_outputs[droplet_index, 0] < 10.0**parameter_ranges["radius"][0] * (100 - 3) / 100:
-                        weird_outputs["radius_too_small"].append( [y0, parameters, t_final, random_outputs[droplet_index, :]] )
                         good_parameters_flag = False
                     elif random_outputs[droplet_index, 0] > 10.0**parameter_ranges["radius"][1] * (100 + 3) / 100:
-                        weird_outputs["radius_too_large"].append( [y0, parameters, t_final, random_outputs[droplet_index, :]] )
                         good_parameters_flag = False
 
                     if random_outputs[droplet_index, 1] < parameter_ranges["temperature"][0] * (100 - 3) / 100:
-                        weird_outputs["temperature_too_small"].append( [y0, parameters, t_final, random_outputs[droplet_index, :]] )
                         good_parameters_flag = False
                     elif random_outputs[droplet_index, 1] > parameter_ranges["temperature"][1] * (100 + 3) / 100:
-                        weird_outputs["temperature_too_large"].append( [y0, parameters, t_final, random_outputs[droplet_index, :]] )
                         good_parameters_flag = False
 
                     # Jump to the next droplet's parameters if we didn't detect a problem.
                     if good_parameters_flag:
                         break
 
-            except RuntimeWarning as e:
-                weird_inputs["evaluation_warning"].append( [y0, parameters, t_final, str( e )] )
             except TimeoutError as e:
-                weird_inputs["timeout_inputs"].append( [y0, parameters, t_final, str( e )] )
                 nudge_count += 1
                 if nudge_count < 3:
                     # Adjust the salt content by 0.01% and see if that gets past
@@ -678,8 +573,6 @@ def create_droplet_batch( number_droplets, number_evaluations=1, solve_ivp_atol=
                     # Fall through and try a completely different set of parameters
                     # if we couldn't quickly find a solution.
                     nudge_count = 0
-            except ValueError as e:
-                weird_inputs["invalid_inputs"].append( [y0, parameters, t_final, str( e )] )
 
             # We failed to create acceptable parameters.  Reroll the dice for
             # this droplet and try again.
@@ -690,12 +583,9 @@ def create_droplet_batch( number_droplets, number_evaluations=1, solve_ivp_atol=
             random_inputs[droplet_index, 1] = (random_inputs[droplet_index, 3] +
                                                np.random.uniform( -3, 3 ))
 
-    # XXX: Warn users if there were strange droplets?  No simple way to see if any
-    #      of the lists associated with weird_*'s keys are non-empty.
+    return random_inputs, random_outputs, integration_times
 
-    return random_inputs, random_outputs, integration_times, weird_inputs, weird_outputs
-
-def create_training_file( file_name, number_droplets, weird_file_name=None, user_batch_size=None, quiet_flag=True ):
+def create_training_file( file_name, number_droplets, user_batch_size=None, quiet_flag=True ):
     """
     Generates random droplet parameters, both inputs and their corresponding
     ODE outputs, and writes them as fixed-size binary records to a file.  This
@@ -718,15 +608,11 @@ def create_training_file( file_name, number_droplets, weird_file_name=None, user
 
     The file generated can be read via read_training_file().
 
-    Takes 5 arguments:
+    Takes 4 arguments:
 
       file_name       - Path to the file to write the droplet parameters.  This
                         is overwritten if it exists.
       number_droplets - The number of droplets to generate.
-      weird_file_name - Optional path to write any weird parameters encountered
-                        during batch generation.  If specified an Excel spreadsheet
-                        file is written, otherwise weird parameters are silently
-                        ignored.
       user_batch_size - Optional batch size specifying the number of parameters
                         to generate at once.  If omitted,
       quiet_flag      - Optional flag specifying whether execution should be quiet.
@@ -746,10 +632,6 @@ def create_training_file( file_name, number_droplets, weird_file_name=None, user
     # the batch size does not evenly divide the number of droplets.
     number_batches = (number_droplets + BATCH_SIZE - 1) // BATCH_SIZE
 
-    # Dictionaries for tracking weird parameters.
-    weird_inputs  = {}
-    weird_outputs = {}
-
     with open( file_name, "wb" ) as output_fp:
         for batch_index in range( number_batches ):
 
@@ -768,13 +650,7 @@ def create_training_file( file_name, number_droplets, weird_file_name=None, user
             # Get the next batch of droplets.
             (inputs,
              outputs,
-             times,
-             batch_weird_inputs,
-             batch_weird_outputs) = create_droplet_batch( batch_size )
-
-            # Track the weirdness for post-mortem analysis.
-            weird_inputs  = merge_weird_parameters( weird_inputs, batch_weird_inputs )
-            weird_outputs = merge_weird_parameters( weird_outputs, batch_weird_outputs )
+             times) = create_droplet_batch( batch_size )
 
             inputs_outputs = np.hstack( (inputs,
                                          times.reshape( (batch_size, 1) ),
@@ -782,11 +658,6 @@ def create_training_file( file_name, number_droplets, weird_file_name=None, user
 
             # Serialize the array
             inputs_outputs.tofile( output_fp )
-
-    if weird_file_name is not None:
-        write_weird_parameters_to_spreadsheet( weird_file_name,
-                                               weird_inputs,
-                                               weird_outputs )
 
 def get_evaluation_column_names( evaluation_tag ):
     """
@@ -932,214 +803,6 @@ def get_particles_index_path( particles_root ):
     """
 
     return "{:s}/particles.index".format( particles_root )
-
-def merge_weird_parameters( parameters_1, parameters_2 ):
-    """
-    Merge two dictionaries of lists into a separate copy containing the
-    concatenated lists of both.  All list entries of the first dictionary
-    come before the first entry of the second dictionary when the first
-    has a non-empty list.
-
-    Takes 2 arguments:
-
-      parameters_1 - 1st dictionary of lists to merge.
-      parameters_2 - 2nd dictionary of lists to merge.
-
-    Returns 1 value:
-
-      merged_parameers - Dictionary containing the merged lists.
-
-    """
-
-    merged_parameters = parameters_1.copy()
-
-    for type_name, weird_things in parameters_2.items():
-        if type_name in merged_parameters:
-            merged_parameters[type_name].extend( weird_things )
-        else:
-            merged_parameters[type_name] = weird_things
-
-    return merged_parameters
-
-def write_weird_parameters_to_spreadsheet( file_name, weird_inputs, weird_outputs ):
-    """
-    Creates an Excel file containing one spreadsheet per type of weird inputs or
-    outputs.
-
-    See create_droplet_batch() for details on weird droplet inputs and outputs.
-
-    Takes 3 arguments:
-
-      file_name     - Path to the spreadsheet to create.  If it exists it is
-                      overwritten.
-      weird_inputs  - Dictionary of lists representing weird input droplet
-                      parameters.
-      weird_outputs - Dictionary of lists representing weird output droplet
-                      parameters.
-
-    Returns nothing.
-
-    """
-
-    # XXX: move this
-    import pandas as pd
-
-    # Open the file for writing, overwriting an existing file if necessary.
-    with pd.ExcelWriter( file_name ) as writer:
-
-        # Create a DataFrame for each category of input parameters weirdness.
-        for type_name, weird_things in weird_inputs.items():
-            sheet_name = "inputs-{:s}".format( type_name )
-
-            # Columns in the DataFrame.
-            columns = ["initial_radius",
-                       "initial_temperature",
-                       "salt_mass",
-                       "air_temperature",
-                       "relative_humidity",
-                       "rhoa",
-                       "t_final",
-                       "error"]
-
-            # Convert our list of lists of NumPy arrays to lists of lists
-            # so spreadsheet cells contain a single value.
-            weird_things_listified = []
-            for weird_thing in weird_things:
-                weird_thing_listified = []
-
-                weird_thing_listified.extend( weird_thing[0].tolist() )
-                weird_thing_listified.extend( weird_thing[1].tolist() )
-                weird_thing_listified.extend( weird_thing[2:] )
-
-                weird_things_listified.append( weird_thing_listified )
-
-            # Build a DataFrame and write it as a new sheet.
-            filtered_df = pd.DataFrame( weird_things_listified, columns=columns )
-            filtered_df.to_excel( writer, sheet_name=sheet_name, index=False )
-
-        # Create a DataFrame for each category of output parameters weirdness.
-        for type_name, weird_things in weird_outputs.items():
-            sheet_name = "outputs-{:s}".format( type_name )
-
-            # Columns in the DataFrame.
-            columns = ["initial_radius",
-                       "initial_temperature",
-                       "salt_mass",
-                       "air_temperature",
-                       "relative_humidity",
-                       "rhoa",
-                       "t_final",
-                       "radius",
-                       "temperature"]
-
-            # Convert our list of lists of NumPy arrays to lists of lists
-            # so spreadsheet cells contain a single value.
-            weird_things_listified = []
-            for weird_thing in weird_things:
-                weird_thing_listified = []
-
-                weird_thing_listified.extend( weird_thing[0].tolist() )
-                weird_thing_listified.extend( weird_thing[1].tolist() )
-                weird_thing_listified.append( weird_thing[2] )
-                weird_thing_listified.extend( weird_thing[3].tolist() )
-
-                weird_things_listified.append( weird_thing_listified )
-
-            # Build a DataFrame and write it as a new sheet.
-            filtered_df = pd.DataFrame( weird_things_listified, columns=columns )
-            filtered_df.to_excel( writer, sheet_name=sheet_name, index=False )
-
-def normalize_NTLP_data( df ):
-    """
-    Adds columns for normalized droplet parameters to a NTLP dataframe from
-    `read_NTLP_data`.
-
-    Takes 1 argument:
-
-      df  - Pandas DataFrame from `read_NTLP_data`.
-
-    Returns nothing
-    """
-
-    # Get the current parameter ranges.
-    parameter_ranges = get_parameter_ranges()
-
-    # Normalize inputs
-    df["normalized input radius"]      = (np.log10(df["input radius"]) - np.mean( parameter_ranges["radius"] )) / (np.diff( parameter_ranges["radius"])/2)
-    df["normalized input temperature"] = (df["input temperature"] - np.mean( parameter_ranges["temperature"] )) / (np.diff( parameter_ranges["temperature"] )/2)
-    df["normalized salt mass"]         = (np.log10(df["salt mass"]) - np.mean( parameter_ranges["salt_mass"] )) / (np.diff( parameter_ranges["salt_mass"] )/2)
-    df["normalized air temperature"]   = (df["air temperature"] - np.mean( parameter_ranges["air_temperature"] )) / (np.diff( parameter_ranges["air_temperature"] )/2)
-    df["normalized relative humidity"] = (df["relative humidity"] - np.mean( parameter_ranges["relative_humidity"] )) / (np.diff( parameter_ranges["relative_humidity"] )/2)
-    df["normalized air density"]       = (df["air density"] - np.mean( parameter_ranges["rhoa"] )) / (np.diff( parameter_ranges["rhoa"])/2)
-
-    # Normalize outputs
-    df["normalized output radius"]      = (np.log10(df["output radius"]) - np.mean( parameter_ranges["radius"] )) / (np.diff( parameter_ranges["radius"] )/2)
-    df["normalized output temperature"] = (df["output temperature"] - np.mean( parameter_ranges["temperature"] )) / (np.diff( parameter_ranges["temperature"] )/2)
-
-def read_NTLP_data( file_name, number_ranks ):
-    """
-    Reads all of the fixed-size binary records from the path specified and returns
-    a pandas DataFrame containing the processed data.
-
-    Takes 2 argument:
-
-      file_name           - String, path to NTLP dump
-      number_ranks        - Integer, number of MPI ranks in the simulation that generated
-                            the NTLP trace.
-
-    Returns 1 value:
-
-      df  - Pandas DataFrame containing:
-        particle id         - integer, equals number_ranks x particle id + processor rank
-        be flag             - integer flag, 0 if backwards euler failed to produce
-                              an output. 1 if it successfully produced an output.
-        time                - float, simulation time at which this sample was taken
-        input radius        - float, radius of the particle
-        input temperatur    - float, temperature of the particle
-        salt mass           - float, salt mass of the particle
-        air temperature     - float, ambient air temperature around particle
-        relative humidity   - float, relative humidty at particle's surface
-        air density         - float, air density around the particle
-        integration time    - float, time between given time step until next time step
-                              if `be_flag==1` and the next sample has the same particle.
-                              Otherwise, `0`.
-        output radius       - float, the radius at the next time step if `be flag==1`
-                              and the next sample has the same particle. Otherwise, `0`.
-        output temperature  - float, the temperature at the next time step if `be flag==1`
-                              and the next sample has the same particle. Otherwise, `0`.
-
-    """
-
-    record_data_type = np.dtype( [("particle id",       np.int32),
-                                  ("be flag",           np.int32),
-                                  ("time",              np.float32),
-                                  ("input radius",      np.float32),
-                                  ("input temperature", np.float32),
-                                  ("salt mass",         np.float32),
-                                  ("air temperature",   np.float32),
-                                  ("relative humidity", np.float32),
-                                  ("air density",       np.float32)] )
-
-    inputs_outputs = np.fromfile( file_name, dtype=record_data_type )
-
-    df = pd.DataFrame( data=inputs_outputs,
-                       columns=record_data_type.names )
-
-    df["processor"] = df["particle id"] % number_ranks
-
-    df.sort_values( by=["particle id", "time"], ascending=True, inplace=True )
-
-    # Calculate outputs and dt, set to 0 if be failed or new particle.
-    #
-    # NOTE: Failed backward Euler is denoted as a non-zero value.
-    #
-    calculate_output_flags = (df["be flag"] == 0) & (df["particle id"].diff( periods=-1 ) == 0)
-
-    df["integration time"]   = calculate_output_flags * -df["time"].diff( periods=-1 )
-    df["output radius"]      = calculate_output_flags *  df["input radius"].shift( periods=-1 )
-    df["output temperature"] = calculate_output_flags *  df["input temperature"].shift( periods=-1 )
-
-    return df
 
 def _read_particles_data_wrapper( particles_root, particle_ids, dirs_per_level, kwargs ):
     """

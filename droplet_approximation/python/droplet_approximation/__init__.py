@@ -19,7 +19,6 @@ from .data import BE_TAG_NAME, \
                   batch_convert_NTLP_traces_to_particle_files, \
                   batch_read_particles_data, \
                   be_success_mask, \
-                  clean_training_data, \
                   convert_NTLP_trace_to_particle_files, \
                   convert_NTLP_trace_array_to_particle_files, \
                   create_droplet_batch, \
@@ -28,13 +27,9 @@ from .data import BE_TAG_NAME, \
                   get_evaluation_file_path, \
                   get_particle_file_path, \
                   get_particles_index_path, \
-                  merge_weird_parameters, \
-                  normalize_NTLP_data, \
-                  read_NTLP_data, \
                   read_particles_data, \
                   read_training_file, \
-                  write_particles_index, \
-                  write_weird_parameters_to_spreadsheet
+                  write_particles_index
 from .models import SimpleNet, \
                     ResidualNet, \
                     do_inference, \
