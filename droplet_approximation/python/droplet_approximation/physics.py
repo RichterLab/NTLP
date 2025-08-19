@@ -133,6 +133,76 @@ def display_parameter_ranges( parameter_ranges, display_type=DisplayType.HUMAN, 
     # Display the range.
     print( display_str )
 
+def droplet_equilibrium( droplet_parameters ):
+    """
+    Uses ported BE code to calculate the droplet equilibrium.
+
+    Takes 1 Argument:
+      droplet_parameters - NumPy array of parameters to calculate the equilibria of.
+                           Sized number_droplets x 6.  May either be
+                           1D, for a single droplet, or 2D for multiple droplets.
+                           The parameters are, in order: radius, particle temperature,
+                           solute term (NOT salt mass), air temperature, relative humidity,
+                           and air density.
+
+    Returns 2 Values:
+      equilibria - Numpy array of radius/temperature equilibria. If no equilibrium is found, returns
+                   the inputed radius/temperature. This follows the behavior found in NTLP.
+      flags      - Whether a successful equilibrium was found. Note: if RH > 100%, the equilibrium
+                   only has imaginary roots ==> there will be flags.
+    """
+
+    r           = droplet_parameters[..., 0]
+    Tp          = droplet_parameters[..., 1]
+    solute_term = droplet_parameters[..., 2]
+    Tf          = droplet_parameters[..., 3]
+    RH          = droplet_parameters[..., 4]
+    rhoa        = droplet_parameters[..., 5]
+
+    rhow = np.float64( 1000 )
+    rhos = np.float64( 2000 )
+    Mw   = np.float64( 0.018015 )
+    Ru   = np.float64( 8.3144 )
+    Gam  = np.float64( 7.28e-2 )
+
+    flag  = np.zeros_like( r )
+
+    einf = 610.94*np.exp((17.6257*(Tf-273.15))/(243.04+(Tf-273.15)))  #NTLP
+    qinf = RH/rhoa*(einf*Mw/Ru/Tf)
+    #qinf = RH/rhoa*(einf*Mw/Ru/Tf)
+
+    pi2   = 2.0 * np.pi
+    
+    a = -(2*Mw*Gam)/(Ru*rhow*Tf)/np.log((Ru*Tf*rhoa*qinf)/(Mw*einf))
+    # This line was changed from BE to account for using
+    # solute term instead of salt mass. There was no rhow
+    # term present in the original equation, so 1/rhow had
+    # to be added to correct for the rhow coefficient in solute_term.
+    c = (solute_term)/((2.0/3.0)*pi2*rhow)/np.log((Ru*Tf*rhoa*qinf)/(Mw*einf))
+    
+    Q = (a**2.0)/9.0
+    R = (2.0*a**3.0+27.0*c)/54.0
+    M = R**2.0-Q**3.0
+    val = (R**2.0)/(Q**3.0)
+
+    guess = Q
+    
+    mask = M<0
+    
+    theta = np.acos(R/np.sqrt(Q**3.0))
+    guess[mask] = (-(2*np.sqrt(Q)*np.cos((theta-pi2)/3.0))-a/3.0)[mask]
+    
+    guess[guess<0] = (-(2*np.sqrt(Q)*np.cos((theta+pi2)/3.0))-a/3.0)[guess < 0]
+    
+    S = -(R/np.abs(R))*(np.abs(R)+np.sqrt(M))**(1.0/3.0)
+    T = Q/S
+    guess[~mask] = (S + T - a/3.0)[~mask]
+    
+    flag[guess < 0] = 1
+    guess[guess < 0] = r[guess < 0]
+
+    return guess, flag
+
 def dydt( t, y, parameters ):
     """
     Differential equations governing a water droplet's radius and temperature as

@@ -48,6 +48,7 @@ from .models import SimpleNet, \
                     weighted_mse_loss
 from .physics import DisplayType, \
                      display_parameter_ranges, \
+                     droplet_equilibrium, \
                      dydt, \
                      get_parameter_ranges, \
                      normalize_droplet_parameters, \
