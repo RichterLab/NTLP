@@ -1,0 +1,274 @@
+\documentclass{article}
+
+\usepackage{amsmath}
+\usepackage[margin=1.0in]{geometry}
+\usepackage{hyperref}
+\usepackage{listings}
+
+\renewcommand{\normalsize}{\fontsize{10pt}{10pt}\selectfont}
+
+\renewcommand{\labelenumi}{(\roman{enumi})}
+
+\newcommand{\HRule}[1]{\rule{\linewidth}{#1}}
+\newcommand{\vol}{\operatorname{vol}}
+
+\newcommand\overscript[2]{\stackrel{{\normalfont\mbox{#1}}}{#2}}
+
+\geometry{
+    textheight=9in,
+    textwidth=5.5in,
+    top=1in,
+    headheight=12pt,
+    headsep=25pt,
+    footskip=30pt
+}
+
+% ------------------------------------------------------------------------------
+
+\begin{document}
+
+% ------------------------------------------------------------------------------
+% Cover Page and ToC
+% ------------------------------------------------------------------------------
+
+\title{Transition Document: RichterLab MLP Droplet Approximation Project}
+\author{Darius Colangelo}
+\date{August 2025}
+
+\maketitle
+\newpage
+
+\tableofcontents
+\newpage
+
+\section{Broad Overview}
+The goal of this project is to replace the Backwards Euler (BE) solver in RichterLab simulations with a multi-layer perceptron (MLP)-- a simple kind of neural network.\\\\
+In particular, the project has focused on the NCAR Turbulence with Lagrangian Particles (NTLP) simulation. This simulation models the radius and temperature fluxuation of millions of simulated "droplets" in various circumstances. For our purposes, we're focused on the relationship between the following key variables
+\begin{enumerate}
+	\item \textbf{Radius:} the radius of the droplet. Roughly ranges from $10^{-8}m$ to $10^{-3}m$.
+	\item \textbf{Particle Temperature:} the temperature of the droplet. Roughly ranges from $273K$ to $310K$.
+	\item \textbf{Mass of Salt:} the salt mass in the droplet. Roughly ranges from $10^{-22}kg$ to $10^{-10}kg$.
+	\item \textbf{Air Temperature:} the temperature of the surrounding air. Roughly ranges from $273K$ to $310K$.
+	\item \textbf{Relative Humidity:} the ratio of the water vapor in the surrounding air to the saturation point. Roughly ranges from $55\%$ to $110\%$.
+	\item \textbf{Air Density} $\rho_a$ or $RHOA$: the density of the surrounding air. Roughly ranges from $0.80\frac{kg}{m^3}$ to $1.20\frac{kg}{m^3}$
+\end{enumerate}
+This process is governed by a coupled pair of ordinary differential equations that describe the change in radius/temperature (the first two variables) in terms of mass of salt, air temperature, relative humidity, and air density (the last four variables-- the `background variables').\\\\
+Currently, these equations are integrated numerically with a Backwards Euler solver. This poses a number of problems:
+\begin{enumerate}
+	\item BE is slow. As a result, fewer particles are simulated than are physically present.
+	\item BE cannot solve certain environments. In particular, the equations governing particles with ice cannot be solved by BE.
+	\item BE makes mistakes. Not enough to be a problem for the overall simulation, but it occasionally yields impossibly cold particles (well less than $273K$).
+\end{enumerate}
+The goal of the MLP network is to learn the solution to this ODE for the relavent parameter ranges. This would help in the following ways:
+\begin{enumerate}
+	\item Improve speed, thereby raising multiplicity. Currently, we're looking at a $34$x speedup in particle solutions, but with architectural changes to NTLP this could be further improved
+	\item Solve new simulation environments, particular ice
+	\item Potentially yield more consistent results for each particle
+\end{enumerate}
+\subsection{Where We Are Now}
+\begin{enumerate}
+	\item We have a model that works "well" in simulation for 1-way-coupled Pi Chamber. We have made progress towards a working model on the full parameter ranges for all NTLP test cases, but it has yet to be thoroughly tested.
+	\item We can dump data from the original NTLP simulations, enabling offline error analysis. We have implemented "evaluations," allowing us to reintegrate NTLP traces with other backends (BDF, various models, etc.)
+	\item We have error analysis code that can calculate the NRMSE between these evaluations and identify where in parameter space the backends deviate from one another. This facilitates a qualatative understanding of model performance.
+\end{enumerate}
+\subsection{Where Are We Going}
+\begin{enumerate}
+	\item Run to ground differences between BE and BDF
+	\item Finalize NTLP traces from all test cases
+	\item Finalize training ranges based on those finalized traces
+	\item Weights and Biases Integration
+	\item Physics Informed Loss with autograd
+	\item Hyperparameter Search
+	\item Sample Kappa Salt Volume Ratio instead of Mass of Salt
+\end{enumerate}
+\subsection{Loose Ends}
+\begin{enumerate}
+	\item Generate Fortran Module still rounds radius and doesn't handle SimpleNet/ResidualNet differences.
+	\item Redump NTLP test cases with temperature initilization. Could affect our conditional temperature sampling.
+	\item Does calculating NRMSE with log radius make sense? I think we need to be really careful here. Seemingly "small" relative changes at large radii correspond to massive amounts of water vapor condensive/energy being absorbed $\rightarrow$ large effects on coupling.
+	\item How much training data do we actually need? We could iterative much more quickly if we need less.
+	\item Do we want a config system? I think the notebook differ enough that this probably won't be worth the time, but its worth discussing.
+\end{enumerate}
+\section{NTLP}
+NTLP (NCAR Turbulence with Lagrangian Particles) is the simulation we have been working with so far. It simulates water droplets in various circumstances.\\\\
+At each time step, each processor iterates over its particles and
+\begin{enumerate}
+	\item Uses BE to calculate a new radius/temperature for each particle
+	\item Calculates the water condensed and energy gained by the particle, subtracting the corresponding humidity and temperature from the environment
+\end{enumerate}
+Both of these steps occur in the function \lstinline{particle_update_BE} function in particles.f90. \\\\
+The MLP is designed to replace the first step in this process: solving for the new radius/temperature. \lstinline{particle_update_ANN} implements the MLP for this first step, using \lstinline{droplet_model.f90} - a Fortran serialization of our MLP model.\\\\
+This second step is called coupling because it couples the physical changes in each droplet with the surrounding environment, enforcing conservation of water vapor (mass) and temperature (energy).
+\subsection{Test Cases}
+NTLP has the following test cases:\\\\
+\textbf{Pi Chamber}
+So called because the simulated space (the unit cylindar) has a total volume of $\pi$. This is the simplest case we work with. Notable features include
+\begin{enumerate}
+	\item Constant salt mass for all particles
+	\item Constant air density for all particles
+	\item Consistent behavior without coupling
+\end{enumerate}
+To this last point, coupling can be disabled by setting
+\begin{lstlisting}
+icouple=0
+iTcouple=0
+iHcouple=0
+\end{lstlisting}
+In \lstinline{test_cases/pi_chamber/params.in}.\\\\
+Disabling coupling helps isolate the model's performance from the effect of coupling, clarifying where exactly the model broke down.\\\\
+Because of its constant air density and salt mass, the PI Chamber, particularly the uncoupled case, serves as the easiest test case for the MLP.\\ \\
+\textbf{cFog}
+So called because it simulates fog formation. Notably has a long "setup" period while the fog is settling before anything interesting happens. Additionally, particles in the top 2/3rds of the simulation are in constant equilibrium. Both of these facts are worth noting when selecting which particles to trace for later scoring/analysis.\\\\
+This simulation is also mostly redundant to Fatima.\\\\
+\textbf{Fatima}
+Similar physical ranges to cFog. Personally, unsure of how they differ.\\\\
+\textbf{Spray}
+So called because it simulates the radius/temperature evolution of droplets in ocean sea spray.
+\subsection{NTLP quirks}
+\begin{enumerate}
+	\item Cold Particles: almost always occur when particles are first introduced. We speculate that new particles can be so out of equilibrium that BE struggles to solve them correctly. At times, this can yield impossibly cold particles. When determining parameter ranges for temperatures and evaluating the MLP against traced data this is important to note.
+	\item BE Failures: BE can also fail to converge for these intial trials. In this case, NTLP does not update the particle radius/temperature. When evaluating the MLP against traced data, this is important to note.
+	\item Neither of these problems seem to have a noticable effect on the overall behavior of the simulation. They mostly impact error analysis.
+	\item Some attempts have been made to remedy this. Lowering the error tolerance to reduce cold particles causes a spike in BE Failures. It's possible that a combination of reducing the tolerances and increasing the max iterations could help this issue, but it could significantly degrade performance. 
+\end{enumerate}
+\subsection{History and Histogram Analysis}
+Every NTLP run will generate a \lstinline{history.nc} and \lstinline{histogram.nc} in its output folder. These history and histogram files can be graphed and compared against other runs with \\
+\lstinline{droplet_approximation/notebooks/history_postprocessing.ipynb}.\\\\
+This is useful for guaging the model's performance in the simulation against the BE solver.
+\subsection{Dumping traces from NTLP}
+To evaluate model performance offline, particle data can be "dumped" from simulations as they run. This process is controled by two flags:
+\begin{enumerate}
+	\item \lstinline{iwritebe}: if $0$, do not dump data. If $1$, \lstinline{particle_update_BE} will dump particle data.
+	\item \lstinline{iwritebe_proportion}: controls the proportion of data to dump. Dumps $\frac{1}{\lstinline{iwritebe{_}proportion}}$ of the data.
+\end{enumerate}
+If enabled, each processor writes the byte data to\\
+\lstinline{OUTPUT_DIRECTORY/TEST_CASE/particle_traj/be_dump_PROCESSOR_ID.data}.\\\\
+Once generated, these traces can split by particle and organized into folders with\\
+\lstinline{batch_convert_NTLP_traces_to_particle_files} in \lstinline{data.py}.\\\\
+These "per particle" traces can then be read with \lstinline{read_particles_data} or \lstinline{batch_read_particles_data}.\\
+It can also be directly read with the function \lstinline{read_NTLP_data} in \lstinline{data.py}.
+\subsection{Miscillaneous Changes}
+\begin{enumerate}
+	\item Setting the simulation seed: a flag was added \lstinline{iseed_init} to \lstinline{params.in}. If $0$, NTLP generates a random seed as usual. Otherwise, each processor seeds its particles with \lstinline{iseed_init + myid} where \lstinline{myid} is the processor rank.
+	\item Initialized temperatures: All particles now have their temperatures set to the air temperature on time step they are introduced.
+	\item Removed "Teleporting" Particles: For cFog and Fatima, when a particle fell out of the bottom of the simulation, a new particle was created with the same id so that the overall number of particles was held constant. This led to the appearance that the particles were "teleporting" in the traces, since our tracing functions treat particles with the same id as the same particle.
+\end{enumerate}
+
+\section{MLP Model}
+Our MLP is written in PyTorch. It can be thought of as a function from initial radius/temperature, background parameters, and integration time to new radius/Temperature:
+\[
+	\begin{bmatrix}
+		\text{initial radius}\\
+		\text{initial temperature}\\
+		\text{salt mass}\\
+		\text{air temperature}\\
+		\text{relative humidity}\\
+		\text{air density}\\
+		\text{integration time}
+	\end{bmatrix}
+	\overscript{\text{MLP Model}}{\mapsto}
+	\begin{bmatrix} 
+		\text{final radius}\\
+		\text{final temperature}
+	\end{bmatrix}
+\]
+In short, our current training process involves
+\begin{enumerate}
+	\item \textbf{Data Generation:} we generate random particle parameters from pre-defined ranges. We use Backwards Differentiation Formula (BDF) to find the new particle radius and temperature after some random \lstinline{integration time} (dt). The data is written in bytes with each set of input data and BDF output data. It is written to a training file to train the model and a validation file to ensure we aren't overfitting.
+	\item \textbf{Model Training:} the model is fed the training data in a random order and estimates the new radius and temperature. We calculate how far off it was from the BDF solution according to some criteria (loss), and backpropogate, updating the model weights minimize loss. The model is periodically evaluated against a seperate validation data set to ensure we aren't overfitting.
+	\item \textbf{Error Analysis:} we evaluate the model on traces from NTLP, quantifying how close its solution was to BDF for NTLP particles and cataloguing particular regions of the parameter space where the model frequently fails to match the BDF solution.
+\end{enumerate}
+Our model has 7 input neurons, four hidden layers of 32 neurons, and 2 output neurons, yielding this shape: \lstinline{7/32/32/32/32/2}.\\\\
+Initially, the forward function consisted of simply evaluating each of these layers and returning the output. This behavior is still maintained in the class \lstinline{SimpleNet} in \lstinline{model.py}.\\\\
+Using a residual connection, that is adding the initial input to the output before returning the result has significantly improved performance. This behavior is implemented in the class \lstinline{ResidualNet}.\\\\
+
+\subsection{Model Training}
+Notes regarding training:
+\begin{enumerate}
+	\item Small decreases in training loss can still correspond to large increase in performance
+	\item We switched to L1 (Mean Absolute Error) from L2 (Mean Squared Error). This greatly improved performance.
+\end{enumerate}
+Things to look into more:
+\begin{enumerate}
+	\item Fortran generation code needs to be rewritten to round radii to one more place.
+	\item Fortran generation code needs to be rewriten to handle both simple and residual nets.
+	\item Using a linear loss for radius significantly improved performance when tested on pi chamber ranges. Essentially, this means scaling the model outputs so that the loss is calculated on the difference between the radii instead of the difference between the log radii.
+	\item PINN Loss (see next section)
+\end{enumerate}
+\subsubsection{Autograd and PINN Loss}
+Autograd is the name of the function in PyTorch that enables calculation of the derivatives of model outputs with respect to model inputs.\\\\
+Particularly interesting is the ability to calculate derivatives with respect to time. Since we have an analytic equation for $\frac{dr}{dt}, \frac{dT}{dt}$, we can construct a loss function based on how well the model's derivatives correspond to the analytic solutions. Examples of calculating the model's gradients can be found in the notebook \lstinline{ODE Exploration.iypnb}.\\\\
+The model's autograd MUST be scaled since the model itself does not take in natural ranges for parameters. The chain rule gives us the equation
+\begin{align*}
+	\frac{dr}{dt} &= \frac{dr_M}{dt}\left(r\tilde r\ln(10)\right)\\
+	\frac{dT}{dt} &= \frac{dT_M}{dt}\tilde T
+\end{align*}
+Where $r_M$ and $t_M$ are the model outputs, $r$ and $T$ are the outputs in natural physical ranges, and $\tilde r$ and $\tilde T$ are one half the max parameter range for $\log r$ and $T$ minus the minimum. Crucially, this is in log units for radius, e.g.
+\[
+	\tilde r = \frac{-3 - (-8)}{2} \neq \frac{10^{-3} - 10^{-8}}{2}
+\]
+It's worth noting that $\frac{dT}{dt}$ scales with $\frac{1}{r^2}$, meaning it explodes for smaller radii even for small differences in temperature. As a result, temperature performance at low radii might be solid, and yet the derivatives are orders of magnitude smaller than the actual analytic derivative. Some way to re-dimensionalize the ODE is probably necessary to solve this problem. Alternatively, a PINN loss could just be implemented for radius.
+\subsection{Data Generation}
+We are currently generating around $420$ million droplets: $~350$ million for training and $~70$ million for evaluation. We have not explored whether a smaller number of droplets would yield similar performance nor whether more would improve performance.\\\\
+All 6 "droplet parameters" are first rolled randomly for each droplet:
+\begin{enumerate}
+	\item Radius is sampled logarithmically on $(10^{-8}m, 10^{-3}m)$.
+	\item Temperature is sampled by sampling uniformly on $(-3.0K, 3.0K)$ and adding it to air temperature.
+	\item Mass of Salt is sampled logarithmically on $(10^{-22}, 10^{-10})$.
+	\item Air Temperature is sampled linearly on $(273.0K, 310.0K)$.
+	\item Air Density is sampled linearly on $(0.80, 1.20)$.
+	\item Relative Humidity is sampled linearly on $(0.55, 1.20)$
+\end{enumerate}
+The ranges themselves are frequently changed, this is just to give a rough idea of where they stand for now.\\\\
+Particle temperature is sampled off of air temperature because as far as we can tell, particle temperature is always within \lstinline{+-3.0K} of air temperature. Sampling the temperature difference allows us to significantly shrink the relevant parameter space.\\\\
+Once these inputs are generated, we use SciPy's \lstinline{solve_ivp} and cast it into 32 bits to generate our output data.\\\\
+Notes:
+\begin{enumerate}
+	\item Relative humidity cannot go lower than $0.55$ without the physical model no longer being valid.
+	\item Since mass of salt is sampled regardless of radius, most small particles are incredibly salty.
+\end{enumerate}
+\subsubsection{Error Tolerances}
+\lstinline{solve_ivp} with BDF keeps local error estimates within a total error tolerance that is a combination of an absolute tolerance (\lstinline{atol}) and a relative tolerance (\lstinline{rtol}). As BDF integrates, error is bounded as follows:
+\[
+	\text{error} \ \leq \ \text{atol} \ + y * \ \text{rtol}
+\]
+The default values are $\text{atol}=10^{-7},\ text{rtol}=10^{-3}$. Given the particle radius can be on the order of $10^{-8}$, these were found to be insufficient. With these tolerances, BDF's results were noisy at low ranges. Since noisy data is harder to learn, this degraded model performance.\\\\
+In the process of selecting new tolerances, we found that absolute tolerance could be set separately for radius and temperature.\\\\
+After doing a grid search on various combinations of \lstinline{atol} and \lstinline{rtol}, we found that $\text{radius atol}=10^{-10}, \ \text{temperature atol}=10^{-4}$ and $\text{rtol}=10^{-7}$. This removed the noise while only taking about 3x as long.
+\subsubsection{Jacobian results}
+SciPy's documentation for \lstinline{solve_ivp} recommends supplying an analytic Jacobian. Otherwise, \lstinline{solve_ivp} defaults to using finite differences.\\\\
+We derived the Jacobian for the ODE, supplied it to \lstinline{solve_ivp} and found no changes to its output or runtime. We suspect that the differential equation is straightforward enough that the finite differences are inexpensive and sufficiently accurate.
+\subsubsection{Sampling kappa salt volume ratio instead of $m_s$}
+Kappa salt volume ratio can be defined as
+\[
+	S_\kappa = \kappa\frac{V_{s}}{V_{w}}
+\]
+Where $\kappa$ is a physical constant that describes the characteristics of a particular solute, $V_s$ is the volume of salt in the droplet, and $V_w$ is the volume of water.\\\\
+In the ODE, $S_\kappa$ is the third term in an exponential used to calculate specific surface humidity, $q_*$, a quantity closely related to the change in radius.\\\\
+We should test replacing salt mass with kappa salt volume ratio both for sampling data and as an input to our model. It has the following advantages
+\begin{enumerate}
+	\item \textbf{Interpretable:} it is more directly related to physics. Could be easier for the model to learn.
+	\item \textbf{Physically Realistic Sampling:} since radius and salt mass are sampled independently, many of our small droplets are sampled with physically impossible amounts of salt. This forces the model to learn physically unrealistic droplet integrations.
+	\item \textbf{Accounts for Kappa}: kappa varies for different solutes in Fatima. Instead of adding kappa as another model input and another variable to sample, we can lump it in with salt mass by replacing both with kappa salt volume ratio.
+	\item \textbf{Better Scale}: Salt mass varies over 22 orders of magnitude. It behaves nicely on a linear scale. \textit{Very} preliminary estimate for range is 0.0 to 3.0.
+\end{enumerate}
+However, in a natural environment, as a droplet grows, its mass of salt remains the same. Accordingly, changes in radius lead to changes in $S_\kappa$ i.e. it is not a true background parameter. It is crucial that data is still generated by running solve IVP with mass of salt as a background parameter, not $S_\kappa$. Otherwise, our model will rely on the assumption that salinity is constant with respect to radius, which is not valid.
+\section{Error Analysis}
+Much of the work Summer 2025 was to create a rigorous way of understanding how models fail. Our error analysis is broken up into two parts: (1) Normalized Root Mean Square Error (NRMSE) calculation. (2) Deviation Clustering. Both of these algorithms are run on trajectories dumped from NTLP.\\\\
+Error analysis functionality can be found in \lstinline{scoring.py} in the \lstinline{droplet_approximation} python package. \lstinline{error_analysis.ipynb} is the main pipeline for model scoring and analysis. Each run of error analysis on a model/dataset can be pickled in a \lstinline{ScorignReport} object for further analysis.\\\\
+All error calculation is done with $\log_{10}(r)$ to ensure that errors on small particles are represented.\\\\
+Normalized Root Mean Square Error is calculated in three steps. First, we square the difference between the model's output radius/temperatures and the true (BDF) reference. Then, we take the square root of the mean of these differences for radius and temperature separately. Finally, we normalize by dividing this quantity by the average output radius/temperature and average the two together. The formula looks like this:
+\[
+	\textbf{Model NRMSE} = \frac{1}{2}\left(\frac{\sqrt{\sum (\log_{10}(r_\text{model}) - \log_{10}(r_\text{bdf}))^2}}{\overline{ \log_{10} r_\text{bdf}}} + \frac{\sqrt{\sum (T_\text{model} - T_\text{BDF})^2}}{\overline{ T_\text{BDF} }}\right)
+\]
+The second portion of error analysis is deviation detection. We employ a Cumulative Sum (CUSUM) algorithm to record the droplet parameters (radius, temperature, mass of salt, etc.) where the model deviates from the true particle trajectory dumped from NTLP.\\\\
+Then, we SciKit-learn's \lstinline{BayesianGaussianMixture} clustering algorithms on the deviation droplet parameters to identify problematic regions in the parameter space. This function demonstrated significantly better performance than both K-means clustering and standard gaussian mixture modeling.\\\\
+Work is in progress to generate histograms and radius/temperature averages offline from model inferencing directly on traces.
+\subsection{CUSUM Error Analysis breakdown}
+A CUSUM relies on two tuning parameters, $k$- the "tolerance" and $h$- the "threshold." At each time step, it accumulates error in excess of the tolerance into a "Cumulative Sum." For example, if the tolerance is $0.25$ kelvin, if the model's output was $0.40$ kelvin off, $0.40 - 0.25 = 0.15$ would be added to the CUSUM. If the CUSUM is greater than 0 and the model returns to within the tolerance, CUSUM will begin to decrease again. For example, an error of $0.20$ kelvin would reduce CUSUM by $0.20 - 0.25 = -0.05$.\\\\
+If CUSUM ever exceeds the threshold, a deviation is recorded at the time step the CUSUM exceeds the threshold. At this point, we record the droplet parameters, simulation time, and whether the deviation was in radius or temperature.\\\\
+A basic example of the CUSUM package can be found in the notebook folder in\\
+\lstinline{Cusum Validation.ipynb}.\\\\
+For more information, see the Wikipedia page: \href{https://en.wikipedia.org/wiki/CUSUM}{link}.
+
+\end{document}

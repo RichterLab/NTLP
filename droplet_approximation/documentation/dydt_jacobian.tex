@@ -1,0 +1,180 @@
+\documentclass{article}
+
+\usepackage[margin=1in]{geometry}
+\usepackage{mathtools}
+
+\raggedbottom
+
+\title{Jacobian for Droplet Parameters}
+\author{Darius Colangelo}
+\date{August 2025}
+
+\begin{document}
+
+\maketitle
+
+\section{Blunt Point Up Front}
+If we express our coupled ODE as a function:
+\[
+    F(r_{p}, T_{p}) := \begin{bmatrix}
+        \frac{dr_{p}}{dt}\\
+        \frac{dT_{p}}{dt}
+    \end{bmatrix}
+\]
+And the ODEs themselves as
+\begin{align*}
+     &\frac{dr_{p}}{dt} = \frac{\gamma}{r_{p}}(q_{\infty} - q_*)\\
+     &\frac{dT_{p}}{dt} = \frac{\alpha}{r_{p}^2}(T_{p}-T_{\infty})
+	                + \frac{\beta}{r_{p}}\frac{dr_{p}}{dt}
+\end{align*}
+Where
+\begin{align*}
+	\gamma &:= \frac{\nu_{f}\rho_{a}Shp}{2\rho_{w}Sc}\\
+        \alpha &:= -\frac{3\nu_{f}\rho_{a}}{2}\frac{Nu_{p}}{Pr}\frac{c_{p,a}}{c_L\rho_{w}}\\
+        \beta  &:= \frac{3L_{p}}{c_{l}}
+\end{align*}
+We have:
+\begin{align*}
+    dF &= \begin{bmatrix}
+        \frac{\partial F^1}{\partial r_{p}} & \frac{\partial F^1}{\partial T_{p}}\\
+        \frac{\partial F^2}{\partial r_{p}} & \frac{\partial F^2}{\partial T_{p}}
+    \end{bmatrix}\\
+    \frac{\partial F^1}{\partial r_{p}} &= -\frac{\gamma}{r_{p}}\left(\frac{q_{\infty} - q_*}{r_{p}}
+                                           + \partial_{r_{p}}q_*\right)\\
+    \frac{\partial F^1}{\partial T_{p}} &= -\frac{\gamma}{r_{p}}\partial_{T_{p}}q_*\\
+    \frac{\partial F^2}{\partial r_{p}} &= -\frac{2\alpha}{r_{p}^3}(T_{p}-T_{\infty})
+                                          + \frac{\beta}{r_p}\left(-\frac{1}{r_{p}}\frac{dr_{p}}{dt}
+                                          + \partial_{r_{p}}F^1(r_{p},T_{p})\right)\\
+    \frac{\partial F^2}{\partial T_{p}} &= \frac{\alpha}{r_{p}^2}+\frac{\beta}{r_{p}}\partial_{T_{p}}F^1(r_{p},T_{p})
+\end{align*}
+Where
+\begin{align*}
+    \frac{dq_*}{dr} &= q_*\left(\frac{9\kappa m_{s}}{4\pi\rho_{s}r_{p}^4}
+		     - \frac{2M_{w}\gamma}{R_{u}\rho_w r_{p}^2T_{p}}\right)\\
+    \frac{dq_*}{dT} &= q_*\left(\frac{M_{w}}{R_{u}T_{p}^2}\left(L_{v}- \frac{2\gamma}{\rho_w r_{p}}\right)-\frac{1}{T_{p}}\right)\\
+\end{align*}
+\section{Derivation}
+
+First, we will rearrange both equations into more workable forms before differentiating. We will start with the derivative $\frac{dr_p}{dt}$.
+\begin{align*}
+    \frac{dr_{p}}{dt} &= \frac{1}{9}\frac{Shp}{Sc}\frac{\rho_{p}}{\rho_{w}}
+                         \frac{r_{p}}{\tau_{p}}(q_{\infty} - q_*)\\
+    &= \left(\frac{1}{9}\frac{Shp}{Sc}\right) \frac{\rho_{p}}{\rho_{w}}
+                        \frac{r_{p}}{\tau_{p}}(q_{\infty} - q_*)\\
+    &= \left(\frac{1}{9}\frac{Shp}{Sc}\right)\frac{\rho_{p}}{\rho_{w}}
+                        \frac{18r_{p}\nu_{f}\rho_{a}}{\rho_{p}(2r_{p})^2}(q_{\infty}-q_*)\\
+    &= \left(\frac{\nu_{f}\rho_{a}Shp}{2\rho_{w}Sc}\right)\frac{1}{r_{p}}(q_{\infty} - q_*)\\
+\end{align*}
+Fix $\gamma := \frac{\nu_{f}\rho_{a}Shp}{2\rho_{w}Sc}$. Accordigly,
+\[
+	\frac{dr_{p}}{dt} = \frac{\gamma}{r_{p}}(q_{\infty} - q_*)
+\]
+Next, we will consider $\frac{dT_{p}}{dt}$.
+\begin{align*}
+    &\frac{dT_{p}}{dt} = \left(-\frac{1}{3}\frac{Nu_{p}}{\Pr}\frac{c_{p,a}}{c_L}
+                               \frac{\rho_{p}}{\rho_{w}}\frac{1}{\tau_{p}}(T_{p}-T_{\infty})\right)
+		       + \left(3L_{p}\frac{1}{r_{p}c_{l}}\frac{dr_{p}}{dt}\right)\\
+    \iff&\frac{dT_{p}}{dt} = \left(-\frac{1}{3}\frac{Nu_{p}}{Pr}\frac{c_{p,a}}{c_L}
+                               \frac{\rho_{p}}{\rho_{w}}\frac{18\nu_{f}\rho_{a}}{\rho_{p}(2r_{p})^2}(T_{p}-T_{\infty})\right)
+		       + \left(3L_{p}\frac{1}{r_{p}c_{l}}\frac{dr_{p}}{dt}\right)\\
+    \iff&\frac{dT_{p}}{dt} = \left(-\frac{1}{3}\frac{Nu_{p}}{Pr}\frac{c_{p,a}}{c_L}
+                               \frac{1}{\rho_{w}}\frac{9\nu_{f}\rho_{a}}{2r_{p}^2}(T_{p}-T_{\infty})\right)
+		       + \left(3L_{p}\frac{1}{r_{p}c_{l}}\frac{dr_{p}}{dt}\right)\\
+\end{align*}
+Fix $\alpha := -\frac{3\nu_{f}\rho_{a}}{2}\frac{Nu_{p}}{Pr}\frac{c_{p,a}}{c_L\rho_{w}}$,
+    $\beta  := \frac{3L_{p}}{c_{l}}$. Accordingly,
+\[
+    \frac{dT_{p}}{dt} = \frac{\alpha}{r_{p}^2}(T_{p}-T_{\infty})
+                      + \frac{\beta}{r_{p}}\frac{dr_{p}}{dt}
+\]
+Next, we will take the partial derivatives of $q_{*}$.
+\begin{align*}
+	\partial_{r_{p}}q_{*} &= \partial_{r_{p}} \frac{e_{\infty} M_{w}}{R_{u} T_{p}\rho_{a}}
+                         \exp\left(\frac{L_{v}M_{w}}{R_{u}}\left(\frac{1}{T_{f}}-\frac{1}{T_{p}}\right)
+			         + \frac{2M_{w}\gamma}{R_{u}\rho_w r_{p}T_{p}}
+			         - \frac{\kappa m_{s}}{\rho_{s}V_{p}}\right)\\
+                      &= \frac{e_{\infty} M_{w}}{R_{u} T_{p}\rho_{a}}
+		         \exp\left(\frac{L_{v}M_{w}}{R_{u}}\left(\frac{1}{T_{f}}-\frac{1}{T_{p}}\right)
+			         + \frac{2M_{w}\gamma}{R_{u}\rho_w r_{p}T_{p}}
+			         - \frac{\kappa m_{s}}{\rho_{s}V_{p}}\right)
+			 \partial_{r_{p}}\left(\frac{L_{v}M_{w}}{R_{u}}\left(\frac{1}{T_{f}}-\frac{1}{T_{p}}\right)
+			                   + \frac{2M_{w}\gamma}{R_{u}\rho_w r_{p}T_{p}}
+				           - \frac{\kappa m_{s}}{\rho_{s}V_{p}}\right)\\
+                      &= q_*\partial_{r_{p}}\left(\frac{L_{v}M_{w}}{R_{u}}\left(\frac{1}{T_{f}}-\frac{1}{T_{p}}\right)
+		          + \frac{2M_{w}\gamma}{R_{u}\rho_w r_{p}T_{p}} - \frac{\kappa m_{s}}{\rho_{s}V_{p}}\right)\\
+		      &= q_*\partial_{r_{p}}\left(\frac{L_{v}M_{w}}{R_{u}}\left(\frac{1}{T_{f}}-\frac{1}{T_{p}}\right)
+			      + \frac{2M_{w}\gamma}{R_{u}\rho_{w} r_{p}T_{p}}
+	  		  - \frac{3\kappa m_{s}}{4\pi\rho_{s}r_{p}^3}\right)\\
+		      &= q_*\left(\frac{9\kappa m_{s}}{4\pi\rho_{s}r_{p}^4}
+		       - \frac{2M_{w}\gamma}{R_{u}\rho_w r_{p}^2T_{p}}\right)\\
+\end{align*}
+\begin{align*}
+    \partial_{T_{p}}q_* &= \partial_{T_{p}} \frac{e_{\infty} M_{w}}{R_{u} T_{p}\rho_{a}}
+          			\exp\left(\frac{L_{v}M_{w}}{R_{u}}\left(\frac{1}{T_{f}}-\frac{1}{T_{p}}\right)
+			      + \frac{2M_{w}\gamma}{R_{u}\rho_w r_{p}T_{p}}
+		              + \frac{\kappa m_{s}}{\rho_{s}V_{p}}\right)\\
+    			&= \left(\partial_{T_{p}}\frac{e_{\infty} M_{w}}{R_{u} T_{p}\rho_{a}}\right)
+			   \exp\left(\frac{L_{v}M_{w}}{R_{u}}\left(\frac{1}{T_{f}}-\frac{1}{T_{p}}\right)
+		         + \frac{2M_{w}\gamma}{R_{u}\rho_w r_{p}T_{p}}
+		         + \frac{\kappa m_{s}}{\rho_{s}V_{p}}\right)\\
+    			&+ \frac{e_{\infty} M_{w}}{R_{u} T_{p}\rho_{a}}\left(\partial_{T_{p}}
+			   \exp\left(\frac{L_{v}M_{w}}{R_{u}}\left(\frac{1}{T_{f}}-\frac{1}{T_{p}}\right)
+		                   + \frac{2M_{w}\gamma}{R_{u}\rho_w r_{p}T_{p}}
+		                   + \frac{\kappa m_{s}}{\rho_{s}V_{p}}\right)\right)\\
+    			&= -\frac{e_{\infty} M_{w}}{R_{u} T_{p}^2\rho_{a}}
+			        \exp\left(\frac{L_{v}M_{w}}{R_{u}}\left(\frac{1}{T_{f}}-\frac{1}{T_{p}}\right)
+				        + \frac{2M_{w}\gamma}{R_{u}\rho_w r_{p}T_{p}}
+				        + \frac{\kappa m_{s}}{\rho_{s}V_{p}}\right) + \cdots\\ 
+    			&= -\frac{q_*}{T_{p}} + \frac{e_{\infty} M_{w}}{R_{u} T_{p}\rho_{a}}\left(\partial_{T_{p}}
+			        \exp\left(\frac{L_{v}M_{w}}{R_{u}}\left(\frac{1}{T_{f}}-\frac{1}{T_{p}}\right)
+		                        + \frac{2M_{w}\gamma}{R_{u}\rho_w r_{p}T_{p}}
+			                + \frac{\kappa m_{s}}{\rho_{s}V_{p}}\right)\right)\\
+    			&= -\frac{q_*}{T_{p}} + \frac{e_{\infty} M_{w}}{R_{u} T_{p}\rho_{a}}
+			    \exp\left(\frac{L_{v}M_{w}}{R_{u}}\left(\frac{1}{T_{f}}-\frac{1}{T_{p}}\right)
+			            + \frac{2M_{w}\gamma}{R_{u}\rho_w r_{p}T_{p}}
+			            + \frac{\kappa m_{s}}{\rho_{s}V_{p}}\right)
+			    \partial_{T_{p}}\left(\frac{L_{v}M_{w}}{R_{u}}\left(\frac{1}{T_{f}}-\frac{1}{T_{p}}\right)
+			  + \frac{2M_{w}\gamma}{R_{u}\rho_w r_{p}T_{p}}
+		          + \frac{\kappa m_{s}}{\rho_{s}V_{p}}\right)\\
+    			&= -\frac{q_*}{T_{p}}
+			 + q_*\partial_{T_{p}}\left(\frac{L_{v}M_{w}}{R_{u}}\left(\frac{1}{T_{f}}-\frac{1}{T_{p}}\right)
+			 + \frac{2M_{w}\gamma}{R_{u}\rho_w r_{p}T_{p}} + \frac{\kappa m_{s}}{\rho_{s}V_{p}}\right)\\
+    			&= -\frac{q_*}{T_{p}}
+			 + q_*\left(\frac{L_{v}M_{w}}{R_{u}T_{p}^2}
+			 - \frac{2M_{w}\gamma}{R_{u}\rho_w r_{p}T_{p}^2}\right)\\
+    			&= q_*\left(-\frac{1}{T_{p}}
+			+ \frac{M_{w}}{R_{u}T_{p}^2}\left(L_{v}
+		        - \frac{2\gamma}{\rho_{w} r_{p}}\right)\right)\\
+    			&= q_*\left(\frac{M_{w}}{R_{u}T_{p}^2}\left(L_{v}- \frac{2\gamma}{\rho_w r_{p}}\right)-\frac{1}{T_{p}}\right)\\
+\end{align*}
+
+Now we take our partial derivatives
+\begin{align*}
+    \partial_{r_{p}}F^1(r_{p},T_{p}) &= \partial_{r_{p}}\frac{\gamma}{r_{p}}(q_{\infty} - q_*)\\
+                                     &= \gamma\partial_{r_{p}}\left(\frac{1}{r_{p}}(q_{\infty} - q_*)\right)\\
+                                     &= \gamma\left(\left(\partial_{r_{p}}\frac{1}{r_{p}}\right)(q_{\infty} - q_*)
+				      + \frac{1}{r_{p}}\partial_{r_{p}}(q_{\infty} - q_*)\right)\\
+                                     &=-\gamma\left(\frac{1}{r_{p}^2}(q_{\infty} - q_*)
+				      + \frac{1}{r_{p}}\partial_{r_{p}}q_*\right)\\
+				     &= -\frac{\gamma}{r_{p}}\left(\frac{q_{\infty} - q_*}{r_{p}}
+				                                + \partial_{r_{p}}q_*\right)\\
+    \partial_{T_{p}}F^2(r_{p},T_{p}) &= \partial_{T_{p}}\frac{\gamma}{r_{p}}(q_{\infty} - q_*)\\
+				     &= -\frac{\gamma}{r_{p}}\partial_{T_{p}}q_*\\
+\end{align*}
+\begin{align*}
+    \partial_{r_{p}}F^2(r_{p}, T_{p}) &= \partial_{r_{p}}\frac{dT_{p}}{dt}\\
+                                      &= \partial_{r_{p}}\left(\left(\alpha\frac{1}{r_{p}^2}(T_{p}-T_{\infty})\right)
+				       + \left(\frac{\beta}{r_{p}}\frac{dr_{p}}{dt}\right)\right)\\
+                                      &= -\frac{2\alpha}{r_{p}^3}(T_{p}-T_{\infty})
+				        + \left(-\frac{\beta}{r_{p}^2}\frac{dr_{p}}{dt}
+				        + \frac{\beta}{r_{p}}\left(\partial_{r_{p}}\frac{dr_{p}}{dt}\right)\right)\\
+                                      &= -\frac{2\alpha}{r_{p}^3}(T_{p}-T_{\infty})
+				        + \frac{\beta}{r_p}\left(-\frac{1}{r_{p}}\frac{dr_{p}}{dt}
+				        + \partial_{r_{p}}F^1(r_{p},T_{p})\right)\\
+    \partial_{T_{p}}F^2(r_{p}, T_{p}) &= \partial_{T_{p}}\frac{dT_{p}}{dt}\\
+                                      &= \partial_{T_{p}}\left(\left(\alpha\frac{1}{r_{p}^2}(T_{p}-T_{\infty})\right)
+				       + \left(\frac{\beta}{r_{p}}\frac{dr_{p}}{dt}\right)\right)\\
+                                      &= \frac{\alpha}{r_{p}^2}+\frac{\beta}{r_{p}}\left(\partial_{T_{p}}\frac{dr_{p}}{dt}\right)\\
+                                      &= \frac{\alpha}{r_{p}^2}+\frac{\beta}{r_{p}}\partial_{T_{p}}F^1(r_{p},T_{p})
+\end{align*}
+\end{document}
