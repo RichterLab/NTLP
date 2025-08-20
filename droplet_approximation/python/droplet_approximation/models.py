@@ -415,7 +415,7 @@ module droplet_model
     !
     !     do particle_index = 1, number_particles
     !
-    !         input_parameters = [radius, temperature, salt_mass, air_temperature, rh, rhoa, t_final]
+    !         input_parameters = [radius, temperature, salt_solute, air_temperature, rh, rhoa, t_final]
     !         call estimate( input_parameters, output_parameters )
     !
     !         new_radius      = output_parameters(RADIUS_INDEX)
@@ -504,7 +504,7 @@ module droplet_model
     ! the indices while the output vector only uses the first two.
     integer, parameter :: RADIUS_INDEX          = 1
     integer, parameter :: TEMPERATURE_INDEX     = 2
-    integer, parameter :: SALT_MASS_INDEX       = 3
+    integer, parameter :: SALT_SOLUTE_INDEX     = 3
     integer, parameter :: AIR_TEMPERATURE_INDEX = 4
     integer, parameter :: RH_INDEX              = 5
     integer, parameter :: RHOA_INDEX            = 6
@@ -526,14 +526,14 @@ module droplet_model
     !
     real*4, parameter :: RADIUS_LOG_RANGE(2)      = [{radius_start:.1f}, {radius_end:.1f}]
     real*4, parameter :: TEMPERATURE_RANGE(2)     = [{temperature_start:.1f}, {temperature_end:.1f}]
-    real*4, parameter :: SALT_MASS_LOG_RANGE(2)   = [{salt_mass_start:.2f}, {salt_mass_end:.2f}]
+    real*4, parameter :: SALT_SOLUTE_LOG_RANGE(2) = [{salt_solute_start:.2f}, {salt_solute_end:.2f}]
     real*4, parameter :: AIR_TEMPERATURE_RANGE(2) = [{air_temperature_start:.1f}, {air_temperature_end:.1f}]
     real*4, parameter :: RH_RANGE(2)              = [{rh_start:.2f}, {rh_end:.2f}]
     real*4, parameter :: RHOA_RANGE(2)            = [{rhoa_start:.2f}, {rhoa_end:.2f}]
 
     real*4, parameter :: RADIUS_LOG_MEAN      = SUM( RADIUS_LOG_RANGE ) / 2
     real*4, parameter :: TEMPERATURE_MEAN     = SUM( TEMPERATURE_RANGE ) / 2
-    real*4, parameter :: SALT_MASS_LOG_MEAN   = SUM( SALT_MASS_LOG_RANGE ) / 2
+    real*4, parameter :: SALT_SOLUTE_LOG_MEAN = SUM( SALT_SOLUTE_LOG_RANGE ) / 2
     real*4, parameter :: AIR_TEMPERATURE_MEAN = SUM( AIR_TEMPERATURE_RANGE ) / 2
     real*4, parameter :: RH_MEAN              = SUM( RH_RANGE ) / 2
     real*4, parameter :: RHOA_MEAN            = SUM( RHOA_RANGE ) / 2
@@ -544,7 +544,7 @@ module droplet_model
     !
     real*4, parameter :: RADIUS_LOG_WIDTH      = (RADIUS_LOG_RANGE(2)-RADIUS_LOG_RANGE(1))/2
     real*4, parameter :: TEMPERATURE_WIDTH     = (TEMPERATURE_RANGE(2)-TEMPERATURE_RANGE(1))/2
-    real*4, parameter :: SALT_MASS_LOG_WIDTH   = (SALT_MASS_LOG_RANGE(2)-SALT_MASS_LOG_RANGE(1))/2
+    real*4, parameter :: SALT_SOLUTE_LOG_WIDTH = (SALT_SOLUTE_LOG_RANGE(2)-SALT_SOLUTE_LOG_RANGE(1))/2
     real*4, parameter :: AIR_TEMPERATURE_WIDTH = (AIR_TEMPERATURE_RANGE(2)-AIR_TEMPERATURE_RANGE(1))/2
     real*4, parameter :: RH_WIDTH              = (RH_RANGE(2)-RH_RANGE(1))/2
     real*4, parameter :: RHOA_WIDTH            = (RHOA_RANGE(2)-RHOA_RANGE(1))/2
@@ -587,8 +587,8 @@ module droplet_model
     radius_end=model_parameter_ranges["radius"][1],
     temperature_start=model_parameter_ranges["temperature"][0],
     temperature_end=model_parameter_ranges["temperature"][1],
-    salt_mass_start=model_parameter_ranges["salt_mass"][0],
-    salt_mass_end=model_parameter_ranges["salt_mass"][1],
+    salt_solute_start=model_parameter_ranges["salt_solute"][0],
+    salt_solute_end=model_parameter_ranges["salt_solute"][1],
     air_temperature_start=model_parameter_ranges["air_temperature"][0],
     air_temperature_end=model_parameter_ranges["air_temperature"][1],
     rh_start=model_parameter_ranges["relative_humidity"][0],
@@ -774,13 +774,13 @@ write(*, "(A,A,/)" ) "MLP model metadata: ", model_metadata
 
 write(*, "(/,A,/,/,A,F5.2,A,F5.2,A,/,A,F6.2,A,F6.2,A,/,A,F6.2,A,F6.2,A)" ) &
                      "MLP was trained with the following parameter ranges:", &
-                     "    Log10(Radius):     [ ", RADIUS_LOG_RANGE(1), ",  ", RADIUS_LOG_RANGE(2), "] m", &
-                     "    Temperature:       [", TEMPERATURE_RANGE(1), ", ", TEMPERATURE_RANGE(2), "] K", &
-                     "    log10(Salt mass):  [", SALT_MASS_LOG_RANGE(1), ", ", SALT_MASS_LOG_RANGE(2), "] kg"
+                     "    Log10(Radius):      [ ", RADIUS_LOG_RANGE(1), ",  ", RADIUS_LOG_RANGE(2), "] m", &
+                     "    Temperature:        [", TEMPERATURE_RANGE(1), ", ", TEMPERATURE_RANGE(2), "] K", &
+                     "    log10(Salt solute): [", SALT_SOLUTE_LOG_RANGE(1), ", ", SALT_SOLUTE_LOG_RANGE(2), "] kg"
 write(*, "(A,F6.2,A,F6.2,A,/,A,F6.2,A,F6.2,A,/,A,F4.2,A,F4.2,A,/)" ) &
-                     "    Air temperatures:  [", AIR_TEMPERATURE_RANGE(1), ", ", AIR_TEMPERATURE_RANGE(2), "] K", &
-                     "    Relative humidity: [", RH_RANGE(1) * 100.0, ", ", RH_RANGE(2) * 100.0, "] %", &
-                     "    Air density:       [  ", RHOA_RANGE(1), ",   ", RHOA_RANGE(2), "] kg/m^3"
+                     "    Air temperatures:   [", AIR_TEMPERATURE_RANGE(1), ", ", AIR_TEMPERATURE_RANGE(2), "] K", &
+                     "    Relative humidity:  [", RH_RANGE(1) * 100.0, ", ", RH_RANGE(2) * 100.0, "] %", &
+                     "    Air density:        [  ", RHOA_RANGE(1), ",   ", RHOA_RANGE(2), "] kg/m^3"
 end if
 """
 
@@ -881,7 +881,7 @@ subroutine estimate( input, output )
     ! Normalize the non-temporal inputs so they're in the range [-1, 1].
     normalized_input(RADIUS_INDEX)          = (log10( input(RADIUS_INDEX) ) - RADIUS_LOG_MEAN) / RADIUS_LOG_WIDTH
     normalized_input(TEMPERATURE_INDEX)     = (input(TEMPERATURE_INDEX) - TEMPERATURE_MEAN) / TEMPERATURE_WIDTH
-    normalized_input(SALT_MASS_INDEX)       = (log10( input(SALT_MASS_INDEX) ) - SALT_MASS_LOG_MEAN) / SALT_MASS_LOG_WIDTH
+    normalized_input(SALT_SOLUTE_INDEX)     = (log10( input(SALT_SOLUTE_INDEX) ) - SALT_SOLUTE_LOG_MEAN) / SALT_SOLUTE_LOG_WIDTH
     normalized_input(AIR_TEMPERATURE_INDEX) = (input(AIR_TEMPERATURE_INDEX) - AIR_TEMPERATURE_MEAN) / AIR_TEMPERATURE_WIDTH
     normalized_input(RH_INDEX)              = (input(RH_INDEX) - RH_MEAN) / RH_WIDTH
     normalized_input(RHOA_INDEX)            = (input(RHOA_INDEX) - RHOA_MEAN) / RHOA_WIDTH
@@ -1021,6 +1021,9 @@ def load_model_checkpoint( checkpoint_path, model, optimizer=None ):
         warnings.warn( "Loaded a legacy checkpoint from '{:s}', returning current parameter ranges!".format(
             checkpoint_path ) )
 
+        warnings.warn( "Version 1 checkpoints are incompatible with the current dydt()!  "
+                       "Make sure to convert salt solute to salt mass before inferencing." )
+
         # The checkpoint is simply the model's weights and biases.
         model.load_state_dict( checkpoint )
 
@@ -1030,7 +1033,8 @@ def load_model_checkpoint( checkpoint_path, model, optimizer=None ):
         """
         Loads a version 2 checkpoint.  These contain model weights, the droplet
         parameter ranges the model was trained on, and the optimizer's state.
-        The model and optimizer are updated in-place.
+        The model and optimizer are updated in-place.  The model and parameter
+        ranges use salt mass.
 
         Takes 4 arguments:
 
@@ -1064,6 +1068,63 @@ def load_model_checkpoint( checkpoint_path, model, optimizer=None ):
         loss_function    = checkpoint["loss_function"]
         training_loss    = checkpoint["training_loss"]
 
+        # Sanity check that the parameter ranges are as expected.
+        if "salt_mass" not in parameter_ranges:
+            raise ValueError( "'{:s}' is not a valid version 2 checkpoint.  "
+                              "Its parameter ranges does not contain 'salt mass'!".format(
+                                  checkpoint_path ) )
+
+        warnings.warn( "Version 2 checkpoints are incompatible with the current dydt()!  "
+                       "Make sure to convert salt solute to salt mass before inferencing." )
+
+        return parameter_ranges, loss_function, training_loss
+
+    def _load_model_checkpoint_v3( checkpoint_path, model, optimizer, checkpoint ):
+        """
+        Loads a version 3 checkpoint.  These contain model weights, the droplet
+        parameter ranges the model was trained on, and the optimizer's state.
+        The model and optimizer are updated in-place.  The model and parameter
+        ranges use salt solute instead of salt mass.
+
+        Takes 4 arguments:
+
+          checkpoint_path - Path to the file that checkpoint was loaded from.
+          model           - Torch model whose weights will be set to the
+                            checkpoint's contents.
+          optimizer       - Optional Torch optimizer whose state will be set to
+                            the checkpoint's contents.  If omitted, the loaded
+                            optimizer state is discarded.
+          checkpoint      - Dictionary containing the following keys:
+                            "droplet_parameters", "loss_function",
+                            "model_weights", "optimizer_state".
+
+        Returns 3 values:
+
+          parameter_ranges - Dictionary containing the droplet parameter ranges
+                             associated with model.  See get_parameter_range()
+                             for details.
+          loss_function    - Function handle for the loss function associated
+                             with model.
+          training_loss    - Sequence containing model's training loss across
+                             batches.
+
+        """
+
+        model.load_state_dict( checkpoint["model_weights"] )
+        if optimizer is not None:
+            optimizer.load_state_dict( checkpoint["optimizer_state"] )
+
+        parameter_ranges = checkpoint["droplet_parameter_ranges"]
+        loss_function    = checkpoint["loss_function"]
+        training_loss    = checkpoint["training_loss"]
+
+        # Sanity check that the parameter ranges are as expected.
+        if "salt_solute" not in parameter_ranges:
+            print( parameter_ranges )
+            raise ValueError( "'{:s}' is not a valid v3 checkpoint.  "
+                              "Its parameter ranges does not contain 'salt solute'!".format(
+                                  checkpoint_path ) )
+
         return parameter_ranges, loss_function, training_loss
 
     # Load the checkpoint's Tensors as a dictionary and figure out which version
@@ -1086,6 +1147,13 @@ def load_model_checkpoint( checkpoint_path, model, optimizer=None ):
         (parameter_ranges,
          loss_function,
          training_loss) = _load_model_checkpoint_v2( checkpoint_path,
+                                                     model,
+                                                     optimizer,
+                                                     checkpoint )
+    elif checkpoint_version == 3:
+        (parameter_ranges,
+         loss_function,
+         training_loss) = _load_model_checkpoint_v3( checkpoint_path,
                                                      model,
                                                      optimizer,
                                                      checkpoint )
@@ -1149,7 +1217,7 @@ def save_model_checkpoint( checkpoint_prefix, checkpoint_number, model, optimize
     #       cases where we need to write a specific version can be handled
     #       as needed.
     #
-    CHECKPOINT_VERSION = 2
+    CHECKPOINT_VERSION = 3
 
     # Build the checkpoint path.
     if checkpoint_number >= 0:
@@ -1180,8 +1248,8 @@ def save_model_checkpoint( checkpoint_prefix, checkpoint_number, model, optimize
         "checkpoint_version":       CHECKPOINT_VERSION,
         "droplet_parameter_ranges": current_parameter_ranges,
         "loss_function":            loss_function,
-        "model_weights":            model.state_dict().to( "cpu" ),
-        "optimizer_state":          optimizer.state_dict().to( "cpu" ),
+        "model_weights":            model.to( "cpu" ).state_dict(),
+        "optimizer_state":          optimizer.state_dict(),
         "training_loss":            training_loss
     }
 

@@ -605,7 +605,7 @@ def plot_particles( particles_df, force_flag=False, time_range=[-np.inf, np.inf]
       3. Output BE particle temperature, in Kelvin
       4. Background air temperature, in Kelvin
       5. Background relative humidity, as a percentage
-      6. Salt mass, in kilograms
+      6. Salt solute, in kilograms
       7. Air density, in kg/m^3
 
     Can plot multiple evaluations for each particle to analyze model performance.
@@ -830,10 +830,10 @@ def plot_particles( particles_df, force_flag=False, time_range=[-np.inf, np.inf]
         ax_h[4].set_ylabel( "Percentage (%)" )
 
         ax_h[5].plot( particle["times"][times_mask],
-                      particle["salt masses"][times_mask],
+                      particle["salt solutes"][times_mask],
                       color=colors_map[particle_label],
                       label=particle_label )
-        ax_h[5].set_title( "Salt Mass" )
+        ax_h[5].set_title( "Salt Solute" )
         ax_h[5].set_ylabel( "kg" )
 
         ax_h[6].plot( particle["times"][times_mask],

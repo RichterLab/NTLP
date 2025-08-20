@@ -94,7 +94,7 @@ class ParticleRecord( Enum ):
     TIME_INDEX              = 2
     RADIUS_INDEX            = 3
     TEMPERATURE_INDEX       = 4
-    SALT_MASS_INDEX         = 5
+    SALT_SOLUTE_INDEX       = 5
     AIR_TEMPERATURE_INDEX   = 6
     RELATIVE_HUMIDITY_INDEX = 7
     AIR_DENSITY_INDEX       = 8
@@ -426,7 +426,7 @@ def create_droplet_batch( number_droplets, number_evaluations=1, solve_ivp_atol=
     Returns 3 values:
 
       random_inputs     - Array, sized number_droplets x 6, containing the droplets
-                          radii, temperatures, salt mass, air temperature, relative
+                          radii, temperatures, salt solute, air temperature, relative
                           humidity, and rhoa.
       random_outputs    - Array, sized number_droplets x 2, containing the droplets
                           radii and temperatures.
@@ -565,7 +565,7 @@ def create_droplet_batch( number_droplets, number_evaluations=1, solve_ivp_atol=
             except TimeoutError as e:
                 nudge_count += 1
                 if nudge_count < 3:
-                    # Adjust the salt content by 0.01% and see if that gets past
+                    # Adjust the salt solute by 0.01% and see if that gets past
                     # whatever numerical issue the ODE solver has encountered.
                     random_inputs[droplet_index, :][2] *= 1.0 + (0.0001 * np.random.choice( [-1, 1] ))
                     continue
@@ -598,7 +598,7 @@ def create_training_file( file_name, number_droplets, user_batch_size=None, quie
 
       1. Input radius, in meters
       2. Input temperature, in Kelvin
-      3. Input salt mass, in kilograms
+      3. Input salt solute, in kilograms
       4. Input air temperature, in Kelvin
       5. Input relative humidity, as a non-dimensional value with 100% humidity at 1.0
       6. Input rhoa, in non-dimensional units
@@ -973,8 +973,8 @@ def read_particles_data( particles_root, particle_ids, dirs_per_level, quiet_fla
                       "output be temperatures": 1D NumPy array of particle
                                                 temperatures after backward
                                                 Euler, in Kelvin.
-                      "salt masses":            1D NumPy array of the particle's
-                                                salt mass, in kilograms.
+                      "salt solutes":           1D NumPy array of the particle's
+                                                salt solute, in kilograms.
                       "air temperatures":       1D NumPy array of air
                                                 temperatures at the particle's
                                                 positions, in Kelvin.
@@ -1025,7 +1025,7 @@ def read_particles_data( particles_root, particle_ids, dirs_per_level, quiet_fla
         BE_TEMPERATURES_NAME,
         "input be temperatures",
         "input be radii",
-        "salt masses",
+        "salt solutes",
         "air temperatures",
         "relative humidities",
         "air densities"
@@ -1076,7 +1076,7 @@ def read_particles_data( particles_root, particle_ids, dirs_per_level, quiet_fla
     particles_df[BE_RADII_NAME]            = pd.Series( dtype=object )
     particles_df["input be temperatures"]  = pd.Series( dtype=object )
     particles_df[BE_TEMPERATURES_NAME]     = pd.Series( dtype=object )
-    particles_df["salt masses"]            = pd.Series( dtype=object )
+    particles_df["salt solutes"]           = pd.Series( dtype=object )
     particles_df["air temperatures"]       = pd.Series( dtype=object )
     particles_df["relative humidities"]    = pd.Series( dtype=object )
     particles_df["air densities"]          = pd.Series( dtype=object )
@@ -1178,7 +1178,7 @@ def read_particles_data( particles_root, particle_ids, dirs_per_level, quiet_fla
         particles_df.at[particle_id, BE_TEMPERATURES_NAME]     = observations_fp32[1:,  ParticleRecord.TEMPERATURE_INDEX.value][timeline_mask[1:]]
 
         # Background parameters.
-        particles_df.at[particle_id, "salt masses"]            = observations_fp32[:-1, ParticleRecord.SALT_MASS_INDEX.value][timeline_mask[:-1]]
+        particles_df.at[particle_id, "salt solutes"]           = observations_fp32[:-1, ParticleRecord.SALT_SOLUTE_INDEX.value][timeline_mask[:-1]]
         particles_df.at[particle_id, "air temperatures"]       = observations_fp32[:-1, ParticleRecord.AIR_TEMPERATURE_INDEX.value][timeline_mask[:-1]]
         particles_df.at[particle_id, "relative humidities"]    = observations_fp32[:-1, ParticleRecord.RELATIVE_HUMIDITY_INDEX.value][timeline_mask[:-1]]
         particles_df.at[particle_id, "air densities"]          = observations_fp32[:-1, ParticleRecord.AIR_DENSITY_INDEX.value][timeline_mask[:-1]]

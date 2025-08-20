@@ -16,7 +16,7 @@ from scipy.integrate import solve_ivp
 # for the parameters that have a large dynamic range.
 DROPLET_RADIUS_LOG_RANGE        = np.array( (-8, -3) )
 DROPLET_TEMPERATURE_RANGE       = np.array( (273, 310) )
-DROPLET_SALT_MASS_LOG_RANGE     = np.array( (-22, -8) )
+DROPLET_SALT_SOLUTE_LOG_RANGE   = np.array( (-22, -8) )
 DROPLET_AIR_TEMPERATURE_RANGE   = np.array( (273, 310) )
 DROPLET_RELATIVE_HUMIDITY_RANGE = np.array( (0.55, 1.1) )
 DROPLET_RHOA_RANGE              = np.array( (0.8, 1.3) )
@@ -87,7 +87,7 @@ def display_parameter_ranges( parameter_ranges, display_type=DisplayType.HUMAN, 
         "\n" + \
         "{indent:s}  log10(Radius)       [{{:.2f}}, {{:.2f}}] m\n" + \
         "{indent:s}  Temperature:        [{{:.2f}}, {{:.2f}}] K\n" + \
-        "{indent:s}  log10(Salt mass):   [{{:.2f}}, {{:.2f}}] kg/m^3\n" + \
+        "{indent:s}  log10(Salt solute): [{{:.2f}}, {{:.2f}}] kg\n" + \
         "{indent:s}  Air temperature:    [{{:.2f}}, {{:.2f}}] K\n" + \
         "{indent:s}  Relative humidity:  [{{:.2f}}, {{:.2f}}] %\n" + \
         "{indent:s}  Air density:        [{{:.2f}}, {{:.2f}}] kg/m^3\n" + \
@@ -96,7 +96,7 @@ def display_parameter_ranges( parameter_ranges, display_type=DisplayType.HUMAN, 
         "{indent:s}parameter_ranges = {{{{\n" + \
         "{indent:s}    \"radius\":             ({{:f}}, {{:f}}),\n" + \
         "{indent:s}    \"temperature\":        ({{:f}}, {{:f}}),\n" + \
-        "{indent:s}    \"salt_mass\":          ({{:f}}, {{:f}}),\n" + \
+        "{indent:s}    \"salt_solute\":        ({{:f}}, {{:f}}),\n" + \
         "{indent:s}    \"air_temperature\":    ({{:f}}, {{:f}}),\n" + \
         "{indent:s}    \"relative_humidity\":  ({{:f}}, {{:f}}),\n" + \
         "{indent:s}    \"rhoa\":               ({{:f}}, {{:f}}),\n" + \
@@ -124,7 +124,7 @@ def display_parameter_ranges( parameter_ranges, display_type=DisplayType.HUMAN, 
     display_str = template.format(
         parameter_ranges["radius"][0],            parameter_ranges["radius"][1],
         parameter_ranges["temperature"][0],       parameter_ranges["temperature"][1],
-        parameter_ranges["salt_mass"][0],         parameter_ranges["salt_mass"][1],
+        parameter_ranges["salt_solute"][0],       parameter_ranges["salt_solute"][1],
         parameter_ranges["air_temperature"][0],   parameter_ranges["air_temperature"][1],
         parameter_ranges["relative_humidity"][0], parameter_ranges["relative_humidity"][1],
         parameter_ranges["rhoa"][0],              parameter_ranges["rhoa"][1],
@@ -227,6 +227,87 @@ def dydt( t, y, parameters ):
                    as either a 1D vector (of length 2), or a 2D array (sized
                    number_droplets x 2) though must be shape compatible with the
                    parameters array.
+      parameters - NumPy array of droplet parameters containing solute term, air temperature,
+                   relative humidity, and rhoa.  May be specified as either a
+                   1D vector (of length 4), or a 2D array (sized number_droplets x 4)
+                   though must be shape compatible with the y array.
+
+    Returns 2 values:
+
+      dradius_dt      - The derivative of the droplet's radius with respect to time, shaped
+                        number_droplets x 1.
+      dtemperature_dt - The derivative of the droplet's temperature with respect to time,
+                        shaped number_droplets x 1.
+
+    """
+
+    #
+    # NOTE: We work in 64-bit precision regardless of the input
+    #       so we get an as accurate as possible answer.
+    #
+    r    = y[..., 0].astype( "float64" )
+    Tp   = y[..., 1].astype( "float64" )
+
+    solute_term = parameters[..., 0].astype( "float64" )
+    Tf          = parameters[..., 1].astype( "float64" )
+    RH          = parameters[..., 2].astype( "float64" )
+    rhoa        = parameters[..., 3].astype( "float64" )
+
+    rhow = np.float64( 1000 )
+    #Cpp  = np.float64( 4190 )  #CM1
+    Cpp  = np.float64( 4179 )  #NTLP
+    Mw   = np.float64( 0.018015 )
+    Ru   = np.float64( 8.3144 )
+    Gam  = np.float64( 7.28e-2 )
+    Shp  = np.float64( 2 )
+    Sc   = np.float64( 0.615 )
+    Pra  = np.float64( 0.715 )
+    Cpa  = np.float64( 1006.0 )
+    nuf  = np.float64( 1.57e-5 )
+    Lv   = np.float64( (25.0 - 0.02274*26)*10**5 )
+    Nup  = np.float64( 2 )
+
+    Volp = 4/3*np.pi*r**3
+
+    term1     = Lv*Mw/Ru*(1/Tf - 1/Tp)
+    term2     = 2*Mw*Gam/Ru/rhow/r/Tp
+    term3     = solute_term/(Volp*rhow)
+    exp_stuff = term1 + term2  - term3
+
+    #einf = 611.2*np.exp(17.67*(Tf-273.15)/(Tf-29.65))  #CM1, Bolton (1980, MWR)
+    einf  = 610.94*np.exp((17.6257*(Tf-273.15))/(243.04+(Tf-273.15)))  #NTLP
+    qinf  = RH/rhoa*(einf*Mw/Ru/Tf)
+    qstar = einf*Mw/Ru/Tp/rhoa*np.exp(exp_stuff)
+
+    dy1dt = 1/2*Shp*nuf*rhoa/Sc/rhow/r*(qinf - qstar)
+    dy2dt = -3/2*Nup*nuf*rhoa/Pra*Cpa/Cpp/rhow/r**2*(Tp - Tf) + 3*Lv/r/Cpp*dy1dt
+
+    return [dy1dt, dy2dt]
+
+def dydt_mass( t, y, parameters ):
+    """
+    Differential equations governing a water droplet's radius and temperature as
+    a function of time, given the specified physical parameters.
+
+    Adapted from code provided by David Richter (droplet_integrator.py) in August 2024.
+    Changes made include:
+
+      - Accepting NumPy arrays for the parameters instead of having hard-coded values.
+
+        NOTE: While it allows for multiple parameters to be specified via additional rows
+              this does not necessarily work with scipy.solve_ivp()!
+
+      - Parameters are promoted to 64-bit floating point values so all internal
+        calculations are performed at maximum precision, resulting in 64-bit outputs.
+        It is the caller's responsibility for casting the results to a different precision.
+
+    Takes 3 arguments:
+
+      t          - Unused argument.  Required for the use of scipy.solve_ivp().
+      y          - NumPy array of droplet radii and temperatures.  May be specified
+                   as either a 1D vector (of length 2), or a 2D array (sized
+                   number_droplets x 2) though must be shape compatible with the
+                   parameters array.
       parameters - NumPy array of droplet parameters containing salt mass, air temperature,
                    relative humidity, and rhoa.  May be specified as either a
                    1D vector (of length 2), or a 2D array (sized number_droplets x 2)
@@ -302,88 +383,6 @@ def dydt( t, y, parameters ):
 
     return [dy1dt, dy2dt]
 
-def dydt_solute( t, y, parameters ):
-    """
-    Differential equations governing a water droplet's radius and temperature as
-    a function of time, given the specified physical parameters.
-
-    Adapted from code provided by David Richter (droplet_integrator.py) in August 2024.
-    Changes made include:
-
-      - Accepting NumPy arrays for the parameters instead of having hard-coded values.
-
-        NOTE: While it allows for multiple parameters to be specified via additional rows
-              this does not necessarily work with scipy.solve_ivp()!
-
-      - Parameters are promoted to 64-bit floating point values so all internal
-        calculations are performed at maximum precision, resulting in 64-bit outputs.
-        It is the caller's responsibility for casting the results to a different precision.
-
-    Takes 3 arguments:
-
-      t          - Unused argument.  Required for the use of scipy.solve_ivp().
-      y          - NumPy array of droplet radii and temperatures.  May be specified
-                   as either a 1D vector (of length 2), or a 2D array (sized
-                   number_droplets x 2) though must be shape compatible with the
-                   parameters array.
-      parameters - NumPy array of droplet parameters containing solute term, air temperature,
-                   relative humidity, and rhoa.  May be specified as either a
-                   1D vector (of length 4), or a 2D array (sized number_droplets x 4)
-                   though must be shape compatible with the y array.
-
-    Returns 2 values:
-
-      dradius_dt      - The derivative of the droplet's radius with respect to time, shaped
-                        number_droplets x 1.
-      dtemperature_dt - The derivative of the droplet's temperature with respect to time,
-                        shaped number_droplets x 1.
-
-    """
-
-    #
-    # NOTE: We work in 64-bit precision regardless of the input
-    #       so we get an as accurate as possible answer.
-    #
-    r    = y[..., 0].astype( "float64" )
-    Tp   = y[..., 1].astype( "float64" )
-
-    solute_term = parameters[..., 0].astype( "float64" )
-    Tf          = parameters[..., 1].astype( "float64" )
-    RH          = parameters[..., 2].astype( "float64" )
-    rhoa        = parameters[..., 3].astype( "float64" )
-
-    rhow = np.float64( 1000 )
-    #Cpp  = np.float64( 4190 )  #CM1
-    Cpp  = np.float64( 4179 )  #NTLP
-    Mw   = np.float64( 0.018015 )
-    Ru   = np.float64( 8.3144 )
-    Gam  = np.float64( 7.28e-2 )
-    Shp  = np.float64( 2 )
-    Sc   = np.float64( 0.615 )
-    Pra  = np.float64( 0.715 )
-    Cpa  = np.float64( 1006.0 )
-    nuf  = np.float64( 1.57e-5 )
-    Lv   = np.float64( (25.0 - 0.02274*26)*10**5 )
-    Nup  = np.float64( 2 )
-
-    Volp = 4/3*np.pi*r**3
-
-    term1     = Lv*Mw/Ru*(1/Tf - 1/Tp)
-    term2     = 2*Mw*Gam/Ru/rhow/r/Tp
-    term3     = solute_term/(Volp*rhow)
-    exp_stuff = term1 + term2  - term3
-
-    #einf = 611.2*np.exp(17.67*(Tf-273.15)/(Tf-29.65))  #CM1, Bolton (1980, MWR)
-    einf  = 610.94*np.exp((17.6257*(Tf-273.15))/(243.04+(Tf-273.15)))  #NTLP
-    qinf  = RH/rhoa*(einf*Mw/Ru/Tf)
-    qstar = einf*Mw/Ru/Tp/rhoa*np.exp(exp_stuff)
-
-    dy1dt = 1/2*Shp*nuf*rhoa/Sc/rhow/r*(qinf - qstar)
-    dy2dt = -3/2*Nup*nuf*rhoa/Pra*Cpa/Cpp/rhow/r**2*(Tp - Tf) + 3*Lv/r/Cpp*dy1dt
-
-    return [dy1dt, dy2dt]
-
-
 def get_parameter_ranges():
     """
     Gets the current droplet parameter ranges as a dictionary mapping
@@ -395,7 +394,7 @@ def get_parameter_ranges():
     Returns 1 value:
 
       parameter_ranges - Dictionary with the following keys: "radius",
-                         "temperature", "salt_mass", "air_temperature",
+                         "temperature", "salt_solute", "air_temperature",
                          "relative_humidity", "rhoa", "time"
 
     """
@@ -404,7 +403,7 @@ def get_parameter_ranges():
 
     parameter_ranges["radius"]            = DROPLET_RADIUS_LOG_RANGE
     parameter_ranges["temperature"]       = DROPLET_TEMPERATURE_RANGE
-    parameter_ranges["salt_mass"]         = DROPLET_SALT_MASS_LOG_RANGE
+    parameter_ranges["salt_solute"]       = DROPLET_SALT_SOLUTE_LOG_RANGE
     parameter_ranges["air_temperature"]   = DROPLET_AIR_TEMPERATURE_RANGE
     parameter_ranges["relative_humidity"] = DROPLET_RELATIVE_HUMIDITY_RANGE
     parameter_ranges["rhoa"]              = DROPLET_RHOA_RANGE
@@ -423,7 +422,7 @@ def set_parameter_ranges( parameter_ranges ):
     Takes 1 argument:
 
       parameter_ranges - Dictionary with one or more of the following keys:
-                         "radius", "temperature", "salt_mass",
+                         "radius", "temperature", "salt_solute",
                          "air_temperature", "relative_humidity", "rhoa", "time"
 
     Returns nothing.
@@ -431,7 +430,7 @@ def set_parameter_ranges( parameter_ranges ):
     """
 
     global DROPLET_RADIUS_LOG_RANGE, DROPLET_TEMPERATURE_RANGE, \
-           DROPLET_SALT_MASS_LOG_RANGE, DROPLET_AIR_TEMPERATURE_RANGE, \
+           DROPLET_SALT_SOLUTE_LOG_RANGE, DROPLET_AIR_TEMPERATURE_RANGE, \
            DROPLET_RELATIVE_HUMIDITY_RANGE, DROPLET_RHOA_RANGE, \
            DROPLET_TIME_LOG_RANGE
 
@@ -439,8 +438,8 @@ def set_parameter_ranges( parameter_ranges ):
         DROPLET_RADIUS_LOG_RANGE = parameter_ranges["radius"]
     if "temperature" in parameter_ranges:
         DROPLET_TEMPERATURE_RANGE = parameter_ranges["temperature"]
-    if "salt_mass" in parameter_ranges:
-        DROPLET_SALT_MASS_LOG_RANGE = parameter_ranges["salt_mass"]
+    if "salt_solute" in parameter_ranges:
+        DROPLET_SALT_SOLUTE_LOG_RANGE = parameter_ranges["salt_solute"]
     if "air_temperature" in parameter_ranges:
         DROPLET_AIR_TEMPERATURE_RANGE = parameter_ranges["air_temperature"]
     if "relative_humidity" in parameter_ranges:
@@ -493,7 +492,7 @@ def normalize_droplet_parameters( droplet_parameters ):
 
     # Sometimes we have the remaining parameters.
     if number_parameters > 2:
-        normalized_droplet_parameters[..., 2] = (np.log10( droplet_parameters[..., 2] ) - np.mean( DROPLET_SALT_MASS_LOG_RANGE )) / (np.diff( DROPLET_SALT_MASS_LOG_RANGE ) / 2)
+        normalized_droplet_parameters[..., 2] = (np.log10( droplet_parameters[..., 2] ) - np.mean( DROPLET_SALT_SOLUTE_LOG_RANGE )) / (np.diff( DROPLET_SALT_SOLUTE_LOG_RANGE ) / 2)
         normalized_droplet_parameters[..., 3] = (droplet_parameters[..., 3] - np.mean( DROPLET_AIR_TEMPERATURE_RANGE )) / (np.diff( DROPLET_AIR_TEMPERATURE_RANGE ) / 2)
         normalized_droplet_parameters[..., 4] = (droplet_parameters[..., 4] - np.mean( DROPLET_RELATIVE_HUMIDITY_RANGE )) / (np.diff( DROPLET_RELATIVE_HUMIDITY_RANGE ) / 2)
         normalized_droplet_parameters[..., 5] = (droplet_parameters[..., 5] - np.mean( DROPLET_RHOA_RANGE )) / (np.diff( DROPLET_RHOA_RANGE ) / 2)
@@ -548,7 +547,7 @@ def scale_droplet_parameters( droplet_parameters ):
 
     # Sometimes we have the remaining parameters.
     if number_parameters > 2:
-        scaled_droplet_parameters[..., 2] = 10.0 ** (droplet_parameters[..., 2] * (np.diff( DROPLET_SALT_MASS_LOG_RANGE ) / 2) + np.mean( DROPLET_SALT_MASS_LOG_RANGE ))
+        scaled_droplet_parameters[..., 2] = 10.0 ** (droplet_parameters[..., 2] * (np.diff( DROPLET_SALT_SOLUTE_LOG_RANGE ) / 2) + np.mean( DROPLET_SALT_SOLUTE_LOG_RANGE ))
         scaled_droplet_parameters[..., 3] = droplet_parameters[..., 3] * (np.diff( DROPLET_AIR_TEMPERATURE_RANGE ) / 2) + np.mean( DROPLET_AIR_TEMPERATURE_RANGE )
         scaled_droplet_parameters[..., 4] = droplet_parameters[..., 4] * (np.diff( DROPLET_RELATIVE_HUMIDITY_RANGE ) / 2) + np.mean( DROPLET_RELATIVE_HUMIDITY_RANGE )
         scaled_droplet_parameters[..., 5] = droplet_parameters[..., 5] * (np.diff( DROPLET_RHOA_RANGE ) / 2) + np.mean( DROPLET_RHOA_RANGE )

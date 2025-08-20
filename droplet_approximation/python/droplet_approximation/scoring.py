@@ -473,7 +473,7 @@ def particle_scoring_pipeline( particles_root, particle_ids_batches, dirs_per_le
             particle_parameters = np.stack( p_df[[
                                       "input {:s} radii".format( BE_TAG_NAME ),
                                       "input {:s} temperatures".format( BE_TAG_NAME ),
-                                      "salt masses",
+                                      "salt solutes",
                                       "air temperatures",
                                       "relative humidities",
                                       "air densities",
