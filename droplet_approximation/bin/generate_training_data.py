@@ -213,14 +213,7 @@ def main( argv ):
         number_processes * number_droplets ) )
 
     # Print out the ranges so the user can review them.
-    longest_name_length      = max( map( lambda name: len( name ), PARAMETER_NAMES ) )
-    parameter_range_template = "  {{:<{:d}s}} [{{:.2f}}, {{:.2f}}]".format( longest_name_length + 4 )
-    print( "Parameter ranges used:\n" )
-    for parameter_name in PARAMETER_NAMES:
-        print( parameter_range_template.format(
-            parameter_name + ":",
-            parameter_ranges[parameter_name][0],
-            parameter_ranges[parameter_name][1] ) )
+    droplet_approximation.display_parameter_ranges( parameter_ranges )
     print()
 
     # Spawn off N-many processes each generating a block of data.
