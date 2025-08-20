@@ -16,10 +16,10 @@ from scipy.integrate import solve_ivp
 # for the parameters that have a large dynamic range.
 DROPLET_RADIUS_LOG_RANGE        = np.array( (-8, -3) )
 DROPLET_TEMPERATURE_RANGE       = np.array( (273, 310) )
-DROPLET_SALT_MASS_LOG_RANGE     = np.array( (-22, -10) )
+DROPLET_SALT_MASS_LOG_RANGE     = np.array( (-22, -8) )
 DROPLET_AIR_TEMPERATURE_RANGE   = np.array( (273, 310) )
-DROPLET_RELATIVE_HUMIDITY_RANGE = np.array( (0.65, 1.1) )
-DROPLET_RHOA_RANGE              = np.array( (0.8, 1.2) )
+DROPLET_RELATIVE_HUMIDITY_RANGE = np.array( (0.55, 1.1) )
+DROPLET_RHOA_RANGE              = np.array( (0.8, 1.3) )
 DROPLET_TIME_LOG_RANGE          = np.array( (-2.0, 1.0) )
 
 # Tolerances for BDF solves.  Per solve_ivp() the effective tolerance is:
