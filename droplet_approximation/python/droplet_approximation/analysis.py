@@ -112,6 +112,10 @@ def bin_particles_data( particles_df, evaluation_tags, histogram_times, radbins,
         Bins a particular particle's radius/temperature for each histogram time.
         """
 
+        # Skip particles that don't have observations.
+        if particle_df["number observations"] == 0:
+            return
+
         # Find the histogram times that fall in a particle's lifetime
         # with some rounding to account for any rounding errors.
         EPSILON = 0.0005
