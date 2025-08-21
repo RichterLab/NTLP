@@ -1449,13 +1449,31 @@ def _read_particle_evaluation_data( evaluation_file_path ):
 
     """
 
+    # Open the file and read it in big chunk (possibly with multiple filesystem reads)
+    # and let NumPy create an array from the buffer.
+    #
+    # NOTE: We transpose the data so it's in column-major order to match the
+    #       access patterns typically encountered by the caller (e.g. operating
+    #       on a single field for all observations).
+    #
+    # NOTE: Manually reading the data and creating an array from a buffer is
+    #       *significantly* faster than simply using .fromfile().  Depending on
+    #       the number of observations read, and the underlying file system,
+    #       this can be 3-10x faster.
+    #
+    with open( evaluation_file_path, "rb" ) as evaluation_fp:
+        evaluation_data = evaluation_fp.read()
     #
     # NOTE: Evaluation data are already sorted by time!
     #
-    evaluation_data = np.fromfile( evaluation_file_path, dtype=np.float32 ).reshape( (-1, 2) )
+    evaluation_data = np.frombuffer( evaluation_data, dtype=np.float32 ).reshape( (-1, 2) ).copy( order="F" )
 
     # Split the data into two separate arrays since we're assigning these to
     # Pandas Series.
+    #
+    # NOTE: These are really views on evaluation_data from above, so
+    #       the underlying storage order matters.
+    #
     evaluation_radii        = evaluation_data[:, 0]
     evaluation_temperatures = evaluation_data[:, 1]
 
@@ -1486,7 +1504,21 @@ def _read_raw_particle_data( particle_path ):
 
     """
 
-    observations_fp32  = np.fromfile( particle_path, dtype=np.float32 ).reshape( -1, ParticleRecord.SIZE.value ).copy( order="F" )
+    # Open the file and read it in big chunk (possibly with multiple filesystem reads)
+    # and let NumPy create an array from the buffer.
+    #
+    # NOTE: We transpose the data so it's in column-major order to match the
+    #       access patterns typically encountered by the caller (e.g. operating
+    #       on a single field for all observations).
+    #
+    # NOTE: Manually reading the data and creating an array from a buffer is
+    #       *significantly* faster than simply using .fromfile().  Depending on
+    #       the number of observations read, and the underlying file system,
+    #       this can be 3-10x faster.
+    #
+    with open( particle_path, "rb" ) as particle_fp:
+        particle_data = particle_fp.read()
+    observations_fp32 = np.frombuffer( particle_data, dtype=np.float32 ).reshape( -1, ParticleRecord.SIZE.value ).copy( order="F" )
 
     # Sort the observations by time.
     #
