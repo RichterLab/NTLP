@@ -396,13 +396,13 @@ def particle_evaluation_pipeline( particles_root, particle_ids, dirs_per_level,
             outputs = np.empty( shape=(observations_fp32.shape[0] - 1, 2), dtype=np.float32 )
 
             if evaluation_type == EvaluationType.BDF:
-                outputs[:] = inference( observations_fp32[:, ParticleRecord.RADIUS_INDEX.value:ParticleRecord.SIZE.value],
-                                        observations_fp32[:, ParticleRecord.TIME_INDEX.value],
+                outputs[:] = inference( observations_fp32[:, ParticleRecord.RADIUS_INDEX:ParticleRecord.SIZE],
+                                        observations_fp32[:, ParticleRecord.TIME_INDEX],
                                         atol=local_parameters["atol"],
                                         rtol=local_parameters["rtol"] )[output_slice, :]
             else:
-                outputs[:] = inference( observations_fp32[:, ParticleRecord.RADIUS_INDEX.value:ParticleRecord.SIZE.value],
-                                        observations_fp32[:, ParticleRecord.TIME_INDEX.value],
+                outputs[:] = inference( observations_fp32[:, ParticleRecord.RADIUS_INDEX:ParticleRecord.SIZE],
+                                        observations_fp32[:, ParticleRecord.TIME_INDEX],
                                         local_parameters["model"],
                                         local_parameters["device"] )[output_slice, :]
 
