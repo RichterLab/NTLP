@@ -835,7 +835,7 @@ def _read_particles_data_wrapper( particles_root, particle_ids, dirs_per_level, 
                                 dirs_per_level,
                                 **kwargs )
 
-def read_particles_data( particles_root, particle_ids, dirs_per_level, quiet_flag=True, cold_threshold=-np.inf, filter_be_failures=False, time_range=[-np.inf, np.inf], evaluations={} ):
+def read_particles_data( particles_root, particle_ids, dirs_per_level, quiet_flag=True, cold_threshold=-np.inf, filter_be_failures=False, time_range=[-np.inf, np.inf], evaluations={}, debug_time_ranges=False ):
     """
     Reads one or more raw particle files and creates a particle-centric
     DataFrame with one row per particle read.  Each row file contains all of the
@@ -855,7 +855,7 @@ def read_particles_data( particles_root, particle_ids, dirs_per_level, quiet_fla
           As a result, this is provided as a way to simplify downstream analysis
           by factoring out outlier removal.
 
-    Takes 8 arguments:
+    Takes 9 arguments:
 
       particles_root     - Path to the top-level directory to read raw particle
                            files from.
@@ -889,6 +889,11 @@ def read_particles_data( particles_root, particle_ids, dirs_per_level, quiet_fla
                            NOTE: If an evaluation file is missing, DataFrame
                                  construction is aborted so the issue can be
                                  remedied.
+
+      debug_time_ranges  - Optional Boolean flag specifying whether the cropping
+                           observations to time_range should be print diagnostic
+                           information to standard out or not.  If omitted, it
+                           defaults to False and no information is displayed.
 
     Returns 1 value:
 
@@ -1110,38 +1115,108 @@ def read_particles_data( particles_root, particle_ids, dirs_per_level, quiet_fla
         # Build this particle's timeline so we can keep the observations of
         # interest.
         #
-        # NOTE: This timeline includes all observation's whose inputs occur
-        #       within the range, admitting the last observation's output
+        # NOTE: This mask includes all observation's whose inputs occur within
+        #       the range, admitting the last observation's corresponding output
         #       to fall just outside of the range.
         #
-        timeline_mask = ((observations_fp32[:, ParticleRecord.TIME_INDEX] >= time_range[0]) &
-                         (observations_fp32[:, ParticleRecord.TIME_INDEX] <= time_range[1]))
-        included_mask = np.where( timeline_mask )[0]
+        observations_mask_all = ((observations_fp32[:, ParticleRecord.TIME_INDEX] >= time_range[0]) &
+                                 (observations_fp32[:, ParticleRecord.TIME_INDEX] <= time_range[1]))
 
-        # Include the successive observation into the mask if the time range
-        # did not include the last observation.
-        if len( included_mask ) > 0:
-
-            if included_mask[-1] != (len( timeline_mask ) - 1):
-                timeline_mask[included_mask[-1] + 1] = True
-
-        # Total number of full observations for this particle.  The last
-        # observation is ignored since we're combining the inputs of successive
-        # observations as the previous observation's outputs, and we don't have
-        # it's result.
+        # Setup our indexing to pull the correct observations for constructing
+        # the particle's evaluations, as well as when we read additional
+        # evaluations.  Applying Boolean mask arrays is a heavyweight operation
+        # relative to slicing (3-10x slower, depending on the number of
+        # observations) so we only use them when we have to.
         #
-        # NOTE: We may not have any observations if the particle existed outside
-        #       of the supplied time range.
+        # NOTE: Supporting a timeline window makes things complicated as we have
+        #       to both slice the observations and, separately, mask them.
+        #       We cannot compose both of these operations together into a single
+        #       slice-like access as applying a Boolean mask will shrink the
         #
-        particles_df.at[particle_id, "number observations"] = max( 0, timeline_mask.sum() - 1 )
+        if (observations_mask_all.sum() == observations_fp32.shape[0]):
+            # Slices encode indexing operations (i.e.. ":", ":-1", and "1:").
+            observations_mask_all     = slice( None )
+            observations_mask_outputs = slice( 1, None )
+            observations_mask_inputs  = slice( None, -1 )
+            evaluations_mask_all      = slice( None )
+
+            # We have one evaluation for every output observation.
+            number_evaluations = observations_fp32.shape[0] - 1
+        else:
+            # We're cropping available observations to a window of time, so
+            # we must use Boolean mask arrays that are each slightly altered
+            # to represent both a subset in time and a subset of that subset
+            # (e.g ignoring the first or last cropped value).
+            #
+            # The inputs and the outputs masks are strict subsets of the all
+            # mask, each retaining one fewer observation than the all mask.  The
+            # input mask is aligned at the beginning of the all mask, while the
+            # output mask is shifted forward by one observation and is aligned
+            # at the end of the all mask.
+            #
+            # Evaluations are always time aligned with the available
+            # observations' timeline and *NOT* the currently requested time
+            # window.  This means we simply ignore the first observation.
+            observations_mask_inputs  = observations_mask_all.copy()
+            observations_mask_outputs = observations_mask_all.copy()
+            evaluations_mask_all      = observations_mask_all[:-1].copy()
+
+            # Determine if any of the observations fall within the time range
+            # requested.  This particle's observations could lie entirely
+            # out of the range which means we already have the masks of
+            # interest that are all False.
+            observations_included_mask = np.where( observations_mask_all )[0]
+            if len( observations_included_mask ) > 0:
+                # Ranges that do not include the final observation need to
+                # be extended by one observation so as to include it as the
+                # original mask's last input observation's output.  This
+                # covers the crop cases of (oo, B] and [A, B].
+                if observations_included_mask[-1] != (len( observations_mask_all ) - 1):
+                    observations_mask_all[observations_included_mask[-1] + 1]     = True
+                    observations_mask_outputs[observations_included_mask[-1] + 1] = True
+                else:
+                    # We're handling the crop case of [A, oo) where a subset
+                    # of observations ending with the last available has been
+                    # requested.  Remove the final included observation from
+                    # the input mask.
+                    observations_mask_inputs[observations_included_mask[-1]] = False
+
+                # Regardless of the crop case ((oo, B], [A, oo), or [A, B]) we
+                # need to remove the first included observation from the output
+                # mask.  This "shifts" the input observations to the outputs.
+                observations_mask_outputs[observations_included_mask[0]] = False
+
+                # Print the masks if we're debugging.  Note that evaluations
+                # match the output observations so we align their mask so its
+                # easier to see.
+                if debug_time_ranges:
+                    print( "\n"
+                           "All:         {}\n",
+                           "Inputs:      {}\n",
+                           "Outputs:     {}\n",
+                           "Evaluations:       {}\n".format(
+                               observations_mask_all,
+                               observations_mask_inputs,
+                               observations_mask_outputs,
+                               evaluations_mask_all ) )
+
+            # We have one evaluation for every output observation.
+            number_evaluations = max( 0, observations_mask_outputs.sum() )
+
+        #
+        # NOTE: Particle DataFrames actually contain (input, output) evaluations
+        #       though were originally misnamed.
+        #
+        particles_df.at[particle_id, "number observations"] = number_evaluations
 
         # Keep track of when this particle existed regardless of whether we
         # retain any of it's observations.
         particles_df.at[particle_id, "birth time"] = observations_fp32[0,  ParticleRecord.TIME_INDEX]
         particles_df.at[particle_id, "death time"] = observations_fp32[-1, ParticleRecord.TIME_INDEX]
 
-        # Simulation timeline.
-        particles_df.at[particle_id, "integration times"] = np.diff( observations_fp32[:, ParticleRecord.TIME_INDEX][timeline_mask] )
+        # Use the particle's observation times to compute the evaluations'
+        # integration times.
+        particles_df.at[particle_id, "integration times"] = np.diff( observations_fp32[observations_mask_all, ParticleRecord.TIME_INDEX] )
 
         # Skip particles that don't have any evaluations.  These are either
         # because they have zero observations or because they have one
@@ -1149,8 +1224,8 @@ def read_particles_data( particles_root, particle_ids, dirs_per_level, quiet_fla
         # first and last observation.  In both cases we retain the birth and
         # death times and wipe out the individual observations.
         #
-        # NOTE: Observe the lack of subscript on the integration time as Pandas
-        #       has converted the singleton array to a scalar!
+        # NOTE: Observe the lack of subscript on the "integration times" as
+        #       Pandas has converted the singleton array to a scalar!
         #
         if ((particles_df.at[particle_id, "number observations"] == 0) or
             (particles_df.at[particle_id, "number observations"] == 1 and
@@ -1165,26 +1240,25 @@ def read_particles_data( particles_root, particle_ids, dirs_per_level, quiet_fla
             continue
 
         # Backward Euler failures for this particle.
-        particles_df.at[particle_id, "number be failures"]     = BEStatus.get_failure_mask( observations_int32[:-1, ParticleRecord.BE_STATUS_INDEX][timeline_mask[:-1]] ).sum()
-        particles_df.at[particle_id, "be statuses"]            = observations_int32[:-1, ParticleRecord.BE_STATUS_INDEX][timeline_mask[:-1]]
-
+        particles_df.at[particle_id, "be statuses"]           = observations_int32[observations_mask_inputs, ParticleRecord.BE_STATUS_INDEX]
+        particles_df.at[particle_id, "number be failures"]    = BEStatus.get_failure_mask( particles_df.at[particle_id, "be statuses"] ).sum()
 
         # Observed radii.
-        particles_df.at[particle_id, "input be radii"]         = observations_fp32[:-1, ParticleRecord.RADIUS_INDEX][timeline_mask[:-1]]
-        particles_df.at[particle_id, BE_RADII_NAME]            = observations_fp32[1:,  ParticleRecord.RADIUS_INDEX][timeline_mask[1:]]
+        particles_df.at[particle_id, "input be radii"]        = observations_fp32[observations_mask_inputs,  ParticleRecord.RADIUS_INDEX]
+        particles_df.at[particle_id, BE_RADII_NAME]           = observations_fp32[observations_mask_outputs, ParticleRecord.RADIUS_INDEX]
 
         # Observed temperatures.
-        particles_df.at[particle_id, "input be temperatures"]  = observations_fp32[:-1, ParticleRecord.TEMPERATURE_INDEX][timeline_mask[:-1]]
-        particles_df.at[particle_id, BE_TEMPERATURES_NAME]     = observations_fp32[1:,  ParticleRecord.TEMPERATURE_INDEX][timeline_mask[1:]]
+        particles_df.at[particle_id, "input be temperatures"] = observations_fp32[observations_mask_inputs,  ParticleRecord.TEMPERATURE_INDEX]
+        particles_df.at[particle_id, BE_TEMPERATURES_NAME]    = observations_fp32[observations_mask_outputs, ParticleRecord.TEMPERATURE_INDEX]
 
         # Background parameters.
-        particles_df.at[particle_id, "salt solutes"]           = observations_fp32[:-1, ParticleRecord.SALT_SOLUTE_INDEX][timeline_mask[:-1]]
-        particles_df.at[particle_id, "air temperatures"]       = observations_fp32[:-1, ParticleRecord.AIR_TEMPERATURE_INDEX][timeline_mask[:-1]]
-        particles_df.at[particle_id, "relative humidities"]    = observations_fp32[:-1, ParticleRecord.RELATIVE_HUMIDITY_INDEX][timeline_mask[:-1]]
-        particles_df.at[particle_id, "air densities"]          = observations_fp32[:-1, ParticleRecord.AIR_DENSITY_INDEX][timeline_mask[:-1]]
+        particles_df.at[particle_id, "salt solutes"]          = observations_fp32[observations_mask_inputs, ParticleRecord.SALT_SOLUTE_INDEX]
+        particles_df.at[particle_id, "air temperatures"]      = observations_fp32[observations_mask_inputs, ParticleRecord.AIR_TEMPERATURE_INDEX]
+        particles_df.at[particle_id, "relative humidities"]   = observations_fp32[observations_mask_inputs, ParticleRecord.RELATIVE_HUMIDITY_INDEX]
+        particles_df.at[particle_id, "air densities"]         = observations_fp32[observations_mask_inputs, ParticleRecord.AIR_DENSITY_INDEX]
 
         # The particle's time line.
-        particles_df.at[particle_id, "times"]                  = observations_fp32[:-1, ParticleRecord.TIME_INDEX][timeline_mask[:-1]]
+        particles_df.at[particle_id, "times"]                 = observations_fp32[observations_mask_inputs, ParticleRecord.TIME_INDEX]
 
         # Get the evaluation file paths to read and the corresponding columns.
         evaluation_file_paths = get_evaluation_file_path( particle_path,
@@ -1197,20 +1271,9 @@ def read_particles_data( particles_root, particle_ids, dirs_per_level, quiet_fla
             (evaluation_radii,
              evaluation_temperatures)      = _read_particle_evaluation_data( evaluation_file_path )
 
-            #
-            # NOTE: Evaluation files only contain the outputs generated by
-            #       evaluating the previous input, resulting in arrays that are
-            #       one shorter than the particle's observations.  As a result
-            #       we don't have to play as many indexing games like we do
-            #       above.
-            #
-            #       The timeline mask covers all particle observations,
-            #       including the first that does not correspond to an output.
-            #       We remove the first mask entry to align it against our
-            #       evaluation data.
-            #
-            particles_df.at[particle_id, evaluation_radii_name]        = evaluation_radii[timeline_mask[1:]]
-            particles_df.at[particle_id, evaluation_temperatures_name] = evaluation_temperatures[timeline_mask[1:]]
+            # Keep the evaluations of interest.
+            particles_df.at[particle_id, evaluation_radii_name]        = evaluation_radii[evaluations_mask_all]
+            particles_df.at[particle_id, evaluation_temperatures_name] = evaluation_temperatures[evaluations_mask_all]
 
         # Work around Pandas being "helpful" by converting a single element
         # array into a scalar.  Without this, two observation/single evaluation
@@ -1235,6 +1298,32 @@ def read_particles_data( particles_root, particle_ids, dirs_per_level, quiet_fla
                 #
                 particles_df.at[particle_id, observation_name] = np.array( [[particles_df.at[particle_id, observation_name]]] )
                 particles_df.at[particle_id, observation_name].shape = [1]
+
+        # Provide a safety net against incorrect indexing.  We want to
+        # immediately know about broken indexing instead of randomly tripping up
+        # on a particle or, worse, never noticing and having subtly incorrect
+        # analysis.
+        #
+        # This ensures we have matching counts across all observation arrays.
+        # We take care to track the individual counts to aide in debugging
+        # should we explode.
+        array_sizes        = set()
+        observation_counts = []
+        for observation_name in OBSERVATION_NAMES:
+            if len( particles_df.at[particle_id, observation_name].shape ) > 0:
+                # 1D array.
+                observation_count = particles_df.at[particle_id, observation_name].shape[0]
+            else:
+                # Scalar that slipped through our conversion contortions.
+                observation_count = 1
+
+            array_sizes.add( observation_count )
+            observation_counts.append( observation_count )
+
+        if len( array_sizes ) != 1:
+            raise ValueError( "Array size mismatch for particle id {:d} ({})!".format(
+                particle_id,
+                observation_counts ) )
 
         # Drop the evaluations that have crazy integration times under the
         # assumption that we don't have a complete trace of this particle (some
