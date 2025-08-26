@@ -269,10 +269,12 @@ def launch_evaluation_pipeline( particles_root, particle_indices_range_str,
         print( "{:s} MLP evaluation:\n"
                "\n"
                "  Evaluation extension:  '{:s}'\n"
+               "  Requested model class: '{:s}'\n"
                "  Model path:            {:s}\n"
                "  Inference device:      {:s}\n".format(
                    "Iterative" if iterative_flag else "Direct",
                    evaluation_extension,
+                   parameters["model_class"],
                    parameters["checkpoint_path"],
                    parameters["device"],
                ) )
