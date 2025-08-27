@@ -3606,7 +3606,7 @@ CONTAINS
 
               droplet_parameters(1) = part%radius
               droplet_parameters(2) = part%Tp
-              droplet_parameters(3) = part%m_s
+              droplet_parameters(3) = part%kappa_s * part%m_s * rhow / rhos
               droplet_parameters(4) = part%Tf
               droplet_parameters(5) = part%qinf/(Mw*mod_magnus(part%Tf)/Ru/part%Tf)*rhoa
               droplet_parameters(6) = rhoa
