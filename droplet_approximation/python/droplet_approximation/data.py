@@ -900,7 +900,8 @@ def read_particles_data( particles_root, particle_ids, dirs_per_level, quiet_fla
       particle_df - DataFrame with one row per particle identifier in particle_ids.
                     Contains the following columns:
 
-                      "number observations":    Number of observations for the
+                      "number evaluations":     Number of evaluations
+                                                (input/output pairs for the
                                                 particle.  This is the length of
                                                 each of the 1D array columns.
                       "birth time":             Simulation time when this
@@ -1018,8 +1019,8 @@ def read_particles_data( particles_root, particle_ids, dirs_per_level, quiet_fla
     # Names of the observation columns.  Each of these stores an array of
     # observations that could be trimmed due to cold particles, if requested.
     #
-    # NOTE: These do not yet include the evaluation observation.  Those
-    #       columns are added later.
+    # NOTE: These do not yet include the evaluation outputs.  Those columns are
+    #       added later.
     #
     BE_RADII_NAME, BE_TEMPERATURES_NAME = get_evaluation_column_names( BE_TAG_NAME )
     OBSERVATION_NAMES = [
@@ -1070,21 +1071,21 @@ def read_particles_data( particles_root, particle_ids, dirs_per_level, quiet_fla
     #       "missing value" type which means Series are changed to a np.float64
     #       data type to accommodate the initial NaNs.
     #
-    particles_df["number observations"]    = zeros_int32
-    particles_df["birth time"]             = zeros_float32
-    particles_df["death time"]             = zeros_float32
-    particles_df["times"]                  = pd.Series( dtype=object )
-    particles_df["integration times"]      = pd.Series( dtype=object )
-    particles_df["number be failures"]     = zeros_int32
-    particles_df["be statuses"]            = pd.Series( dtype=object )
-    particles_df["input be radii"]         = pd.Series( dtype=object )
-    particles_df[BE_RADII_NAME]            = pd.Series( dtype=object )
-    particles_df["input be temperatures"]  = pd.Series( dtype=object )
-    particles_df[BE_TEMPERATURES_NAME]     = pd.Series( dtype=object )
-    particles_df["salt solutes"]           = pd.Series( dtype=object )
-    particles_df["air temperatures"]       = pd.Series( dtype=object )
-    particles_df["relative humidities"]    = pd.Series( dtype=object )
-    particles_df["air densities"]          = pd.Series( dtype=object )
+    particles_df["number evaluations"]    = zeros_int32
+    particles_df["birth time"]            = zeros_float32
+    particles_df["death time"]            = zeros_float32
+    particles_df["times"]                 = pd.Series( dtype=object )
+    particles_df["integration times"]     = pd.Series( dtype=object )
+    particles_df["number be failures"]    = zeros_int32
+    particles_df["be statuses"]           = pd.Series( dtype=object )
+    particles_df["input be radii"]        = pd.Series( dtype=object )
+    particles_df[BE_RADII_NAME]           = pd.Series( dtype=object )
+    particles_df["input be temperatures"] = pd.Series( dtype=object )
+    particles_df[BE_TEMPERATURES_NAME]    = pd.Series( dtype=object )
+    particles_df["salt solutes"]          = pd.Series( dtype=object )
+    particles_df["air temperatures"]      = pd.Series( dtype=object )
+    particles_df["relative humidities"]   = pd.Series( dtype=object )
+    particles_df["air densities"]         = pd.Series( dtype=object )
 
     # Add the evaluation columns.  Each of them are an array like the other
     # observation columns.
@@ -1203,11 +1204,8 @@ def read_particles_data( particles_root, particle_ids, dirs_per_level, quiet_fla
             # We have one evaluation for every output observation.
             number_evaluations = max( 0, observations_mask_outputs.sum() )
 
-        #
-        # NOTE: Particle DataFrames actually contain (input, output) evaluations
-        #       though were originally misnamed.
-        #
-        particles_df.at[particle_id, "number observations"] = number_evaluations
+        # We have one evaluation for every output observation.
+        particles_df.at[particle_id, "number evaluations"] = number_evaluations
 
         # Keep track of when this particle existed regardless of whether we
         # retain any of it's observations.
@@ -1227,12 +1225,12 @@ def read_particles_data( particles_root, particle_ids, dirs_per_level, quiet_fla
         # NOTE: Observe the lack of subscript on the "integration times" as
         #       Pandas has converted the singleton array to a scalar!
         #
-        if ((particles_df.at[particle_id, "number observations"] == 0) or
-            (particles_df.at[particle_id, "number observations"] == 1 and
+        if ((particles_df.at[particle_id, "number evaluations"] == 0) or
+            (particles_df.at[particle_id, "number evaluations"] == 1 and
              particles_df.at[particle_id, "integration times"] >= MAXIMUM_DT_GAP_SIZE)):
 
-            particles_df.at[particle_id, "number observations"] = 0
-            particles_df.at[particle_id, "number be failures"]  = 0
+            particles_df.at[particle_id, "number evaluations"] = 0
+            particles_df.at[particle_id, "number be failures"] = 0
 
             for observation_name in OBSERVATION_NAMES:
                 particles_df.at[particle_id, observation_name] = np.array( [] )
@@ -1375,7 +1373,7 @@ def read_particles_data( particles_root, particle_ids, dirs_per_level, quiet_fla
         #       complicated indexing in an already indexing-heavy portion of the
         #       code.
         #
-        if particles_df.at[particle_id, "number observations"] < 3:
+        if particles_df.at[particle_id, "number evaluations"] < 3:
             selection_func = np.min
         else:
             selection_func = np.median
@@ -1432,7 +1430,7 @@ def read_particles_data( particles_root, particle_ids, dirs_per_level, quiet_fla
                 # Once again, work around Pandas being "helpful" by converting
                 # a single element array into a scalar.  Without this, indexing
                 # this particle's columns will explode.
-                if number_gaps == (particles_df.at[particle_id, "number observations"] - 1):
+                if number_gaps == (particles_df.at[particle_id, "number evaluations"] - 1):
                      #
                      # NOTE: We must create a 2D array, shaped 1x1, so that
                      #       Pandas doesn't promote it to a Series object (and,
@@ -1446,10 +1444,10 @@ def read_particles_data( particles_root, particle_ids, dirs_per_level, quiet_fla
                     particles_df.at[particle_id, observation_name].shape = [1]
 
             # Finally, reduce the observation count by the gaps we've removed.
-            particles_df.at[particle_id, "number observations"] -= number_gaps
+            particles_df.at[particle_id, "number evaluations"] -= number_gaps
 
             # Move to the next particle if we eliminated all of the evaluations.
-            if particles_df.at[particle_id, "number observations"] == 0:
+            if particles_df.at[particle_id, "number evaluations"] == 0:
                 continue
 
         # Excise failed backward Euler (BE) evaluations if requested.  This
@@ -1468,7 +1466,7 @@ def read_particles_data( particles_root, particle_ids, dirs_per_level, quiet_fla
                 # can use it's simulation time as the start of this particle's
                 # life.
                 number_starting_failures = 1
-                for observation_index in range( 1, particles_df.at[particle_id, "number observations"] ):
+                for observation_index in range( 1, particles_df.at[particle_id, "number evaluations"] ):
                     if (particles_df.at[particle_id, "be statuses"][observation_index] & BEStatus.FAILED_UPDATE) == 0:
                         break
 
@@ -1478,12 +1476,12 @@ def read_particles_data( particles_root, particle_ids, dirs_per_level, quiet_fla
                 # failures and excising them will result in an empty particle.
                 # We retain the original birth and death times in that case so
                 # as to be consistent with the time range filtering from above.
-                if number_starting_failures != particles_df.at[particle_id, "number observations"]:
+                if number_starting_failures != particles_df.at[particle_id, "number evaluations"]:
                     particles_df.at[particle_id, "birth time"] = particles_df.at[particle_id, "times"][number_starting_failures]
 
             # Reduce the number of observations we have.
-            particles_df.at[particle_id, "number observations"] -= be_failure_mask.sum()
-            particles_df.at[particle_id, "number be failures"]  -= be_failure_mask.sum()
+            particles_df.at[particle_id, "number evaluations"] -= be_failure_mask.sum()
+            particles_df.at[particle_id, "number be failures"] -= be_failure_mask.sum()
 
             # Excise the failed BE observations.
             for observation_name in OBSERVATION_NAMES:
@@ -1506,8 +1504,8 @@ def read_particles_data( particles_root, particle_ids, dirs_per_level, quiet_fla
 
             # Subtract the trimmed observations and pretend that the particle
             # sprang into existence after our cut.
-            particles_df.at[particle_id, "number observations"] -= trim_index + 1
-            particles_df.at[particle_id, "birth time"]           = particles_df.at[particle_id, "times"][trim_index]
+            particles_df.at[particle_id, "number evaluations"] -= trim_index + 1
+            particles_df.at[particle_id, "birth time"]          = particles_df.at[particle_id, "times"][trim_index]
 
             # Excise the observations in question.
             for observation_name in OBSERVATION_NAMES:

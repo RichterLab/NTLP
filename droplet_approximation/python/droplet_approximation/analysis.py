@@ -113,7 +113,7 @@ def bin_particles_data( particles_df, evaluation_tags, histogram_times, radbins,
         """
 
         # Skip particles that don't have observations.
-        if particle_df["number observations"] == 0:
+        if particle_df["number evaluations"] == 0:
             return
 
         # Find the histogram times that fall in a particle's lifetime
