@@ -1011,10 +1011,12 @@ def read_particles_data( particles_root, particle_ids, dirs_per_level, quiet_fla
     # maximum timestep are are due to missing observations.
     MAXIMUM_DT_GAP_SIZE = 10.0
 
-    # Remove "be" if it is an evaluation tag
-    # to avoid attempted reading
-    if "be" in evaluations.keys():
-        del evaluations["be"]
+    # Guard against an evaluations dictionary that contains the backward Euler
+    # tag.  We remove this tag since there isn't a distinct evaluations file
+    # for it and allows the caller to reuse the same dictionary during reading
+    # and analysis.
+    if BE_TAG_NAME in evaluations.keys():
+        del evaluations[BE_TAG_NAME]
 
     # Names of the observation columns.  Each of these stores an array of
     # observations that could be trimmed due to cold particles, if requested.
