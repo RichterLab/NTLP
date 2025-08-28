@@ -1018,6 +1018,15 @@ def read_particles_data( particles_root, particle_ids, dirs_per_level, quiet_fla
     if BE_TAG_NAME in evaluations.keys():
         del evaluations[BE_TAG_NAME]
 
+    # Guard against duplicate particle identifiers that cause duplicate indices
+    # in the DataFrame and breaks the logic throughout this function that
+    # assumes every particle is unique.  Uniqify the identifiers while
+    # maintaining the original sort order, in case it is important.
+    particle_ids                            = np.array( particle_ids )
+    unique_particle_ids, identifier_indices = np.unique( particle_ids, return_index=True )
+    identifier_indices                      = np.sort( identifier_indices )
+    particle_ids                            = particle_ids[identifier_indices]
+
     # Names of the observation columns.  Each of these stores an array of
     # observations that could be trimmed due to cold particles, if requested.
     #
