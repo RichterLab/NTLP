@@ -19,6 +19,12 @@ from .physics import BDF_TOLERANCE_ABSOLUTE, \
 # along with other evaluations.
 BE_TAG_NAME = "be"
 
+# Maximum integration gap size, in simulation seconds, to consider.  This is
+# chosen such that it is larger than the largest LES-based timestep that
+# could occur in NTLP.  Differences in observation times larger than one
+# maximum timestep are are due to missing observations.
+MAXIMUM_DT_GAP_SIZE = 10.0
+
 class BEStatus( IntEnum ):
     """
     Container for constants describing the backward Euler (BE) status flags
@@ -1108,12 +1114,6 @@ def read_particles_data( particles_root, particle_ids, dirs_per_level, quiet_fla
     #       expression...
     #
 
-    # Maximum integration gap size, in simulation seconds, to consider.  This is
-    # chosen such that it is larger than the largest LES-based timestep that
-    # could occur in NTLP.  Differences in observation times larger than one
-    # maximum timestep are are due to missing observations.
-    MAXIMUM_DT_GAP_SIZE = 10.0
-
     # Guard against an evaluations dictionary that contains the backward Euler
     # tag.  We remove this tag since there isn't a distinct evaluations file
     # for it and allows the caller to reuse the same dictionary during reading
@@ -1433,61 +1433,9 @@ def read_particles_data( particles_root, particle_ids, dirs_per_level, quiet_fla
         # observations occurred on a MPI rank whose outputs were not processed).
         # This manifests as outputs that appear to have a huge integration time
         # because the intermediate observations are missing.
-        #
-        # The gap threshold is set at 5 times the median so we're robust to
-        # actual outliers in the observations, clamped at the maximum integration
-        # time seen in NTLP simulations.  Some simulations have larger time
-        # steps to begin with and are ratcheted down to small steps once a
-        # sufficient number of particles are present.  Median will step down to
-        # a smaller time step for particles with many observations while
-        # selecting a reasonable step size for small observation counts.
-        #
-        # We have to be careful to handle the extreme corner cases where taking
-        # the median breaks down, which is when we only have two evaluations.
-        # This leaves us to handle the following three cases:
-        #
-        #   1. Neither observation has a gap
-        #   2. One observation has a gap
-        #   3. Both observations have a gap
-        #
-        # Case #1 is handled by construction though case #2 requires us to
-        # compute the minimum integration time instead of the median, as
-        # this results in the average of the two integration times and yields
-        # a large threshold that doesn't detect the gap.  Taking the minimum
-        # at least flags the evaluation with a gap.  Keep in mind that we've
-        # already filtered out single evaluation particles with a large
-        # integration time above so we have at least two observations here.
-        #
-        # Noe that Case #3 cannot be detected from a single particle's
-        # evaluations alone.  We opt for simplicity instead of attempting to
-        # compute a running median across all particles because this is such
-        # an extreme corner case and, more importantly, it has not occurred
-        # yet.
-        #
-        # NOTE: This has not been tested on a wide range of simulations and
-        #       may not be sufficiently robust!
-        #
-        # NOTE: We perform gap detection after the DataFrame is setup to
-        #       simplify the logic throughout, albeit at the expense of some
-        #       performance.  Removing gaps after observations have been
-        #       combined into evaluations means we're eliminating gaps by
-        #       shifting potentially large swaths of evaluations around which is
-        #       memory bandwidth inefficient.
-        #
-        #       Handling this at the observation level would require more
-        #       complicated indexing in an already indexing-heavy portion of the
-        #       code.
-        #
-        if particles_df.at[particle_id, "number evaluations"] < 3:
-            selection_func = np.min
-        else:
-            selection_func = np.median
-
-        dt_threshold = min( 5 * selection_func( particles_df.at[particle_id, "integration times"] ),
-                            MAXIMUM_DT_GAP_SIZE )
-
-        gaps_mask = (particles_df.at[particle_id, "integration times"] > dt_threshold)
-        if np.any( gaps_mask ):
+        gaps_mask   = detect_timeline_gaps( particles_df.at[particle_id, "integration times"] )
+        number_gaps = gaps_mask.sum()
+        if number_gaps > 0:
             # We have at least one gap that we need to remove.  Since we're have
             # evaluations with an input and an output we can simply drop those
             # with large integration times.
@@ -1502,7 +1450,6 @@ def read_particles_data( particles_root, particle_ids, dirs_per_level, quiet_fla
             #       This shouldn't happen on fully evaluated datasets so we
             #       don't consider this a priority just yet.
             #
-            number_gaps = gaps_mask.sum()
 
             # Track how many gaps, and where they're located, so downstream
             # users can correctly segment the ungapped regions.  We take care to

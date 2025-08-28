@@ -23,6 +23,7 @@ from .data import BE_TAG_NAME, \
                   convert_NTLP_trace_array_to_particle_files, \
                   create_droplet_batch, \
                   create_training_file, \
+                  detect_timeline_gaps, \
                   get_evaluation_column_names, \
                   get_evaluation_file_path, \
                   get_particle_file_path, \
@@ -32,6 +33,7 @@ from .data import BE_TAG_NAME, \
                   write_particles_index
 from .models import SimpleNet, \
                     ResidualNet, \
+                    do_bdf, \
                     do_inference, \
                     do_iterative_bdf, \
                     do_iterative_inference, \

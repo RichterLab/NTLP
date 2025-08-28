@@ -61,7 +61,7 @@ class ResidualNet( SimpleNet ):
 
         return out
 
-def do_bdf( input_parameters, times, **kwargs ):
+def do_bdf( input_parameters, times, gap_indices=np.array( [] ), **kwargs ):
     """
     Evaluates droplet parameters using backward differentiation formula (BDF) at the
     supplied simulation times.
@@ -70,13 +70,17 @@ def do_bdf( input_parameters, times, **kwargs ):
     BDF's solution against the reference observation.  The ith input is used to
     generate the ith output.
 
-    Takes 3 arguments:
+    Takes 4 arguments:
 
       input_parameters    - NumPy array, sized number_time_steps x 6, containing the
                             input parameters for a single particle in order by time.
                             These are provided in their natural, physical ranges.
       times               - NumPy array, shaped number_time_steps x 1, containing
                             the time at each step.
+      gap_indices         - Optional NumPy array, shaped number_gaps x 1, containing
+                            gap indices specifying the locations in input_parameters
+                            immediately after a gap.  This is unused and only exists
+                            to provide a compatible interface with do_iterative_bdf().
       kwargs              - Optional keyword arguments to supply to solve_ivp_float32_outputs().
 
     Returns 1 value:
@@ -93,6 +97,13 @@ def do_bdf( input_parameters, times, **kwargs ):
                                   input_parameters.
 
     """
+
+    #
+    # NOTE: We provide gap_indices as an explicit argument to avoid manipulating
+    #       our kwargs and removing it if it is present.  This routine does not
+    #       care about gaps, but we generate a warning about an unused solver
+    #       parameter in solve_ivp() if it is part of the kwargs passed on.
+    #
 
     integration_times = np.diff( times )
 
@@ -120,12 +131,12 @@ def do_bdf( input_parameters, times, **kwargs ):
 
     return output_parameters
 
-def do_inference( input_parameters, times, model, device ):
+def do_inference( input_parameters, times, model, device, **kwargs ):
     """
     Estimates droplet parameters using a specified model.  Model evaluation is
     performed on the device specified.
 
-    Takes 4 arguments:
+    Takes 5 arguments:
 
       input_parameters - NumPy array, sized number_time_steps x 6, containing
                          the input parameters for either one particle with
@@ -136,6 +147,9 @@ def do_inference( input_parameters, times, model, device ):
                          the time at each step.
       model            - PyTorch model to use.
       device           - String specifying the device to evaluate with.
+      kwargs           - Optional keyword arguments.  These are provided for
+                         interface compatibility with the other inference
+                         routines and are ignored.
 
     Returns 1 value:
 
@@ -162,7 +176,7 @@ def do_inference( input_parameters, times, model, device ):
 
     # Allocate the outputs and zero the last output since direct inference does
     # not produce one due to the lack of an integration time for the final
-    # input..
+    # input.
     normalized_outputs        = torch.empty( (input_parameters.shape[0], 2), dtype=torch.float32 ).to( device )
     normalized_outputs[-1, :] = 0
 
@@ -172,19 +186,26 @@ def do_inference( input_parameters, times, model, device ):
 
     return scale_droplet_parameters( normalized_outputs.cpu() )
 
-def do_iterative_bdf( input_parameters, times, **kwargs ):
+def do_iterative_bdf( input_parameters, times, gap_indices=np.array( [] ), **kwargs ):
     """
     Iteratively evaluates a particle trajectory along given background inputs with
     backward differentiation formula (BDF).  The outputs for the ith time are
     used as the input for the (i+1)th time.
 
-    Takes 3 arguments:
+    Takes 4 arguments:
 
       input_parameters    - NumPy array, sized number_time_steps x 6, containing the
                             input parameters for a single particle in order by time.
                             These are provided in their natural, physical ranges.
       times               - NumPy array, shaped number_time_steps x 1, containing
                             the time at each step.
+      gap_indices         - Optional NumPy array, shaped number_gaps x 1, containing
+                            gap indices specifying the locations in input_parameters
+                            immediately after a gap.  May be supplied as an empty
+                            array.  If omitted, gap detection is not performed,
+                            otherwise the radius and temperatures from input_parameters
+                            is used after a gap instead of the previously output
+                            radius and temperature.
       kwargs              - Optional keyword arguments to supply to solve_ivp_float32_outputs().
 
     Returns 1 value:
@@ -204,21 +225,44 @@ def do_iterative_bdf( input_parameters, times, **kwargs ):
 
     integration_times = np.diff( times )
 
+    # Construct a sequence of gap markers, including a sentinel that we'll never
+    # reach, indicating when to reset our inputs.
+    current_gap_number   = 0
+    adjusted_gap_indices = np.append( gap_indices,
+                                      [input_parameters.shape[0] + 1],
+                                      axis=0 )
+
     output_parameters       = np.zeros( (input_parameters.shape[0], 2), dtype=np.float32 )
     output_parameters[0, :] = input_parameters[0, :2]
 
     # Evaluate all but the first observation, as it's our input.
     for time_index in range( 1, input_parameters.shape[0] ):
+        # Skip evaluations which effectively don't take a step forward in time.
         if integration_times[time_index - 1] < 1.0e-10:
             output_parameters[time_index, :] = output_parameters[time_index - 1, :]
             continue
 
+        # Select the correct input to this BDF evaluation based on whether we've
+        # passed a gap or not.
+        if time_index == adjusted_gap_indices[current_gap_number]:
+            # Start again from the inputs when we've passed a gap.
+            source_time_index  = time_index
+            radius_temperature = input_parameters[source_time_index, :2]
+
+            current_gap_number += 1
+        else:
+            # Otherwise continue iterating from the previous output.
+            source_time_index  = time_index - 1
+            radius_temperature = output_parameters[source_time_index, :2]
+
+        # Solve for this time's output using the previous evaluation's output
+        # as our input.
         output_parameters[time_index, :] = solve_ivp_float32_outputs( dydt,
-                                                                      [0, integration_times[time_index - 1]],
-                                                                      output_parameters[time_index - 1, :],
+                                                                      [0, integration_times[source_time_index]],
+                                                                      radius_temperature,
                                                                       method="BDF",
-                                                                      t_eval=[integration_times[time_index-1]],
-                                                                      args=(input_parameters[time_index-1, 2:],),
+                                                                      t_eval=[integration_times[source_time_index]],
+                                                                      args=(input_parameters[source_time_index, 2:],),
                                                                       **kwargs )
 
         # See if this evaluation failed to provide a solution.  If so, then we
@@ -230,13 +274,13 @@ def do_iterative_bdf( input_parameters, times, **kwargs ):
 
     return output_parameters
 
-def do_iterative_inference( input_parameters, times, model, device ):
+def do_iterative_inference( input_parameters, times, model, device, gap_indices=np.array( [] ) ):
     """
     Iteratively Estimates a particle trajectory along given background inputs
     using a MLP model.  The outputs for the ith time are used as the input for
     the (i+1)th time.
 
-    Takes 4 arguments:
+    Takes 5 arguments:
 
       input_parameters    - Array, sized number_time_steps x 6, containing the
                             input parameters for a single particle in order by time.
@@ -245,6 +289,13 @@ def do_iterative_inference( input_parameters, times, model, device ):
                             time at each step.
       model               - PyTorch model to use.
       device              - String specifying the device to evaluate with.
+      gap_indices         - Optional NumPy array, shaped number_gaps x 1, containing
+                            gap indices specifying the locations in input_parameters
+                            immediately after a gap.  May be supplied as an empty
+                            array.  If omitted, gap detection is not performed,
+                            otherwise the radius and temperatures from input_parameters
+                            is used after a gap instead of the previously output
+                            radius and temperature.
 
     Returns 1 value:
 
@@ -264,22 +315,42 @@ def do_iterative_inference( input_parameters, times, model, device ):
     eval_model = model.to( device )
     eval_model.eval()
 
-    # Calculate integration time between time steps.
-    # Keep an extra 0 at the end so that the array is
-    # the same length as the input parameters.
+    # Construct a sequence of gap markers, including a sentinel that we'll never
+    # reach, indicating when to reset our inputs.
+    current_gap_number   = 0
+    adjusted_gap_indices = np.append( gap_indices,
+                                      [input_parameters.shape[0] + 1],
+                                      axis=0 )
+
+    # Calculate integration time between time steps.  Keep an extra zero at the
+    # end so that the array is the same length as the input parameters, though
+    # only the first N-1 values are ever referenced.
     integration_times      = np.zeros( times.shape[0] )
     integration_times[:-1] = np.diff( times )
 
-    normalized_data = torch.from_numpy( np.hstack( [ normalize_droplet_parameters( input_parameters ),
-                                                     integration_times.reshape( -1, 1 ) ] )
-                                          .astype( "float32" )).to( device )
+    normalized_data = torch.from_numpy( np.hstack( [normalize_droplet_parameters( input_parameters ),
+                                                    integration_times.reshape( -1, 1 )] )
+                                          .astype( "float32" ) ).to( device )
 
     with torch.no_grad():
         for time_index in range( 1,  normalized_data.shape[0] ):
+            # Skip evaluations which effectively don't take a step forward in time.
             if integration_times[time_index - 1] < 1.0e-10:
                 normalized_data[time_index, :2] = normalized_data[time_index - 1, :2]
                 continue
-            normalized_data[time_index, :2] = eval_model( normalized_data[time_index - 1, :] )
+
+            # Select the correct input to this BDF evaluation based on whether
+            # we've passed a gap or not.
+            if time_index == adjusted_gap_indices[current_gap_number]:
+                # Start again from the inputs when we've passed a gap.
+                source_time_index = time_index
+
+                current_gap_number += 1
+            else:
+                # Otherwise continue iterating from the previous output.
+                source_time_index = time_index - 1
+
+            normalized_data[time_index, :2] = eval_model( normalized_data[source_time_index, :] )
 
     return scale_droplet_parameters( normalized_data[:, :2].to( "cpu" ).numpy() )
 

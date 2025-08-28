@@ -13,6 +13,7 @@ from torch import multiprocessing
 
 from .data import BE_TAG_NAME, \
                   ParticleRecord, \
+                  detect_timeline_gaps, \
                   get_evaluation_file_path, \
                   get_particle_file_path, \
                   read_particles_data, \
@@ -389,6 +390,12 @@ def particle_evaluation_pipeline( particles_root, particle_ids, dirs_per_level,
             # Get the particle's observations sorted by time.
             observations_fp32 = _read_raw_particle_data( particle_path )
 
+            # Identify where gaps in successive observations have occurred so we
+            # can correctly handle them when iteratively evaluating.
+            gaps_mask   = detect_timeline_gaps( observations_fp32[:, ParticleRecord.TIME_INDEX],
+                                                times_flag=True )
+            gap_indices = np.where( gaps_mask )[0]
+
             # Evaluate the output for every observation we're interested in.
             # We will ignore either the first or the last based on whether
             # we're evaluating directly or iteratively, respectively.  See
@@ -399,12 +406,14 @@ def particle_evaluation_pipeline( particles_root, particle_ids, dirs_per_level,
                 outputs[:] = inference( observations_fp32[:, ParticleRecord.RADIUS_INDEX:ParticleRecord.SIZE],
                                         observations_fp32[:, ParticleRecord.TIME_INDEX],
                                         atol=local_parameters["atol"],
-                                        rtol=local_parameters["rtol"] )[output_slice, :]
+                                        rtol=local_parameters["rtol"],
+                                        gap_indices=gap_indices )[output_slice, :]
             else:
                 outputs[:] = inference( observations_fp32[:, ParticleRecord.RADIUS_INDEX:ParticleRecord.SIZE],
                                         observations_fp32[:, ParticleRecord.TIME_INDEX],
                                         local_parameters["model"],
-                                        local_parameters["device"] )[output_slice, :]
+                                        local_parameters["device"],
+                                        gap_indices=gap_indices )[output_slice, :]
 
             # Write out the evaluations and move on to the next particle.
             #
