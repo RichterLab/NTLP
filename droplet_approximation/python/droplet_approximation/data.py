@@ -659,6 +659,87 @@ def create_training_file( file_name, number_droplets, user_batch_size=None, quie
             # Serialize the array
             inputs_outputs.tofile( output_fp )
 
+def detect_timeline_gaps( integration_times, maximum_gap_size=MAXIMUM_DT_GAP_SIZE, times_flag=False ):
+    """
+    Empirically identifies gaps in a time line so they may be explicitly
+    handled.  Takes the successive differences between time line observations
+    and computes a Boolean mask array identifying where gaps are believed to
+    have occurred.
+
+    Takes 3 arguments:
+
+      integration_times - NumPy array, with N elements, containing the
+                          successive differences between time line entries.
+      maximum_gap_size  - Optional scalar specifying the maximum allowed size
+                          between successive two time line entries.  Differences
+                          larger than this value are flagged as a gap.  If
+                          omitted, defaults to MAXIMUM_DT_GAP_SIZE.
+      times_flag        - Optional flag specifying that integration_times is
+                          really an array of simulation times and not the delta
+                          between successive simulation times.  If omitted,
+                          defaults to False and integration_times contains
+                          deltas.  When True, integration_times contains one
+                          additional element than is returned in gaps_mask.
+
+    Returns 1 value:
+
+      gaps_mask - NumPy Boolean array, with N elements, representing differences
+                  that are considered to be gaps.
+
+    """
+
+    if times_flag:
+        integration_times = np.diff( integration_times )
+
+    # Handle the case where we got zero integration times or fewer than two
+    # times (the difference of on time is an empty array).
+    if len( integration_times ) == 0:
+        return np.array( [], dtype=np.bool_ )
+
+    # The gap threshold is set at 5 times the median so we're robust to
+    # actual outliers in the observations, clamped at the maximum integration
+    # time seen in NTLP simulations.  Some simulations have larger time
+    # steps to begin with and are ratcheted down to small steps once a
+    # sufficient number of particles are present.  Median will step down to
+    # a smaller time step for particles with many observations while
+    # selecting a reasonable step size for small observation counts.
+    #
+    # We have to be careful to handle the extreme corner cases where taking
+    # the median breaks down, which is when we only have two integration times
+    # from three observations.  This leaves us to handle the following three
+    # cases:
+    #
+    #   1. Neither pair of observations has a gap
+    #   2. One pair of observation has a gap
+    #   3. Both pairs of observations have a gap
+    #
+    # Case #1 is handled normally by construction, though case #2 requires us to
+    # compute the minimum integration time instead of the median, as this
+    # results in the average of the two integration times and yields a large
+    # threshold that doesn't detect the gap.  Taking the minimum at least flags
+    # the gap.
+    #
+    # Note that Case #3 cannot be detected from a single pair of observations
+    # alone unless both are beyond the maximum NTLP integration time.  As a
+    # result, we opt for simplicity instead of requiring the caller to do
+    # additional calculations to provide a better estimate (e.g. a running
+    # median across all timelines).
+    #
+    # NOTE: This has not been tested on a wide range of simulations and
+    #       may not be sufficiently robust!
+    #
+    if len( integration_times ) < 3:
+        selection_func = np.min
+    else:
+        selection_func = np.median
+
+    dt_threshold = min( 5 * selection_func( integration_times ),
+                        MAXIMUM_DT_GAP_SIZE )
+
+    gaps_mask = (integration_times > dt_threshold)
+
+    return gaps_mask
+
 def get_evaluation_column_names( evaluation_tag ):
     """
     Returns the names of evaluation column names for accessing the radii and
@@ -1005,6 +1086,28 @@ def read_particles_data( particles_root, particle_ids, dirs_per_level, quiet_fla
 
     """
 
+    #
+    # NOTE: We jump through hoops to get Pandas to respect our wishes regarding
+    #       column data types throughout this function.  In particular, we have
+    #       columns with dtype=object so we can store 1D NumPy arrays.  For the
+    #       most part this works fine, though we have to work around Panda's
+    #       "help" when we encounter arrays with a single element as Pandas
+    #       will promote the scalar into a Series object of a single value,
+    #       ignoring the parent DataFrame's data type.  While this functions
+    #       *mostly* like a 1D NumPy array, it is subtly and very much not
+    #       the same in that a single DataFrame row's column is now represented
+    #       as a scalar meaning it's shape becomes zero-length and would require
+    #       special treatment in *all* downstream callers.
+    #
+    #       To work around this "help", we must create a 2D array, shaped 1x1,
+    #       so that Pandas doesn't promote it to a Series object (and, thus,
+    #       creating a Series within a Series) and then abuse the fact that we
+    #       can reshape a NumPy array by manipulating its .shape attribute.
+    #       This results in a 1D array with a single element, though with much
+    #       more effort than simply assigning the result of an array
+    #       expression...
+    #
+
     # Maximum integration gap size, in simulation seconds, to consider.  This is
     # chosen such that it is larger than the largest LES-based timestep that
     # could occur in NTLP.  Differences in observation times larger than one
@@ -1087,6 +1190,8 @@ def read_particles_data( particles_root, particle_ids, dirs_per_level, quiet_fla
     particles_df["death time"]            = zeros_float32
     particles_df["times"]                 = pd.Series( dtype=object )
     particles_df["integration times"]     = pd.Series( dtype=object )
+    particles_df["number gaps"]           = zeros_int32
+    particles_df["gap indices"]           = pd.Series( dtype=object )
     particles_df["number be failures"]    = zeros_int32
     particles_df["be statuses"]           = pd.Series( dtype=object )
     particles_df["input be radii"]        = pd.Series( dtype=object )
@@ -1227,6 +1332,10 @@ def read_particles_data( particles_root, particle_ids, dirs_per_level, quiet_fla
         # integration times.
         particles_df.at[particle_id, "integration times"] = np.diff( observations_fp32[observations_mask_all, ParticleRecord.TIME_INDEX] )
 
+        # We assume that we have all observations for this particle.
+        particles_df.at[particle_id, "number gaps"] = 0
+        particles_df.at[particle_id, "gap indices"] = np.array( [] )
+
         # Skip particles that don't have any evaluations.  These are either
         # because they have zero observations or because they have one
         # evaluation with a large dt that implies there was a gap between the
@@ -1288,23 +1397,8 @@ def read_particles_data( particles_root, particle_ids, dirs_per_level, quiet_fla
         # array into a scalar.  Without this, two observation/single evaluation
         # particles explode on use as the assumption that we have arrays of
         # evaluations is fundamental to this DataFrame.
-        #
-        # NOTE: We must evaluate the Series' shape's length as we cannot take
-        #       the length of a scalar value.  We also must recreate the
-        #       Series object as simply assigning a single element array gets
-        #       reduced to a scalar if the destination is already a scalar.
-        #
         if len( particles_df.at[particle_id, "times"].shape ) == 0:
             for observation_name in OBSERVATION_NAMES:
-                #
-                # NOTE: We must create a 2D array, shaped 1x1, so that
-                #       Pandas doesn't promote it to a Series object (and,
-                #       thus, creating a Series within a Series which is
-                #       functionally a 1D array but has an index that it
-                #       likes to print out) and then abuse the fact that we
-                #       can reshape a NumPy array by manipulating its
-                #       .shape attribute.
-                #
                 particles_df.at[particle_id, observation_name] = np.array( [[particles_df.at[particle_id, observation_name]]] )
                 particles_df.at[particle_id, observation_name].shape = [1]
 
@@ -1410,6 +1504,19 @@ def read_particles_data( particles_root, particle_ids, dirs_per_level, quiet_fla
             #
             number_gaps = gaps_mask.sum()
 
+            # Track how many gaps, and where they're located, so downstream
+            # users can correctly segment the ungapped regions.  We take care to
+            # adjust the gap locations to account for the fact that the original
+            # evaluations containing them will be removed below.
+            particles_df.at[particle_id, "number gaps"] = number_gaps
+            if number_gaps > 1:
+                particles_df.at[particle_id, "gap indices"] = (np.where( gaps_mask )[0] - np.arange( number_gaps ))
+            else:
+                # Work around Pandas' "help".  Note that we don't need to adjust
+                # the locations since we only have a single gap.
+                particles_df.at[particle_id, "gap indices"]       = np.array( [np.where( gaps_mask )[0]] )
+                particles_df.at[particle_id, "gap indices"].shape = [1]
+
             # Move the birth time forward if we have a gap between the first two
             # observations, which manifests itself in the first evaluation.
             new_start_index = np.argmin( gaps_mask )
@@ -1442,15 +1549,7 @@ def read_particles_data( particles_root, particle_ids, dirs_per_level, quiet_fla
                 # a single element array into a scalar.  Without this, indexing
                 # this particle's columns will explode.
                 if number_gaps == (particles_df.at[particle_id, "number evaluations"] - 1):
-                     #
-                     # NOTE: We must create a 2D array, shaped 1x1, so that
-                     #       Pandas doesn't promote it to a Series object (and,
-                     #       thus, creating a Series within a Series which is
-                     #       functionally a 1D array but has an index that it
-                     #       likes to print out) and then abuse the fact that we
-                     #       can reshape a NumPy array by manipulating its
-                     #       .shape attribute.
-                     #
+                    # Work around Pandas' "help".
                     particles_df.at[particle_id, observation_name] = np.array( [[particles_df.at[particle_id, observation_name]]] )
                     particles_df.at[particle_id, observation_name].shape = [1]
 

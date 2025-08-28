@@ -183,6 +183,46 @@ def get_particles_data_simulation_times( particles_df ):
 
     return np.array( simulation_times )
 
+def _insert_gaps( x, gap_indices, gap_value=np.nan ):
+    """
+    Takes an array representing a time series and inserts one or more values
+    at each of the locations specified.  This is useful for inserting NaNs
+    into a time series that will be plotted so lines are segmented at the
+    gap location instead of connected.
+
+    Takes 3 arguments:
+
+      x           - NumPy array containing the input time series.  x may be
+                    multi-dimensional though gaps will always be inserted along
+                    the leading (first) dimension.
+      gap_indices - NumPy array containing the indices in x indicating the right
+                    side of the gap is located (i.e. first point after the gap).
+                    May be empty if no gaps are present.  Indices larger than the
+                    length of x are ignored so a cropped version of x can have
+                    gaps inserted without the caller directly working with the
+                    gaps.
+      gap_value   - Optional scalar to represent the gap when inserted into
+                    the time series.  If omitted, defaults to np.nan.
+
+    Returns 1 value:
+
+      gapped_x - NumPy array, with leading dimension of length N +
+                 len( gap_indices ), containing a copy of x with
+                 len( gap_indices )-many gap_values inserted into it at each
+                 gap location.
+
+    """
+
+    if len( gap_indices ) == 0:
+        return x
+
+    # Only insert gaps in the portion of x we were provided.
+    cropped_gap_indices = gap_indices[gap_indices < len( x )]
+
+    #
+    # NOTE: We insert along the first axis so we handle both 1D and 2D arrays.
+    #
+    return np.insert( x, cropped_gap_indices, np.nan, axis=0 )
 
 def plot_droplet_size_temperatures( times, size_temperatures, background_parameters={},
                                     compare_flag=None, ax_h=None, title_string=None ):
@@ -418,7 +458,8 @@ def plot_droplet_size_temperatures_dataframe( particle_dataframe, evaluation_tag
                                   "Particle {:d}").format( evaluation_string, particle_id )
 
     # Get the data to plot as series.
-    times = particle_dataframe["times"]
+    times = _insert_gaps( particle_dataframe["times"],
+                          particle_dataframe["gap indices"] )
 
     size_temperatures = {}
     for evaluation_tag in evaluation_tags:
@@ -430,7 +471,20 @@ def plot_droplet_size_temperatures_dataframe( particle_dataframe, evaluation_tag
         # NOTE: We have to stack columns to get a NumPy array as the DataFrame's
         #       .values will return a list of 1D NumPy arrays.
         #
-        size_temperatures[evaluation_tag] = np.column_stack( particle_dataframe[column_names].values )
+        size_temperatures[evaluation_tag] = _insert_gaps( np.column_stack( particle_dataframe[column_names].values ),
+                                                          particle_dataframe["gap indices"] )
+
+    # Add gaps into the background parameters if they were provided.  We take
+    # care to work with a shallow copy of them so we don't modify the caller's
+    # version.
+    if "background_parameters" in kwargs:
+        background_parameters = kwargs["background_parameters"].copy()
+
+        for parameter_name, parameter_values in background_parameters.items():
+            background_parameters[parameter_name] = _insert_gaps( parameter_values,
+                                                                  particle_dataframe["gap indices"] )
+
+        kwargs["background_parameters"] = background_parameters
 
     fig_h, ax_h = plot_droplet_size_temperatures( times, size_temperatures, **kwargs )
 
@@ -784,9 +838,18 @@ def plot_particles( particles_df, force_flag=False, time_range=[-np.inf, np.inf]
         # Create label for this particle.
         particle_label = _get_particle_label( particle )
 
-        # Plot our quantities with labels
-        ax_h[0].plot( particle["times"][times_mask],
-                      particle["integration times"][times_mask],
+        # Plot our quantities with labels.  We insert NaNs where gaps are
+        # located so quantities plotted are segmented and do not span gaps.
+        #
+        # NOTE: We convert a single quantity at a time to reduce memory usage.
+        #
+        particle_times    = _insert_gaps( particle["times"][times_mask],
+                                          particle["gap indices"] )
+        particle_quantity = _insert_gaps( particle["integration times"][times_mask],
+                                          particle["gap indices"] )
+
+        ax_h[0].plot( particle_times,
+                      particle_quantity,
                       color=colors_map[particle_label],
                       label=particle_label )
         ax_h[0].set_title( "Integration Time" )
@@ -803,12 +866,17 @@ def plot_particles( particles_df, force_flag=False, time_range=[-np.inf, np.inf]
             #
             # NOTE: These are labeled with the evaluation tag as a suffix.
             #
-            ax_h[1].plot( particle["times"][times_mask],
-                          particle[evaluation_radii_name][times_mask],
+            particle_quantity = _insert_gaps( particle[evaluation_radii_name][times_mask],
+                                              particle["gap indices"] )
+            ax_h[1].plot( particle_times,
+                          particle_quantity,
                           color=colors_map[evaluation_label],
                           label=evaluation_label )
-            ax_h[2].plot( particle["times"][times_mask],
-                          particle[evaluation_temperatures_name][times_mask],
+
+            particle_quantity = _insert_gaps( particle[evaluation_temperatures_name][times_mask],
+                                              particle["gap indices"] )
+            ax_h[2].plot( particle_times,
+                          particle_quantity,
                           color=colors_map[evaluation_label],
                           label=evaluation_label )
 
@@ -819,29 +887,37 @@ def plot_particles( particles_df, force_flag=False, time_range=[-np.inf, np.inf]
         ax_h[2].set_ylabel( "Kelvin" )
 
         # Now plot the environments for the particle.
-        ax_h[3].plot( particle["times"][times_mask],
-                      particle["air temperatures"][times_mask],
+        particle_quantity = _insert_gaps( particle["air temperatures"][times_mask],
+                                          particle["gap indices"] )
+        ax_h[3].plot( particle_times,
+                      particle_quantity,
                       color=colors_map[particle_label],
                       label=particle_label )
         ax_h[3].set_title( "Air Temperature" )
         ax_h[3].set_ylabel( "Kelvin" )
 
-        ax_h[4].plot( particle["times"][times_mask],
-                      particle["relative humidities"][times_mask] * 100,
+        particle_quantity = _insert_gaps( particle["relative humidities"][times_mask],
+                                          particle["gap indices"] )
+        ax_h[4].plot( particle_times,
+                      particle_quantity * 100,
                       color=colors_map[particle_label],
                       label=particle_label )
         ax_h[4].set_title( "Relative Humidity" )
         ax_h[4].set_ylabel( "Percentage (%)" )
 
-        ax_h[5].plot( particle["times"][times_mask],
-                      particle["salt solutes"][times_mask],
+        particle_quantity = _insert_gaps( particle["salt solutes"][times_mask],
+                                          particle["gap indices"] )
+        ax_h[5].plot( particle_times,
+                      particle_quantity,
                       color=colors_map[particle_label],
                       label=particle_label )
         ax_h[5].set_title( "Salt Solute" )
         ax_h[5].set_ylabel( "kg" )
 
-        ax_h[6].plot( particle["times"][times_mask],
-                      particle["air densities"][times_mask],
+        particle_quantity = _insert_gaps( particle["air densities"][times_mask],
+                                          particle["gap indices"] )
+        ax_h[6].plot( particle_times,
+                      particle_quantity,
                       color=colors_map[particle_label],
                       label=particle_label )
         ax_h[6].set_title( "Air Density" )
