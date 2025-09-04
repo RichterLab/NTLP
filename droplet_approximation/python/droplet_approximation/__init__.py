@@ -16,6 +16,7 @@ from .analysis import average_particles_data, \
                       plot_particle_history
 from .data import BE_TAG_NAME, \
                   BEStatus, \
+                  ParticleRecord, \
                   batch_convert_NTLP_traces_to_particle_files, \
                   batch_read_particles_data, \
                   be_success_mask, \
