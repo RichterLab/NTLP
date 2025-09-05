@@ -891,6 +891,40 @@ def get_particles_index_path( particles_root ):
 
     return "{:s}/particles.index".format( particles_root )
 
+def get_particles_parameter_extrema_path( particles_root ):
+    """
+    Gets a particle directory's parameters extrema file path.
+
+    Takes 1 argument:
+
+      particles_root - Path to the top-level of a particle's directory.
+
+    Returns 1 value:
+
+      particle_parameter_extrema_path - Path to the particles directory's
+                                        parameter extrema file.
+
+    """
+
+    return "{:s}/particles.extrema".format( particles_root )
+
+def get_particles_timeline_path( particles_root ):
+    """
+    Gets a particle directory's simulation timeline path.
+
+    Takes 1 argument:
+
+      particles_root - Path to the top-level of a particle's directory.
+
+    Returns 1 value:
+
+      particle_timeline_path - Path to the particles directory's simulation
+                               timeline file.
+
+    """
+
+    return "{:s}/particles.timeline".format( particles_root )
+
 def _read_particles_data_wrapper( particles_root, particle_ids, dirs_per_level, kwargs ):
     """
     Wrapper to read_particles_data() that can be called with a

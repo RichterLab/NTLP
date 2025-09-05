@@ -29,6 +29,8 @@ from .data import BE_TAG_NAME, \
                   get_evaluation_file_path, \
                   get_particle_file_path, \
                   get_particles_index_path, \
+                  get_particles_parameter_extrema_path, \
+                  get_particles_timeline_path, \
                   read_particles_data, \
                   read_training_file, \
                   write_particles_index
