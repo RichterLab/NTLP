@@ -1,0 +1,33 @@
+#!/bin/bash
+
+# SGE job template to convert a single NTLP trace file using _NUMBER_NODES_ processes.
+
+#$ -M _EMAIL_
+#$ -m be
+#$ -pe smp 1
+#$ -t 1-_NUMBER_NODES_
+#$ -N convert-_TRACE_NAME_-trace_TRACE_NUMBER_
+
+# Conversion script.
+CONVERT_TRACE=${HOME}/code/NTLP/droplet_approximation/bin/convert_ntlp_trace.py
+
+# Number of processes to convert the file with.  Larger numbers means the I/O
+# load (metadata heavy) is spread across more servers.
+NUMBER_NODES=_NUMBER_NODES_
+
+# Zero-based process index specifying the last process in this job array.
+MAX_NODE_INDEX=`expr ${NUMBER_NODES} - 1`;
+
+# Zero-based process index of this job.
+JOB_INDEX=`expr ${SGE_TASK_ID} - 1`
+
+# Path to the NTLP trace to convert.
+TRACE_PATH=_TRACE_PATH_
+
+# Path to the particles directory to write the particles to.
+PARTICLES_ROOT=_PARTICLES_ROOT_
+
+mkdir -p ${PARTICLES_ROOT}
+
+echo "Conversion of '${TRACE_PATH}' into particles beneath '${PARTICLES_ROOT}' (job ${JOB_INDEX} of ${MAX_NODE_INDEX})."
+${CONVERT_TRACE} ${PARTICLES_ROOT} ${NUMBER_NODES} ${JOB_INDEX} ${TRACE_PATH}
