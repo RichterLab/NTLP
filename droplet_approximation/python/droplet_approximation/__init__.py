@@ -19,6 +19,7 @@ from .data import BE_TAG_NAME, \
                   ParticleRecord, \
                   batch_convert_NTLP_traces_to_particle_files, \
                   batch_read_particles_data, \
+                  be_status_to_z_domain_quartile, \
                   be_success_mask, \
                   convert_NTLP_trace_to_particle_files, \
                   convert_NTLP_trace_array_to_particle_files, \

@@ -233,6 +233,46 @@ def batch_read_particles_data( particles_root, particle_ids, dirs_per_level, num
     # Concatenate the resulting DataFrames.
     return pd.concat( dfs, axis=0 )
 
+def be_status_to_z_domain_quartile( be_statuses ):
+    """
+    Converts backward Euler (BE) status flags into a the Z domain's quantile number
+    where the evaluation started in.
+
+    Takes 1 argument:
+
+      be_statuses - NumPy array containing the BE status flags to convert.
+
+    Returns 1 value:
+
+      z_domain_quartile - NumPy array, shaped the same as be_statuses, containing the
+                          Z domain's encoded quartile number.  Will be in the range of [1, 4]
+                          representing the [0%, 25%), [25%, 50%), [50%, 75%), [75%, 100]%
+                          quartiles.
+
+    """
+
+    # Construct a bitmask to pull out the Z domain flags.
+    z_domain_bitmask = (BEStatus.HEIGHT_Q1 |
+                        BEStatus.HEIGHT_Q2 |
+                        BEStatus.HEIGHT_Q3 |
+                        BEStatus.HEIGHT_Q4)
+
+    quantiles = np.array( (be_statuses & z_domain_bitmask), dtype=np.int32 )
+
+    # Remap the individual flags into the range of [1, 4] specifying the
+    # quantile number the evaluation started in.
+    for quantile_index in range( quantiles.shape[0] ):
+        if quantiles[quantile_index] == BEStatus.HEIGHT_Q1:
+            quantiles[quantile_index] = 1
+        elif quantiles[quantile_index] == BEStatus.HEIGHT_Q2:
+            quantiles[quantile_index] = 2
+        elif quantiles[quantile_index] == BEStatus.HEIGHT_Q3:
+            quantiles[quantile_index] = 3
+        else:
+            quantiles[quantile_index] = 4
+
+    return quantiles
+
 def be_success_mask( radius_data ):
     """
     Identifies trials where BE succeeded (True) and be failed (False).  This
