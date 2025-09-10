@@ -219,10 +219,20 @@ def insert_timeseries_gaps( x, gap_indices, gap_value=np.nan ):
     # Only insert gaps in the portion of x we were provided.
     cropped_gap_indices = gap_indices[gap_indices < len( x )]
 
+    # We need a floating point-valued array to insert NaNs.  Figure out
+    # which data type to convert to.  This is a no-op for floating point
+    # data types.
+    if np.issubdtype( x.dtype, np.floating ):
+        target_dtype = x.dtype
+    elif x.itemsize > 4:
+        target_dtype = np.float64
+    else:
+        target_dtype = np.float32
+
     #
     # NOTE: We insert along the first axis so we handle both 1D and 2D arrays.
     #
-    return np.insert( x, cropped_gap_indices, np.nan, axis=0 )
+    return np.insert( x.astype( target_dtype ), cropped_gap_indices, np.nan, axis=0 )
 
 def plot_droplet_size_temperatures( times, size_temperatures, background_parameters={},
                                     compare_flag=None, ax_h=None, title_string=None ):
