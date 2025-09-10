@@ -925,6 +925,57 @@ def get_particles_timeline_path( particles_root ):
 
     return "{:s}/particles.timeline".format( particles_root )
 
+def insert_timeseries_gaps( x, gap_indices, gap_value=np.nan ):
+    """
+    Takes an array representing a time series and inserts one or more values
+    at each of the locations specified.  This is useful for inserting NaNs
+    into a time series that will be plotted so lines are segmented at the
+    gap location instead of connected.
+
+    Takes 3 arguments:
+
+      x           - NumPy array containing the input time series.  x may be
+                    multi-dimensional though gaps will always be inserted along
+                    the leading (first) dimension.
+      gap_indices - NumPy array containing the indices in x indicating the right
+                    side of the gap is located (i.e. first point after the gap).
+                    May be empty if no gaps are present.  Indices larger than the
+                    length of x are ignored so a cropped version of x can have
+                    gaps inserted without the caller directly working with the
+                    gaps.
+      gap_value   - Optional scalar to represent the gap when inserted into
+                    the time series.  If omitted, defaults to np.nan.
+
+    Returns 1 value:
+
+      gapped_x - NumPy array, with leading dimension of length N +
+                 len( gap_indices ), containing a copy of x with
+                 len( gap_indices )-many gap_values inserted into it at each
+                 gap location.
+
+    """
+
+    if len( gap_indices ) == 0:
+        return x
+
+    # Only insert gaps in the portion of x we were provided.
+    cropped_gap_indices = gap_indices[gap_indices < len( x )]
+
+    # We need a floating point-valued array to insert NaNs.  Figure out
+    # which data type to convert to.  This is a no-op for floating point
+    # data types.
+    if np.issubdtype( x.dtype, np.floating ):
+        target_dtype = x.dtype
+    elif x.itemsize > 4:
+        target_dtype = np.float64
+    else:
+        target_dtype = np.float32
+
+    #
+    # NOTE: We insert along the first axis so we handle both 1D and 2D arrays.
+    #
+    return np.insert( x.astype( target_dtype ), cropped_gap_indices, np.nan, axis=0 )
+
 def _read_particles_data_wrapper( particles_root, particle_ids, dirs_per_level, kwargs ):
     """
     Wrapper to read_particles_data() that can be called with a

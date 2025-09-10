@@ -8,7 +8,6 @@
 from .analysis import average_particles_data, \
                       bin_particles_data, \
                       get_particles_data_simulation_times, \
-                      insert_timeseries_gaps, \
                       plot_droplet_size_temperatures, \
                       plot_droplet_size_temperatures_dataframe, \
                       plot_droplet_size_temperatures_domain, \
@@ -32,6 +31,7 @@ from .data import BE_TAG_NAME, \
                   get_particles_index_path, \
                   get_particles_parameter_extrema_path, \
                   get_particles_timeline_path, \
+                  insert_timeseries_gaps, \
                   read_particles_data, \
                   read_training_file, \
                   write_particles_index
