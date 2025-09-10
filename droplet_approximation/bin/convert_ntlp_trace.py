@@ -9,7 +9,7 @@ run as part of a larger distributed job system where multiple instances process
 different subsets of the total data.
 
 Usage:
-    script.py [-t] <particles_root> <number_jobs> <job_index> <file1> [<file2> [...]]
+    script.py [-t] <particles_root> <number_jobs> <job_index> <number_workers> <file1> [<file2> [...]]
 
     -t: Test mode - print configuration without executing
 
@@ -60,6 +60,7 @@ def main( arguments: List[str] ):
      particles_root,
      number_jobs,
      job_index,
+     number_processes,
      trace_files) = parse_arguments( arguments )
 
     # Calculate the total number of records across all input files.
@@ -70,7 +71,6 @@ def main( arguments: List[str] ):
      record_end_index) = calculate_job_range( total_records, number_jobs, job_index )
 
     # Calculate how work will be distributed among worker processes.
-    number_processes = 1 #multiprocessing.cpu_count()
     worker_ranges    = divide_range_among_workers( record_start_index,
                                                    record_end_index,
                                                    number_processes )
@@ -121,7 +121,7 @@ def main( arguments: List[str] ):
                                                  particle_ids_list,
                                                  merge_flag=True )
 
-def parse_arguments( arguments: List[str] ) -> Tuple[bool, str, int, int, List[str]]:
+def parse_arguments( arguments: List[str] ) -> Tuple[bool, str, int, int, int, List[str]]:
     """
     Parse and validate command line arguments.  Exits if provided with an
     incorrect number of arguments or given invalid arguments.
@@ -134,21 +134,22 @@ def parse_arguments( arguments: List[str] ) -> Tuple[bool, str, int, int, List[s
       arguments - Array of command line arguments to parse.  This does not
                   include the executing script's name.
 
-    Returns 5 values:
+    Returns 6 values:
 
       testing_flag   - Boolean indicating if test mode was requested.
       particles_root - Path to top-level of a particles directory.
       number_jobs    - Total number of job instances.
       job_index      - Index of this job instance.
+      number_workers - Number of worker processes to use.
       trace_files    - List of input trace file paths.
 
     """
 
     # Validate minimum number of required arguments.
-    if len( arguments ) < 4:
+    if len( arguments ) < 5:
         print( "Error: Insufficient arguments.\n"
                "\n"
-               "Usage: script.py [-t] <particles_root> <number_jobs> <job_index> <file1> [<file2> [...]]",
+               "Usage: script.py [-t] <particles_root> <number_jobs> <job_index> <number_workers> <file1> [<file2> [...]]",
                file=sys.stderr )
         sys.exit( 1 )
 
@@ -164,7 +165,8 @@ def parse_arguments( arguments: List[str] ) -> Tuple[bool, str, int, int, List[s
     particles_root = arguments[0]
     number_jobs    = int( arguments[1] )
     job_index      = int( arguments[2] )
-    trace_files    = arguments[3:]
+    number_workers = int( arguments[3] )
+    trace_files    = arguments[4:]
 
     # Validate job parameters.
     if number_jobs < 1:
@@ -180,6 +182,18 @@ def parse_arguments( arguments: List[str] ) -> Tuple[bool, str, int, int, List[s
               file=sys.stderr )
         sys.exit( 1 )
 
+    # Ensure we have a reasonable number of processes.
+    if number_workers < 0:
+        print( "Must have a non-negative number of worker processes ({:d})!".format(
+            number_workers ),
+               file=sys.stderr )
+        sys.exit( 1 )
+
+    # Default to the number of cores on the system if a specific count wasn't
+    # given.
+    if number_workers == 0:
+        number_workers = multiprocessing.cpu_count()
+
     # Verify all trace files exist.
     for file_path in trace_files:
         if not os.path.isfile( file_path ):
@@ -187,7 +201,7 @@ def parse_arguments( arguments: List[str] ) -> Tuple[bool, str, int, int, List[s
                    file=sys.stderr )
             sys.exit( 1 )
 
-    return testing_flag, particles_root, number_jobs, job_index, trace_files
+    return testing_flag, particles_root, number_jobs, job_index, number_workers, trace_files
 
 def get_file_size( file_path: str ) -> int:
     """

@@ -11,7 +11,7 @@ if [ "$1" == "-t" ]; then
 fi
 
 if [ $# != 5 ]; then
-    echo "Usage: $0 <simulation_name> <particles_root> <number_processes> <trace_number> <trace_path>"
+    echo "Usage: $0 <simulation_name> <particles_root> <number_jobs> <number_processes> <trace_number> <trace_path>"
     exit 1
 fi
 
@@ -19,8 +19,9 @@ fi
 TRACE_NAME=$1
 PARTICLES_ROOT=$2
 NUMBER_NODES=$3
-TRACE_NUMBER=$4
-TRACE_PATH=$5
+NUMBER_PROCESSES=$4
+TRACE_NUMBER=$5
+TRACE_PATH=$6
 
 # Send mail to ourselves when the job starts and ends.
 EMAIL="${USER}@nd.edu"
@@ -43,6 +44,7 @@ cd ${PARTICLES_ROOT}
 
 sed -e "s#_EMAIL_#${EMAIL}#g" \
     -e "s#_NUMBER_NODES_#${NUMBER_NODES}#g" \
+    -e "s#_NUMBER_PROCESSES_#${NUMBER_PROCESSES}#g" \
     -e "s#_PARTICLES_ROOT_#${PARTICLES_ROOT}#g" \
     -e "s#_TRACE_NAME_#${TRACE_NAME}#g" \
     -e "s#_TRACE_NUMBER_#${TRACE_NUMBER}#g" \
