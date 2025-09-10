@@ -48,6 +48,7 @@ from .models import SimpleNet, \
                     save_model_checkpoint, \
                     train_model, \
                     weighted_mse_loss
+from .names import generate_name
 from .physics import DisplayType, \
                      display_parameter_ranges, \
                      droplet_equilibrium, \
