@@ -172,32 +172,32 @@ def droplet_equilibrium( droplet_parameters ):
     #qinf = RH/rhoa*(einf*Mw/Ru/Tf)
 
     pi2   = 2.0 * np.pi
-    
+
     a = -(2*Mw*Gam)/(Ru*rhow*Tf)/np.log((Ru*Tf*rhoa*qinf)/(Mw*einf))
     # This line was changed from BE to account for using
     # solute term instead of salt mass. There was no rhow
     # term present in the original equation, so 1/rhow had
     # to be added to correct for the rhow coefficient in solute_term.
     c = (solute_term)/((2.0/3.0)*pi2*rhow)/np.log((Ru*Tf*rhoa*qinf)/(Mw*einf))
-    
+
     Q = (a**2.0)/9.0
     R = (2.0*a**3.0+27.0*c)/54.0
     M = R**2.0-Q**3.0
     val = (R**2.0)/(Q**3.0)
 
     guess = Q
-    
+
     mask = M<0
-    
+
     theta = np.acos(R/np.sqrt(Q**3.0))
     guess[mask] = (-(2*np.sqrt(Q)*np.cos((theta-pi2)/3.0))-a/3.0)[mask]
-    
+
     guess[guess<0] = (-(2*np.sqrt(Q)*np.cos((theta+pi2)/3.0))-a/3.0)[guess < 0]
-    
+
     S = -(R/np.abs(R))*(np.abs(R)+np.sqrt(M))**(1.0/3.0)
     T = Q/S
     guess[~mask] = (S + T - a/3.0)[~mask]
-    
+
     flag[guess < 0] = 1
     guess[guess < 0] = r[guess < 0]
 

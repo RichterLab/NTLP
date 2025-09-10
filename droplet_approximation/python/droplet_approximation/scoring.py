@@ -431,7 +431,7 @@ def particle_evaluation_pipeline( particles_root, particle_ids, dirs_per_level,
 
 def particle_scoring_pipeline( particles_root, particle_ids_batches, dirs_per_level, reference_evaluation, comparison_evaluation, cusum_error_tolerance, cusum_error_threshold, norm, cold_threshold, filter_be_failures ):
     """
-    Calculates NRMSE and deviations for a set of particles between two evaluation tags. 
+    Calculates NRMSE and deviations for a set of particles between two evaluation tags.
     Loads particle data from per particle data frames. Also provides statistics needed
     to calcualte overall dataset NRMSE.
 
@@ -495,10 +495,10 @@ def particle_scoring_pipeline( particles_root, particle_ids_batches, dirs_per_le
             elif p_df["output {:s} radii".format( reference_evaluation_tag )].shape[0] == 0:
                 continue
 
-            normed_reference_output  = norm( np.stack( p_df[["output {:s} radii".format( reference_evaluation_tag ), 
+            normed_reference_output  = norm( np.stack( p_df[["output {:s} radii".format( reference_evaluation_tag ),
                                                               "output {:s} temperatures".format( reference_evaluation_tag )
                                                             ]].to_numpy(), axis=-1 ) )
-            normed_comparison_output = norm( np.stack( p_df[["output {:s} radii".format( comparison_evaluation_tag ), 
+            normed_comparison_output = norm( np.stack( p_df[["output {:s} radii".format( comparison_evaluation_tag ),
                                                               "output {:s} temperatures".format( comparison_evaluation_tag )
                                                              ]].to_numpy(), axis=-1 ) )
 
@@ -514,7 +514,7 @@ def particle_scoring_pipeline( particles_root, particle_ids_batches, dirs_per_le
             normed_reference_output  = normed_reference_output[mask, :]
             normed_comparison_output = normed_comparison_output[mask, :]
             simulation_times         = simulation_times[mask]
- 
+
             # Calculating the overall NRMSE directly would require copying all of the particle
             # data frames together. Instead, we just copy the square error and the sum of the truth
             # parameters for each particle so that net NRMSE can be calculated later.
@@ -618,8 +618,8 @@ class ScoringReport():
 
     """
 
-    def __init__( self, particles_root, particle_ids, dirs_per_level, reference_evaluation, 
-                  comparison_evaluation, cusum_error_tolerance, cusum_error_threshold, norm=None, 
+    def __init__( self, particles_root, particle_ids, dirs_per_level, reference_evaluation,
+                  comparison_evaluation, cusum_error_tolerance, cusum_error_threshold, norm=None,
                   max_clusters=7, number_processes=0, number_batches=1, cold_threshold=-np.inf,
                   filter_be_failures=False ):
         """
@@ -677,7 +677,7 @@ class ScoringReport():
 
         self.cusum_error_tolerance = cusum_error_tolerance
         self.cusum_error_threshold = cusum_error_threshold
-        self.reference_evaluation  = reference_evaluation 
+        self.reference_evaluation  = reference_evaluation
         self.comparison_evaluation = comparison_evaluation
 
         # Splits all of the requested particle ids across processors

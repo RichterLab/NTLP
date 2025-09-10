@@ -21,11 +21,11 @@ def average_particles_data( particles_df, evaluation_tags, simulation_times, bac
 
     Takes 4 Arguments:
       particles_df       - Pandas DataFrame of particle data to average
-      evaluation_tags    - String list of evaluation tags to average 
+      evaluation_tags    - String list of evaluation tags to average
       simulation_times   - Numpy Array of the time steps in the simulation to average.
       background_columns - Optional String List containing list of other columns
                            to average
-    
+
     Returns 2 Values:
       rt_averages         - Dictionary of evaluation_tag: averages, where averages is an array with:
                             at index 0: an array of radius averages for the given evaluation tag at
@@ -45,20 +45,20 @@ def average_particles_data( particles_df, evaluation_tags, simulation_times, bac
         for column in background_columns
     }
     particle_counts = np.zeros( shape=simulation_times.shape[0], dtype=np.int32 )
-    
+
     # Adds up the values for each evaluation tag
     # and each background column for a particle
     # at each time step.
     def _sum_particle( particle_df ):
         EPSILON = 0.0005
-        
+
         # Identify the time indexes in the particle's
         # lifetime that are being averaged
         time_indexes = np.searchsorted( simulation_times, particle_df["times"] - EPSILON )
 
         mask = np.abs( simulation_times[[time_indexes]][0] - particle_df["times"] ) < EPSILON
         time_indexes = time_indexes[mask]
-        
+
         # Sum radius/temperature and background columns for
         # relavent times
         particle_counts[time_indexes] += 1
@@ -124,7 +124,7 @@ def bin_particles_data( particles_df, evaluation_tags, histogram_times, radbins,
         timewindow_end           = np.searchsorted( histogram_times,
                                                     particle_df["times"][-1] + EPSILON ) - 1
         relavent_histogram_times = histogram_times[timewindow_start:timewindow_end]
-        
+
         # Find the indexes in the particles lifetime that correspond to each histogram
         time_indexes      = np.searchsorted( particle_df["times"], relavent_histogram_times)
         histogram_indexes = np.arange( timewindow_start, timewindow_end )
@@ -139,10 +139,10 @@ def bin_particles_data( particles_df, evaluation_tags, histogram_times, radbins,
 
         if relavent_histogram_times.shape[0] == 0:
             return
-        
+
         for evaluation_tag, hist in histograms.items():
             # Record the radius/temperature for each histogram time
-            hist_radii        = particle_df["output {:s} radii".format( 
+            hist_radii        = particle_df["output {:s} radii".format(
                                             evaluation_tag )][[time_indexes]][0]
             hist_temperatures = particle_df["output {:s} temperatures".format(
                                             evaluation_tag )][[time_indexes]][0]
@@ -158,13 +158,13 @@ def bin_particles_data( particles_df, evaluation_tags, histogram_times, radbins,
 
 def get_particles_data_simulation_times( particles_df ):
     """
-    Generates one "simulation times" numpy array that includes 
+    Generates one "simulation times" numpy array that includes
     all the time steps for all of the particles supplied.
 
     Takes 1 Argument:
       particles_df - DataFrame containing all of the particles from
                      which to construct a timeline.
-    
+
     Returns 1 Argument:
       simulation_times - Numpy Array containing all time steps present
                          in the DataFrame.
