@@ -5,6 +5,7 @@ import torch
 import torch.nn as nn
 
 from .data import read_training_file
+from .names import generate_name
 from .physics import dydt,\
                      get_parameter_ranges, \
                      normalize_droplet_parameters, \
@@ -18,8 +19,14 @@ class SimpleNet( nn.Module ):
     it is faster than Gauss-Newton iterative solvers.
     """
 
-    def __init__( self ):
+    def __init__( self, model_name=None ):
         super().__init__()
+
+        # Generate a random name if we aren't provided with one.
+        if model_name is None:
+            model_name = generate_name()
+
+        self.model_name = model_name
 
         #
         # NOTE: These sizes were chosen without any consideration other than creating
@@ -50,8 +57,8 @@ class ResidualNet( SimpleNet ):
     temperature and the outputs, given the provided background conditions.
     """
 
-    def __init__( self ):
-        super().__init__()
+    def __init__( self, model_name=None ):
+        super().__init__( model_name )
 
     def forward( self, x ):
         # Add the input to the final result to force the model to learn the
