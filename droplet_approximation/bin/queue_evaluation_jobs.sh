@@ -7,11 +7,11 @@
 # NOTE: This currently expects the particle evaluation script to live in the
 #       same directory as this script!
 #
-USAGE_STR="$0 <simulation_name> <particles_root> <job_count> <process_count> <iterative_flag> bdf <extension> <atol_radii> <atol_temps> <rtol> [<testing_flag>]
-$0 <simulation_name> <particles_root> <job_count> <process_count> <iterative_flag> mlp <extension> <model_class> <device> <checkpoint_path> [<testing_flag>]"
+USAGE_STR="$0 <simulation_name> <particles_root> <job_count> <process_count> <iterative_flag> bdf <extension> <atol_radii> <atol_temps> <rtol> [<testing_flag> [<particles_index_path>]]
+$0 <simulation_name> <particles_root> <job_count> <process_count> <iterative_flag> mlp <extension> <model_class> <device> <checkpoint_path> [<testing_flag> [<particles_index_path>]]"
 
-if [ $# -lt 10 -o $# -gt 11 ]; then
-    echo "Incorrect number of arguments supplied.  Expected 10 or 11 but received $#."
+if [ $# -lt 10 -o $# -gt 12 ]; then
+    echo "Incorrect number of arguments supplied.  Expected 10 or 12 but received $#."
     echo
     #
     # NOTE: Our usage string has multiple lines so we must evaluate escape
@@ -56,6 +56,15 @@ if [ $# -gt 3 ]; then
     TESTING_FLAG=${4}
 else
     TESTING_FLAG="yes"
+fi
+
+# Do we have an alternative particle index to work with?  Otherwise use the
+# "default".
+if [ $# -gt 4 ]; then
+    PARTICLES_INDEX_PATH=${5}
+    ALTERNATIVE_INDEX_OPTION="-i ${PARTICLES_INDEX_PATH}"
+else
+    PARTICLES_INDEX_PATH="particles.index"
 fi
 
 # Takes a count and the number of chunks to break the count up into.  Echoes an
@@ -107,23 +116,24 @@ SCRIPTS_DIRECTORY=`dirname $0`
 EVALUATE_PARTICLES="${SCRIPTS_DIRECTORY}/evaluate_particles.py"
 
 # Path to the particles index.
-PARTICLES_INDEX="${PARTICLES_ROOT}/particles.index"
+FULL_PARTICLES_INDEX_PATH="${PARTICLES_ROOT}/${PARTICLES_INDEX_PATH}"
+
 if [ ! -d ${PARTICLES_ROOT} ]; then
     echo "'${PARTICLES_ROOT}' does not exist!" >&2
     exit 1
-elif [ ! -f ${PARTICLES_INDEX} ]; then
-    echo "'${PARTICLES_INDEX}' does not exist!" >&2
+elif [ ! -f ${FULL_PARTICLES_INDEX_PATH} ]; then
+    echo "'${FULL_PARTICLES_INDEX_PATH}' does not exist!" >&2
     exit 2
 fi
 
 # Get the number of particles from the index's size.
-NUMBER_PARTICLES=`stat -c %s ${PARTICLES_INDEX} | awk '{ print $1 / 4}'`
+NUMBER_PARTICLES=`stat -c %s ${FULL_PARTICLES_INDEX_PATH} | awk '{ print $1 / 4}'`
 
 # Compute the individual indices per job we're submitting.
 INDEX_ARRAY=($(partition_indices ${NUMBER_PARTICLES} ${JOB_COUNT}))
 
 # Report what we're doing.
-echo "Evaluating ${NUMBER_PARTICLES} particles in '${PARTICLES_ROOT}' with ${JOB_COUNT} jobs."
+echo "Evaluating ${NUMBER_PARTICLES} particles from '${FULL_PARTICLES_INDEX_PATH}' with ${JOB_COUNT} jobs."
 
 JOB_NUMBER=1
 for INDEX in "${INDEX_ARRAY[@]}"; do
@@ -132,6 +142,7 @@ for INDEX in "${INDEX_ARRAY[@]}"; do
     # launched and name it in a way that we can identify it later (-N).
     SCHEDULE_COMMAND="echo ${EVALUATE_PARTICLES} \
                               -f \
+                              ${ALTERNATIVE_INDEX_OPTION} \
                               ${PARTICLES_ROOT} \
                               ${INDEX} \
                               ${PROCESS_COUNT} \

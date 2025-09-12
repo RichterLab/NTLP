@@ -1,13 +1,17 @@
 #!/usr/bin/env python3
 
-# Usage: evaluate_particles.py [-f] <particles_root> <indices_range> <number_processes> <iterative_flag> bdf <extension> <atol_radii> <atol_temps> <rtol>
-#                                   <particles_root> <indices_range> <number_processes> <iterative_flag> mlp <extension> <model_class> <device> <checkpoint_path>
+# Usage: evaluate_particles.py [-f] [-i <index_path>] <particles_root> <indices_range> <number_processes> <iterative_flag> bdf <extension> <atol_radii> <atol_temps> <rtol>
+#                                   [-i <index_path>] <particles_root> <indices_range> <number_processes> <iterative_flag> mlp <extension> <model_class> <device> <checkpoint_path>
 #
 # Evaluates a range of particles using N processes.  Evaluation is either BDF or
 # MLP and each evaluation type's parameters are (painfully) specified on the
 # commandline.  Since this has the potential for launching a lot of long-running
 # work, it's default behavior is to report what would be done.  Execution is
 # actually performed when the "-f" flag is provided.
+#
+# An alternate particles index file can be specified via the "-i" flag allowing
+# evaluation of a subset of particles.  This is useful when working with very
+# large particle trees where full evaluation is time consuming.
 
 # TODO:
 #
@@ -70,7 +74,7 @@ def create_new_model( model_class_name ):
 
     return model
 
-def launch_evaluation_pipeline( particles_root, particle_indices_range_str,
+def launch_evaluation_pipeline( particles_root, particles_index_path, particle_indices_range_str,
                                 number_processes, evaluation_type, iterative_flag,
                                 evaluation_extension, testing_flag, parameters ):
     """
@@ -79,9 +83,14 @@ def launch_evaluation_pipeline( particles_root, particle_indices_range_str,
     that converts command line arguments into the objects/values necessary for
     execution.
 
-    Takes 8 arguments:
+    Takes 9 arguments:
 
       particles_root             - Path to the particles/ sub-directory to process.
+      particles_index_path       - Optional relative path to the particles index
+                                   to use with particles_root.  If specified as
+                                   None, the default particles index is used,
+                                   otherwise the contents of particles_index is
+                                   used.
       particle_indices_range_str - String of the form <start>:<end> representing
                                    0-based particle indices.  <end> is exclusive
                                    to match Python range semantics, and may be
@@ -128,7 +137,12 @@ def launch_evaluation_pipeline( particles_root, particle_indices_range_str,
     # Number of directories per level in the particle traces.
     DIRS_PER_LEVEL = 256
 
-    particles_index_path = "{:s}/particles.index".format( particles_root )
+    if particles_index_path is None:
+        full_particles_index_path = droplet_approximation.get_particles_index_path( particles_root )
+    else:
+        full_particles_index_path = "{:s}/{:s}".format(
+            particles_root,
+            particles_index_path )
 
     # Default to all of the cores on the system if requested.
     if number_processes == 0:
@@ -164,7 +178,7 @@ def launch_evaluation_pipeline( particles_root, particle_indices_range_str,
         parameters["parameter_ranges"] = parameter_ranges
 
     # Figure out which particles are available.
-    particle_ids = np.fromfile( particles_index_path, dtype=np.int32 )
+    particle_ids = np.fromfile( full_particles_index_path, dtype=np.int32 )
 
     # Convert the range of particle indices into actual indices.
     particle_indices_range_components = list( map( lambda x: int( x ),
@@ -239,7 +253,7 @@ def launch_evaluation_pipeline( particles_root, particle_indices_range_str,
     print( "Processing particles {:d}-{:d} from '{:s}'.".format(
         particle_indices[0] + 1,
         particle_indices[-1] + 1,
-        particles_index_path ) )
+        full_particles_index_path ) )
 
     print( "\n"
            "          Particle Indices\n"
@@ -301,19 +315,24 @@ def main( argv ):
 
     testing_flag = True
 
+    # Path to an alternate particles index instead of the default in the
+    # provided particles tree.  This facilitates evaluation of a subset of
+    # particles.
+    particles_index_path = None
+
     # We have two different calling interfaces, one for BDF and one for MLP.
     # We print them on separate lines instead of trying to show them
     # on one and confusing everyone.
     usage_string = \
-        "Usage: {:s} [-f] <particles_root> <indices_range> <number_processes> <iterative_flag> bdf <extension> <atol_radii> <atol_temps> <rtol>\n" \
-        "       {:>{:d}} [-f] <particles_root> <indices_range> <number_processes> <iterative_flag> mlp <extension> <model_class> <device> <checkpoint_path>".format(
+        "Usage: {:s} [-f] [-i <index_path>] <particles_root> <indices_range> <number_processes> <iterative_flag> bdf <extension> <atol_radii> <atol_temps> <rtol>\n" \
+        "       {:>{:d}} [-f] [-i <index_path>] <particles_root> <indices_range> <number_processes> <iterative_flag> mlp <extension> <model_class> <device> <checkpoint_path>".format(
             argv[0],
             "",
             len( argv[0] ) )
 
     # Parse any options to handle the case where we're "forced" to execute.
     try:
-        options, arguments = getopt.getopt( sys.argv[1:], "f" )
+        options, arguments = getopt.getopt( sys.argv[1:], "fi:" )
     except getopt.GetoptError as error:
         print( "{:s}\n"
                "\n"
@@ -325,6 +344,8 @@ def main( argv ):
     for option, option_value in options:
         if option == "-f":
             testing_flag = False
+        elif option == "-i":
+            particles_index_path = option_value
         else:
             raise NotImplementedError( "Unhandled option '{:s}'!".format( option ) )
 
@@ -369,6 +390,7 @@ def main( argv ):
 
     # Execute the pipeline.
     launch_evaluation_pipeline( particles_root,
+                                particles_index_path,
                                 indices_range,
                                 number_processes,
                                 evaluation_type,
