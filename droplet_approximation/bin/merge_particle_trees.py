@@ -379,7 +379,9 @@ def merge_directory_trees( source_tree: str, destination_tree: str, number_proce
 
     # Update destination particle index
     dest_index_path = droplet_approximation.get_particles_index_path( destination_tree )
-    droplet_approximation.write_particles_index( dest_index_path, unique_particle_ids )
+    droplet_approximation.write_particles_index( dest_index_path,
+                                                 unique_particle_ids,
+                                                 merge_flag=True )
 
     # Report any errors that occurred
     if len( read_error_paths ) > 0:
