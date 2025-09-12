@@ -1,4 +1,5 @@
 import copy
+import sys
 import warnings
 
 import numpy as np
@@ -68,6 +69,53 @@ class ResidualNet( SimpleNet ):
         out += x[..., 0:2]
 
         return out
+
+def create_new_model( model_class_name, model_name=None ):
+    """
+    Instantiates a PyTorch model object from a droplet_approximation's class
+    name.  The object is created with default arguments.
+
+    Raises ValueError if the supplied name does not exist in the
+    droplet_approximation package or if it doesn't represent a class name.
+
+    Takes 2 arguments:
+
+      model_class_name - String specifying the model class name to instantiate.
+                         Must be one of the classes exposed in the
+                         droplet_approximation package's interface.
+      model_name       - Optional string specifying the name of the model.  If
+                         omitted, defaults to None.   This is passed as the
+                         value for the "model_name" keyword argument for
+                         model_class_name's constructor.
+
+    Returns 1 value:
+
+      model - PyTorch model object described by model_class_name.
+
+    """
+
+    # Get this package's handle.
+    module_name   = __name__
+    module_handle = sys.modules[module_name]
+
+    # Blow up if this isn't known to the package.
+    if model_class_name not in module_handle.__dict__:
+        raise ValueError( "Model class '{:s} does not exist in droplet_approximation'!".format(
+            model_class_name ) )
+
+    # Lookup the symbol and confirm that it is indeed a class.
+    obj = getattr( module_handle, model_class_name )
+    if not callable( obj ):
+        raise ValueError( "Model class '{:s}' is not callable!".format(
+            model_class_name ) )
+    elif not isinstance( obj, type ):
+        raise ValueError( "Model class '{:s}' is not a class!".format(
+            model_class_name ) )
+
+    # Instantiate it with the default arguments.
+    model = obj( model_name=model_name )
+
+    return model
 
 def do_bdf( input_parameters, integration_times, gap_indices=np.array( [] ), **kwargs ):
     """
@@ -1053,7 +1101,7 @@ end subroutine estimate
         # Write out the end of the module.
         _write_module_epilog( model_state, output_fp )
 
-def load_model_checkpoint( checkpoint_path, model, optimizer=None ):
+def load_model_checkpoint( checkpoint_path, model=None, optimizer=None ):
     """
     Loads a checkpoint from disk and updates the provided model and optimizer
     objects with the state contained.  Returns the parameter ranges found in the
@@ -1062,14 +1110,23 @@ def load_model_checkpoint( checkpoint_path, model, optimizer=None ):
     Takes 3 arguments:
 
       checkpoint_path - Path to the file that checkpoint was loaded from.
-      model           - Torch model whose weights will be set to the
+      model           - Optional Torch model whose weights will be set to the
                         checkpoint's contents.
+
+                        NOTE: Specifying a model is only valid when loading a v3
+                              or older checkpoint as newer checkpoints contain
+                              enough information to instantiate the correct
+                              model object.  A provided model is ignored when
+                              loading a v4 or newer checkpoint.
+
       optimizer       - Optional Torch optimizer whose state will be set to the
                         checkpoint's contents.  If omitted, any optimizer state
                         in checkpoint_path is ignored.
 
-    Returns 3 values:
+    Returns 4 values:
 
+      model            - Torch model containing the weights loaded.  Its type
+                         is determined by the contents of checkpoint_path.
       parameter_ranges - Dictionary containing the droplet parameter ranges
                          associated with model.  See get_parameter_range() for
                          details.
@@ -1077,6 +1134,11 @@ def load_model_checkpoint( checkpoint_path, model, optimizer=None ):
                          model.
       training_loss    - Sequence containing model's training loss across
                          batches.
+
+      NOTE: model is *NOT* returned when it is provided as an input argument!
+            This matches the original interface of load_model_checkpoint() which
+            will be phased out when older checkpoints (v3 and older) are no
+            longer in circulation.
 
     """
 
@@ -1216,10 +1278,77 @@ def load_model_checkpoint( checkpoint_path, model, optimizer=None ):
 
         return parameter_ranges, loss_function, training_loss
 
+    def _load_model_checkpoint_v4( checkpoint_path, optimizer, checkpoint ):
+        """
+        Loads a version 4 checkpoint.  These contain the model's architecture
+        and name, the droplet parameter ranges the model was trained on, the
+        optimizer's state, the loss function used in training, and the current
+        training loss.  The model is instantiated from its architecture and
+        name, and its weights loaded.  The model and parameter ranges use salt
+        solute.
+
+        Takes 3 arguments:
+
+          checkpoint_path -
+          optimizer       - Optional Torch optimizer whose state will be set to
+                            the checkpoint's contents.  If omitted, the loaded
+                            optimizer state is discarded.
+          checkpoint      - Dictionary containing the following keys:
+                            "architecture", "droplet_parameters", "loss_function",
+                            "model_name", "model_weights", "optimizer_state",
+                            "training_loss".
+
+        Returns 4 values:
+
+          model            - Torch model containing the weights loaded.  Its
+                             type is determined by the contents of
+                             checkpoint_path.
+          parameter_ranges - Dictionary containing the droplet parameter ranges
+                             associated with model.  See get_parameter_range()
+                             for details.
+          loss_function    - Function handle for the loss function associated
+                             with model.
+          training_loss    - Sequence containing model's training loss across
+                             batches.
+
+        """
+
+        model = create_new_model( checkpoint["architecture"],
+                                  model_name=checkpoint["model_name"] )
+
+        model.load_state_dict( checkpoint["model_weights"] )
+        if optimizer is not None:
+            optimizer.load_state_dict( checkpoint["optimizer_state"] )
+
+        parameter_ranges = checkpoint["droplet_parameter_ranges"]
+        loss_function    = checkpoint["loss_function"]
+        training_loss    = checkpoint["training_loss"]
+
+        # Sanity check that the parameter ranges are as expected.
+        if "salt_solute" not in parameter_ranges:
+            print( parameter_ranges )
+            raise ValueError( "'{:s}' is not a valid v4 checkpoint.  "
+                              "Its parameter ranges does not contain 'salt solute'!".format(
+                                  checkpoint_path ) )
+
+        return model, parameter_ranges, loss_function, training_loss
+
+    # Keep track of whether the caller provided a model so we can deal with
+    # older checkpoints and change our return values.
+    no_model_provided_flag = model is None
+
     # Load the checkpoint's Tensors as a dictionary and figure out which version
     # it is.
     checkpoint         = torch.load( checkpoint_path, weights_only=False, map_location=torch.device( "cpu" ) )
     checkpoint_version = checkpoint.get( "checkpoint_version", 1 )
+
+    # Older checkpoints don't have a way of specifying the model architecture so
+    # the caller must provide an instantiated object to load weights into.
+    if checkpoint_version < 4 and no_model_provided_flag:
+        raise ValueError( "Older checkpoints (v3 and older) must provide a model "
+                          "object to load weights into!  '{:s}' is v{:d}.".format(
+                              checkpoint_path,
+                              checkpoint_version ) )
 
     # Load the checkpoint based on its reported version.  Complain if we don't
     # know how to support it.
@@ -1246,12 +1375,23 @@ def load_model_checkpoint( checkpoint_path, model, optimizer=None ):
                                                      model,
                                                      optimizer,
                                                      checkpoint )
+    elif checkpoint_version == 4:
+        (model,
+         parameter_ranges,
+         loss_function,
+         training_loss) = _load_model_checkpoint_v4( checkpoint_path,
+                                                     optimizer,
+                                                     checkpoint )
     else:
         raise RuntimeError( "Unknown checkpoint version ({:d}) in '{:s}'!".format(
             checkpoint_version,
             checkpoint_path ) )
 
-    return parameter_ranges, loss_function, training_loss
+    # Figure out which values to return based on how we were called.
+    if no_model_provided_flag:
+        return model, parameter_ranges, loss_function, training_loss
+    else:
+        return parameter_ranges, loss_function, training_loss
 
 def ode_residual( inputs, outputs, model ):
 
@@ -1306,7 +1446,7 @@ def save_model_checkpoint( checkpoint_prefix, checkpoint_number, model, optimize
     #       cases where we need to write a specific version can be handled
     #       as needed.
     #
-    CHECKPOINT_VERSION = 3
+    CHECKPOINT_VERSION = 4
 
     # Build the checkpoint path.
     if checkpoint_number >= 0:
@@ -1325,18 +1465,25 @@ def save_model_checkpoint( checkpoint_prefix, checkpoint_number, model, optimize
 
     # Checkpoints are dictionaries comprised of the following key/values:
     #
+    #  architecture             - Name of the model's class, used to instantiate
+    #                             a new model object when the checkpoint is
+    #                             loaded.  Must be compatible with create_new_model().
     #  droplet_parameter_ranges - The physics module's current parameter range
     #                             dictionary.
     #  loss_function            - Function that computes model's training loss.
+    #  model_name               - Name of the model, used for identification
+    #                             purposes.
     #  model_weights            - Model weights and biases.
     #  optimizer_state          - Optional optimizer state so as to continue
     #                             training where the checkpoint left off.
     #  training_loss            - Sequence of training loss values.
     #
     checkpoint = {
+        "architecture":             type( model ).__name__,
         "checkpoint_version":       CHECKPOINT_VERSION,
         "droplet_parameter_ranges": current_parameter_ranges,
         "loss_function":            loss_function,
+        "model_name":               model.model_name,
         "model_weights":            copy.deepcopy( model ).to( "cpu" ).state_dict(),
         "optimizer_state":          optimizer.state_dict(),
         "training_loss":            training_loss

@@ -35,45 +35,6 @@ import droplet_approximation
 EVALUATION_TYPE_BDF_STR = droplet_approximation.EvaluationType.BDF.name.lower()
 EVALUATION_TYPE_MLP_STR = droplet_approximation.EvaluationType.MLP.name.lower()
 
-def create_new_model( model_class_name ):
-    """
-    Instantiates a PyTorch model object from a droplet_approximation's class
-    name.  The object is created with default arguments.
-
-    Raises ValueError if the supplied name does not exist in the
-    droplet_approximation package or if it doesn't represent a class name.
-
-    Takes 1 argument:
-
-      model_class_name - String specifying the model class name to instantiate.
-                         Must be one of the classes exposed in the
-                         droplet_approximation package's interface.
-
-    Returns 1 value:
-
-      model - PyTorch model object described by model_class_name.
-
-    """
-
-    # Blow up if this isn't known to the package.
-    if model_class_name not in droplet_approximation.__dict__:
-        raise ValueError( "Model class '{:s} does not exist in droplet_approximation'!".format(
-            model_class_name ) )
-
-    # Lookup the symbol and confirm that it is indeed a class.
-    obj = getattr( droplet_approximation, model_class_name )
-    if not callable( obj ):
-        raise ValueError( "Model class '{:s}' is not callable!".format(
-            model_class_name ) )
-    elif not isinstance( obj, type ):
-        raise ValueError( "Model class '{:s}' is not a class!".format(
-            model_class_name ) )
-
-    # Instantiate it with the default arguments.
-    model = obj()
-
-    return model
-
 def launch_evaluation_pipeline( particles_root, particles_index_path, particle_indices_range_str,
                                 number_processes, evaluation_type, iterative_flag,
                                 evaluation_extension, testing_flag, parameters ):
@@ -151,7 +112,7 @@ def launch_evaluation_pipeline( particles_root, particles_index_path, particle_i
     # Load the model and acquire its parameter ranges if we're doing
     # MLP evaluation.
     if evaluation_type == droplet_approximation.EvaluationType.MLP:
-        model = create_new_model( parameters["model_class"] )
+        model = droplet_approximation.create_new_model( parameters["model_class"] )
 
         # Promote warnings to errors so we can prevent v1 checkpoints from being
         # used.

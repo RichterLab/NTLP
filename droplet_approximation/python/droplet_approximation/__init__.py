@@ -38,6 +38,7 @@ from .data import BE_TAG_NAME, \
                   write_particles_index
 from .models import SimpleNet, \
                     ResidualNet, \
+                    create_new_model, \
                     do_bdf, \
                     do_inference, \
                     do_iterative_bdf, \
