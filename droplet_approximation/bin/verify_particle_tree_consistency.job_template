@@ -1,0 +1,183 @@
+#!/bin/bash
+
+# SGE job template for verifying a particles tree's consistency, spreading the
+# work across _NUMBER_NODES_ job tasks each reading particles with
+# _NUMBER_PROCESSES_ process(es).
+#
+# Requires the following parameters to be instantiated:
+#
+#  Parameter Tag           Description
+#  -----------------       ------------------------------------------------
+#  _EMAIL_                 Email address to mail when the jobs are launched and
+#                          complete.  Must be provided since it is part of the
+#                          SGE script directives.
+#  _EVALUATION_TAGS_       Optional list of whitespace-delimited evaluation tags
+#                          to load.  If omitted, only raw particle observations
+#                          are verified.
+#  _NODE_TYPE_             Processing Element (PE) selection.  May be anything
+#                          that the scheduler recognizes, though common
+#                          selections include:
+#
+#                            Selection         Description
+#                            -------------     ------------
+#                            -pe smp 1         Single core on shared SMP systems
+#                                              (read: the general purpose queue)
+#                            -pe mpi-64 64     An entire 64-core MPI node
+#
+#  _NUMBER_NODES_          The number of nodes to process.  This specifies the
+#                          number of job tasks in the job array.
+#  _NUMBER_PROCESSES       The number of worker processes per node.
+#  _QUEUE_SELECTION_       Optional queue selection string to specify a
+#                          partciular queue to submit to.  May be empty to use
+#                          the default queue.  The Richer Lab's nodes use "-q
+#                          *@@richter".
+#  _PARTICLES_INDEX_PATH_  Optional path, relative to _PARTICLES_ROOT_, to
+#                          the particles index file to work with.  If omitted,
+#                          the default particle index (particles.index) will be
+#                          used.  This allows verifying a subset of particles#
+#                          instead of the entire tree.
+#  _PARTICLES_ROOT_        Path to the particles tree to verify.
+
+#$ -M _EMAIL_
+#$ _NODE_TYPE_
+#$ _QUEUE_SELECTION_
+#$ -t 1-_NUMBER_NODES_
+#$ -j y
+#$ -N verify-particle-tree-_TRACE_NAME_
+
+# Takes a count and the number of chunks to break the count up into.  Echoes an
+# array of (start, end) indices suitable for use in Python (open upper bounds)
+# to standard output.  When the count isn't evenly divisible by the number of
+# chunks the remainder is distributed across the initial chunks.
+partition_indices()
+{
+    local COUNT=$1
+    local NUMBER_CHUNKS=$2
+
+    local CHUNK_SIZE=$((COUNT / NUMBER_CHUNKS))
+    local REMAINDER=$((COUNT % NUMBER_CHUNKS))
+
+    local START_INDEX=0
+    local INDICES=()
+
+    for ((CHUNK_INDEX = 0; CHUNK_INDEX < NUMBER_CHUNKS; CHUNK_INDEX++)); do
+        local END_INDEX=$((START_INDEX + CHUNK_SIZE + (CHUNK_INDEX < REMAINDER ? 1 : 0)))
+
+        INDICES+=("${START_INDEX}:${END_INDEX}")
+
+        START_INDEX=${END_INDEX}
+    done
+
+    echo "${INDICES[@]}"
+}
+
+# Number of instances of the verification script working in concert (each with
+# _NUMBER_PROCESSES_ processes).
+JOB_COUNT=_NUMBER_NODES_
+JOB_INDEX=`expr ${SGE_TASK_ID} - 1`
+
+# Number of processes launched by a single job task.  Each of these launches an
+# instance of the verification script.
+NUMBER_PROCESSES=_NUMBER_PROCESSES_
+MAX_PROCESS_INDEX=`expr ${NUMBER_PROCESSES} - 1`
+
+# Particles tree and its particles index.
+#
+# NOTE: _PARTICLES_INDEX_PATH_ may be empty and is handled below.
+#
+PARTICLES_ROOT=_PARTICLES_ROOT_
+PARTICLES_INDEX_PATH=_PARTICLES_INDEX_PATH_
+
+# Optional list of evaluation tags to verify in addition to raw observations.
+EVALUATION_TAGS_LIST="_EVALUATION_TAGS_"
+
+# This template's installation directory.
+SCRIPTS_DIRECTORY="${HOME}/code/NTLP/droplet_approximation/bin"
+
+# Path to the tree verification script.
+VERIFY_PARTICLES="${SCRIPTS_DIRECTORY}/verify_particle_tree_consistency.py"
+
+# Figure out where the particles index resides.  We need to provide an
+# option to the verification script when a non-default index is used.
+if [ -z "${PARTICLES_INDEX_PATH}" ]; then
+    FULL_PARTICLES_INDEX_PATH="${PARTICLES_ROOT}/particles.index"
+else
+    FULL_PARTICLES_INDEX_PATH="${PARTICLES_ROOT}/${PARTICLES_INDEX_PATH}"
+    PARTICLES_INDEX_OPTION="-i ${FULL_PARTICLES_INDEX_PATH}"
+fi
+
+# Bail early if this isn't a particles tree.
+if [ ! -d "${PARTICLES_ROOT}" ]; then
+    echo "'${PARTICLES_ROOT}' does not exist!" >&2
+    exit 1
+elif [ ! -f ${FULL_PARTICLES_INDEX_PATH} ]; then
+    echo "'${FULL_PARTICLES_INDEX_PATH}' does not exist!" >&2
+    exit 2
+fi
+
+# Get the total number of particles from the index's size.  This is the
+# aggregate number read across all job tasks.
+NUMBER_PARTICLES=`stat -c %s ${FULL_PARTICLES_INDEX_PATH} | awk '{ print $1 / 4}'`
+
+# Compute the individual particle indices for each job task.
+JOB_PARTICLES_INDEX_ARRAY=($(partition_indices ${NUMBER_PARTICLES} ${JOB_COUNT}))
+
+# Get the this job task's particles range.
+JOB_PARTICLE_INDICES=${JOB_PARTICLES_INDEX_ARRAY[${JOB_INDEX}]}
+JOB_PARTICLE_INDEX_START=`echo ${JOB_PARTICLE_INDICES} | cut -d: -f1`
+JOB_PARTICLE_INDEX_END=`echo ${JOB_PARTICLE_INDICES} | cut -d: -f2`
+
+# Get the number of particles processed by this job task.
+#
+# NOTE: Job indices are exclusive so we don't need to add one.
+#
+JOB_NUMBER_PARTICLES=`expr ${JOB_PARTICLE_INDEX_END} - ${JOB_PARTICLE_INDEX_START}`
+
+# Report what we're doing.
+echo "Evaluating ${NUMBER_PARTICLES} particles (${JOB_PARTICLE_INDEX_START}:${JOB_PARTICLE_INDEX_END}) from '${FULL_PARTICLES_INDEX_PATH}' with ${NUMBER_PROCESSES} processes (Job index ${JOB_INDEX} of ${JOB_COUNT})."
+
+# Subdivide this task particle's across its processes.
+PROCESS_PARTICLES_INDEX_ARRAY=($(partition_indices ${JOB_NUMBER_PARTICLES} ${NUMBER_PROCESSES}))
+
+# Launch each of this task's processes sequentially.
+PROCESS_PIDS=
+for PROCESS_INDEX in `seq 0 ${MAX_PROCESS_INDEX}`; do
+    # Get the this process' particles range.
+    #
+    # NOTE: These are relative to the start of this job's first particle.
+    #
+    PROCESS_PARTICLE_INDICES=${PROCESS_PARTICLES_INDEX_ARRAY[${PROCESS_INDEX}]}
+    PROCESS_PARTICLE_INDEX_START=`echo ${PROCESS_PARTICLE_INDICES} | cut -d: -f1`
+    PROCESS_PARTICLE_INDEX_END=`echo ${PROCESS_PARTICLE_INDICES} | cut -d: -f2`
+
+    # Add the job's particle count so these particles are distinct from other
+    # job's processes.
+    PROCESS_PARTICLE_INDEX_START=`expr ${PROCESS_PARTICLE_INDEX_START} + ${JOB_PARTICLE_INDEX_START}`
+    PROCESS_PARTICLE_INDEX_END=`expr ${PROCESS_PARTICLE_INDEX_END} + ${JOB_PARTICLE_INDEX_START}`
+
+    ${VERIFY_PARTICLES} \
+        ${PARTICLES_INDEX_OPTION} \
+        ${PARTICLES_ROOT} \
+        ${PROCESS_PARTICLE_INDEX_START} \
+        ${PROCESS_PARTICLE_INDEX_END} \
+        ${EVALUATION_TAGS_LIST} &
+
+    # Track this process so we can see how it performed.
+    PROCESS_PIDS="${PROCESS_PIDS} $!"
+done
+
+# Report if any of the tasks failed.
+PROCESS_NUMBER="1"
+for PROCESS_PID in ${PROCESS_PIDS}; do
+    wait ${PROCESS_PID}
+
+    EXIT_CODE=$?
+
+    if [ ${EXIT_CODE} -ne 0 ]; then
+        echo "Process #${PROCESS_NUMBER} failed!  Exit code ${EXIT_CODE}."
+    fi
+
+    PROCESS_NUMBER=`expr ${PROCESS_NUMBER} + 1`
+done
+
+echo "Done."
