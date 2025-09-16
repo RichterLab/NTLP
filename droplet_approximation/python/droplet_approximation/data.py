@@ -176,7 +176,7 @@ def batch_read_particles_data( particles_root, particle_ids, dirs_per_level, num
                          particle trace files in parallel.  If omitted, defaults
                          to 0 and one process per core will be utilized.
       kwargs           - Optional dictionary of arguments to pass to
-                         read_particle_data().
+                         read_particles_data().
 
     Returns 1 value:
 
@@ -792,7 +792,7 @@ def get_evaluation_column_names( evaluation_tag ):
     temperature evaluations in a particles DataFrame.
 
     Note that these columns are only valid for DataFrames loaded with the same
-    evaluations.  See read_particle_data() for details.
+    evaluations.  See read_particles_data() for details.
 
     Takes 1 argument:
 
@@ -1031,14 +1031,14 @@ def _read_particles_data_wrapper( particles_root, particle_ids, dirs_per_level, 
                        raw particle files.
       dirs_per_level - Number of subdirectories per level in the particle files
                        directory hierarchy.
-      kwargs         - Dictionary of keyword arguments to supply to read_particle_data().
+      kwargs         - Dictionary of keyword arguments to supply to read_particles_data().
 
                        NOTE: This is required and not optional!
 
     Returns 1 value:
 
       particle_df - DataFrame with one row per particle identifier in particle_ids.
-                    See read_particle_data() for details on the columns contained.
+                    See read_particles_data() for details on the columns contained.
 
     """
 
