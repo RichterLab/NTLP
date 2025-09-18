@@ -1125,6 +1125,14 @@ def read_particles_data( particles_root, particle_ids, dirs_per_level, quiet_fla
                                                 observations.
                       "integration times":      1D NumPy array of the timestep
                                                 size.
+                      "number gaps":            Number of gaps in the
+                                                evaluations.  This specifies the
+                                                number of elements in the "gap
+                                                indices" column.
+                      "gap indices":            Indices specifying where a gap
+                                                occurred.  These are zero-based
+                                                and indicate the first
+                                                evaluation after each gap.
                       "number be failures":     Non-negative number of backward
                                                 Euler failures across a
                                                 particle's observations.  See
