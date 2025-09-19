@@ -326,18 +326,19 @@ def particle_evaluation_pipeline( particles_root, particle_ids, dirs_per_level,
     #
 
     # Make a shallow copy of the caller's parameters so we don't modify theirs.
-    local_parameters = parameters
+    local_parameters = parameters.copy()
+
+    # Arguments passed to our inference function.  Assume we don't have any
+    # by default.
+    inference_arguments = ()
+
+    # Parameter ranges used for MLP inference.  Assume we don't have any
+    # by default.
+    parameter_ranges = {}
 
     # Verify that we got the correct parameters for the evaluation type
     # requested and setup the inference function handle.
     if evaluation_type == EvaluationType.BDF:
-        # BDF can accept tolerances to control is convergence.  Use the
-        # packages's defaults if the caller didn't supply any.
-        if "atol" not in local_parameters:
-            local_parameters["atol"] = BDF_TOLERANCE_ABSOLUTE
-        if "rtol" not in local_parameters:
-            local_parameters["rtol"] = BDF_TOLERANCE_RELATIVE
-
         if iterative_flag:
             inference = do_iterative_bdf
         else:
@@ -351,6 +352,17 @@ def particle_evaluation_pipeline( particles_root, particle_ids, dirs_per_level,
         elif "parameter_ranges" not in local_parameters:
             raise ValueError( "MLP inference requires the 'parameter_ranges' parameter." )
 
+        # Get the MLP-specific parameters.
+        inference_arguments = (local_parameters["model"],
+                               local_parameters["device"])
+        parameter_ranges    = local_parameters["parameter_ranges"]
+
+        # Remove our parameters so we can pass the remaining as keyword
+        # arguments.
+        del local_parameters["model"]
+        del local_parameters["device"]
+        del local_parameters["parameter_ranges"]
+
         if iterative_flag:
             inference = do_iterative_inference
         else:
@@ -359,23 +371,12 @@ def particle_evaluation_pipeline( particles_root, particle_ids, dirs_per_level,
         raise ValueError( "evaluation_type must be either EvaluationTyep.BDF or EvaluationType.MLP, got {}!".format(
             evaluation_type ) )
 
-    # Direct and iterative evaluations access a different subset of the outputs
-    # computed.  Construct a slice object to simplify the indexing below.
-    if iterative_flag:
-        # Iterative outputs use the first input as the output and use previous
-        # outputs as current inputs.
-        output_slice = slice( 1, None )
-    else:
-        # Direct outputs use the corresponding input, though there is no
-        # final output since we don't know the integration time to use.
-        output_slice = slice( None, -1 )
-
     # MLP evaluation requires us to have the correct parameter ranges set,
     # otherwise our scaling will generate garbage results.
     previous_parameter_ranges = get_parameter_ranges()
 
     if evaluation_type == EvaluationType.MLP:
-        set_parameter_ranges( local_parameters["parameter_ranges" ] )
+        set_parameter_ranges( parameter_ranges )
 
     try:
         # Walk through each of the particles, read the raw observations,
@@ -390,30 +391,21 @@ def particle_evaluation_pipeline( particles_root, particle_ids, dirs_per_level,
             # Get the particle's observations sorted by time.
             observations_fp32 = _read_raw_particle_data( particle_path )
 
+            # We need integration times for each time step so we can remove gaps
+            # from them prior to inferencing.
+            integration_times = np.diff( observations_fp32[:, ParticleRecord.TIME_INDEX] )
+
             # Identify where gaps in successive observations have occurred so we
             # can correctly handle them when iteratively evaluating.
-            gaps_mask   = detect_timeline_gaps( observations_fp32[:, ParticleRecord.TIME_INDEX],
-                                                times_flag=True )
-            gap_indices = np.where( gaps_mask )[0]
+            gap_mask, gap_indices = detect_timeline_gaps( integration_times )
 
-            # Evaluate the output for every observation we're interested in.
-            # We will ignore either the first or the last based on whether
-            # we're evaluating directly or iteratively, respectively.  See
-            # the documentation for the output_slice for details.
-            outputs = np.empty( shape=(observations_fp32.shape[0] - 1, 2), dtype=np.float32 )
-
-            if evaluation_type == EvaluationType.BDF:
-                outputs[:] = inference( observations_fp32[:, ParticleRecord.RADIUS_INDEX:ParticleRecord.SIZE],
-                                        observations_fp32[:, ParticleRecord.TIME_INDEX],
-                                        atol=local_parameters["atol"],
-                                        rtol=local_parameters["rtol"],
-                                        gap_indices=gap_indices )[output_slice, :]
-            else:
-                outputs[:] = inference( observations_fp32[:, ParticleRecord.RADIUS_INDEX:ParticleRecord.SIZE],
-                                        observations_fp32[:, ParticleRecord.TIME_INDEX],
-                                        local_parameters["model"],
-                                        local_parameters["device"],
-                                        gap_indices=gap_indices )[output_slice, :]
+            # Create evaluations from our observations.  We ignore the last
+            # observation since we don't have an integration time for it.
+            outputs = inference( observations_fp32[:-1, ParticleRecord.RADIUS_INDEX:ParticleRecord.SIZE][~gap_mask],
+                                 integration_times[~gap_mask],
+                                 *inference_arguments,
+                                 gap_indices=gap_indices,
+                                 **local_parameters )
 
             # Write out the evaluations and move on to the next particle.
             #

@@ -705,14 +705,23 @@ def create_training_file( file_name, number_droplets, user_batch_size=None, quie
             # Serialize the array
             inputs_outputs.tofile( output_fp )
 
-def detect_timeline_gaps( integration_times, maximum_gap_size=MAXIMUM_DT_GAP_SIZE, times_flag=False ):
+def detect_timeline_gaps( integration_times, maximum_gap_size=MAXIMUM_DT_GAP_SIZE ):
     """
     Empirically identifies gaps in a time line so they may be explicitly
     handled.  Takes the successive differences between time line observations
     and computes a Boolean mask array identifying where gaps are believed to
-    have occurred.
+    have occurred.  Also returns an array of time step indices indicating
+    where gaps occur relative to arrays that have been masked.
 
-    Takes 3 arguments:
+    NOTE: This function handles identifying gaps in a time line of integration
+          times, which implicitly corresponds to a sequence of evaluations, as
+          gap handling is only reliable when operating on evaluations and their
+          associated integration times.  Gap handling with observations requires
+          directly working with de-gapped integration times which defeats the
+          purpose of using the simulation times that naturally occurs with
+          observations.
+
+    Takes 2 arguments:
 
       integration_times - NumPy array, with N elements, containing the
                           successive differences between time line entries.
@@ -720,22 +729,88 @@ def detect_timeline_gaps( integration_times, maximum_gap_size=MAXIMUM_DT_GAP_SIZ
                           between successive two time line entries.  Differences
                           larger than this value are flagged as a gap.  If
                           omitted, defaults to MAXIMUM_DT_GAP_SIZE.
-      times_flag        - Optional flag specifying that integration_times is
-                          really an array of simulation times and not the delta
-                          between successive simulation times.  If omitted,
-                          defaults to False and integration_times contains
-                          deltas.  When True, integration_times contains one
-                          additional element than is returned in gaps_mask.
 
-    Returns 1 value:
+    Returns 2 values:
 
-      gaps_mask - NumPy Boolean array, with N elements, representing differences
-                  that are considered to be gaps.
+      gap_mask    - NumPy Boolean array, with N elements, representing
+                    differences that are considered to be gaps, where
+                    N is the length of integration_times.
+
+      gap_indices - NumPy array, with M elements (with M <= N),
+                    specifying the indices where gaps occur.  These
+                    indices correspond to
+                    integration_times[~evaluations_gap_mask].
+
+                    NOTE: This array may be shorter than gap_mask's True entries
+                          count when multiple gaps occur back-to-back and
+                          aggregate to fewer, larger gaps.
 
     """
 
-    if times_flag:
-        integration_times = np.diff( integration_times )
+    #
+    # NOTE: Detection is only provided on integration times (read:
+    #       evaluation-based gaps) to:
+    #
+    #         1. Be simple
+    #         2. Avoid unnecessary footguns
+    #
+    #       Correctly handling gaps in sequences of observations, associated
+    #       with simulations, is hard.  It is also requires more care when
+    #       applying the gaps mask to construct an un-gapped timeline than for
+    #       evaluations.  Since there is no real gain for supporting both and
+    #       one is harder than the other, we make the obvious choice and only
+    #       support evaluations-based gap detection.  This is motivated by the
+    #       fact that it is *very* difficult to track down bugs when seemingly
+    #       two identical operations (one observations-based, one
+    #       evaluations-based) fail, only to realize they only differ by how the
+    #       gaps were detected and applied.
+    #
+    #       For future archaeologists, the decision to only support integration
+    #       times was realized after learning the following painful lessons:
+    #
+    #         - Construction of an observations-based gap mask is conceptually
+    #           different to reason about, even though it is relatively easy to
+    #           create from an evaluations-based mask.  Extending the first
+    #           entry of the mask, and remove the last gap of each consecutive
+    #           run (while eliminating gaps of length one), is all that is
+    #           needed.
+    #
+    #           However, one has to keep in mind what is being masked as
+    #           observations are used twice in each evaluation - once as an
+    #           input and once as an output.  The mask is only applied to the
+    #           observations as an input, unless there are back-to-back gaps
+    #           in which case its output use is also masked.  This asymmetry
+    #           can be difficult to keep track of during its use and is an
+    #           easy source of mistakes.
+    #
+    #         - Because the observation-based gap mask is different, it also
+    #           necessitates different gap indices as observations have one
+    #           extra entry compared to evaluations.  As a result,
+    #           observation-based each gap index is offset by its 1-based
+    #           position (i.e. 1:N, for N gaps), relative to its
+    #           evaluation-based gap index.  This change of index further
+    #           complicates reasoning when troubleshooting differences between
+    #           evaluations and observations.
+    #
+    #         - Most importantly, observation-based gap masks must be propagated
+    #           throughout code that works on observation's simulation time
+    #           and not integration times.  Unlike evaluation-based masks,
+    #           one cannot simply mask gap-aware arrays and process them with
+    #           their corresponding integration times *unless* they explicitly
+    #           provide masked integration times (thereby defeating the point
+    #           of using simulation time).  Without this, the calculated
+    #           integration times will include the gaps.
+    #
+    #       Given that gaps are the result of computational resource constraints
+    #       and are always shifting, it is likely that the same sharp edges will
+    #       never be encountered twice unless testing is adopted.  The cases to
+    #       worry about don't always occur (single gaps, runs of gaps, gaps at
+    #       the beginning or end of a timeline that are ignored, etc) in data
+    #       used for testing and requiring it to work in two similar, but subtly
+    #       different ways is a recipe for frustration.
+    #
+    #       TL;DR: Friends don't let friends use observation-based gaps.
+    #
 
     # Handle the case where we got zero integration times or fewer than two
     # times (the difference of on time is an empty array).
@@ -782,9 +857,79 @@ def detect_timeline_gaps( integration_times, maximum_gap_size=MAXIMUM_DT_GAP_SIZ
     dt_threshold = min( 5 * selection_func( integration_times ),
                         MAXIMUM_DT_GAP_SIZE )
 
-    gaps_mask = (integration_times > dt_threshold)
+    # Compute where gaps are in the evaluations.  Derive gap indices
+    # from the mask to handle runs of back-to-back gaps.
+    evaluations_gap_mask = (integration_times > dt_threshold)
+    gap_indices          = _evaluations_gap_mask_to_indices( evaluations_gap_mask )
 
-    return gaps_mask
+    return evaluations_gap_mask, gap_indices
+
+def _evaluations_gap_mask_to_indices( evaluations_gap_mask ):
+    """
+    Constructs the indices for inserting gap markers (e.g. NaN) into an
+    evaluation array to produce a gapped time series.  This is useful for
+    plotting where NaNs representing gaps result in visualizing multiple line
+    segments instead of a single segment that spans multiple gaps.
+
+    The indices returned are suitable for use with NumPy's .where() method.
+
+    Gaps spanning multiple elements are compressed into a single gap.  Gaps
+    at the beginning or end of the supplied mask are ignored as these
+    are typically not useful.  As a result, using the indices calculated
+    to construct a gapped time series does not result in the original
+    mask and will have a different length.
+
+    Takes 1 values:
+
+      evaluations_gap_mask - NumPy array containing a Boolean mask specifying where
+                             gaps occur within a time series.
+
+    Return 1 value:
+
+      gap_indices - NumPy array containing indices where gap markers
+                    should be inserted to create the gapped array.
+
+    """
+
+    # We don't want to produce indices for gaps at the beginning or end
+    # of the mask.  Find the subset of the mask to operate on that ignores
+    # gaps at the edges.  Masks comprised entirely of gaps are properly
+    # handled.
+    mask_start_index = 0
+    mask_end_index   = len( evaluations_gap_mask ) - 1
+
+    while mask_start_index <= mask_end_index and evaluations_gap_mask[mask_start_index]:
+        mask_start_index += 1
+    while mask_end_index >= mask_start_index and evaluations_gap_mask[mask_end_index]:
+        mask_end_index -= 1
+
+    # Find gap runs where we have consecutive gaps in the mask.  We track the
+    # index of the beginning of each run.
+    #
+    # NOTE: We only operate on the interior of the mask, after gaps starting
+    #       at the beginning and up to a gap at the end.
+    #
+    gap_run_starts = []
+    in_gap         = False
+    for evaluation_index, is_gap in enumerate( evaluations_gap_mask[mask_start_index:(mask_end_index+1)] ):
+        if is_gap and not in_gap:
+            # Start of a gap.
+            gap_run_starts.append( evaluation_index + mask_start_index )
+            in_gap = True
+        elif not is_gap and in_gap:
+            # End of a gap.
+            in_gap = False
+
+    # Calculate the insertion position based on where we identified gaps.
+    gap_indices = []
+    for gap_index in gap_run_starts:
+        # Count how many non-gap elements come before this gap run.
+        number_nongaps_before = np.sum( ~evaluations_gap_mask[mask_start_index:gap_index] )
+        gap_indices.append( number_nongaps_before )
+
+    gap_indices = np.array( gap_indices, dtype=np.int32 )
+
+    return gap_indices
 
 def get_evaluation_column_names( evaluation_tag ):
     """
@@ -1535,40 +1680,22 @@ def read_particles_data( particles_root, particle_ids, dirs_per_level, quiet_fla
                 particles_df.at[particle_id, observation_name] = np.array( [[particles_df.at[particle_id, observation_name]]] )
                 particles_df.at[particle_id, observation_name].shape = [1]
 
-        # Provide a safety net against incorrect indexing.  We want to
-        # immediately know about broken indexing instead of randomly tripping up
-        # on a particle or, worse, never noticing and having subtly incorrect
-        # analysis.
-        #
-        # This ensures we have matching counts across all observation arrays.
-        # We take care to track the individual counts to aide in debugging
-        # should we explode.
-        array_sizes        = set()
-        observation_counts = []
-        for observation_name in OBSERVATION_NAMES:
-            if len( particles_df.at[particle_id, observation_name].shape ) > 0:
-                # 1D array.
-                observation_count = particles_df.at[particle_id, observation_name].shape[0]
-            else:
-                # Scalar that slipped through our conversion contortions.
-                observation_count = 1
-
-            array_sizes.add( observation_count )
-            observation_counts.append( observation_count )
-
-        if len( array_sizes ) != 1:
-            raise ValueError( "Array size mismatch for particle id {:d} ({})!".format(
-                particle_id,
-                observation_counts ) )
-
         # Drop the evaluations that have crazy integration times under the
         # assumption that we don't have a complete trace of this particle (some
         # observations occurred on a MPI rank whose outputs were not processed).
         # This manifests as outputs that appear to have a huge integration time
         # because the intermediate observations are missing.
-        gaps_mask   = detect_timeline_gaps( particles_df.at[particle_id, "integration times"] )
-        number_gaps = gaps_mask.sum()
-        if number_gaps > 0:
+        #
+        # NOTE: We use number of masked evaluations to determine whether we
+        #       update this particle's arrays, and not the length of the
+        #       indices, as the former accounts for gaps at the beginning/end of
+        #       the time line that are omitted from the gap indices.
+        #
+        gaps_mask, gap_indices    = detect_timeline_gaps( particles_df.at[particle_id, "integration times"] )
+        number_masked_evaluations = gaps_mask.sum()
+        number_gap_indices        = len( gap_indices )
+
+        if number_masked_evaluations > 0:
             # We have at least one gap that we need to remove.  Since we're have
             # evaluations with an input and an output we can simply drop those
             # with large integration times.
@@ -1588,13 +1715,13 @@ def read_particles_data( particles_root, particle_ids, dirs_per_level, quiet_fla
             # users can correctly segment the ungapped regions.  We take care to
             # adjust the gap locations to account for the fact that the original
             # evaluations containing them will be removed below.
-            particles_df.at[particle_id, "number gaps"] = number_gaps
-            if number_gaps > 1:
-                particles_df.at[particle_id, "gap indices"] = (np.where( gaps_mask )[0] - np.arange( number_gaps ))
-            else:
+            particles_df.at[particle_id, "number gaps"] = number_gap_indices
+            if number_gap_indices > 1:
+                particles_df.at[particle_id, "gap indices"] = gap_indices
+            elif number_gap_indices == 1:
                 # Work around Pandas' "help".  Note that we don't need to adjust
                 # the locations since we only have a single gap.
-                particles_df.at[particle_id, "gap indices"]       = np.array( [np.where( gaps_mask )[0]] )
+                particles_df.at[particle_id, "gap indices"]       = np.array( [gap_indices[0]] )
                 particles_df.at[particle_id, "gap indices"].shape = [1]
 
             # Move the birth time forward if we have a gap between the first two
@@ -1621,24 +1748,65 @@ def read_particles_data( particles_root, particle_ids, dirs_per_level, quiet_fla
             number_gapped_be_failures = (gaps_mask & BEStatus.get_failure_mask( particles_df.at[particle_id, "be statuses"] )).sum()
             particles_df.at[particle_id, "number be failures"] -= number_gapped_be_failures
 
+            # Get all of the evaluation columns as a single, flat list.
+            all_evaluation_column_names = sum( evaluation_column_names, [] )
+
             # Remove the gaps from every observation.
             for observation_name in OBSERVATION_NAMES:
+                # Avoid a "chicken and the egg" problem and skip evaluation
+                # columns.  These already had gaps removed prior to their
+                # creation and don't need them removed again.
+                if observation_name in all_evaluation_column_names:
+                    continue
+
                 particles_df.at[particle_id, observation_name] = particles_df.at[particle_id, observation_name][~gaps_mask]
 
                 # Once again, work around Pandas being "helpful" by converting
                 # a single element array into a scalar.  Without this, indexing
                 # this particle's columns will explode.
-                if number_gaps == (particles_df.at[particle_id, "number evaluations"] - 1):
+                if number_masked_evaluations == (particles_df.at[particle_id, "number evaluations"] - 1):
                     # Work around Pandas' "help".
                     particles_df.at[particle_id, observation_name] = np.array( [[particles_df.at[particle_id, observation_name]]] )
                     particles_df.at[particle_id, observation_name].shape = [1]
 
             # Finally, reduce the observation count by the gaps we've removed.
-            particles_df.at[particle_id, "number evaluations"] -= number_gaps
+            particles_df.at[particle_id, "number evaluations"] -= number_masked_evaluations
 
             # Move to the next particle if we eliminated all of the evaluations.
             if particles_df.at[particle_id, "number evaluations"] == 0:
                 continue
+
+        # Provide a safety net against incorrect indexing.  We want to
+        # immediately know about broken indexing instead of randomly tripping up
+        # on a particle or, worse, never noticing and having subtly incorrect
+        # analysis.
+        #
+        # This ensures we have matching counts across all observation arrays.
+        # We take care to track the individual counts to aide in debugging
+        # should we explode.
+        #
+        # NOTE: We have to do this after removing gaps since evaluations are
+        #       created with gaps already removed.  Otherwise we're guaranteed
+        #       to have mismatched array sizes for particles with gaps.
+        #
+        array_sizes        = set()
+        observation_counts = []
+        for observation_name in OBSERVATION_NAMES:
+            if len( particles_df.at[particle_id, observation_name].shape ) > 0:
+                # 1D array.
+                observation_count = particles_df.at[particle_id, observation_name].shape[0]
+            else:
+                # Scalar that slipped through our conversion contortions.
+                observation_count = 1
+
+            array_sizes.add( observation_count )
+            observation_counts.append( observation_count )
+
+        if len( array_sizes ) != 1:
+            raise ValueError( "Array size mismatch for particle id {:d} ({}, {})!".format(
+                particle_id,
+                observation_counts,
+                OBSERVATION_NAMES ) )
 
         # Excise failed backward Euler (BE) evaluations if requested.  This
         # removes evaluations whose inputs match their BE outputs.

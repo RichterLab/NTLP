@@ -512,9 +512,12 @@ def plot_droplet_size_temperatures_domain( input_parameters, model=None, dt=None
     if model is not None:
         model_output = do_iterative_inference( np.tile( input_parameters,
                                                         (NUMBER_TIME_POINTS, 1) ),
-                                               t_eval,
+                                               np.full( (NUMBER_TIME_POINTS, 1),
+                                                        dt,
+                                                        dtype=np.float32 ),
                                                model,
-                                               "cpu" )
+                                               "cpu",
+                                               dt_flag=True )
         model_nrmse  = calculate_nrmse( bdf_output, model_output )
 
         # Add the MLP output to the visualization.
