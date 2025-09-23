@@ -603,7 +603,7 @@ def solve_ivp_float32_outputs( dydt, t_span, y0, **kwargs ):
     try:
         ode_solution = solve_ivp( dydt, t_span, y0, **kwargs )
 
-        if ode_solution.success:
+        if ode_solution.success and isinstance( ode_solution.y, np.ndarray ):
             # If we could integrate, return the outputs as the requested
             # precision.
             solution[:] = ode_solution.y.T.astype( "float32" )
