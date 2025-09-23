@@ -660,7 +660,7 @@ class ScoringReport():
 
         # The processes must be created with spawn; it seems the pipeline
         # will not parallelize properly with fork.
-        multiprocessing.set_start_method( 'spawn', force=True )
+        multiprocessing.set_start_method( "spawn", force=True )
 
         if norm is None:
             norm = identity_norm
