@@ -1396,8 +1396,9 @@ def read_particles_data( particles_root, particle_ids, dirs_per_level, quiet_fla
     # tag.  We remove this tag since there isn't a distinct evaluations file
     # for it and allows the caller to reuse the same dictionary during reading
     # and analysis.
-    if BE_TAG_NAME in evaluations.keys():
-        del evaluations[BE_TAG_NAME]
+    local_evaluations = evaluations.copy()
+    if BE_TAG_NAME in local_evaluations.keys():
+        del local_evaluations[BE_TAG_NAME]
 
     # Guard against duplicate particle identifiers that cause duplicate indices
     # in the DataFrame and breaks the logic throughout this function that
@@ -1431,8 +1432,8 @@ def read_particles_data( particles_root, particle_ids, dirs_per_level, quiet_fla
 
     # Rearrange the evaluations map into arrays of tags and extensions for
     # easier access.
-    evaluation_tags       = list( evaluations.keys() )
-    evaluation_extensions = list( evaluations.values() )
+    evaluation_tags       = list( local_evaluations.keys() )
+    evaluation_extensions = list( local_evaluations.values() )
 
     data_dict    = {"particle id": particle_ids}
     particles_df = pd.DataFrame( data_dict ).set_index( "particle id" )
