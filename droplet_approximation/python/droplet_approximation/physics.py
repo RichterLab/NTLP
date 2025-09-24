@@ -558,7 +558,7 @@ def scale_droplet_parameters( droplet_parameters ):
 
     return scaled_droplet_parameters
 
-def solve_ivp_float32_outputs( dydt, t_span, y0, **kwargs ):
+def solve_ivp_float32_outputs( dydt, t_span, y0, atol=BDF_TOLERANCE_ABSOLUTE, rtol=BDF_TOLERANCE_RELATIVE, **kwargs ):
     """
     Solves an initial value problem and returns the solutions in 32-bit precision.
     Error checking is present to ensure that failed solves provide a solution
@@ -578,6 +578,10 @@ def solve_ivp_float32_outputs( dydt, t_span, y0, **kwargs ):
                is integrated from t_span[0] until t_span[1].
       y0     - Initial state of the system to solve.  Must be compatible with
                dydt.
+      atol   - Optional floating point scalar specifying the absolute tolerance
+               to use during the solve.  If omitted, defaults to BDF_TOLERANCE_ABSOLUTE.
+      rtol   - Optional floating point scalar specifying the relative tolerance
+               to use during the solve.  If omitted, defaults to BDF_TOLERANCE_RELATIVE.
       kwargs - Optional keyword arguments to supply to solve_ivp().
 
     Returns 1 value:
@@ -601,7 +605,7 @@ def solve_ivp_float32_outputs( dydt, t_span, y0, **kwargs ):
 
     # Solve the ODE in the precision supplied by the caller.
     try:
-        ode_solution = solve_ivp( dydt, t_span, y0, **kwargs )
+        ode_solution = solve_ivp( dydt, t_span, y0, atol=atol, rtol=rtol, **kwargs )
 
         if ode_solution.success and isinstance( ode_solution.y, np.ndarray ):
             # If we could integrate, return the outputs as the requested

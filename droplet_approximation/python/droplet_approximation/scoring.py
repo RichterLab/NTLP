@@ -290,11 +290,15 @@ def particle_evaluation_pipeline( particles_root, particle_ids, dirs_per_level,
                              are allowed:
 
                                atol - Absolute tolerance used during the
-                                      BDF solve.  If omitted, uses solve_ivp()'s
-                                      default.  See solve_ivp() for details.
+                                      BDF solve.  If omitted, uses
+                                      solve_ivp_float32_outputs()'s default.
+                                      See solve_ivp_float32_outputs() for
+                                      details.
                                rtol - Relative tolerance used during the
-                                      BDF solve.  If omitted, uses solve_ivp()'s
-                                      default.  See solve_ivp() for details.
+                                      BDF solve.  If omitted, uses
+                                      solve_ivp_float32_outputs()'s default.
+                                      See solve_ivp_float32_outputs() for
+                                      details.
 
                              For EvaluationType.MLP, the following key/values
                              are required:
