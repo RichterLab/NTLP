@@ -11,13 +11,16 @@ from sklearn.mixture import BayesianGaussianMixture
 
 from torch import multiprocessing
 
+from .config import get_config, get_config_as_dict, set_config_from_dict, validate_config
 from .data import BE_TAG_NAME, \
                   ParticleRecord, \
                   detect_timeline_gaps, \
                   get_evaluation_file_path, \
                   get_particle_file_path, \
-                  read_particles_data, \
-                  _read_raw_particle_data
+                  _read_raw_particle_data, \
+                  read_particle_ids_from_config, \
+                  read_particles_data_from_config, \
+                  read_particles_timeline_from_config
 from .models import do_bdf, \
                     do_inference, \
                     do_iterative_bdf, \
@@ -599,53 +602,77 @@ def particle_evaluation_pipeline( particles_root, particle_ids, dirs_per_level,
     finally:
         set_parameter_ranges( previous_parameter_ranges )
 
-def particle_score_pipeline( particles_root, particle_ids_batches, dirs_per_level, reference_evaluation, comparison_evaluation, cusum_error_tolerance, cusum_error_threshold, norm, cold_threshold, filter_be_failures ):
+def particle_score_pipeline( config_dict, particle_ids_batches ):
     """
     Calculates NRMSE and deviations for a set of particles between two evaluation tags.
     Loads particle data from per particle data frames. Also provides statistics needed
     to calcualte overall dataset NRMSE.
 
-    Takes 8 arguments:
+    Takes 2 arguments:
 
-      particles_root         - Path to the top-level directory to read raw
-                               particle files from.
+      config_dict            - Config to run the analysis with.
       particle_ids_batches   - List of batches of particle ids to process.
                                e.g. [[1,2,3],[4,5],[7,8,9]] will process
                                particles ids 1,2,3 as a batch, then 4,5,
                                then 7,8,9.
-      dirs_per_level         - Number of subdirectories per level in the
-                               particle files directory hierarchy.
-      reference_evaluation   - Dictionary containing a map of the evaluation
-                               tag to its file extension for the reference
-                               evaluation.
-      comparison_evaluation  - Dictionary containing a map of the evaluation
-                               tag to its file extension for the evaluation
-                               to compare.
-      cusum_error_tolerance  - NumPy Array, sized 2, containing the
-                               radius/temperature tolerances to pass to
-                               `calculate_cusum`.
-      cusum_error_threshold  - NumPy Array, sized 2, containing the
-                               radius/temperature thresholds to pass to
-                               `detect_cusum_deviations`.
-      norm                   - User provided norm to apply to all data before
-                               scoring and deviation detection. Accepts an
-                               array sized number_observations x 2 and returns
-                               a normed array of the same length.
 
     Returns 1 Value:
 
       ParticleScores - List of ParticleScore objects.
 
     """
-    reference_evaluation_tag  = list( reference_evaluation.keys() )[0]
-    comparison_evaluation_tag = list( comparison_evaluation.keys() )[0]
 
-    evaluations = reference_evaluation | comparison_evaluation
+    # Load configuration data to global config
+    set_config_from_dict( config_dict )
+    config = get_config()
 
-    particle_scores = []
+    # Enforce single-core utilization on child process
+    config["general"]["number_processes"] = "1"
 
+    # Load all relavent config data
+    error_config = config["error_analysis"]
+
+    # Load all relavent settings
+    evaluations               = error_config.getdict( "evaluations" )
+    reference_evaluation_tag  = error_config.get( "reference_tag" )
+    comparison_evaluation_tag = error_config.get( "comparison_tag" )
+    evaluation_tags           = [reference_evaluation_tag, comparison_evaluation_tag]
+
+    cusum_error_tolerance = error_config.getfloat32_array( "cusum_error_tolerance" )
+    cusum_error_threshold = error_config.getfloat32_array( "cusum_error_threshold" )
+
+    # Load histogram/averages settings
+    background_averages = error_config.getlist( "background_averages" )
+    averages_count      = error_config.getint( "averages_count" )
+
+    radbins_count       = error_config.getint( "radbins_count" )
+    tempbins_count      = error_config.getint( "tempbins_count" )
+    radbins_range       = error_config.getfloat32_array( "radbins_range" )
+    tempbins_range      = error_config.getfloat32_array( "tempbins_range" )
+
+    # Load the corresponding timeline
+    simulation_times = read_particles_timeline_from_config()
+
+    # Set up histogram/averages times and histogram bins
+    averages_indexes  = np.linspace( 0, simulation_times.shape[0] - 1, averages_count, dtype=np.int32 )
+    histogram_indexes = np.linspace( 0, simulation_times.shape[0] - 1, averages_count, dtype=np.int32 )
+    averages_times    = simulation_times[[averages_indexes]][0]
+    histogram_times   = simulation_times[[histogram_indexes]][0]
+    radbins           = np.logspace( radbins_range[0], radbins_range[1], radbins_count )
+    tempbins          = np.linspace( tempbins_range[0], tempbins_range[1], tempbins_count )
+
+    particle_scores     = []
+    particle_averages   = []
+    particle_histograms = []
     for particle_ids in particle_ids_batches:
-        particles_df = read_particles_data( particles_root, particle_ids, dirs_per_level, evaluations=evaluations, cold_threshold=cold_threshold )
+        particles_df = read_particles_data_from_config( particle_ids=particle_ids, evaluations=evaluations )
+
+        # append averages/histograms for this batch
+        particle_averages.append( average_particles_data( particles_df, evaluation_tags, averages_times,
+                                                          background_averages ) )
+        particle_histograms.append( bin_particles_data( particles_df, evaluation_tags, histogram_times,
+                                                        radbins, tempbins ) )
+
         for particle_index, particle_id in enumerate( particle_ids ):
             p_df                = particles_df.iloc[particle_index]
             simulation_times    = p_df["times"]
@@ -665,16 +692,14 @@ def particle_score_pipeline( particles_root, particle_ids_batches, dirs_per_leve
             elif p_df["output {:s} radii".format( reference_evaluation_tag )].shape[0] == 0:
                 continue
 
-            normed_reference_output  = norm( np.stack( p_df[["output {:s} radii".format( reference_evaluation_tag ),
+            normed_reference_output  = standard_norm( np.stack( p_df[["output {:s} radii".format( reference_evaluation_tag ),
                                                               "output {:s} temperatures".format( reference_evaluation_tag )
                                                             ]].to_numpy(), axis=-1 ) )
-            normed_comparison_output = norm( np.stack( p_df[["output {:s} radii".format( comparison_evaluation_tag ),
+            normed_comparison_output = standard_norm( np.stack( p_df[["output {:s} radii".format( comparison_evaluation_tag ),
                                                               "output {:s} temperatures".format( comparison_evaluation_tag )
                                                              ]].to_numpy(), axis=-1 ) )
 
             mask = ~np.isnan( normed_reference_output[:, 0] ) & ~np.isnan( normed_comparison_output[:, 0] )
-            if filter_be_failures:
-                mask = mask & (p_df["be statuses"] == 0)
 
             # If we're masking out all remaining trials, ignore
             if np.sum( mask ) == 0:
@@ -734,25 +759,21 @@ def particle_score_pipeline( particles_root, particle_ids_batches, dirs_per_leve
 
             particle_scores.append( particle_score )
 
-    return particle_scores
+    return particle_scores, particle_averages, particle_histograms
 
 class ScoreReport():
     """
     A class to handle the information when scoring a model.
 
-    Contains 16 attributes:
+    Contains 12 attributes:
 
+      analysis_config        - Dictionary of config used during scoring.
       cluster_centers        - NumPy array, sized number_clusters
                                times 7, containing the droplet
                                parameters for the centroid of each
                                cluster.
       cluster_model          - The Gaussian mixture model that was
                                used to cluster the data.
-      cusum_error_threshold  - NumPy array, sized 2, containing the
-                               threshold used to calculate the CUSUM
-                               for radius and temperature respectively.
-      cusum_error_tolerance  - NumPy array, sized 2, containing the
-                               tolerance used to calculate the CUSUM
                                for radius and temperature respectively.
       deviations             - NumPy array, sized number_deviations x 7
                                containing the droplet parameters for
@@ -772,10 +793,6 @@ class ScoreReport():
       deviation_times        - NumPy array of floats, sized number_deviations,
                                containing the time at which each deviation
                                occurred.
-      reference_evaluation   - Dicionary containing the evaluation tag that was
-                               used as the reference for scoring.
-      comparison_evaluaton   - Dictionary containing the evaluation tag that was
-                               scored.
       net_nrmse              - Float, NRMSE of the entire dataset.
       per_particle_nrmse     - Dictionary, keys are particle IDs, values are floats
                                corresponding to the model's NRMSE on the
@@ -786,69 +803,79 @@ class ScoreReport():
                                Used to convert between z-scored coordinates and
                                natural ranges.
 
-    """
+"""
 
-    def __init__( self, particles_root, particle_ids, dirs_per_level, reference_evaluation,
-                  comparison_evaluation, cusum_error_tolerance, cusum_error_threshold, norm=None,
-                  max_clusters=7, number_processes=0, number_batches=1, cold_threshold=-np.inf,
-                  filter_be_failures=False ):
+    def __init__( self ):
         """
-        Takes 12 arguments:
+        Runs a score report based on the currently loaded config. Considers the following config entires:
 
-          particles_root        - Path to the top-level directory to read raw
-                                  particle files from.
-          particle_ids          - Sequence of particle identifiers to process.
-          dirs_per_level        - Number of subdirectories per level in the
-                                  particle files directory hierarchy.
-          reference_evaluation  - Dictionary containing a map of the evaluation
-                                  tag to its file extension for the reference
-                                  evaluation.
-          comparison_evaluation - Dictionary containing a map of the evaluation
-                                  tag to its file extension for the evaluation
-                                  to compare.
-          cusum_error_tolerance - NumPy Array, sized 2, containing the
-                                  radius/temperature tolerances to pass to
-                                  `calculate_cusum`.
-          cusum_error_threshold - NumPy Array, sized 2, containing the
-                                  radius/temperature thresholds to pass
-                                  to `detect_cusum_deviations`.
-          norm                  - Optional user provided norm to apply to all
-                                  data before scoring and deviation detection.
-                                  Accepts an array sized number_observations x 2
-                                  and returns a normed array of the same length.
-                                  Defaults to `identity_norm`.
-          max_clusters          - Optional Integer, identifies the max number of
-                                  clusters for the Bayesian Gaussian mixture model
-                                  to attempt. Defaults to 7.
-          number_processes      - Optional Integer, the number of workers to
-                                  parallelize error analysis across. Defaults
-                                  to `multiprocessing.cpu_count()`.
-          number_batches        - Optional Integer, determines the number of
-                                  batches for each core to break up the particles
-                                  into. Higher batches results in fewer particles
-                                  loaded at one time. Defaults to 1.
-          cold_threshold        - Optional floating point value specifying the lower bound
-                                  for particle temperatures before they're considered "cold"
-                                  and should be trimmed from the DataFrame.  Cold particles
-                                  are invalid from the NTLP simulation's standpoint but were
-                                  not flagged as such.  If omitted, all particles are retained.
-          filter_be_failures    - Optional boolean, if True, remove all trials with BE failures
-                                  before scoring. Defaults to False.
+          [general]
+          number_processes      - Integer, the number of processes to use while scoring
+
+          [error_analysis]
+          subset_fraction       - Integer, what fraction of the data to score.
+          number_batches        - Integer, the number of batches for each process to split
+                                  the data into as they score.
+          max_clusters          - Integer, the maximum number of clusters to group deviations
+          evaluations           - Dictionary containing which evaluations to compare.
+          cusum_error_threshold - Two-Entry Float32 Array describing the radius/temperature threshold for CUSUM calculations.
+          cusum_error_tolerance - Two-Entry Float32 Array describing the radius/temperature tolerance for CUSUM calculations.
+          background_averages   - String list, list of additional particle dataframe columns
+                                  to average.
+          averages_count        - Integer, the number of timesteps to calculates particle averages at.
+          radbins_count         - Integer, the number of bins in the radius histograms.
+          tempbins_count        - Integer, the number of bins in the temperature histograms.
+          radbins_range         - Two-Entry Float32 Array, minimum and maximum radius for radius histograms
+                                  in log10.
+          tempbin_range         - Two-Entry Float32 Array, minimum and maximum radius for temperature histograms.
+
+          [Simulation]
+          All entries regarding data-loading. For more details see read_particles_data_from_config(),
+            read_particle_ids_from_config(), and read_particles_timeline_from_config().
+
+        Takes no arguments.
+
+        Returns no values.
+
         """
 
-        # The processes must be created with spawn; it seems the pipeline
-        # will not parallelize properly with fork.
-        multiprocessing.set_start_method( "spawn", force=True )
+        # TODO fix simulation name/loading
 
-        if norm is None:
-            norm = identity_norm
-        if number_processes == 0:
-            number_processes = multiprocessing.cpu_count()
+        validate_config( ["error_analysis", "simulation"] )
+        config               = get_config( validate=False )
+        error_config         = config["error_analysis"]
+        self.analysis_config = get_config_as_dict()
 
-        self.cusum_error_tolerance = cusum_error_tolerance
-        self.cusum_error_threshold = cusum_error_threshold
-        self.reference_evaluation  = reference_evaluation
-        self.comparison_evaluation = comparison_evaluation
+        number_processes = config["general"].getint( "number_processes" )
+        subset_fraction  = config["error_analysis"].getint( "subset_fraction" )
+        number_batches   = config["error_analysis"].getint( "number_batches" )
+        max_clusters     = config["error_analysis"].getint( "max_clusters" )
+
+        particle_ids     = read_particle_ids_from_config()[::subset_fraction]
+
+        # Load histogram/averages settings
+        background_averages = error_config.getlist( "background_averages" )
+        averages_count      = error_config.getint( "averages_count" )
+
+        radbins_count       = error_config.getint( "radbins_count" )
+        tempbins_count      = error_config.getint( "tempbins_count" )
+        radbins_range       = error_config.getfloat32_array( "radbins_range" )
+        tempbins_range      = error_config.getfloat32_array( "tempbins_range" )
+
+        # Load the corresponding timeline
+        simulation_times = read_particles_timeline_from_config()
+
+        # Set up histogram/averages times and histogram bins
+        self.averages_indexes  = np.linspace( 0, simulation_times.shape[0] - 1, averages_count, dtype=np.int32 )
+        self.histogram_indexes = np.linspace( 0, simulation_times.shape[0] - 1, averages_count, dtype=np.int32 )
+        self.averages_times    = simulation_times[[self.averages_indexes]][0]
+        self.histogram_times   = simulation_times[[self.histogram_indexes]][0]
+        self.radbins           = np.logspace( radbins_range[0], radbins_range[1], radbins_count )
+        self.tempbins          = np.linspace( tempbins_range[0], tempbins_range[1], tempbins_count )
+
+
+
+        print( "Evaluating {:d} particles with subset fraction {:d}".format( particle_ids.shape[0], subset_fraction ) )
 
         # Splits all of the requested particle ids across processors
         # and into batches to avoid loading all of the particles
@@ -856,16 +883,20 @@ class ScoreReport():
         particle_id_chunks  = [np.array_split( process_particle_ids, number_batches )
                                for process_particle_ids in np.array_split( particle_ids,
                                                                            number_processes )]
-        pipeline_parameters = [[particles_root, process_particle_ids, dirs_per_level,
-                                reference_evaluation, comparison_evaluation, cusum_error_tolerance,
-                                cusum_error_threshold, norm, cold_threshold, filter_be_failures]
+
+        pipeline_parameters = [[ self.analysis_config,
+                                 process_particle_ids ]
                                for process_particle_ids in particle_id_chunks]
 
         if number_processes > 1:
+            # The processes must be created with spawn; it seems the pipeline
+            # will not parallelize properly with fork.
+            multiprocessing.set_start_method( 'spawn', force=True )
+            print("Spawning workers...")
             with multiprocessing.Pool( processes=number_processes ) as pool:
-                particle_scores_list = pool.starmap( particle_scoring_pipeline, pipeline_parameters )
+                pipeline_output_list = pool.starmap( particle_score_pipeline, pipeline_parameters )
         else:
-            particle_scores_list = [particle_scoring_pipeline( *pipeline_parameters[0] )]
+            pipeline_output_list = [particle_score_pipeline( *pipeline_parameters[0] )]
 
         # Collect results
         self.per_particle_nrmse = {}
@@ -880,7 +911,53 @@ class ScoreReport():
         deviation_times        = []
         deviation_particle_ids = []
 
-        for particle_scores in particle_scores_list:
+        # Set up histogram/averages variables
+        # Note that the output of the pipeline is structured like so:
+        #
+        # List of outputs per processor, containing:
+        #     0: List of ScoreReports
+        #     1: List of Averages per Batch containing:
+        #         0: rt_averages         - dictionary with keys of evaluation tags mapping to values of rt arrays
+        #         1: background_averages - dictionary with entires containing the background variables
+        #     2: List of histograms per Batch, containing:
+        #         Dictionary with keys as evaluation tags and keys that are lists, containing:
+        #             0: radius histograms - NumPy Array with shape histogram_times_count x radbin_count.
+        #             1: temperature histograms - NumPy Array with shape histogram_times_count x tempbin_count
+
+        # Initialize histograms to the first processor, at batch 0 for radius array (at 0)
+        #                                                          and temperature array (at 1)
+        self.particle_histograms  = { evaluation_tag:
+                                      [np.zeros_like( histograms[0] ),
+                                       np.zeros_like( histograms[1] )]
+                                      for evaluation_tag,histograms in pipeline_output_list[0][2][0].items() }
+
+        self.particle_rt_averages = {
+                key: np.zeros_like( value )
+                for key,value in pipeline_output_list[0][1][0][0].items() }
+        self.particle_background_averages = {
+                key: np.zeros_like( value )
+                for key,value in pipeline_output_list[0][1][0][1].items() }
+
+        for pipeline_output in pipeline_output_list:
+            particle_scores          = pipeline_output[0]
+            particle_averages_list   = pipeline_output[1]
+            particle_histograms_list = pipeline_output[2]
+            for particle_averages, particle_histograms in zip( particle_averages_list,
+                                                               particle_histograms_list ):
+
+                particle_count = particle_averages[1]["particle count"]
+                for evaluation_tag, averages in particle_averages[0].items():
+                    self.particle_rt_averages[evaluation_tag] += averages * particle_count.reshape( (-1, 1) )
+                for variable_name, averages in particle_averages[1].items():
+                    if variable_name == "particle count" or variable_name == "nan count":
+                        self.particle_background_averages[variable_name] += averages
+                        continue
+                    self.particle_background_averages[variable_name] += averages * particle_count
+
+                for evaluation_tag, histograms in particle_histograms.items():
+                    self.particle_histograms[evaluation_tag][0] += histograms[0]
+                    self.particle_histograms[evaluation_tag][1] += histograms[1]
+
             for particle_score in particle_scores:
                 self.per_particle_nrmse[particle_score.particle_id] = particle_score.particle_nrmse
 
@@ -893,6 +970,15 @@ class ScoreReport():
                 deviation_parameters.append(   particle_score.deviation_parameters )
                 deviation_times.append(        particle_score.deviation_times )
                 deviation_particle_ids.append( particle_score.deviation_particle_ids )
+
+        # Re-normalize averages by dividing by total particle count
+        particle_count = self.particle_background_averages["particle count"]
+        for evaluation_tag, averages in self.particle_rt_averages.items():
+            self.particle_rt_averages[evaluation_tag] /= particle_count.reshape( (-1, 1) )
+        for variable_name, averages in self.particle_background_averages.items():
+            if variable_name == "particle count" or variable_name == "nan count":
+                continue
+            self.particle_background_averages[variable_name] /= particle_count
 
         self.net_nrmse = np.sum( np.sqrt( overall_square_error / overall_observation_count ) /
                                  (overall_truth_sum / overall_observation_count) )
@@ -987,18 +1073,25 @@ class ScoreReport():
         ax.set_ylabel( "Temperature Difference (K)" )
         ax.set_zlabel( "Relative Humidity (%)" )
 
-        comparison_label = "{:s} vs {:s}".format( next( iter( self.reference_evaluation ) ),
-                                                  next( iter( self.comparison_evaluation ) ) )
+        reference_tag  = self.analysis_config["error_analysis"].get( "reference_tag" )
+        comparison_tag = self.analysis_config["error_analysis"].get( "comparison_tag" )
+
+        comparison_label = "{:s} vs {:s}".format( reference_tag, comparison_tag )
 
         # Do not pad these curly braces with spaces.
         # ':3f ' is not the same as ':3f'. The former
         # will throw an error.
+        cusum_radius_tolerance      = np.float32( self.analysis_config["error_analysis"].get( "cusum_error_tolerance_radius" ) )
+        cusum_temperature_tolerance = np.float32( self.analysis_config["error_analysis"].get( "cusum_error_tolerance_temperature" ) )
+        cusum_radius_threshold      = np.float32( self.analysis_config["error_analysis"].get( "cusum_error_threshold_radius" ) )
+        cusum_temperature_threshold = np.float32( self.analysis_config["error_analysis"].get( "cusum_error_threshold_temperature" ) )
+
         ax.set_title( f"Deviation Clusters " +
                       f"for { comparison_label }\n" +
-                      f"Radius Tolerance: {100*self.cusum_error_tolerance[0]:.3f}%," +
-                      f" Temperature Tolerance: {self.cusum_error_tolerance[1]:.3f} degrees\n" +
-                      f"Radius Threshold: {self.cusum_error_threshold[0]:.3f}," +
-                      f" Temperature Threshold: {self.cusum_error_threshold[1]:.3f}\n" )
+                      f"Radius Tolerance: {100*cusum_radius_tolerance:.3f}%," +
+                      f" Temperature Tolerance: {cusum_temperature_tolerance:.3f} degrees\n" +
+                      f"Radius Threshold: {cusum_radius_threshold:.3f}," +
+                      f" Temperature Threshold: {cusum_temperature_threshold:.3f}\n" )
 
         # Zooming out prevents clipping the z-axis label
 
