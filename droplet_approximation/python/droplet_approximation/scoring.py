@@ -189,7 +189,7 @@ def identity_norm( rt_data ):
 # order to be more data-oriented. Instead of containing values
 # for an individual particle, each object would contain an array
 # of values. `particle_pipeline` would return one `ParticleScores`
-# object, and `Scoring_Report` `__init__` would concatenate all of
+# object, and `ScoreReport` `__init__` would concatenate all of
 # these arrays together.
 @dataclass
 class ParticleScore:
@@ -223,7 +223,7 @@ class ParticleScore:
                                containing the time at which each deviation occurred.
       deviation_particle_ids - NumPy array of integers containing the particle id
                                of each deviation. Technically, this is redundant to
-                               particle_id, but it is used by ScoringReport to
+                               particle_id, but it is used by ScoreReport to
                                cleanly generate the overall deviation_particle_ids array.
 
     """
@@ -425,7 +425,7 @@ def particle_evaluation_pipeline( particles_root, particle_ids, dirs_per_level,
     finally:
         set_parameter_ranges( previous_parameter_ranges )
 
-def particle_scoring_pipeline( particles_root, particle_ids_batches, dirs_per_level, reference_evaluation, comparison_evaluation, cusum_error_tolerance, cusum_error_threshold, norm, cold_threshold, filter_be_failures ):
+def particle_score_pipeline( particles_root, particle_ids_batches, dirs_per_level, reference_evaluation, comparison_evaluation, cusum_error_tolerance, cusum_error_threshold, norm, cold_threshold, filter_be_failures ):
     """
     Calculates NRMSE and deviations for a set of particles between two evaluation tags.
     Loads particle data from per particle data frames. Also provides statistics needed
@@ -562,7 +562,7 @@ def particle_scoring_pipeline( particles_root, particle_ids_batches, dirs_per_le
 
     return particle_scores
 
-class ScoringReport():
+class ScoreReport():
     """
     A class to handle the information when scoring a model.
 

@@ -11,7 +11,7 @@ from .analysis import average_particles_data, \
                       plot_droplet_size_temperatures, \
                       plot_droplet_size_temperatures_dataframe, \
                       plot_droplet_size_temperatures_domain, \
-                      plot_droplet_size_temperatures_scoring, \
+                      plot_droplet_size_temperatures_score, \
                       plot_particles, \
                       plot_particle_history
 from .config import display_config, \
@@ -80,11 +80,11 @@ from .scoring import DeviationDirection, \
                      DeviationParameter, \
                      EvaluationType, \
                      ParticleScore, \
-                     ScoringReport, \
+                     ScoreReport, \
                      calculate_cusum, \
                      calculate_nrmse, \
                      detect_cusum_deviations, \
                      identity_norm, \
                      particle_evaluation_pipeline, \
-                     particle_scoring_pipeline, \
+                     particle_score_pipeline, \
                      standard_norm
