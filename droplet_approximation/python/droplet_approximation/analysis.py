@@ -592,10 +592,14 @@ def plot_droplet_size_temperatures_score( particle_dataframe, score_report, **kw
               plot_droplet_size_temperatures() for details.
 
     """
+    analysis_config = score_report.analysis_config
 
     # The score report has the evaluation tags for our DataFrame.
-    reference_evaluation_tag  = next( iter( score_report.reference_evaluation ) )
-    comparison_evaluation_tag = next( iter( score_report.comparison_evaluation ) )
+    simulation_name           = analysis_config["simulation"].get( "name" )
+    reference_evaluation_tag  = analysis_config["error_analysis"].get( "reference_tag" )
+    comparison_evaluation_tag = analysis_config["error_analysis"].get( "comparison_tag" )
+    cusum_error_tolerance     = analysis_config["error_analysis"].get( "cusum_error_tolerance" )
+    cusum_error_threshold     = analysis_config["error_analysis"].get( "cusum_error_threshold" )
 
     # Add a default title to the figure if the user did not provide one.
     if "title_string" not in kwargs:
@@ -604,15 +608,16 @@ def plot_droplet_size_temperatures_score( particle_dataframe, score_report, **kw
         particle_nrmse = score_report.per_particle_nrmse[particle_id]
 
         # Provide the comparison's details and results.
-        kwargs["title_string"] = ("Scoring Particle {:d} for {:s} vs. {:s}\n" +
+        kwargs["title_string"] = ("Scoring Particle {:d} from {:s} for {:s} vs. {:s}\n" +
                                   "NRMSE: {:.3e}\n" +
                                   "CUSUM Tolerance: {}, CUSUM Threshold: {}").format(
                                       particle_id,
+                                      simulation_name,
                                       reference_evaluation_tag,
                                       comparison_evaluation_tag,
                                       particle_nrmse,
-                                      score_report.cusum_error_tolerance,
-                                      score_report.cusum_error_threshold )
+                                      cusum_error_tolerance,
+                                      cusum_error_threshold )
 
     fig_h, ax_h = plot_droplet_size_temperatures_dataframe( particle_dataframe,
                                                             [reference_evaluation_tag,
