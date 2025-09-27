@@ -7,6 +7,8 @@ import warnings
 import numpy as np
 import pandas as pd
 
+from .config import get_config, validate_config
+
 from .physics import BDF_TOLERANCE_ABSOLUTE, \
                      BDF_TOLERANCE_RELATIVE, \
                      TimeoutError, \
@@ -1982,6 +1984,117 @@ def _read_raw_particle_data( particle_path ):
     observations_fp32 = observations_fp32[sorted_indices, :]
 
     return observations_fp32
+
+def read_particle_ids_from_config():
+    """
+    Uses the currently loaded config to load the particle ids
+    associated with the loaded simulation.
+
+    Considers the following fields:
+
+      [general]
+      index_path - Path to the simulation particle index
+
+    Takes no arguments
+
+    Returns 1 value:
+
+      particle_ids - Array of particle ids associated with
+                     the simulation.
+
+    """
+
+    simulation_config   = get_config()["simulation"]
+
+    return np.fromfile( simulation_config["index_path"], dtype=np.int32 )
+
+
+def read_particles_data_from_config( particle_ids=None, number_processes=0, **kwargs ):
+    """
+    Reads the particle data according to the currently loaded config.
+    Considers the following fields:
+
+      [general]
+      number_processes          - Default number of processes to use to read the data.
+
+      [simulation]
+      simulation_data_root      - The root folder for the simulation traces
+      simulation_directory_name - The name of the simulation's folder
+      dirs_per_level            - The number of subdirectories in particles data
+                                  Defaults to 256.
+      cold_threshold            - Threshold for filtering cold particles.
+                                  Defaults to -np.inf.
+      filter_be_failures        - Whether to filter out BE failures when loading.
+                                  Defaults to False.
+
+    Takes 3 Arguments:
+
+      particle_ids     - Optional list of particle ids to load. Defaults to all
+                         particles in a given simulation.
+      number_processes - Optional number of processes to read with. Defaults to
+                         what's written in the config.
+                         particles in a given simulation.
+      kwargs           - Additional optional arguments to pass to read_particles_data.
+
+    Returns 1 Value:
+
+      particles_data - DataFrame containing the simulation traces.
+
+    """
+
+    config            = get_config()
+    simulation_config = config["simulation"]
+
+    if number_processes == 0:
+        number_processes   = config["general"].getint( "number_processes" )
+
+    particles_root     = simulation_config.get( "particles_root" )
+    dirs_per_level     = simulation_config.getint( "dirs_per_level" )
+    cold_threshold     = simulation_config.getfloat( "cold_threshold" )
+    filter_be_failures = simulation_config.getboolean( "filter_be_failures" )
+
+    if particle_ids is None:
+        particle_ids = read_particle_ids_from_config()
+
+    if number_processes == 1:
+        return read_particles_data( particles_root,
+                                    particle_ids,
+                                    dirs_per_level,
+                                    filter_be_failures=filter_be_failures,
+                                    cold_threshold=cold_threshold,
+                                    **kwargs )
+    else:
+        return batch_read_particles_data( particles_root,
+                                          particle_ids,
+                                          dirs_per_level,
+                                          filter_be_failures=filter_be_failures,
+                                          cold_threshold=cold_threshold,
+                                          number_processes=number_processes,
+                                          **kwargs )
+
+def read_particles_timeline_from_config():
+    """
+    Reads the particle timeline from the simulation currently
+    loaded into the config.
+
+    Considers the following config fields:
+
+      [general]
+      timeline_path - Path to the simulation timeline
+
+    Takes no arguments.
+
+    Returns 1 Value:
+
+        simulation_times - NumPy Float32 array of simulation times
+
+    """
+
+    validate_config( ["simulation"] )
+    simulation_config = get_config( validate=False )["simulation"]
+
+    return np.fromfile( simulation_config["timeline_path"],
+                        dtype=np.float32 )
 
 def read_training_file( file_name ):
     """

@@ -20,6 +20,7 @@ from .config import display_config, \
                     load_config, \
                     load_subconfig, \
                     set_config_from_dict, \
+                    validate_config
 from .data import BE_TAG_NAME, \
                   BEStatus, \
                   ParticleRecord, \
@@ -40,6 +41,9 @@ from .data import BE_TAG_NAME, \
                   get_particles_timeline_path, \
                   insert_timeseries_gaps, \
                   read_particles_data, \
+                  read_particles_data_from_config, \
+                  read_particle_ids_from_config, \
+                  read_particles_timeline_from_config, \
                   read_training_file, \
                   write_particles_index
 from .models import SimpleNet, \
