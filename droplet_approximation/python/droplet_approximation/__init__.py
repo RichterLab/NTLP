@@ -5,9 +5,7 @@
 #       update!
 #
 
-from .analysis import average_particles_data, \
-                      bin_particles_data, \
-                      get_particles_data_simulation_times, \
+from .analysis import get_particles_data_simulation_times, \
                       plot_droplet_size_temperatures, \
                       plot_droplet_size_temperatures_dataframe, \
                       plot_droplet_size_temperatures_domain, \
@@ -82,7 +80,9 @@ from .physics import DisplayType, \
                      solve_ivp_float32_outputs, \
                      temporary_parameter_ranges, \
                      timed_solve_ivp
-from .scoring import DeviationDirection, \
+from .scoring import average_particles_data, \
+                     bin_particles_data, \
+                     DeviationDirection, \
                      DeviationParameter, \
                      EvaluationType, \
                      ParticleScore, \
