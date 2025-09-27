@@ -34,7 +34,8 @@ def average_particles_data( particles_df, evaluation_tags, simulation_times, bac
                             at index 1: an array of temperature averages for the given evaluation tag
                                 at each time step.
       background_averages - Dictionary of background column name: averages, where averages is an array
-                            of the average value of that variable at each time step.
+                            of the average value of that variable at each time step. Always contains an
+                            entry "particle count" that describes the number of particles at each time step.
     """
 
     rt_averages         = {
@@ -45,7 +46,7 @@ def average_particles_data( particles_df, evaluation_tags, simulation_times, bac
         column: np.zeros( shape=( simulation_times.shape[0] ) )
         for column in background_columns
     }
-    particle_counts = np.zeros( shape=simulation_times.shape[0], dtype=np.int32 )
+    background_averages["particle count"] = np.zeros( shape=simulation_times.shape[0], dtype=np.int32 )
 
     # Adds up the values for each evaluation tag
     # and each background column for a particle
@@ -62,12 +63,12 @@ def average_particles_data( particles_df, evaluation_tags, simulation_times, bac
 
         # Sum radius/temperature and background columns for
         # relavent times
-        particle_counts[time_indexes] += 1
+        background_averages["particle count"][time_indexes] += 1
         for evaluation_tag in evaluation_tags:
-                rt_averages[evaluation_tag][time_indexes, 0] += (
-                    particle_df["output {:s} radii".format( evaluation_tag )][mask])
-                rt_averages[evaluation_tag][time_indexes, 1] += (
-                    particle_df["output {:s} temperatures".format( evaluation_tag )][mask])
+            rt_averages[evaluation_tag][time_indexes, 0] += (
+                particle_df["output {:s} radii".format( evaluation_tag )][mask])
+            rt_averages[evaluation_tag][time_indexes, 1] += (
+                particle_df["output {:s} temperatures".format( evaluation_tag )][mask])
 
         for column in background_columns:
             background_averages[column][time_indexes] += particle_df[column][mask]
@@ -75,12 +76,19 @@ def average_particles_data( particles_df, evaluation_tags, simulation_times, bac
     particles_df.apply( _sum_particle, axis=1 )
 
     # Average the results
+    non_zero_mask = background_averages["particle count"] != 0
     for evaluation_tag in evaluation_tags:
-        rt_averages[evaluation_tag][:, 0] /= particle_counts
-        rt_averages[evaluation_tag][:, 1] /= particle_counts
+        rt_averages[evaluation_tag][non_zero_mask, 0] /= background_averages["particle count"][non_zero_mask]
+        rt_averages[evaluation_tag][non_zero_mask, 1] /= background_averages["particle count"][non_zero_mask]
 
-    for _, average in background_averages.items():
-        average /= particle_counts
+        rt_averages[evaluation_tag][~non_zero_mask, :] = 0
+
+    for key, average in background_averages.items():
+        if key == "particle count":
+            continue
+
+        average[non_zero_mask] /= background_averages["particle count"][non_zero_mask]
+        average[~non_zero_mask] = 0
 
     return rt_averages, background_averages
 
