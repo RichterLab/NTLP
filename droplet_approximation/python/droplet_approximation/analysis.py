@@ -35,7 +35,8 @@ def average_particles_data( particles_df, evaluation_tags, simulation_times, bac
                                 at each time step.
       background_averages - Dictionary of background column name: averages, where averages is an array
                             of the average value of that variable at each time step. Always contains an
-                            entry "particle count" that describes the number of particles at each time step.
+                            entry "particle count" that describes the number of particles at each time step
+                            and an entry "nan count" that records the number of NaNs at each time step.
     """
 
     rt_averages         = {
@@ -47,6 +48,7 @@ def average_particles_data( particles_df, evaluation_tags, simulation_times, bac
         for column in background_columns
     }
     background_averages["particle count"] = np.zeros( shape=simulation_times.shape[0], dtype=np.int32 )
+    background_averages["nan count"]      = np.zeros( shape=simulation_times.shape[0], dtype=np.int32 )
 
     # Adds up the values for each evaluation tag
     # and each background column for a particle
@@ -58,9 +60,19 @@ def average_particles_data( particles_df, evaluation_tags, simulation_times, bac
         # lifetime that are being averaged
         time_indexes = np.searchsorted( simulation_times, particle_df["times"] - EPSILON )
 
+        # Filter out mismatched times and NaNs
+        # and skip single-element or empty arrays
         mask = np.abs( simulation_times[[time_indexes]][0] - particle_df["times"] ) < EPSILON
-        time_indexes = time_indexes[mask]
+        for evaluation_tag in evaluation_tags:
+            radius_column = particle_df["output {:s} radii".format( evaluation_tag )][mask]
+            mask[mask] = ~np.isnan( radius_column )
 
+        # If no time steps are being considered, move
+        # to the next particle
+        if np.sum( mask ) == 0:
+            return
+
+        time_indexes = time_indexes[mask]
         # Sum radius/temperature and background columns for
         # relavent times
         background_averages["particle count"][time_indexes] += 1
@@ -84,7 +96,7 @@ def average_particles_data( particles_df, evaluation_tags, simulation_times, bac
         rt_averages[evaluation_tag][~non_zero_mask, :] = 0
 
     for key, average in background_averages.items():
-        if key == "particle count":
+        if key == "particle count" or key == "nan count":
             continue
 
         average[non_zero_mask] /= background_averages["particle count"][non_zero_mask]
@@ -156,7 +168,8 @@ def bin_particles_data( particles_df, evaluation_tags, histogram_times, radbins,
             hist_temperatures = particle_df["output {:s} temperatures".format(
                                             evaluation_tag )][[time_indexes]][0]
 
-            for data_index, histogram_index in enumerate( histogram_indexes ):
+            nan_mask = np.isnan( hist_radii )
+            for data_index, histogram_index in enumerate( histogram_indexes[~nan_mask] ):
                 # Increment the bin corresponding to the radius/temperature
                 hist[0][histogram_index, np.searchsorted( radbins, hist_radii[data_index] )]         += 1
                 hist[1][histogram_index, np.searchsorted( tempbins, hist_temperatures[data_index] )] += 1
