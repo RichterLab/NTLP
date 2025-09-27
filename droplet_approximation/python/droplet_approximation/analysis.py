@@ -567,7 +567,7 @@ def plot_droplet_size_temperatures_domain( input_parameters, model=None, dt=None
 
     return fig_h, ax_h
 
-def plot_droplet_size_temperatures_scoring( particle_dataframe, score_report, **kwargs ):
+def plot_droplet_size_temperatures_score( particle_dataframe, score_report, **kwargs ):
     """
     Wrapper for plot_droplet_size_temperature_dataframe() that plots the
     a single particle's differences between a reference and an evaluation, and
