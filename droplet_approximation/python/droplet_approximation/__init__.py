@@ -14,6 +14,12 @@ from .analysis import average_particles_data, \
                       plot_droplet_size_temperatures_scoring, \
                       plot_particles, \
                       plot_particle_history
+from .config import display_config, \
+                    get_config, \
+                    get_config_as_dict, \
+                    load_config, \
+                    load_subconfig, \
+                    set_config_from_dict, \
 from .data import BE_TAG_NAME, \
                   BEStatus, \
                   ParticleRecord, \
