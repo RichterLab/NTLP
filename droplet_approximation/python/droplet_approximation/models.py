@@ -1197,7 +1197,7 @@ def load_model_checkpoint( checkpoint_path, model=None, optimizer=None ):
                             optimizer state is discarded.
           checkpoint      - Dictionary containing the following keys:
                             "droplet_parameters", "loss_function",
-                            "model_weights", "optimizer_state".
+                            "model_weights", "optimizer_state", "training_loss".
 
         Returns 3 values:
 
@@ -1247,7 +1247,7 @@ def load_model_checkpoint( checkpoint_path, model=None, optimizer=None ):
                             optimizer state is discarded.
           checkpoint      - Dictionary containing the following keys:
                             "droplet_parameters", "loss_function",
-                            "model_weights", "optimizer_state".
+                            "model_weights", "optimizer_state", "training_loss".
 
         Returns 3 values:
 
