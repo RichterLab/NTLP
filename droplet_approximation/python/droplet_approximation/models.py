@@ -39,23 +39,109 @@ class SimpleNet( nn.Module ):
         if model_name is None:
             model_name = generate_name()
 
-        self.model_name = model_name
+        self._model_name = model_name
+        self._activation = torch.relu
+
+        self._layer_sizes    = [32, 32, 32]
+        self._number_inputs  = 7
+        self._number_outputs = 2
 
         #
-        # NOTE: These sizes were chosen without any consideration other than creating
-        #       a small network (wrt parameter count) and should have good computational
-        #       efficiency (wrt memory alignment and cache lines).  No effort has been
-        #       spent to improve upon the initial guess.
+        # NOTE: These sizes were chosen without any consideration other than
+        #       creating a small network (wrt parameter count) and should have
+        #       good computational efficiency (wrt memory alignment and cache
+        #       lines).  No effort has been spent to improve upon the initial
+        #       guess.
         #
-        self.fc1 = nn.Linear( 7, 32 )
-        self.fc2 = nn.Linear( 32, 32 )
-        self.fc3 = nn.Linear( 32, 32 )
-        self.fc4 = nn.Linear( 32, 2 )
+        self.fc1 = nn.Linear( self._number_inputs,  self._layer_sizes[0] )
+        self.fc2 = nn.Linear( self._layer_sizes[0], self._layer_sizes[1] )
+        self.fc3 = nn.Linear( self._layer_sizes[1], self._layer_sizes[2] )
+        self.fc4 = nn.Linear( self._layer_sizes[2], self._number_outputs )
+
+    def activation_func( self ):
+        """
+        Returns the name of the activation function used by the model.
+
+        Takes no arguments.
+
+        Returns 1 value:
+
+          activation_func_name - Name of the activation function.  This is a
+                                 short, unqualified name useful for
+                                 informational purposes.
+
+        """
+
+        return self._activation.__name__
+
+    def architecture( self ):
+        """
+        Returns the architecture name of the model.
+
+        Takes no arguments.
+
+        Returns 1 value:
+
+          architecture_name - Name of the model's class.
+
+        """
+
+        return type( self ).__name__
+
+    def layer_sizes( self ):
+        """
+        Returns the number of outputs for each of the model's layers, including
+        the final layer.
+
+        Takes no arguments.
+
+        Returns 1 value:
+
+          layer_sizes - List of integers specifying the output size of each
+                        hidden and the output layer.
+
+        """
+
+        layer_sizes = self._layer_sizes.copy()
+        layer_sizes.append( self._number_outputs )
+
+        return layer_sizes
+
+    def name( self ):
+        """
+        Returns the name of the model.  This is the name that was given during
+        object construction.
+
+        Takes no arguments.
+
+        Returns 1 value:
+
+          model_name - Name of the model.
+
+        """
+
+        return self._model_name
+
+    def number_layers( self ):
+        """
+        Returns the number of layers in the model.
+
+        Takes no arguments.
+
+        Returns 1 value:
+
+          number_layers - Number of layers.
+
+        """
+
+        # We treat the output layer size differently than the intermediate
+        # layers, so add one to account for it.
+        return len( self._layer_sizes ) + 1
 
     def forward( self, x ):
-        x = torch.relu( self.fc1( x ) )
-        x = torch.relu( self.fc2( x ) )
-        x = torch.relu( self.fc3( x ) )
+        x = self._activation( self.fc1( x ) )
+        x = self._activation( self.fc2( x ) )
+        x = self._activation( self.fc3( x ) )
         x = self.fc4( x )
 
         return x
@@ -1494,7 +1580,7 @@ def save_model_checkpoint( checkpoint_prefix, checkpoint_number, model, optimize
         "checkpoint_version":       CHECKPOINT_VERSION,
         "droplet_parameter_ranges": current_parameter_ranges,
         "loss_function":            loss_function,
-        "model_name":               model.model_name,
+        "model_name":               model.name(),
         "model_weights":            copy.deepcopy( model ).to( "cpu" ).state_dict(),
         "optimizer_state":          optimizer.state_dict(),
         "training_loss":            training_loss
