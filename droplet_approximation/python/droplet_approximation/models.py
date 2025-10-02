@@ -13,6 +13,17 @@ from .physics import dydt,\
                      normalize_droplet_parameters, \
                      scale_droplet_parameters, \
                      solve_ivp_float32_outputs
+from .wandb import NoOpWandB, prepare_wandb_run
+
+# See if Weights and Biases is installed.  Load the package if it is.
+try:
+    import wandb
+
+    wandb_available_flag = True
+except ImportError:
+    wandb_available_flag = False
+
+    from .wandb import NoOpWandB
 
 class SimpleNet( nn.Module ):
     """
@@ -1494,7 +1505,7 @@ def save_model_checkpoint( checkpoint_prefix, checkpoint_number, model, optimize
 
     return checkpoint_path
 
-def train_model( model, criterion, optimizer, device, number_epochs, training_file, validation_file=None, checkpoint_prefix=None, epoch_callback=None, lr_scale=0.5, batch_size=1024 ):
+def train_model( model, criterion, optimizer, device, number_epochs, training_file, validation_file=None, checkpoint_prefix=None, epoch_callback=None, lr_scale=0.5, batch_size=1024, project_name=None ):
     """
     Trains the supplied model for one or more epochs using all of the droplet parameters
     in an on-disk training file.  The parameters are read into memory once and then
@@ -1502,7 +1513,7 @@ def train_model( model, criterion, optimizer, device, number_epochs, training_fi
     are logged when requested.  Model performance may be evaluated when a validation
     file is provided and is done so at the end of each epoch.
 
-    Takes 11 arguments:
+    Takes 12 arguments:
 
       model             - PyTorch model to optimize.
       criterion         - PyTorch loss object to use during optimization.
@@ -1547,6 +1558,10 @@ def train_model( model, criterion, optimizer, device, number_epochs, training_fi
                           If omitted, defaults to 0.5.
       batch_size        - Optional batch size used during training.  If omitted,
                           defaults to 1024 samples.
+      project_name      - Optional Weights and Biases (W&B) project name.  If
+                          omitted, defaults to None and W&B integrations are
+                          skipped.  Otherwise this specifies the project to
+                          log to for the currently logged in entity.
 
     Returns 2 values:
 
@@ -1629,6 +1644,36 @@ def train_model( model, criterion, optimizer, device, number_epochs, training_fi
     # Track each epoch's validation loss for analysis.
     validation_loss_history = []
 
+    # Figure out how we'll generate our Run object.  We disable Weights and
+    # Biases logging if no project name is specified so we don't attempt to log
+    # even if the package is installed.
+    if wandb_available_flag and project_name is not None:
+        wandb_factory = wandb
+    else:
+        wandb_factory = NoOpWandB()
+
+    # Create a Weights and Biases (W&B) Run object, or a no-op proxy, for this
+    # run.
+    run = prepare_wandb_run( wandb_factory,
+                             project_name,
+                             model,
+                             criterion,
+                             optimizer,
+                             batch_size,
+                             lr_scale,
+                             (training_file,
+                              validation_file),
+                             (training_inputs.shape[0],
+                              validation_inputs.shape[0]) )
+
+    # Log the initial learning rate for the first epoch/batch.
+    epoch_metrics = {
+        "epoch":           0,
+        "batch":           0,
+        "learning_rate":   optimizer.param_groups[0]["lr"],
+    }
+    run.log( epoch_metrics )
+
     for epoch_index in range( number_epochs ):
         model.train()
 
@@ -1696,6 +1741,17 @@ def train_model( model, criterion, optimizer, device, number_epochs, training_fi
                 training_loss.append( running_loss )
                 training_loss_history.append( running_loss )
 
+                batch_metrics = {
+                    #
+                    # NOTE: The batch metric jumps up by MINI_BATCH_SIZE each
+                    #       time but is monotonically increasing.
+                    #
+                    "epoch":         epoch_index,
+                    "batch":         epoch_index * number_batches + batch_index,
+                    "training_loss": running_loss,
+                }
+                run.log( batch_metrics )
+
                 running_loss = 0.0
         else:
             # Handle the case where we don't have enough data to finish a
@@ -1760,6 +1816,19 @@ def train_model( model, criterion, optimizer, device, number_epochs, training_fi
             # the history.
             validation_loss = np.nan
 
+        # Log our epoch-specific metrics.
+        #
+        # NOTE: Provide both batch and epoch so we can align the timelines so
+        #       that validation loss can be overlaid with training loss.
+        #
+        epoch_metrics = {
+            "epoch":           epoch_index,
+            "batch":           (epoch_index + 1) * number_batches,
+            "learning_rate":   optimizer.param_groups[0]["lr"],
+            "validation_loss": validation_loss,
+        }
+        run.log( epoch_metrics )
+
         # Execute each of the callbacks.
         for epoch_callback in epoch_callbacks:
             epoch_callback( model,
@@ -1767,6 +1836,9 @@ def train_model( model, criterion, optimizer, device, number_epochs, training_fi
                             optimizer,
                             training_loss,
                             validation_loss )
+
+    # Mark the training as complete.
+    run.finish()
 
     return training_loss_history, validation_loss_history
 
