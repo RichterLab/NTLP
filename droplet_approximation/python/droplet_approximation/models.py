@@ -1,3 +1,4 @@
+import copy
 import warnings
 
 import numpy as np
@@ -1336,7 +1337,7 @@ def save_model_checkpoint( checkpoint_prefix, checkpoint_number, model, optimize
         "checkpoint_version":       CHECKPOINT_VERSION,
         "droplet_parameter_ranges": current_parameter_ranges,
         "loss_function":            loss_function,
-        "model_weights":            model.to( "cpu" ).state_dict(),
+        "model_weights":            copy.deepcopy( model ).to( "cpu" ).state_dict(),
         "optimizer_state":          optimizer.state_dict(),
         "training_loss":            training_loss
     }
