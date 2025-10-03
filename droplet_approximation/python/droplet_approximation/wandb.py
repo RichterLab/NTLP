@@ -35,6 +35,13 @@ class NoOpWandB:
         See https://docs.wandb.ai/ref/python/public-api/run/ for more details.
         """
 
+        # Placeholder attributes used to identify this run.  We handle these
+        # explicitly, instead of via the default __getattr__(), so we can provide
+        # some sensible default.
+        entity  = "null"
+        id      = "null"
+        project = "null"
+
         def __init__( self, *args, **kwargs ):
             pass
 
@@ -78,8 +85,35 @@ class NoOpWandB:
         def save( self, *args, **kwargs ):
             pass
 
-    # Make our dummy class a class attribute so we can imitate wandb.Artifact().
+    class NoOpApi:
+        """
+        No-op dummy for the Api class.  Objects of this class only support
+        querying a run for its logged artifacts.
+
+        See https://docs.wandb.ai/ref/python/public-api/api/ for more details.
+        """
+
+        class NoOpApiRun:
+            """
+            XXX
+            """
+
+            def __init__( self, *args, **kwargs ):
+                pass
+
+            def logged_artifacts( self, *args, **kwargs ):
+                return []
+
+        def __init__( self, *args, **kwargs ):
+            pass
+
+        def run( self, *args, **kwargs ):
+            return self.NoOpApiRun()
+
+    # Make our dummy classes class attributes so we can imitate wandb.Artifact()
+    # and wandb.Api().
     Artifact = NoOpArtifact
+    Api      = NoOpApi
 
     def __init__( self ):
         # Expose the current Run object to the world.
@@ -169,6 +203,103 @@ def _get_repository_information( repo_path="." ):
     clean_flag  = len( clean_result.stdout.strip() ) == 0
 
     return commit_sha, branch_name, clean_flag
+
+def log_wandb_checkpoint( model, epoch_index, optimizer, training_loss, validation_loss, 
+                          wandb, wandb_run, checkpointer, checkpoint_prefix, loss_function, parameter_ranges ):
+    """
+    Creates a model checkpoint and logs it to Weights and Biases (W&B) for the
+    supplied training run.  The checkpoint is linked to the current run as an
+    Artifact that can be referenced/used in the future.
+
+    NOTE: This interface was chosen to be compatible with the models module's
+          training callback interface, while also accepting additional arguments
+          to support being executed as a callback.  It is intended that a partial
+          function be created that supplies the last arguments so it can be
+          invoked with other callbacks.
+
+    Takes 11 arguments:
+
+      model             - Torch model object.
+      epoch_index       - Integer index specifying the training epoch that just
+                          completed.
+      optimizer         - Torch optimizer object.
+      training_loss     - Sequence of floating point training loss values for the
+                          most recent epoch.
+      validation_loss   - Scalar floating point validation loss for the last
+                          epoch.  May be NaN if a validation dataset was not
+                          provided.
+
+                          NOTE: This is the last argument of the callback interface.
+
+      wandb             - W&B Python package handle.  This is wandb when W&B is
+                          used, or an instance of NoOpWandB otherwise.
+      wandb_run         - W&B Run object representing the executing training run.
+      checkpointer      - Checkpoint function that serializes the model state
+                          to disk.  Must have the same interface as
+                          save_model_checkpoint() and is typically that function.
+      checkpoint_prefix - Prefix of the checkpoint to write locally before
+                          logging to W&B.
+      loss_function     - Loss function used to optimize model.
+      parameter_ranges  - Dictionary containing the parameter ranges associated
+                          with model.
+
+    Returns nothing.
+
+    """
+
+    #
+    # NOTE: We take checkpointer to avoid a circular dependency on the models
+    #       module which prevents us from using save_model_checkpoint()
+    #       directly.
+    #
+
+    # Create a checkpoint with the model state.  Make sure it's an absolute
+    # path.
+    checkpoint_path = checkpointer( checkpoint_prefix,
+                                    epoch_index,
+                                    model,
+                                    optimizer,
+                                    loss_function,
+                                    training_loss,
+                                    parameter_ranges=parameter_ranges )
+    checkpoint_path = os.path.abspath( checkpoint_path )
+
+    # Create a W&B artifact to store this model.
+    checkpoint_name     = "{:s}-checkpoint_{:d}".format( model.name(), epoch_index )
+    checkpoint_artifact = wandb.Artifact( name=checkpoint_name, type="model" )
+
+    checkpoint_artifact.add_file( local_path=checkpoint_path )
+
+    # Walk through this run's artifacts and link the training and validation
+    # datasets' artifacts to this checkpoint since it's derived from them.
+    # We have to jump through hoops as it appears that the wandb_run object does
+    # not keep track of the artifacts it has logged.  Instead, we have to use
+    # the Api API to query this run through it's id.
+    api     = wandb.Api()
+    api_run = api.run( "{:s}/{:s}/{:s}".format(
+        wandb_run.entity,
+        wandb_run.project,
+        wandb_run.id ) )
+
+    for dataset_artifact in api_run.logged_artifacts():
+
+        # Skip over non-dataset artifacts.
+        if not ("training-data" in dataset_artifact.name or
+                "validation-data" in dataset_artifact.name):
+            continue
+
+        #
+        # NOTE: We're referencing ("using") the dataset since the
+        #       model/checkpoint did not create it.
+        #
+        checkpoint_artifact.use_artifact( dataset_artifact )
+
+    # Upload the checkpoint to W&B.  We've logging it, vice using it, since we
+    # created it.
+    wandb_run.log_artifact( checkpoint_artifact )
+
+    del api_run
+    del api
 
 def prepare_wandb_run( wandb, project_name, model, criterion, optimizer, batch_size, lr_scale, file_paths, number_droplets ):
     """

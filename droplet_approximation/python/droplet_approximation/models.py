@@ -1,4 +1,5 @@
 import copy
+import functools
 import sys
 import warnings
 
@@ -13,7 +14,7 @@ from .physics import dydt,\
                      normalize_droplet_parameters, \
                      scale_droplet_parameters, \
                      solve_ivp_float32_outputs
-from .wandb import NoOpWandB, prepare_wandb_run
+from .wandb import NoOpWandB, log_wandb_checkpoint, prepare_wandb_run
 
 # See if Weights and Biases is installed.  Load the package if it is.
 try:
@@ -1751,6 +1752,26 @@ def train_model( model, criterion, optimizer, device, number_epochs, training_fi
                               validation_file),
                              (training_inputs.shape[0],
                               validation_inputs.shape[0]) )
+
+    # Log checkpoints to W&B if we're creating them.
+    if checkpoint_prefix is not None:
+        # Capture the run's static information so we can log to W&B from within
+        # our callback.
+        #
+        # NOTE: We pull the current parameter ranges since we don't have access
+        #       to them.  This follows suit with the rest of this function.
+        #
+        wandb_save_checkpoint = functools.partial(
+            log_wandb_checkpoint,
+            wandb=wandb_factory,
+            wandb_run=run,
+            checkpointer=save_model_checkpoint,
+            checkpoint_prefix=checkpoint_prefix,
+            loss_function=criterion,
+            parameter_ranges={} )
+
+        # Add this callback.
+        epoch_callbacks.append( wandb_save_checkpoint )
 
     # Log the initial learning rate for the first epoch/batch.
     epoch_metrics = {
