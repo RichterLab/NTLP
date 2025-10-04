@@ -815,7 +815,7 @@ def detect_timeline_gaps( integration_times, maximum_gap_size=MAXIMUM_DT_GAP_SIZ
     # Handle the case where we got zero integration times or fewer than two
     # times (the difference of on time is an empty array).
     if len( integration_times ) == 0:
-        return np.array( [], dtype=np.bool_ )
+        return np.array( [], dtype=np.bool_ ), np.array( [], dtype=np.int32 )
 
     # The gap threshold is set at 5 times the median so we're robust to
     # actual outliers in the observations, clamped at the maximum integration
