@@ -1990,27 +1990,25 @@ def _read_raw_particle_data( particle_path ):
 def read_training_file( file_name ):
     """
     Reads all of the fixed-size binary records from the path specified and returns
-    NumPy arrays containing input parameters, output parameters, and integration
-    times.
+    NumPy arrays containing input parameters and output parameters.  Note that the
+    input parameters contains the integration times.
 
     Takes 1 arguments:
 
       file_name - Path to the file to parse.
 
-    Returns 3 values:
+    Returns 2 values:
 
-      inputs  - NumPy array, shaped number_droplets x 6, containing the input parameters.
+      inputs  - NumPy array, shaped number_droplets x 7, containing the input parameters.
       outputs - NumPy array, shaped number_droplets x 2, containing the output parameters.
-      times   - NumPy array, shaped number_droplets x 1, containing the integration times.
 
     """
 
     inputs_outputs = np.fromfile( file_name, dtype=np.float32 ).reshape( (-1, 9) )
-    inputs         = inputs_outputs[:, :6]
-    times          = inputs_outputs[:, 6]
+    inputs         = inputs_outputs[:, :7]
     outputs        = inputs_outputs[:, 7:]
 
-    return inputs, outputs, times
+    return inputs, outputs
 
 def write_particles_index( particles_index_path, particle_ids, merge_flag=False ):
     """

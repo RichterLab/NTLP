@@ -420,6 +420,11 @@ def do_evaluation_dataframe( particles_df, bdf_flag=True, models=[], iterative_f
                                          model,
                                          device )
 
+            #
+            # NOTE: Our outputs are already on the host as an NumPy array since
+            #       we constructed our inputs as such.
+            #
+
             mlp_column_names = get_evaluation_column_names( mlp_tag )
             particles_df.at[particle_id, mlp_column_names[0]] = mlp_outputs[:, 0]
             particles_df.at[particle_id, mlp_column_names[1]] = mlp_outputs[:, 1]
@@ -434,6 +439,10 @@ def do_inference( input_parameters, integration_times, model, device, **kwargs )
     ith output.  Gaps are ignored as they implicitly handled due to the nature
     of the algorithm.
 
+    The droplets' inputs and integration times may be specified either as NumPy
+    arrays or as PyTorch tensors.  Inference outputs have the same type and
+    location as the droplet inputs for convenience.
+
     Takes 5 arguments:
 
       input_parameters  - NumPy array, sized number_inputs x 6, containing
@@ -443,7 +452,8 @@ def do_inference( input_parameters, integration_times, model, device, **kwargs )
                           observations.
       integration_times - NumPy array, sized number_time_steps x 1, containing
                           the time at each step.  number_time_steps must
-                          be no larger than number_inputs.
+                          be no larger than number_inputs.  Must have the same
+                          type and location as input_parameters.
       model             - PyTorch model to use.
       device            - String specifying the device to evaluate with.
       kwargs            - Optional keyword arguments.  These are provided for
@@ -452,12 +462,20 @@ def do_inference( input_parameters, integration_times, model, device, **kwargs )
 
     Returns 1 value:
 
-      output_parameters - NumPy array, sized number_time_steps x 2, containing the
+      output_parameters - Array, sized number_time_steps x 2, containing the
                           estimated radius and temperature for each of the
                           droplets at the specified integration times.  These
-                          are in their natural physical ranges.
+                          are in their natural physical ranges.  This has the
+                          same type and location as input_parameters.
 
     """
+
+    # Figure out what type of array we were provided and get our ranges in
+    # the right type and location.
+    if isinstance( input_parameters, np.ndarray ):
+        xp = np
+    else:
+        xp = torch
 
     # Get the number of outputs we're producing.
     number_outputs = integration_times.shape[0]
@@ -467,17 +485,38 @@ def do_inference( input_parameters, integration_times, model, device, **kwargs )
 
     # Combine the normalized parameters along with the integration times so we
     # have a single array to supply to the model.
-    normalized_inputs = np.hstack( (normalize_droplet_parameters( input_parameters[:number_outputs, :] ),
-                                    integration_times.reshape( (number_outputs, 1) )) ).astype( "float32" )
+    normalized_inputs = xp.hstack( (normalize_droplet_parameters( input_parameters[:number_outputs, :] ),
+                                    integration_times.reshape( (number_outputs, 1) )) )
+
+    # Ensure our NumPy data are 32-bit in case it comes in at higher precision.
+    # PyTorch tensors will not be higher precision.
+    if xp == np:
+        normalized_inputs = normalized_inputs.astype( "float32" )
+
+    # Convert the concatenated, normalized inputs to a PyTorch tensor and move
+    # it to the target device.
+    normalized_inputs = torch.from_numpy( normalized_inputs ).to( device )
 
     # Allocate the outputs on the target device.
     normalized_outputs = torch.empty( (number_outputs, 2), dtype=torch.float32 ).to( device )
 
+    device_parameter_ranges = get_parameter_ranges( tensor_flag=True, tensor_device=device )
+
     # Disable gradient accumulation since they're unnecessary for inference.
     with torch.no_grad():
-        normalized_outputs[:, :] = eval_model( torch.from_numpy( normalized_inputs ).to( device ) )
+        normalized_outputs[:, :] = eval_model( normalized_inputs )
 
-    return scale_droplet_parameters( normalized_outputs.cpu() )
+    # Scale the outputs while they're on the device.
+    scaled_outputs = scale_droplet_parameters( normalized_outputs,
+                                               device_parameter_ranges )
+
+    # Get the outputs to the same type and location as the inputs.
+    if xp == np:
+        scaled_outputs = scaled_outputs.detach().cpu().numpy()
+    else:
+        scaled_outputs = scaled_outputs.to( input_parameters.device )
+
+    return scaled_outputs
 
 def do_iterative_bdf( input_parameters, integration_times, gap_indices=np.array( [] ), **kwargs ):
     """
@@ -581,32 +620,46 @@ def do_iterative_inference( input_parameters, integration_times, model, device, 
     the (i+1)th time.  Gaps are handled by restarting the iteration from the
     inputs after each gap.
 
+    The droplets' inputs and integration times may be specified either as NumPy
+    arrays or as PyTorch tensors.  Inference outputs have the same type and
+    location as the droplet inputs for convenience.
+
     Takes 5 arguments:
 
-      input_parameters    - Array, sized number_inputs x 6, containing the
-                            input parameters for a single particle in order by time.
-                            These are provided in their natural, physical ranges.
-      integration_times   - Array, sized number_time_steps x 1, containing the
-                            integration time at each step.  number_time_steps must
-                            be no larger than number_inputs.
-      model               - PyTorch model to use.
-      device              - String specifying the device to evaluate with.
-      gap_indices         - Optional NumPy array, shaped number_gaps x 1, containing
-                            gap indices specifying the locations in input_parameters
-                            immediately after a gap.  May be supplied as an empty
-                            array.  If omitted, gap detection is not performed,
-                            otherwise the radius and temperatures from input_parameters
-                            is used after a gap instead of the previously output
-                            radius and temperature.
+      input_parameters  - Array, sized number_inputs x 6, containing the
+                          input parameters for a single particle in order by time.
+                          These are provided in their natural, physical ranges.
+                          Must be either a NumPy array or a PyTorch tensor.
+      integration_times - Array, sized number_time_steps x 1, containing the
+                          integration time at each step.  number_time_steps must
+                          be no larger than number_inputs.  Must have the same
+                          type and location as input_parameters.
+      model             - PyTorch model to use.
+      device            - String specifying the device to evaluate with.
+      gap_indices       - Optional NumPy array, shaped number_gaps x 1, containing
+                          gap indices specifying the locations in input_parameters
+                          immediately after a gap.  May be supplied as an empty
+                          array.  If omitted, gap detection is not performed,
+                          otherwise the radius and temperatures from input_parameters
+                          is used after a gap instead of the previously output
+                          radius and temperature.
 
     Returns 1 value:
 
-      output_parameters   - NumPy array, sized number_time_steps x 2, containing
-                            the estimated trajectory of a particle integrated
-                            along its background parameters with the MLP in
-                            natural ranges.
+      output_parameters - Array, sized number_time_steps x 2, containing the
+                          estimated trajectory of a particle integrated along
+                          its background parameters with the MLP in natural
+                          ranges.  This has the same type and location as
+                          input_parameters.
 
     """
+
+    # Figure out what type of array we were provided and get our ranges in
+    # the right type and location.
+    if isinstance( input_parameters, np.ndarray ):
+        xp = np
+    else:
+        xp = torch
 
     # Get the number of outputs we're producing.
     number_outputs = integration_times.shape[0]
@@ -620,11 +673,21 @@ def do_iterative_inference( input_parameters, integration_times, model, device, 
     adjusted_gap_indices = np.append( gap_indices, [number_outputs], axis=0 )
 
     # Construct an array with the input observations organized as the model
-    # expects.  We overwrite the input radii and temperatures with evaluation
-    # outputs to save memory.
-    normalized_data = torch.from_numpy( np.hstack( [normalize_droplet_parameters( input_parameters[:number_outputs, :] ),
-                                                    integration_times.reshape( number_outputs, 1 )] )
-                                          .astype( "float32" ) ).to( device )
+    # expects.  We overwrite the input radii and temperatures below with
+    # evaluation outputs to save memory.
+    normalized_data = np.hstack( [normalize_droplet_parameters( input_parameters[:number_outputs, :] ),
+                                  integration_times.reshape( number_outputs, 1 )] )
+
+    # Ensure our NumPy data are 32-bit in case it comes in at higher precision.
+    # PyTorch tensors will not be higher precision.
+    if xp == np:
+        normalized_data = normalized_data.astype( "float32" )
+
+    # Convert the concatenated, normalized inputs to a PyTorch tensor and move
+    # it to the target device.
+    normalized_data = torch.from_numpy( normalized_data ).to( device )
+
+    device_parameter_ranges = get_parameter_ranges( tensor_flag=True, tensor_device=device )
 
     with torch.no_grad():
         # Evaluate each input in succession.  We either use the previous output
@@ -658,7 +721,13 @@ def do_iterative_inference( input_parameters, integration_times, model, device, 
 
             normalized_data[time_index, :2] = eval_model( normalized_data[source_time_index, :] )
 
-    return scale_droplet_parameters( normalized_data[:, :2].to( "cpu" ).numpy() )
+    # Get the outputs to the same type and location as the inputs.
+    if xp == np:
+        normalized_data = normalized_data.detach().cpu().numpy()
+    else:
+        normalized_data = normalized_data.to( input_parameters.device )
+
+    return scale_droplet_parameters( normalized_data[:, :2] )
 
 def generate_fortran_module( output_path, model_name, model, parameter_ranges={} ):
     """
@@ -1913,6 +1982,34 @@ def train_model( model, criterion, optimizer, device, number_epochs, training_fi
 
     """
 
+    def _get_dataset( dataset_path ):
+        """
+        Gets a dataset for use in training.  Loads droplets from a file and
+        splits the records into inputs, outputs, and integration times.
+
+        Takes 1 argument:
+
+          dataset_path - String path to the droplets file to load with
+                         read_training_file().  If supplied as a tuple, it is
+                         assumed that read_training_file()'s outputs was
+                         supplied.
+
+        Returns 2 values:
+
+          training_inputs  - NumPy array, shaped number_droplets x 7, containing
+                             the input parameters.
+          training_outputs - NumPy array, shaped number_droplets x 2, containing
+                             the output parameters.
+
+        """
+
+        if isinstance( dataset_path, tuple ):
+            training_inputs, training_outputs = dataset_path
+        else:
+            training_inputs, training_outputs = read_training_file( dataset_path )
+
+        return training_inputs, training_outputs
+
     # Number of batches to train on per training loss measurement.
     MINI_BATCH_SIZE = 1024
 
@@ -1937,42 +2034,69 @@ def train_model( model, criterion, optimizer, device, number_epochs, training_fi
             # Add all of the callbacks.
             epoch_callbacks.extend( epoch_callback )
 
+    # Get parameters as Tensors both on the host and on the training device to
+    # avoid transferring them to the device on demand.
     #
-    # NOTE: This is inefficient and requires the entire training data set to reside in
-    #       RAM.  We could read chunks of the file on demand but that would require
-    #       a more sophisticated training loop that performs I/O in a separate thread
-    #       while the optimization process executes.
+    # NOTE: These are small so we don't care about the duplicated memory in
+    #       the case where the host is the training device.
+    #
+    tensor_parameter_ranges      = get_parameter_ranges()
+    tensor_parameter_ranges_host = get_parameter_ranges()
+    for name, value in tensor_parameter_ranges.items():
+        tensor_parameter_ranges[name]      = torch.from_numpy( value ).to( device )
+        tensor_parameter_ranges_host[name] = torch.from_numpy( value )
+
+    #
+    # NOTE: This is inefficient and requires the entire training/validation data
+    #       sets to reside in RAM.  We could read chunks of the file on demand
+    #       but that would require a more sophisticated training loop that
+    #       performs I/O in a separate thread while the optimization process
+    #       executes.
     #
     #       TL;DR Find a big machine to train on.
     #
-    if isinstance( training_file, tuple ):
-        training_inputs, training_outputs, training_times = training_file
-    else:
-        training_inputs, training_outputs, training_times = read_training_file( training_file )
+    (training_inputs,
+     training_outputs) = _get_dataset( training_file )
+
+    # Bail if we have no training data.
+    if training_inputs.shape[0] == 0:
+        print( "WARNING: No training samples available!  Nothing to do." )
+        return [], []
+
+    # Calculate weights for weighted loss while the training data are NumPy
+    # arrays.  We keep these as a host-based Tensor and transfer portions of
+    # it on demand for each batch.
+    weights = np.reciprocal( training_inputs[:, -1] )
+    weights = np.stack( (weights, weights), axis=-1 )
+    weights = torch.from_numpy( weights )
+
+    # Get the training inputs/outputs as normalized tensors on the host.  We'll
+    # transfer these in batches as needed to minimize the device's memory
+    # footprint.
+    training_inputs  = normalize_droplet_parameters( torch.from_numpy( training_inputs ),
+                                                     tensor_parameter_ranges_host )
+    training_outputs = normalize_droplet_parameters( torch.from_numpy( training_outputs ),
+                                                     tensor_parameter_ranges_host )
 
     if validation_file is not None:
-        if isinstance( validation_file, tuple ):
-            validation_inputs, validation_outputs, validation_times = validation_file
-        else:
-            validation_inputs, validation_outputs, validation_times = read_training_file( validation_file )
+        (validation_inputs,
+         validation_outputs) = _get_dataset( validation_file )
 
-        # Normalize the validation data once and prepare it for inference.
+        # Get the validation inputs/outputs as normalized tensors on the host.
+        # We'll transfer these in batches as needed to minimize the device's
+        # memory footprint.
         #
         # NOTE: We don't send it to the device since it may be too large
         #       to hold on to during training.
         #
-        validation_inputs  = normalize_droplet_parameters( validation_inputs )
-        validation_outputs = normalize_droplet_parameters( validation_outputs )
+        validation_inputs  = normalize_droplet_parameters( torch.from_numpy( validation_inputs ),
+                                                           tensor_parameter_ranges_host )
+        validation_outputs = normalize_droplet_parameters( torch.from_numpy( validation_outputs ),
+                                                           tensor_parameter_ranges_host )
 
-        validation_inputs  = np.hstack( (validation_inputs,
-                                         validation_times.reshape( -1, 1 )) )
-
-        validation_inputs  = torch.from_numpy( validation_inputs )
-        validation_outputs = torch.from_numpy( validation_outputs )
-
-    weights = np.reciprocal( training_times )
-    weights = np.stack( (weights, weights), axis=-1 )
-    weights = torch.from_numpy( weights ).to( device )
+        number_validation_inputs = validation_inputs.shape[0]
+    else:
+        number_validation_inputs = 0
 
     #
     # NOTE: This ignores parameters if the last batch isn't complete.
@@ -2005,7 +2129,7 @@ def train_model( model, criterion, optimizer, device, number_epochs, training_fi
                              (training_file,
                               validation_file),
                              (training_inputs.shape[0],
-                              validation_inputs.shape[0]) )
+                              number_validation_inputs) )
 
     # Log checkpoints to W&B if we're creating them.
     if checkpoint_prefix is not None:
@@ -2057,23 +2181,10 @@ def train_model( model, criterion, optimizer, device, number_epochs, training_fi
             start_index = permuted_batch_indices[batch_index] * batch_size
             end_index   = start_index + batch_size
 
-            # Get the next batch of droplets.
-            inputs          = training_inputs[start_index:end_index, :]
-            outputs         = training_outputs[start_index:end_index, :]
-            times           = training_times[start_index:end_index]
-            current_weights = weights[start_index:end_index]
-
-            # Normalize the inputs and outputs to [-1, 1].
-            normalized_inputs  = normalize_droplet_parameters( inputs )
-            normalized_outputs = normalize_droplet_parameters( outputs )
-
-            # XXX: Need to rethink how we handle time as an input.  This is annoying
-            #      to have to stack a reshaped vector each time.
-            normalized_inputs = np.hstack( (normalized_inputs,
-                                            times.reshape( (batch_size, 1) )) )
-
-            normalized_inputs  = torch.from_numpy( normalized_inputs ).to( device )
-            normalized_outputs = torch.from_numpy( normalized_outputs ).to( device )
+            # Move the next batch of droplets to the device.
+            normalized_inputs  = training_inputs[start_index:end_index, :].to( device )
+            normalized_outputs = training_outputs[start_index:end_index, :].to( device )
+            current_weights    = weights[start_index:end_index].to( device )
 
             # Reset the parameter gradients.
             optimizer.zero_grad()
@@ -2164,6 +2275,7 @@ def train_model( model, criterion, optimizer, device, number_epochs, training_fi
                                                   validation_outputs[start_index:end_index].to( device ),
                                                   current_weights )
                     else:
+                        # XXX: normalized on the host.
                         loss = criterion( validation_approximations,
                                           validation_outputs[start_index:end_index].to( device ) )
 
