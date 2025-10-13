@@ -366,7 +366,13 @@ def plot_droplet_size_temperatures( times, size_temperatures, background_paramet
         current_axis      = ax_h[axis_row_index][axis_column_index]
 
         current_axis.set_title( label )
-        current_axis.plot( times, time_series )
+        #
+        # NOTE: We set the line's label though we do not show it as it is the
+        #       only thing on the plot.  We do this as a convenience for the
+        #       caller should they want to add additional data and turn on the
+        #       legend after we return.
+        #
+        current_axis.plot( times, time_series, label=label )
         current_axis.set_ylabel( label )
 
     # Format all subplots.
