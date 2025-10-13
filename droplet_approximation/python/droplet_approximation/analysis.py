@@ -361,13 +361,13 @@ def plot_droplet_size_temperatures( times, size_temperatures, background_paramet
     # Plot background parameters in the remaining subplots.
     starting_index = 4 if compare_flag else 2
     for index, (label, time_series) in enumerate( background_parameters.items() ):
-       axis_row_index    = (starting_index + index) // 2
-       axis_column_index = (starting_index + index) % 2
-       current_axis      = ax_h[axis_row_index][axis_column_index]
+        axis_row_index    = (starting_index + index) // 2
+        axis_column_index = (starting_index + index) % 2
+        current_axis      = ax_h[axis_row_index][axis_column_index]
 
-       current_axis.set_title( label )
-       current_axis.plot( times, time_series )
-       current_axis.set_ylabel( label )
+        current_axis.set_title( label )
+        current_axis.plot( times, time_series )
+        current_axis.set_ylabel( label )
 
     # Format all subplots.
     #
