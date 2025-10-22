@@ -78,7 +78,7 @@ def average_particles_data( particles_df, evaluation_tags, simulation_times, bac
     for evaluation_tag in evaluation_tags:
         rt_averages[evaluation_tag][:, 0] /= particle_counts
         rt_averages[evaluation_tag][:, 1] /= particle_counts
-        
+
     for _, average in background_averages.items():
         average /= particle_counts
 
