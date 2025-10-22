@@ -516,8 +516,7 @@ def plot_droplet_size_temperatures_domain( input_parameters, model=None, dt=None
                                                         dt,
                                                         dtype=np.float32 ),
                                                model,
-                                               "cpu",
-                                               dt_flag=True )
+                                               "cpu" )
         model_nrmse  = calculate_nrmse( bdf_output, model_output )
 
         # Add the MLP output to the visualization.
