@@ -445,15 +445,16 @@ def do_inference( input_parameters, integration_times, model, device, **kwargs )
 
     Takes 5 arguments:
 
-      input_parameters  - NumPy array, sized number_inputs x 6, containing
-                          the input parameters for either one particle with
+      input_parameters  - Array, sized number_inputs x 6, containing the input
+                          parameters for either one particle with
                           number_time_steps-many time steps or parameters for
                           number_time_steps-many droplets each with a single
-                          observations.
+                          observations.  Must be either a NumPy array or a
+                          PyTorch tensor.
       integration_times - NumPy array, sized number_time_steps x 1, containing
                           the time at each step.  number_time_steps must
-                          be no larger than number_inputs.  Must have the same
-                          type and location as input_parameters.
+                          be no larger than number_inputs.  Must be the same
+                          type as input_parameters.
       model             - PyTorch model to use.
       device            - String specifying the device to evaluate with.
       kwargs            - Optional keyword arguments.  These are provided for
@@ -1915,7 +1916,7 @@ def save_model_checkpoint( checkpoint_prefix, checkpoint_number, model, optimize
 
     return checkpoint_path
 
-def train_model( model, criterion, optimizer, device, number_epochs, training_file, validation_file=None, checkpoint_prefix=None, epoch_callback=None, lr_scale=0.5, batch_size=1024, project_name=None ):
+def train_model( model, criterion, optimizer, device, number_epochs, training_file, validation_file=None, checkpoint_prefix=None, epoch_callback=None, lr_scale=0.5, batch_size=1024, project_name=None, pinn_loss_flag=False ):
     """
     Trains the supplied model for one or more epochs using all of the droplet parameters
     in an on-disk training file.  The parameters are read into memory once and then
@@ -1923,7 +1924,7 @@ def train_model( model, criterion, optimizer, device, number_epochs, training_fi
     are logged when requested.  Model performance may be evaluated when a validation
     file is provided and is done so at the end of each epoch.
 
-    Takes 12 arguments:
+    Takes 13 arguments:
 
       model             - PyTorch model to optimize.
       criterion         - PyTorch loss object to use during optimization.
@@ -1972,6 +1973,29 @@ def train_model( model, criterion, optimizer, device, number_epochs, training_fi
                           omitted, defaults to None and W&B integrations are
                           skipped.  Otherwise this specifies the project to
                           log to for the currently logged in entity.
+      pinn_loss_flag    - Optional Boolean specifying whether a physics-based
+                          loss function is supplied or not.  When False the supplied
+                          criterion takes 2 arguments to compute a non-physics-based
+                          loss:
+
+                            normalized_approximations - The normalized model estimates
+                            normalized_outputs        - The normalized truth values
+
+                          Otherwise criterion takes 4 arguments to compute a
+                          physics-based loss:
+
+                            normalized_approximations - The normalized model estimates
+                            normalized_outputs        - The normalized truth values
+                            normalized_inputs         - The normalized model inputs
+                            parameter_ranges          - Parameter ranges suitable to
+                                                        scale the inputs to physical
+                                                        units
+
+                          It expected that all loss function arguments are PyTorch
+                          tensors on device.
+
+                          If omitted, defaults to False and non-physics-based criterion
+                          expected.
 
     Returns 2 values:
 
@@ -2009,6 +2033,12 @@ def train_model( model, criterion, optimizer, device, number_epochs, training_fi
             training_inputs, training_outputs = read_training_file( dataset_path )
 
         return training_inputs, training_outputs
+
+    # Non-physics-based loss functions disable gradient accumulation during
+    # validation so we need contextlib's no-op context manager when we have
+    # physics-bassed loss.
+    if pinn_loss_flag:
+        import contextlib
 
     # Number of batches to train on per training loss measurement.
     MINI_BATCH_SIZE = 1024
@@ -2078,6 +2108,15 @@ def train_model( model, criterion, optimizer, device, number_epochs, training_fi
     training_outputs = normalize_droplet_parameters( torch.from_numpy( training_outputs ),
                                                      tensor_parameter_ranges_host )
 
+    # XXX: Hack to disable validation with physics-based loss until its fixed.
+    #
+    #      We currently do not correctly setup the requires_grad flag for
+    #      validation-related tensors which results in an exception during
+    #      the first validation loss calculated.
+    #
+    if validation_file and pinn_loss_flag:
+        validation_file = None
+
     if validation_file is not None:
         (validation_inputs,
          validation_outputs) = _get_dataset( validation_file )
@@ -2093,6 +2132,15 @@ def train_model( model, criterion, optimizer, device, number_epochs, training_fi
                                                            tensor_parameter_ranges_host )
         validation_outputs = normalize_droplet_parameters( torch.from_numpy( validation_outputs ),
                                                            tensor_parameter_ranges_host )
+
+        # Ensure we accumulate gradients for our validation tensors.
+        #
+        # XXX: This is broken!  See the hack that disables validation when
+        #      phsyics-based loss functions are provided.
+        #
+        if pinn_loss_flag:
+            validation_inputs.requires_grad_( True )
+            validation_outputs.requires_grad_( True )
 
         number_validation_inputs = validation_inputs.shape[0]
     else:
@@ -2179,12 +2227,19 @@ def train_model( model, criterion, optimizer, device, number_epochs, training_fi
 
         for batch_index in range( number_batches ):
             start_index = permuted_batch_indices[batch_index] * batch_size
-            end_index   = start_index + batch_size
+            end_index   = min( start_index + batch_size,
+                               training_inputs.shape[0] )
 
             # Move the next batch of droplets to the device.
             normalized_inputs  = training_inputs[start_index:end_index, :].to( device )
             normalized_outputs = training_outputs[start_index:end_index, :].to( device )
             current_weights    = weights[start_index:end_index].to( device )
+
+            # Accumulate gradients when we're calculating a physics-based loss
+            # otherwise autograd does not work.
+            if pinn_loss_flag:
+                normalized_inputs.requires_grad_( True )
+                normalized_outputs.requires_grad_( True )
 
             # Reset the parameter gradients.
             optimizer.zero_grad()
@@ -2195,6 +2250,11 @@ def train_model( model, criterion, optimizer, device, number_epochs, training_fi
             # Estimate the loss - using weights if needed.
             if criterion == weighted_mse_loss:
                 loss = weighted_mse_loss( normalized_approximations, normalized_outputs, current_weights )
+            elif pinn_loss_flag:
+                loss = criterion( normalized_approximations,
+                                  normalized_outputs,
+                                  normalized_inputs,
+                                  parameter_ranges=tensor_parameter_ranges )
             else:
                 loss = criterion( normalized_approximations, normalized_outputs )
 
@@ -2252,7 +2312,15 @@ def train_model( model, criterion, optimizer, device, number_epochs, training_fi
 
         # Measure our validation loss if we have data.
         if validation_file is not None:
-            with torch.no_grad():
+
+            # Save some memory and execution speed if we don't need to
+            # accumulate gradients.
+            if pinn_loss_flag:
+                context_manager = contextlib.nullcontext
+            else:
+                context_manager = torch.no_grad
+
+            with context_manager():
                 running_loss = 0.0
 
                 # Compute the number of batches we have, possibly including a
@@ -2274,8 +2342,12 @@ def train_model( model, criterion, optimizer, device, number_epochs, training_fi
                         loss = weighted_mse_loss( validation_approximations,
                                                   validation_outputs[start_index:end_index].to( device ),
                                                   current_weights )
+                    elif pinn_loss_flag:
+                        loss = criterion( validation_approximations,
+                                          validation_outputs.to( device ),
+                                          validation_inputs.to( device ),
+                                          parameter_ranges=tensor_parameter_ranges )
                     else:
-                        # XXX: normalized on the host.
                         loss = criterion( validation_approximations,
                                           validation_outputs[start_index:end_index].to( device ) )
 
