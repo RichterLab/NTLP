@@ -451,7 +451,7 @@ def do_inference( input_parameters, integration_times, model, device, **kwargs )
 
     return scale_droplet_parameters( normalized_outputs.cpu() )
 
-def do_iterative_bdf( input_parameters, integration_times, gap_indices=np.array( [] ), dt_flag=False, **kwargs ):
+def do_iterative_bdf( input_parameters, integration_times, gap_indices=np.array( [] ), **kwargs ):
     """
     Iteratively evaluates a particle trajectory along given background inputs with
     backward differentiation formula (BDF).  The outputs for the ith time are
