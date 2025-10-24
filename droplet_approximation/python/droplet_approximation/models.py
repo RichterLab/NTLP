@@ -1205,6 +1205,17 @@ def load_model_checkpoint( checkpoint_path, model=None, optimizer=None ):
     objects with the state contained.  Returns the parameter ranges found in the
     checkpoint as well as the model's recorded training loss.
 
+    Raises ValueError for a number of errors:
+
+      - The loaded model does not provide the correct parameter ranges
+        (e.g. older models used salt mass as a parameter while newer code uses
+        salt solute).
+      - The wrong interface was used (e.g. older checkpoints require a model
+        object provided by the caller, while newer checkpoints return a new
+        object).
+
+    Returns RuntimeError if an unknown version is encountered in the checkpoint.
+
     Takes 3 arguments:
 
       checkpoint_path - Path to the file that checkpoint was loaded from.
@@ -1441,10 +1452,40 @@ def load_model_checkpoint( checkpoint_path, model=None, optimizer=None ):
     checkpoint_version = checkpoint.get( "checkpoint_version", 1 )
 
     # Older checkpoints don't have a way of specifying the model architecture so
-    # the caller must provide an instantiated object to load weights into.
+    # the caller must provide an instantiated object to load weights into.  But,
+    # newer checkpoints are self-contained so they can instantiate a new model
+    # object (obviating the need to provide a compatible one) and cannot safely
+    # take a model object from the caller.
+    #
+    # Raise an exception to help the caller understand which interface to use.
+    #
+    # NOTE: We don't support new checkpoints with an existing model as it is
+    #       a lot of work for minimal gain.  In particular, we must update every
+    #       model class to support cloning its configuration and sate from
+    #       another model (the one loaded) which requires code in every model
+    #       class we use.
+    #
+    #       Even if we bite that bullet we then have to content with the issue
+    #       where the caller needs to know the architecture of the model in the
+    #       checkpoint and deal with the case where they're different.  For
+    #       arbitrary models this is intractable and we'd raise an exception.
+    #
+    #       As a result, we simply force the caller to use the new interface and
+    #       do an awkward dance while there are still v3 and older checkpoints
+    #       of interest (i.e. try to load with the new interface, catch the
+    #       exception and try to load with the old interface if you can guess
+    #       the architecture).  In the long run, we simply won't have older
+    #       checkpoints to worry about and this goes away.
+    #
     if checkpoint_version < 4 and no_model_provided_flag:
         raise ValueError( "Older checkpoints (v3 and older) must provide a model "
                           "object to load weights into!  '{:s}' is v{:d}.".format(
+                              checkpoint_path,
+                              checkpoint_version ) )
+    elif checkpoint_version >= 4 and not no_model_provided_flag:
+        if not no_model_provided_flag:
+            raise ValueError( "New checkpoints (v4 and newer) must not provide a "
+                              "model object to load weights into!  '{:s}' is v{:d}.".format(
                               checkpoint_path,
                               checkpoint_version ) )
 
