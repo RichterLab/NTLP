@@ -35,6 +35,79 @@ import droplet_approximation
 EVALUATION_TYPE_BDF_STR = droplet_approximation.EvaluationType.BDF.name.lower()
 EVALUATION_TYPE_MLP_STR = droplet_approximation.EvaluationType.MLP.name.lower()
 
+def compatible_load_model_checkpoint( checkpoint_path, model_class ):
+    """
+    Tries real hard to load a usable model checkpoint.  Legacy and new
+    (self-contained) checkpoints will be loaded, while vintage checkpoints
+    without parameter ranges will not be loaded.
+
+    Raises ValueError if any of the following are true:
+
+      - A vintage checkpoint is encountered (i.e. a checkpoint without parameter ranges)
+      - An invalid checkpoint is encountered
+      - An unknown checkpoint version is encountered
+
+    Takes 2 arguments:
+
+      checkpoint_path - Path to the model checkpoint to load.
+      model_class     - Name of the model architecture class to use.
+
+                        NOTE: This is only required for legacy checkpoints
+                              that are not self-contained.  For newer
+                              checkpoints this argument is ignored.
+
+    Returns 2 values:
+
+      model            - Torch model loaded from checkpoint_path.
+      parameter_ranges - Dictionary of parameter ranges to use during
+                         inference with model.  See get_parameter_ranges()
+                         for details.
+
+    """
+
+    model = droplet_approximation.create_new_model( model_class )
+
+    # Promote warnings to errors so we can prevent v1 checkpoints from being
+    # used.
+    #
+    # NOTE: While we could accept parameter ranges to facilitate evaluation
+    #       with v1 checkpoints this is *very* error prone and we don't want
+    #       to evaluate potentially billions of observations with the wrong
+    #       values and generate total garbage.
+    #
+    with warnings.catch_warnings():
+        warnings.simplefilter( "error", UserWarning )
+
+        try:
+            (parameter_ranges,
+             _,
+             _) = droplet_approximation.load_model_checkpoint( checkpoint_path,
+                                                               model )
+        except Warning:
+            # Promote the warning to an exception since we're not guessing the
+            # parameter ranges.
+            raise ValueError( "Checkpoint '{:s}' does not contain parameter ranges!\n"
+                              "Evaluation is only available for models that have explicit parameter ranges!".format(
+                                  checkpoint_path ) )
+        except droplet_approximation.InvalidCheckpointError as e:
+            raise ValueError( "Checkpoint '{:s}' is malformed - {:s}".format(
+                checkpoint_path,
+                str( e ) ) )
+        except droplet_approximation.UnhandledCheckpointVersionError as e:
+            raise ValueError( "Checkpoint '{:s}' is a version we don't handle - {:s}".format(
+                checkpoint_path,
+                str( e ) ) )
+        except droplet_approximation.MismatchedLoadInterfaceError:
+            # This is a newer checkpoint version that is self-contained.
+            # Attempt to load it with the new interface, but don't bother
+            # catching anything as we want to crater if we can't load a model.
+            (model,
+             parameter_ranges,
+             _,
+             _) = droplet_approximation.load_model_checkpoint( checkpoint_path )
+
+    return model, parameter_ranges
+
 def launch_evaluation_pipeline( particles_root, particles_index_path, particle_indices_range_str,
                                 number_processes, evaluation_type, iterative_flag,
                                 evaluation_extension, testing_flag, parameters ):
@@ -109,34 +182,30 @@ def launch_evaluation_pipeline( particles_root, particles_index_path, particle_i
     if number_processes == 0:
         number_processes = multiprocessing.cpu_count()
 
+    # Make a copy of the parameters so we can control what is passed
+    # to the underlying evaluation function.
+    local_parameters = parameters.copy()
+
     # Load the model and acquire its parameter ranges if we're doing
     # MLP evaluation.
+    #
+    # NOTE: We take care to handle legacy models (pre-v4) as well as newer,
+    #       self-contained models (v4 and later).  Legacy support should be
+    #       removed once older checkpoints are no longer used.
+    #
     if evaluation_type == droplet_approximation.EvaluationType.MLP:
-        model = droplet_approximation.create_new_model( parameters["model_class"] )
+        # The checkpoint path and the model architecture are only necessary for
+        # loading the model.  Remove them from the parameters we pass to the
+        # inference routine.
+        del local_parameters["checkpoint_path"]
+        del local_parameters["model_class"]
 
-        # Promote warnings to errors so we can prevent v1 checkpoints from being
-        # used.
-        #
-        # NOTE: While we could accept parameter ranges to facilitate evaluation
-        #       with v1 checkpoints this is *very* error prone and we don't want
-        #       to evaluate potentially billions of observations with the wrong
-        #       values and generate total garbage.
-        #
-        with warnings.catch_warnings():
-            warnings.simplefilter( "error", UserWarning )
+        model, parameter_ranges = compatible_load_model_checkpoint( parameters["checkpoint_path"],
+                                                                    parameters["model_class"] )
 
-            try:
-                (parameter_ranges,
-                 _,
-                 _) = droplet_approximation.load_model_checkpoint( parameters["checkpoint_path"],
-                                                                   model )
-            except Warning as e:
-                raise ValueError( "Checkpoint '{:s}' does not contain parameter ranges!\n"
-                                  "Evaluation is only available for models that have explicit parameter ranges!".format(
-                                      parameters["checkpoint_path"] ) )
-
-        parameters["model"]            = model
-        parameters["parameter_ranges"] = parameter_ranges
+        # Use the loaded model and its parameter ranges for inference.
+        local_parameters["model"]            = model
+        local_parameters["parameter_ranges"] = parameter_ranges
 
     # Figure out which particles are available.
     particle_ids = np.fromfile( full_particles_index_path, dtype=np.int32 )
@@ -203,7 +272,7 @@ def launch_evaluation_pipeline( particles_root, particles_index_path, particle_i
                 evaluation_type,
                 evaluation_extension,
                 iterative_flag,
-                parameters)
+                local_parameters)
         args_list.append( args )
 
         # Thanks to Python's exclusive indexing, the beginning of the next
@@ -253,7 +322,7 @@ def launch_evaluation_pipeline( particles_root, particles_index_path, particle_i
                    parameters["checkpoint_path"],
                    parameters["device"],
                ) )
-        droplet_approximation.display_parameter_ranges( parameters["parameter_ranges"],
+        droplet_approximation.display_parameter_ranges( local_parameters["parameter_ranges"],
                                                         droplet_approximation.DisplayType.HUMAN,
                                                         "  " )
         print()
