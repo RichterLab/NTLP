@@ -1,5 +1,6 @@
 import copy
 import functools
+import pickle
 import sys
 import warnings
 
@@ -1385,6 +1386,73 @@ def load_model_checkpoint( checkpoint_path, model=None, optimizer=None ):
 
     """
 
+    class PickleAndStubUnknownFunctions( object ):
+        """
+        Custom pickle handler that stubs out unresolvable symbols as functions
+        that raise NotImplementedError when called.  This lets us load
+        checkpoints that use methods local to the system that produced them
+        without raising an error.  For non-critical things (e.g. loss functions)
+        this allows users to use checkpoints produced from development code
+        that has yet to be checked into the repository.
+        """
+
+        class StubUnpickler( pickle.Unpickler ):
+            """
+            Custom unpickler that stubs out any symbols that cannot be found
+            in the current interpreter.  Stubs raise NotImplementedError when
+            called.
+            """
+
+            def find_class( self, module, name ):
+                """
+                Finds a class by name in the supplied module.  Handles missing names
+                (due to symbols that don't exist in the current interpreter,
+                e.g. functions defined in a Jupyter notebook) by creating a stub
+                function that raises NotImplementedError.
+
+                Takes 3 arguments:
+
+                  self   - Instance of StubUnpickler.
+                  module - Module to search for name in.
+                  name   - Symbol name to find.
+
+                Returns 1 value:
+
+                  klass - The class, function object, callable object, or stubbed
+                          function associated with module and name.
+
+                """
+
+                try:
+                    return super().find_class( module, name )
+                except AttributeError:
+                    # Return a stub that raises NotImplementedError when called.
+                    # Give a reference to the original function to aide in the
+                    # diagnostics.
+                    def stub( *args, **kwargs ):
+                        raise NotImplementedError( "Function '{:s}' from module "
+                                                   "'{:s}' is not available.".format(
+                                                       name,
+                                                       module ) )
+
+                    # "Rename" the stub to match what we were looking for.
+                    stub.__name__   = name
+                    stub.__module__ = module
+
+                    return stub
+
+        # Masquerade as Python's pickle module.  This is required to work with
+        # Torch's custom pickle code.
+        __name__ = "pickle"
+
+        # Use our custom class to handle unresolved classes/functions as stub
+        # functions that raise exceptions when called.
+        Unpickler = StubUnpickler
+
+        # Forward all attribute accesses to the pickle module.
+        def __getattr_( self, name ):
+            return getattr( pickle, name )
+
     def _load_model_checkpoint_v1( checkpoint_path, model, checkpoint ):
         """
         Loads a legacy, version 1 checkpoint.  This is simply a serialization of
@@ -1579,8 +1647,14 @@ def load_model_checkpoint( checkpoint_path, model=None, optimizer=None ):
     no_model_provided_flag = model is None
 
     # Load the checkpoint's Tensors as a dictionary and figure out which version
-    # it is.
-    checkpoint         = torch.load( checkpoint_path, weights_only=False, map_location=torch.device( "cpu" ) )
+    # it is.  Take care to handle functions that were defined locally (e.g. in a
+    # Jupyter notebook) and aren't available in the current namespace.
+    custom_pickle = PickleAndStubUnknownFunctions()
+    checkpoint    = torch.load( checkpoint_path,
+                                weights_only=False,
+                                map_location=torch.device( "cpu" ),
+                                pickle_module=custom_pickle )
+
     checkpoint_version = checkpoint.get( "checkpoint_version", 1 )
 
     # Older checkpoints don't have a way of specifying the model architecture so
