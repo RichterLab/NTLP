@@ -34,7 +34,7 @@ DEFAULT_PARAMETER_RANGES = None
 # be provided on the command line.
 PARAMETER_NAMES = ["radius",
                    "temperature",
-                   "salt_mass",
+                   "salt_solute",
                    "air_temperature",
                    "relative_humidity",
                    "rhoa",
@@ -47,7 +47,7 @@ def parse_parameter_ranges( parameter_ranges_str ):
     parameter's range is colon-delimited, with each range separated by commas
     like so:
 
-      <radius_low>:<radius_high>,<temp_low>:<temp_high>,<salt_low>:<salt_high>,<air_temp_low>:<air_temp_high>,<rh_low>:<rh_high>,<rhoa_low>:<rhoa_high>,<time_low>:<time_high>
+      <radius_low>:<radius_high>,<temp_low>:<temp_high>,<solute_low>:<solute_high>,<air_temp_low>:<air_temp_high>,<rh_low>:<rh_high>,<rhoa_low>:<rhoa_high>,<time_low>:<time_high>
 
     All seven of the parameters must have ranges specified.
 
