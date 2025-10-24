@@ -289,7 +289,7 @@ def plot_droplet_size_temperatures( times, size_temperatures, background_paramet
 
     if compare_flag:
         if time_series_count == 1:
-            raise( ValueError( "Error: compare flag true but no other time series to compare!" ) )
+            raise ValueError( "Error: compare flag true but no other time series to compare!" )
 
         # Setup twin axes so we can see both relative and absolute differences
         # between the reference and each comparison with a single plot.
