@@ -4,10 +4,11 @@ import sys
 import warnings
 
 import numpy as np
+import pandas as pd
 import torch
 import torch.nn as nn
 
-from .data import read_training_file
+from .data import get_evaluation_column_names, read_training_file
 from .names import generate_name
 from .physics import dydt,\
                      get_parameter_ranges, \
@@ -281,6 +282,119 @@ def do_bdf( input_parameters, integration_times, gap_indices=np.array( [] ), **k
         #
 
     return output_parameters
+
+def do_evaluation_dataframe( particles_df, bdf_flag=True, models=[], iterative_flag=True, device="cpu" ):
+    """
+    Calculates one or more evaluations for each particle in a DataFrame.  The
+    DataFrame is updated in place so the evaluations' outputs are available
+    to the caller.  BDF solve and/or MLP inference may be computed, either
+    iteratively or directly, based on the parameterization.  By default,
+    calculates the iterative BDF solution.
+
+    After evaluations are calculated, the DataFrame is updated to contain
+    the column names returned by get_evaluation_column_names() using the
+    following tags:
+
+      bdf_direct                When bdf_flag == True and iterative_flag == False
+      bdf_iterative             When bdf_flag == iterative_flag == True
+      mlp_direct-<model>        When len( models ) > 0 and iterative_flag == False
+      mlp_iterative-<model>     When len( models ) > 0 and iterative_flag == True
+
+    Any existing evaluations are overwritten.
+
+    Takes 5 arguments:
+
+      particles_df   - Pandas DataFrame to compute evaluations with and update
+                       with the results.
+      bdf_flag       - Optional Boolean flag specifying whether BDF solves are
+                       requested.  If omitted, defaults to True.
+      models         - Optional list of model objects to inference with.  If
+                       omitted, defaults to an empty list.
+      iterative_flag - Optional Boolean flag specifying whether the evaluations
+                       should be iteratively computed or directly from each
+                       observation.  If omitted, defaults to True.
+      device         - Optional device string specifying where model inference
+                       should be performed.  If omitted, defaults to "cpu" for
+                       host-based inference.  This is ignored if models is
+                       empty.
+
+    Returns nothing.
+
+    """
+
+    droplet_parameter_names = [
+        "input be radii",
+        "input be temperatures",
+        "salt solutes",
+        "air temperatures",
+        "relative humidities",
+        "air densities"
+    ]
+
+    evaluation_column_names = []
+
+    if bdf_flag:
+        # Select the BDF evaluation function and its tag.
+        if iterative_flag:
+            bdf_inference = do_iterative_bdf
+            bdf_tag       = "bdf_iterative"
+        else:
+            bdf_inference = do_bdf
+            bdf_tag       = "bdf_direct"
+
+        # Track the associated columns.
+        bdf_column_names = get_evaluation_column_names( bdf_tag )
+        evaluation_column_names.extend( bdf_column_names )
+
+    for model in models:
+        # Select the tag and track the associated columns for each model.
+        mlp_tag = "mlp_{:s}-{:s}".format(
+            "iterative" if iterative_flag else "direct",
+            model.name() )
+
+        evaluation_column_names.extend( get_evaluation_column_names( mlp_tag ) )
+
+    # Select the model evaluation function.
+    if iterative_flag:
+        mlp_inference = do_iterative_inference
+    else:
+        mlp_inference = do_inference
+
+    # Add the new column names into the DataFrame so our internal function can use
+    # them.
+    for evaluation_column_name in evaluation_column_names:
+        particles_df[evaluation_column_name] = pd.Series( dtype=object )
+
+    # Evaluate each particle.
+    for particle_id in particles_df.index:
+
+        # Convert the droplet parameters' columns into an N x 6 NumPy array.
+        droplet_parameters = np.stack( particles_df.loc[particle_id][droplet_parameter_names].to_numpy(),
+                                       axis=-1 )
+        integration_times  = particles_df.loc[particle_id]["integration times"]
+
+        # Evaluate truth via BDF.  We use the column names from above.
+        if bdf_flag:
+            bdf_outputs = bdf_inference( droplet_parameters,
+                                         integration_times )
+
+            particles_df.at[particle_id, bdf_column_names[0]] = bdf_outputs[:, 0]
+            particles_df.at[particle_id, bdf_column_names[1]] = bdf_outputs[:, 1]
+
+        # Evaluate each of the models, if any.
+        for model in models:
+            mlp_tag = "mlp_{:s}-{:s}".format(
+                "iterative" if iterative_flag else "direct",
+                model.name() )
+
+            mlp_outputs = mlp_inference( droplet_parameters,
+                                         integration_times,
+                                         model,
+                                         device )
+
+            mlp_column_names = get_evaluation_column_names( mlp_tag )
+            particles_df.at[particle_id, mlp_column_names[0]] = mlp_outputs[:, 0]
+            particles_df.at[particle_id, mlp_column_names[1]] = mlp_outputs[:, 1]
 
 def do_inference( input_parameters, integration_times, model, device, **kwargs ):
     """

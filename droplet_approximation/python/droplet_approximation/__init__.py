@@ -40,6 +40,7 @@ from .models import SimpleNet, \
                     ResidualNet, \
                     create_new_model, \
                     do_bdf, \
+                    do_evaluation_dataframe, \
                     do_inference, \
                     do_iterative_bdf, \
                     do_iterative_inference, \
