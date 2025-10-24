@@ -38,6 +38,9 @@ from .data import BE_TAG_NAME, \
                   write_particles_index
 from .models import SimpleNet, \
                     ResidualNet, \
+                    InvalidCheckpointError, \
+                    MismatchedLoadInterfaceError, \
+                    UnhandledCheckpointVersionError, \
                     create_new_model, \
                     do_bdf, \
                     do_evaluation_dataframe, \

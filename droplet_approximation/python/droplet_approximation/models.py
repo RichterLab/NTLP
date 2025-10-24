@@ -169,6 +169,26 @@ class ResidualNet( SimpleNet ):
 
         return out
 
+class InvalidCheckpointError( ValueError ):
+    """
+    Represents an invalid checkpoint that was consistent enough to be loaded but
+    did not contain all of the keys required.
+    """
+
+class MismatchedLoadInterfaceError( ValueError ):
+    """
+    Represents a checkpoint that was consistent enough to be loaded but was
+    loaded with the wrong interface (e.g. newer checkpoints using the legacy
+    loading calling conventions).  Checkpoints that raise this should be
+    loaded using the other calling convention.
+    """
+
+class UnhandledCheckpointVersionError( ValueError ):
+    """
+    Represents a checkpoint that has a version number that is unknown to the
+    package.
+    """
+
 def create_new_model( model_class_name, model_name=None ):
     """
     Instantiates a PyTorch model object from a droplet_approximation's class
@@ -1444,9 +1464,9 @@ def load_model_checkpoint( checkpoint_path, model=None, optimizer=None ):
 
         # Sanity check that the parameter ranges are as expected.
         if "salt_mass" not in parameter_ranges:
-            raise ValueError( "'{:s}' is not a valid version 2 checkpoint.  "
-                              "Its parameter ranges does not contain 'salt mass'!".format(
-                                  checkpoint_path ) )
+            raise InvalidCheckpointError( "'{:s}' is not a valid version 2 checkpoint.  "
+                                          "Its parameter ranges does not contain 'salt mass'!".format(
+                                              checkpoint_path ) )
 
         warnings.warn( "Version 2 checkpoints are incompatible with the current dydt()!  "
                        "Make sure to convert salt solute to salt mass before inferencing." )
@@ -1494,10 +1514,9 @@ def load_model_checkpoint( checkpoint_path, model=None, optimizer=None ):
 
         # Sanity check that the parameter ranges are as expected.
         if "salt_solute" not in parameter_ranges:
-            print( parameter_ranges )
-            raise ValueError( "'{:s}' is not a valid v3 checkpoint.  "
-                              "Its parameter ranges does not contain 'salt solute'!".format(
-                                  checkpoint_path ) )
+            raise InvalidCheckpointError( "'{:s}' is not a valid v3 checkpoint.  "
+                                          "Its parameter ranges does not contain 'salt solute'!".format(
+                                              checkpoint_path ) )
 
         return parameter_ranges, loss_function, training_loss
 
@@ -1549,10 +1568,9 @@ def load_model_checkpoint( checkpoint_path, model=None, optimizer=None ):
 
         # Sanity check that the parameter ranges are as expected.
         if "salt_solute" not in parameter_ranges:
-            print( parameter_ranges )
-            raise ValueError( "'{:s}' is not a valid v4 checkpoint.  "
-                              "Its parameter ranges does not contain 'salt solute'!".format(
-                                  checkpoint_path ) )
+            raise InvalidCheckpointError( "'{:s}' is not a valid v4 checkpoint.  "
+                                          "Its parameter ranges does not contain 'salt solute'!".format(
+                                              checkpoint_path ) )
 
         return model, parameter_ranges, loss_function, training_loss
 
@@ -1592,16 +1610,16 @@ def load_model_checkpoint( checkpoint_path, model=None, optimizer=None ):
     #       checkpoints to worry about and this goes away.
     #
     if checkpoint_version < 4 and no_model_provided_flag:
-        raise ValueError( "Older checkpoints (v3 and older) must provide a model "
-                          "object to load weights into!  '{:s}' is v{:d}.".format(
-                              checkpoint_path,
-                              checkpoint_version ) )
+        raise MismatchedLoadInterfaceError( "Older checkpoints (v3 and older) must provide a model "
+                                            "object to load weights into!  '{:s}' is v{:d}.".format(
+                                                checkpoint_path,
+                                                checkpoint_version ) )
     elif checkpoint_version >= 4 and not no_model_provided_flag:
         if not no_model_provided_flag:
-            raise ValueError( "New checkpoints (v4 and newer) must not provide a "
-                              "model object to load weights into!  '{:s}' is v{:d}.".format(
-                              checkpoint_path,
-                              checkpoint_version ) )
+            raise MismatchedLoadInterfaceError( "New checkpoints (v4 and newer) must not provide a "
+                                                "model object to load weights into!  '{:s}' is v{:d}.".format(
+                                                    checkpoint_path,
+                                                    checkpoint_version ) )
 
     # Load the checkpoint based on its reported version.  Complain if we don't
     # know how to support it.
@@ -1636,7 +1654,7 @@ def load_model_checkpoint( checkpoint_path, model=None, optimizer=None ):
                                                      optimizer,
                                                      checkpoint )
     else:
-        raise RuntimeError( "Unknown checkpoint version ({:d}) in '{:s}'!".format(
+        raise UnhandledCheckpointVersionError( "Unknown checkpoint version ({:d}) in '{:s}'!".format(
             checkpoint_version,
             checkpoint_path ) )
 
