@@ -75,7 +75,14 @@ class SimpleNet( nn.Module ):
 
         """
 
-        return self._activation.__name__
+        try:
+            # Functions have names.
+            activation_name = self._activation.__name__
+        except AttributeError:
+            # Callable objects might only have a string representation.
+            activation_name = str( self._activation )
+
+        return activation_name
 
     def architecture( self ):
         """
