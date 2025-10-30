@@ -447,13 +447,13 @@ def convert_NTLP_trace_to_particle_files( trace_path, particles_root, dirs_per_l
     # Return the unique identifiers seen in this trace.
     return np.unique( np.hstack( particle_ids_list ) )
 
-def create_droplet_batch( number_droplets, number_evaluations=1, solve_ivp_atol=None, solve_ivp_rtol=None ):
+def create_droplet_batch( number_droplets, number_evaluations=1, solve_ivp_atol=None, solve_ivp_rtol=None, max_salinity=np.inf ):
     """
     Creates a batch of random droplets' input parameters, with t_final.  t_final is sampled
     from a slightly larger distribution than the anticipated use cases (spanning [1e-3, 1e1])
     so as to increase the performance at the edges of the range.
 
-    Takes 4 arguments:
+    Takes 5 arguments:
 
       number_droplets    - Number of droplets to generate parameters for.
       number_evaluations - Optional number of integration times to evaluate each
@@ -468,6 +468,10 @@ def create_droplet_batch( number_droplets, number_evaluations=1, solve_ivp_atol=
       solve_ivp_rtol     - Scalar floating point value specifying the relative
                            tolerance used by solve_ivp().  If omitted, defaults to
                            physics.BDF_TOLERANCE_RELATIVE.
+      max_salinity       - Optional floating point scalar. Caps the salt solute of rolled
+                           droplets to avoid unrealisticly salty droplets. In particular, caps
+                           the ratio between salt solute and mass of water. Assumes density
+                           of water is 1000.0 kilograms per meter. Defaults to np.inf (no cap).
 
     Returns 3 values:
 
@@ -507,6 +511,18 @@ def create_droplet_batch( number_droplets, number_evaluations=1, solve_ivp_atol=
     # Fix the particle temperature based on air temperature.
     random_inputs[::number_evaluations, 1] = (random_inputs[::number_evaluations, 3] +
                                               np.random.uniform( -3, 3, number_droplets ))
+
+    # Fix salt solute according to the salinity cap
+    if max_salinity != np.inf:
+        rhow = 1000.0
+        log_solute_range = get_parameter_ranges()["salt_solute"]
+        effective_max_log_solute = np.log10( max_salinity * rhow *
+                                             (4.0 * np.pi * (random_inputs[:, 0] ** 3) / 3.0) )
+        log_solute_coefficient   = 1.0 - np.clip( ( log_solute_range[1] - effective_max_log_solute )/
+                                                    ( np.diff( log_solute_range ) ), 0.0, None )
+        random_inputs[:, 2]      = 10.0 ** ( log_solute_coefficient * ( np.log10( random_inputs[:, 2] )
+                                                                          - log_solute_range[0] )
+                                                                    + log_solute_range[0] )
 
     # Duplicate each unique droplet parameter once for each evaluation.
     # This keeps them in parameter order.
@@ -628,6 +644,16 @@ def create_droplet_batch( number_droplets, number_evaluations=1, solve_ivp_atol=
             # Fix the particle temperature based on air temperature.
             random_inputs[droplet_index, 1] = (random_inputs[droplet_index, 3] +
                                                np.random.uniform( -3, 3 ))
+
+            # Correct salt solute based on max salinity
+            if max_salinity != np.inf:
+                effective_max_log_solute = np.log10( max_salinity * rhow *
+                                                     (4.0 * np.pi * (random_inputs[droplet_index, 0] ** 3) / 3.0) )
+                log_solute_coefficient   = 1.0 - np.clip( ( log_solute_range[1] - effective_max_log_solute )/
+                                                          ( np.diff( log_solute_range ) ), 0.0, None )
+                random_inputs[droplet_index, 2] = 10.0 ** ( log_solute_coefficient * ( np.log10( random_inputs[droplet_index, 2] )
+                                                                                     - log_solute_range[0] )
+                                                                                   + log_solute_range[0] )
 
     return random_inputs, random_outputs, integration_times
 
