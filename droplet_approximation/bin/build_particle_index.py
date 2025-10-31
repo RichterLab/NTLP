@@ -297,10 +297,10 @@ def process_trace_file( trace_path: str, particles_index_path: str, particles_ex
 
                 # Update our particles list and timeline with this chunk's
                 # unique values.
-                unique_particle_ids     = np.unique( np.concat( (unique_particle_ids,
-                                                                 particle_ids) ) )
-                unique_simulation_times = np.unique( np.concat( (unique_simulation_times,
-                                                                 simulation_times) ) )
+                unique_particle_ids     = np.unique( np.concatenate( (unique_particle_ids,
+                                                                      particle_ids) ) )
+                unique_simulation_times = np.unique( np.concatenate( (unique_simulation_times,
+                                                                      simulation_times) ) )
 
                 records_processed += len( int32_records )
                 chunks_processed  += 1
