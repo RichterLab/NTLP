@@ -37,6 +37,9 @@ DROPLET_TIME_LOG_RANGE          = np.array( (-2.0, 1.0) )
 BDF_TOLERANCE_ABSOLUTE = (1e-10, 1e-4)
 BDF_TOLERANCE_RELATIVE = 1e-7
 
+# Density of fresh water (kg/m^3).
+RHOW = 1000.0
+
 class DisplayType( Enum ):
     """
     Enumeration class specifying how particle parameter ranges are displayed.
@@ -159,7 +162,7 @@ def droplet_equilibrium( droplet_parameters ):
     RH          = droplet_parameters[..., 4]
     rhoa        = droplet_parameters[..., 5]
 
-    rhow = np.float64( 1000 )
+    rhow = np.float64( RHOW )
     rhos = np.float64( 2000 )
     Mw   = np.float64( 0.018015 )
     Ru   = np.float64( 8.3144 )
@@ -253,7 +256,7 @@ def dydt( t, y, parameters ):
     RH          = parameters[..., 2].astype( "float64" )
     rhoa        = parameters[..., 3].astype( "float64" )
 
-    rhow = np.float64( 1000 )
+    rhow = np.float64( RHOW )
     #Cpp  = np.float64( 4190 )  #CM1
     Cpp  = np.float64( 4179 )  #NTLP
     Mw   = np.float64( 0.018015 )
@@ -332,7 +335,7 @@ def dydt_mass( t, y, parameters ):
     RH   = parameters[2, ...].astype( "float64" )
     rhoa = parameters[3, ...].astype( "float64" )
 
-    rhow = np.float64( 1000 )
+    rhow = np.float64( RHOW )
     rhos = np.float64( 2000 )
     #Cpp  = np.float64( 4190 )  #CM1
     Cpp  = np.float64( 4179 )  #NTLP
