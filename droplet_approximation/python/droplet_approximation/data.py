@@ -9,6 +9,7 @@ import pandas as pd
 
 from .physics import BDF_TOLERANCE_ABSOLUTE, \
                      BDF_TOLERANCE_RELATIVE, \
+                     RHOW, \
                      TimeoutError, \
                      dydt, \
                      get_parameter_ranges, \
@@ -518,19 +519,27 @@ def create_droplet_batch( number_droplets, number_evaluations=1, solve_ivp_atol=
     random_inputs[::number_evaluations, 1] = (random_inputs[::number_evaluations, 3] +
                                               np.random.uniform( -3, 3, number_droplets ))
 
-    # Fix salt solute according to the salinity cap.
-    if max_salinity != np.inf:
-        RHOW                     = 1000.0
-        log_solute_range         = parameter_ranges["salt_solute"]
-        effective_max_log_solute = np.log10( max_salinity * RHOW *
-                                             (4.0 * np.pi * (random_inputs[:, 0]**3) / 3.0) )
-        log_solute_coefficient   = 1.0 - np.clip( (log_solute_range[1] - effective_max_log_solute) /
-                                                  np.diff( log_solute_range ),
-                                                  0.0,
-                                                  None )
-        random_inputs[:, 2]      = 10.0**(log_solute_coefficient * (np.log10( random_inputs[:, 2] ) -
-                                                                    log_solute_range[0] ) +
-                                          log_solute_range[0])
+    # Fix salt solute according to the salinity cap.  This calculates the
+    # maximum admissible salt solute term for the input droplet volumes and
+    # scales the randomly chosen solute term between the solute range's minimum
+    # and the per-droplet maximum.  As a result, this samples the log-uniform
+    # solute distribute limited by the caller's salinity request.
+    #
+    # NOTE: Infinite maximum salinity (i.e. wet salt) is correctly handled.
+    #
+    # NOTE: Zero maximum salinity will still admit saline particles as this
+    #       never produces salt solutes that are outside of their parameter
+    #       range.
+    #
+    log_solute_range         = parameter_ranges["salt_solute"]
+    effective_max_log_solute = np.log10( max_salinity * RHOW *
+                                         (4.0 * np.pi * (random_inputs[:, 0]**3) / 3.0) )
+    log_solute_coefficient   = 1.0 - max( (log_solute_range[1] - effective_max_log_solute) /
+                                          np.diff( log_solute_range ),
+                                          0.0 )
+    random_inputs[:, 2]      = 10.0**(log_solute_coefficient * (np.log10( random_inputs[:, 2] ) -
+                                                                log_solute_range[0] ) +
+                                      log_solute_range[0])
 
     # Duplicate each unique droplet parameter once for each evaluation.
     # This keeps them in parameter order.
@@ -654,14 +663,13 @@ def create_droplet_batch( number_droplets, number_evaluations=1, solve_ivp_atol=
                                                np.random.uniform( -3, 3 ))
 
             # Fix salt solute according to the salinity cap.
-            if max_salinity != np.inf:
-                effective_max_log_solute        = np.log10( max_salinity * RHOW *
-                                                            (4.0 * np.pi * (random_inputs[droplet_index, 0]**3) / 3.0) )
-                log_solute_coefficient          = 1.0 - max( (log_solute_range[1] - effective_max_log_solute) / np.diff( log_solute_range ),
-                                                             0.0 )
-                random_inputs[droplet_index, 2] = 10.0**(log_solute_coefficient * (np.log10( random_inputs[droplet_index, 2] ) -
-                                                                                   log_solute_range[0] ) +
-                                                                                   log_solute_range[0] )
+            effective_max_log_solute        = np.log10( max_salinity * RHOW *
+                                                        (4.0 * np.pi * (random_inputs[droplet_index, 0]**3) / 3.0) )
+            log_solute_coefficient          = 1.0 - max( (log_solute_range[1] - effective_max_log_solute) / np.diff( log_solute_range ),
+                                                         0.0 )
+            random_inputs[droplet_index, 2] = 10.0**(log_solute_coefficient * (np.log10( random_inputs[droplet_index, 2] ) -
+                                                                               log_solute_range[0] ) +
+                                                     log_solute_range[0] )
 
     return random_inputs, random_outputs, integration_times
 
