@@ -8,6 +8,17 @@ import warnings
 import numpy as np
 from scipy.integrate import solve_ivp
 
+# Temperature delta, in Kelvin, relative to the surrounding air to sample
+# droplet temperatures from.  This constrains generated droplets to physically
+# realizable scenario by respecting the implicit coupling of droplet and the
+# space it occupies instead of leaving them fully independent (and creating
+# exciting physics as a result).
+#
+# NOTE: 3 K was somewhat arbitrarily chosen based on reviewing NTLP simulation
+#       outputs, but not thoroughly investigated.
+#
+DROPLET_DELTA_AIR_TEMPERATURE = 3.0
+
 # Provide the range of each of the input parameters so we can normalize
 # each to [-1, 1], allowing the models to weight each equally.  If we don't
 # perform this mapping then optimization process will effectively ignore
@@ -385,6 +396,74 @@ def dydt_mass( t, y, parameters ):
     dy2dt = -1/3*Nup/Pra*Cpa/Cpp*rhop/rhow/taup*(y[1] - Tf) + 3*Lv/y[0]/Cpp*dy1dt
 
     return [dy1dt, dy2dt]
+
+def generate_random_droplets( number_droplets, max_salinity=np.inf, normalize_flag=False ):
+    """
+    Generates random droplet parameters.  Takes care to conditionally sample
+    parameters so as to create physically realistic droplets.
+
+    Takes 3 arguments:
+
+      number_droplets - Number of droplets to generate.
+      max_salinity    - Optional scalar floating point, in the range of [0,
+                        np.inf) specifying the maximum salinity allowed for a
+                        droplet.  Droplets whose salt solute mass are greater
+                        than this salinity will have their mass adjusted to a
+                        smaller value that satisfies this maximum.  Salinity
+                        is defined as the ratio of salt solute divided by the
+                        droplet's water volume times the dimensionless
+                        density of fresh water.  If omitted, defaults to
+                        np.inf which corresponds to wet salt and admits any
+                        salt solute mass.
+      normalize_flag  - Optional flag indicating the droplets generated should be
+                        normalized into the range of [-1, 1].  If omitted,
+                        defaults to False and the droplets are in physical
+                        units.
+
+    Returns 1 value:
+
+      droplet_parameters - NumPy array, sized number_droplets x 6, containing
+                           the generated non-temporal droplet parameters.
+
+    """
+
+    # Uniformly sample the normalized ranges to start.
+    droplet_parameters = np.reshape( np.random.uniform( -1, 1, number_droplets*6 ),
+                                     (number_droplets, 6) ).astype( "float32" )
+    droplet_parameters = scale_droplet_parameters( droplet_parameters )
+
+    # Conditionally sample the droplets' temperatures based on their surrounding
+    # air temperatures.
+    droplet_parameters[:, 1] = (droplet_parameters[:, 3] +
+                                DROPLET_DELTA_AIR_TEMPERATURE * np.random.uniform( -1, 1, number_droplets ))
+
+    # Ensure the salt solute terms respect the maximum salinity requested.  This
+    # calculates the maximum admissible salt solute term for the input droplet
+    # volumes and scales the randomly chosen solute term between the solute
+    # range's minimum and the per-droplet maximum.  As a result, this samples
+    # the log-uniform solute distribute limited by the caller's salinity
+    # request.
+    #
+    # NOTE: Infinite maximum salinity (i.e. wet salt) is correctly handled.
+    #
+    # NOTE: Zero maximum salinity will still admit saline particles as this
+    #       never produces salt solutes that are outside of their parameter
+    #       range.
+    #
+    log_solute_range         = get_parameter_ranges()["salt_solute"]
+    effective_max_log_solute = np.log10( max_salinity * RHOW *
+                                         (4.0/3.0 * np.pi * (droplet_parameters[:, 0]**3)) )
+    log_solute_coefficient   = 1.0 - np.maximum( (log_solute_range[1] - effective_max_log_solute) / np.diff( log_solute_range ),
+                                                 0.0 )
+    droplet_parameters[:, 2] = 10.0**(log_solute_coefficient * (np.log10( droplet_parameters[:, 2] ) -
+                                                                log_solute_range[0] ) +
+                                      log_solute_range[0])
+
+    # Map everything into [-1, 1] if requested.
+    if normalize_flag:
+        droplet_parameters = normalize_droplet_parameters( droplet_parameters )
+
+    return droplet_parameters
 
 def get_parameter_ranges():
     """
