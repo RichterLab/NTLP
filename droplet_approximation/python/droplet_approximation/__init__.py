@@ -60,6 +60,7 @@ from .physics import DisplayType, \
                      dydt, \
                      dydt_mass, \
                      get_parameter_ranges, \
+                     generate_random_droplets, \
                      normalize_droplet_parameters, \
                      scale_droplet_parameters, \
                      set_parameter_ranges, \
