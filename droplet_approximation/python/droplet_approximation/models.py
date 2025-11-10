@@ -177,6 +177,48 @@ class ResidualNet( SimpleNet ):
 
         return out
 
+class BiggerResidualNet_4x128( ResidualNet ):
+    """
+    5-layer multi-layer perceptron (MLP) with ReLU activations.  This aims to
+    balance parameter count vs computational efficiency so that inferencing with
+    it is faster than Gauss-Newton iterative solvers.
+
+    This residual network learns the delta between the input particle size and
+    temperature and the outputs, given the provided background conditions.
+    """
+
+    def __init__( self, model_name=None ):
+        super().__init__( model_name=model_name )
+
+        self._layer_sizes    = [128, 128, 128, 128]
+        self._number_inputs  = 7
+        self._number_outputs = 2
+
+        #
+        # NOTE: These sizes were chosen without any consideration other than
+        #       creating a small network (wrt parameter count) and should have
+        #       good computational efficiency (wrt memory alignment and cache
+        #       lines).  No effort has been spent to improve upon the initial
+        #       guess.
+        #
+        self.fc1 = nn.Linear( self._number_inputs,  self._layer_sizes[0] )
+        self.fc2 = nn.Linear( self._layer_sizes[0], self._layer_sizes[1] )
+        self.fc3 = nn.Linear( self._layer_sizes[1], self._layer_sizes[2] )
+        self.fc4 = nn.Linear( self._layer_sizes[2], self._layer_sizes[3] )
+        self.fc5 = nn.Linear( self._layer_sizes[3], self._number_outputs )
+
+    def forward( self, x ):
+        # Add the input to the final result to force the model to learn the
+        # delta instead of the approximation itself.
+        out = self._activation( self.fc1( x ) )
+        out = self._activation( self.fc2( out ) )
+        out = self._activation( self.fc3( out ) )
+        out = self._activation( self.fc4( out ) )
+        out = self.fc5( out )
+        out += x[..., 0:2]
+
+        return out
+
 class InvalidCheckpointError( ValueError ):
     """
     Represents an invalid checkpoint that was consistent enough to be loaded but

@@ -36,7 +36,8 @@ from .data import BE_TAG_NAME, \
                   read_particles_data, \
                   read_training_file, \
                   write_particles_index
-from .models import SimpleNet, \
+from .models import BiggerResidualNet_4x128, \
+                    SimpleNet, \
                     ResidualNet, \
                     InvalidCheckpointError, \
                     MismatchedLoadInterfaceError, \
