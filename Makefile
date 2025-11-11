@@ -135,9 +135,13 @@ SRC = data_structures.f90 \
 
 BENCHMARK_SRC = benchmark_approximation.f90
 
+INFERENCE_SRC = inference_test.f90
+
 OBJS = $(addsuffix .o, $(basename $(SRC)))
 
 BENCHMARK_OBJS = $(addsuffix .o, $(basename $(BENCHMARK_SRC)))
+
+INFERENCE_OBJS = $(addsuffix .o, $(basename $(INFERENCE_SRC)))
 
 ifeq ($(TECPLOT), yes)
 FLAGS    += $(TECFLAGS)
@@ -166,6 +170,9 @@ clean:
 	rm -f *.o *.mod lesmpi.a benchmark_approximation.x mach.file
 
 benchmark_approximation.x: $(BENCHMARK_OBJS) measurement.o data_structures.o droplet_model.o
+	$(FORTRAN) $(FLAGS) $(DEBUG_FLAGS) $(MODEL_FLAGS) $(OUTPUTLIB) $(LINKOPTS) -o $@ $^
+
+inference_test.x: $(INFERENCE_OBJS) defs.o droplet_model.o
 	$(FORTRAN) $(FLAGS) $(DEBUG_FLAGS) $(MODEL_FLAGS) $(OUTPUTLIB) $(LINKOPTS) -o $@ $^
 
 # Dependencies between the individual objects.
