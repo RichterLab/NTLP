@@ -49,6 +49,13 @@ class SimpleNet( nn.Module ):
         self._number_inputs  = 7
         self._number_outputs = 2
 
+        # Linear ordering of the layers to execute.  This is necessary for the
+        # serialization code.
+        self._layer_names    = ["fc1",
+                                "fc2",
+                                "fc3",
+                                "fc4"]
+
         #
         # NOTE: These sizes were chosen without any consideration other than
         #       creating a small network (wrt parameter count) and should have
@@ -97,6 +104,21 @@ class SimpleNet( nn.Module ):
         """
 
         return type( self ).__name__
+
+    def layer_names( self ):
+        """
+        Returns the names of the model's layers.
+
+        Takes no arguments.
+
+        Returns 1 value:
+
+          layer_names - List of strings specifying the names of each of the
+                        model's layers.
+
+        """
+
+        return self._layer_names.copy()
 
     def layer_sizes( self ):
         """
@@ -193,6 +215,12 @@ class BiggerResidualNet_4x128( ResidualNet ):
         self._layer_sizes    = [128, 128, 128, 128]
         self._number_inputs  = 7
         self._number_outputs = 2
+
+        self._layer_names    = ["fc1",
+                                "fc2",
+                                "fc3",
+                                "fc4",
+                                "fc5"]
 
         #
         # NOTE: These sizes were chosen without any consideration other than
@@ -777,8 +805,8 @@ def generate_fortran_module( output_path, model_name, model, parameter_ranges={}
     Creates a Fortran 2003 module that allows use of the supplied model with a
     batch size of 1 during inference.
 
-    NOTE: This currently expects the supplied model state to represent a 4-layer
-          MLP with a specific set weights/biases names.
+    NOTE: This currently expects the supplied model state to be a derivative of
+          SimpleNet so as to ensure that we know how to serialize it.
 
     Takes 4 arguments:
 
@@ -799,26 +827,208 @@ def generate_fortran_module( output_path, model_name, model, parameter_ranges={}
         raise ValueError( "Provided model is type '{:s}' and not a subclass of SimpleNet!".format(
             str( type( model ) ) ) )
 
-    #
-    # NOTE: This is hard coded against the SimpleNet class' implementation.  This
-    #       strange coupling could be better (less strange?) by moving this routine
-    #       into SimpleNet.
-    #
-    expected_weights = ["fc1.weight",
-                        "fc2.weight",
-                        "fc3.weight",
-                        "fc4.weight"]
-    expected_biases  = ["fc1.bias",
-                        "fc2.bias",
-                        "fc3.bias",
-                        "fc4.bias"]
-
     # Keep track of the parameter ranges for this model so we can report them at
     # run-time.
     if len( parameter_ranges ) == 0:
         model_parameter_ranges = get_parameter_ranges()
     else:
         model_parameter_ranges = parameter_ranges
+
+    # Keep track of the parameters' names for the weights and biases so we can
+    # look them up later.
+    expected_weights = []
+    expected_biases  = []
+
+    # Map the model's linear layers to individual parameter names.
+    for layer_name in model.layer_names():
+        expected_weights.append( layer_name + ".weight" )
+        expected_biases.append( layer_name + ".bias" )
+
+    def _get_layer_sizes_declarations_str( weight_layers, model_state ):
+        """
+        Constructs the layer sizes' Fortran variable declarations string.  Takes
+        the supplied layer names and the model state and creates a complete
+        Fortran fragment for use in the module definition.
+
+        Takes 2 arguments:
+
+          weight_layers - Sequence of names for each layer's weights in model_state.
+          model_state   - Dictionary of model parameters.  Must contain each of
+                          the strings in weight_layers.
+
+        Returns 1 value:
+
+          declarations_str - String specifying constants representing the number of
+                             neurons in each of the layers in weight_layers.  Defines
+                             Fortran variables of the form "NUMBER_HIDDEN_LAYER<N>"
+                             where N range from 1 to len( weight_layers ).
+
+        """
+
+        declaration_template_str = "    integer, parameter :: NUMBER_HIDDEN_LAYER{layer_number:d}_NEURONS = {number_neurons:d}"
+
+        declarations_str = ""
+
+        for weight_index, layer_name in enumerate( weight_layers[:-1] ):
+            declarations_str += "{:s}\n".format(
+                declaration_template_str.format(
+                    layer_number=(weight_index + 1),
+                    #
+                    # NOTE: PyTorch weights are in row-major order!
+                    #
+                    number_neurons=model_state[layer_name].shape[0] ) )
+
+        # Remove the trailing newline from the declarations for aesthetics.
+        return declarations_str[:-1]
+
+    def _get_weights_array_declarations_str( weight_layers ):
+        """
+        Constructs the layers' weights array declaration string.  Takes the
+        supplied layer names and creates a complete Fortran fragment for use in
+        the module definition.
+
+        Takes 1 value:
+
+          weights_layers - Sequence of names for each layer's weights.
+
+        Returns 1 value:
+
+          declarations_str - String specifying variable declarations for the
+                             layers' weights.  Define Fortran variables of the
+                             form "layer<N>_weights" for layers 1 to
+                             len( weight_layers ) - 1, and "output_weights" for
+                             the final layer.
+
+        """
+
+        # Definition of the first layer's weights array, along with a comment
+        # for all of the arrays.
+        declarations_str = """
+    ! Weights for each of the layers.
+    real*4, dimension(NUMBER_INPUTS, NUMBER_HIDDEN_LAYER1_NEURONS)                :: layer1_weights
+"""
+
+        # Template for the second through last layer.
+        declaration_template_str = "    real*4, dimension(NUMBER_{input_layer_size_name:s}, NUMBER_{output_layer_size_name:s})                :: {weights_name:s}"
+
+        number_layers = len( weight_layers )
+
+        # Walk through all of the layers except the first and instantiate the
+        # declaration template for each.  Take care to handle the last layer's
+        # which contains the outputs.
+        for layer_number, _ in enumerate( weight_layers[1:], 1 ):
+            if layer_number == (number_layers - 1):
+                input_layer_size_name  = "HIDDEN_LAYER{:d}_NEURONS".format( layer_number )
+                output_layer_size_name = "OUTPUTS"
+                weights_name      = "output_weights"
+            else:
+                input_layer_size_name  = "HIDDEN_LAYER{:d}_NEURONS".format( layer_number )
+                output_layer_size_name = "HIDDEN_LAYER{:d}_NEURONS".format( layer_number + 1 )
+                weights_name      = "layer{:d}_weights".format( layer_number + 1 )
+
+            declarations_str += "{:s}\n".format(
+                declaration_template_str.format(
+                    layer_number=layer_number,
+                    input_layer_size_name=input_layer_size_name,
+                    output_layer_size_name=output_layer_size_name,
+                    weights_name=weights_name ) )
+
+        # Remove the trailing newline from the declarations for aesthetics.
+        return declarations_str[:-1]
+
+    def _get_biases_array_declarations_str( bias_layers ):
+        """
+        Constructs the layers' weights array declaration string.  Takes the
+        supplied layer names and creates a complete Fortran fragment for use in
+        the module definition.
+
+        Takes 1 value:
+
+          bias_layers - Sequence of names for each layer's biases.
+
+        Returns 1 value:
+
+          declarations_str - String specifying variable declarations for the
+                             layers' biases.  Define Fortran variables of the
+                             form "layer<N>_biases" for layers 1 to
+                             len( weight_layers ) - 1, and "output_biases" for
+                             the final layer.
+
+        """
+
+        # Definition of the first layer's biases array, along with a comment for
+        # all of the arrays.
+        declarations_str = """
+    ! Biases for each of the layers.
+    real*4, dimension(NUMBER_HIDDEN_LAYER1_NEURONS) :: layer1_biases
+"""
+
+        # Template for the second through last layer.
+        declaration_template_str = "    real*4, dimension(NUMBER_{layer_dimension_name:s}) :: {layer_name:s}"
+
+        number_layers = len( bias_layers )
+
+        # Walk through all of the layers except the first and instantiate the
+        # declaration template for each.  Take care to handle the last layer's
+        # which contains the outputs.
+        for layer_number, layer_name in enumerate( bias_layers[1:], 2 ):
+            if layer_number == number_layers:
+                layer_dimension_name = "OUTPUTS"
+                layer_name           = "output_biases"
+            else:
+                layer_dimension_name = "HIDDEN_LAYER{:d}_NEURONS".format( layer_number )
+                layer_name           = "layer{:d}_biases".format( layer_number )
+
+            declarations_str += "{:s}\n".format(
+                declaration_template_str.format(
+                    layer_number=layer_number,
+                    layer_dimension_name=layer_dimension_name,
+                    layer_name=layer_name ) )
+
+        # Remove the trailing newline from the declarations for aesthetics.
+        return declarations_str[:-1]
+
+    def _get_intermediates_array_declarations_str( weight_layers ):
+        """
+        Constructs the layer's intermediate outputs array declarations string.
+        Takes the supplied layer names and creates a complete Fortran fragment
+        for use in the module definition.
+
+        Takes 1 value:
+
+          weights_layers - Sequence of names for each layer's intermediate arrays.
+
+        Returns 1 value:
+
+          declarations_str - String specifying variable declarations for the
+                             layers' intermediate arrays.  Define Fortran
+                             variables of the form "layer<N>_intermediate" for
+                             layers 1 to len( weight_layers ) - 1.
+
+        """
+
+        # Definition of the first intermediate array (used by the output of the
+        # first layer), along with a comment for all of the arrays.
+        declarations_str = """
+    ! Arrays to hold the intermediate results between layers.
+    !
+    ! NOTE: We don't do anything fancy like detecting when we could reuse an
+    !       intermediate.
+    !
+"""
+
+        # Template for the remaining intermediate layers (not including the
+        # last).
+        declaration_template_str = "    real*4, dimension(NUMBER_HIDDEN_LAYER{layer_number:d}_NEURONS) :: layer{layer_number:d}_intermediate"
+
+        # We don't have an intermediate layer for the last layer as that is
+        # simply our output.
+        for layer_number in range( 1, len( weight_layers[:-1] ) + 1 ):
+            declarations_str += "{:s}\n".format(
+                declaration_template_str.format( layer_number=layer_number ) )
+
+        # Remove the trailing newline from the declarations for aesthetics.
+        return declarations_str[:-1]
 
     def _write_module_prolog( model_name, model_state, output_fp ):
         """
@@ -871,6 +1081,16 @@ def generate_fortran_module( output_path, model_name, model, parameter_ranges={}
         model_metadata = "{:s} ({:s})".format(
             model_name,
             current_date_time_str )
+
+        # Construct the layer-dependent portions of the prolog.
+        layer_sizes_declarations_str         = _get_layer_sizes_declarations_str( expected_weights, model_state )
+        layer_weights_declarations_str       = _get_weights_array_declarations_str( expected_weights )
+        layer_biases_declarations_str        = _get_biases_array_declarations_str( expected_biases )
+        intermediate_arrays_declarations_str = _get_intermediates_array_declarations_str( expected_weights )
+
+        # Get the number of inputs and outputs for this model.
+        number_model_inputs  = model_state[expected_weights[0]].shape[1]
+        number_model_outputs = model_state[expected_weights[-1]].shape[0]
 
         preamble_str = """!
 ! NOTE: This module was generated from {model_name:s} on {creation_date:s}.
@@ -943,15 +1163,15 @@ module droplet_model
     !      ability to understand the structure and internal components of the
     !      MLP while requiring a single subroutine call at startup.
     !
-    !   3. This is a naive implementation of a 4-layer MLP (it was written in 15
-    !      minutes!)  and does not implement all potential optimizations.  In
-    !      particular, each intermediate layer has its own array and no attempt
-    !      to reuse arrays or work out of one large array has been made, so as
-    !      to minimize the MLP's run-time footprint.  As initially developed the
-    !      MLP is very small (O(2500) parameters) and uses O(10 KiB) storage,
-    !      though should this ever be used for much larger MLPs, or with larger
-    !      batch sizes (see above) then some of the omitted optimizations should
-    !      be revisited.
+    !   3. This is a naive implementation of a N-layer MLP (it was originally
+    !      written in 15 minutes!)  and does not implement all potential
+    !      optimizations.  In particular, each intermediate layer has its own
+    !      array and no attempt to reuse arrays or work out of one large array
+    !      has been made, so as to minimize the MLP's run-time footprint.  As
+    !      initially developed the MLP was very small (O(2500) parameters) and
+    !      used O(10 KiB) storage, though should this ever be used for much
+    !      larger MLPs, or with larger batch sizes (see above) then some of the
+    !      omitted optimizations should be revisited.
     !
     !   4. While the MLP was trained on the product space of the input
     !      parameters and has poor performance on certain (likely) physically
@@ -1002,9 +1222,7 @@ module droplet_model
     integer, parameter :: NUMBER_INPUTS  = {number_inputs:d}
     integer, parameter :: NUMBER_OUTPUTS = {number_outputs:d}
 
-    integer, parameter :: NUMBER_HIDDEN_LAYER1_NEURONS = {number_layer1_neurons:d}
-    integer, parameter :: NUMBER_HIDDEN_LAYER2_NEURONS = {number_layer2_neurons:d}
-    integer, parameter :: NUMBER_HIDDEN_LAYER3_NEURONS = {number_layer3_neurons:d}
+{hidden_layer_size_declarations:s}
 
     ! The input variables must be normalized into the range of [-1, 1] before
     ! feeding them into the model.  The following ranges, means, and widths are
@@ -1037,41 +1255,24 @@ module droplet_model
     real*4, parameter :: AIR_TEMPERATURE_WIDTH = (AIR_TEMPERATURE_RANGE(2)-AIR_TEMPERATURE_RANGE(1))/2
     real*4, parameter :: RH_WIDTH              = (RH_RANGE(2)-RH_RANGE(1))/2
     real*4, parameter :: RHOA_WIDTH            = (RHOA_RANGE(2)-RHOA_RANGE(1))/2
-
-    ! Weights for each of the layers.
-    real*4, dimension(NUMBER_INPUTS, NUMBER_HIDDEN_LAYER1_NEURONS)                :: layer1_weights
-    real*4, dimension(NUMBER_HIDDEN_LAYER1_NEURONS, NUMBER_HIDDEN_LAYER2_NEURONS) :: layer2_weights
-    real*4, dimension(NUMBER_HIDDEN_LAYER2_NEURONS, NUMBER_HIDDEN_LAYER3_NEURONS) :: layer3_weights
-    real*4, dimension(NUMBER_HIDDEN_LAYER3_NEURONS, NUMBER_OUTPUTS)               :: output_weights
-
-    ! Biases for each of the layers.
-    real*4, dimension(NUMBER_HIDDEN_LAYER1_NEURONS) :: layer1_biases
-    real*4, dimension(NUMBER_HIDDEN_LAYER2_NEURONS) :: layer2_biases
-    real*4, dimension(NUMBER_HIDDEN_LAYER3_NEURONS) :: layer3_biases
-    real*4, dimension(NUMBER_OUTPUTS)               :: output_biases
-
-    ! Arrays to hold the intermediate results between layers.
-    !
-    ! NOTE: We don't do anything fancy like detecting when we could reuse an
-    !       intermediate.
-    !
-    real*4, dimension(NUMBER_HIDDEN_LAYER1_NEURONS) :: layer1_intermediate
-    real*4, dimension(NUMBER_HIDDEN_LAYER2_NEURONS) :: layer2_intermediate
-    real*4, dimension(NUMBER_HIDDEN_LAYER3_NEURONS) :: layer3_intermediate
+{layer_weights_declarations:s}
+{layer_biases_declarations:s}
+{intermediate_arrays_declarations:s}
 
     contains
 """.format(
     # XXX: Double check the hidden layer neuron's sizes!  This was not
     #      thoroughly tested since the target model had identical sizes
     #      throughout.
+    hidden_layer_size_declarations=layer_sizes_declarations_str,
+    layer_weights_declarations=layer_weights_declarations_str,
+    layer_biases_declarations=layer_biases_declarations_str,
+    intermediate_arrays_declarations=intermediate_arrays_declarations_str,
     model_name=model_name,
     model_metadata=model_metadata,
     creation_date=current_date_time_str,
-    number_inputs=model_state["fc1.weight"].shape[1],
-    number_outputs=model_state["fc4.weight"].shape[0],
-    number_layer1_neurons=model_state["fc1.weight"].shape[0],
-    number_layer2_neurons=model_state["fc2.weight"].shape[0],
-    number_layer3_neurons=model_state["fc3.weight"].shape[0],
+    number_inputs=number_model_inputs,
+    number_outputs=number_model_outputs,
     radius_start=model_parameter_ranges["radius"][0],
     radius_end=model_parameter_ranges["radius"][1],
     temperature_start=model_parameter_ranges["temperature"][0],
@@ -1103,131 +1304,158 @@ module droplet_model
 
         """
 
-        def _write_model_biases( model_state, output_fp, indentation_str ):
+        def _write_model_parameters( model_state, output_fp, indentation_str, layer_names, biases_flag=False ):
             """
-            Internal routine that generates the biases initialization expressions for
-            all of the biases in the supplied model state.  This does not generate
-            initialization for weights nor does it generate a fully functional subroutine
-            (i.e. pre-amble/epilog).
+            Internal routine that writes the weights/biases initialization
+            expressions for all of the parameters in the model state to the
+            supplied file handle.
 
-            Takes 3 arguments:
+            Variables are initialized in groups so as to adhere to Fortran
+            standards for line length (less than 132 characters per line) and
+            number of continuations per expression (39 in Fortran90 through
+            Fortran 2003).  128 values per assignment group makes it easier
+            to identify specific locations within each weight array for
+            debugging purposes.
+
+            Takes 5 arguments:
 
               model_state     - PyTorch model state dictionary for the model to initialize.
               output_fp       - File handle to write to.
               indentation_str - String prepended to each line of the subroutine written.
+              layer_names     - Sequence of layer names
+              biases_flag     - Optional Boolean flag specifying whether model
+                                biases (True) or weights (False) are being
+                                written.  If omitted, defaults to False and
+                                the routine assumes writing 2D weights instead
+                                of 1D biases.
 
             Returns nothing.
+
             """
 
-            # We rename each of the biases to Fortran-compatible symbols that are
-            # self-descriptive.
-            original_layer_names = expected_biases
-            new_layer_names      = ["layer1_biases",
-                                    "layer2_biases",
-                                    "layer3_biases",
-                                    "output_biases"]
+            # Correctly name our weights and biases variables.
+            layer_suffix = "biases" if biases_flag else "weights"
 
-            for original_layer_name, new_layer_name in zip( original_layer_names, new_layer_names ):
-                layer_parameters = model_state[original_layer_name]
+            # We rename each of the weights to Fortran-compatible symbols that
+            # are self-descriptive.
+            original_layer_names = layer_names
 
-                # Start the array assignment to this bias' variable.
-                biases_definition_str = "{:s}{:s} = [".format(
-                    indentation_str,
-                    new_layer_name )
+            # Create the Fortran variable names used within the module from the
+            # PyTorch parameter names.
+            new_layer_names = []
+            for layer_number in range( 1, len( expected_weights ) ):
+                new_layer_names.append( "layer{:d}_{:s}".format( layer_number, layer_suffix ) )
+            new_layer_names.append( "output_{:s}".format( layer_suffix ) )
 
-                # Create enough indentation so all of the bias values are aligned
-                # at the first column after the open bracket.
-                biases_indentation_str = " " * len( biases_definition_str )
+            # Walk through each layer and write out the parameters requested.
+            # We take care to translate between the PyTorch-specified names and
+            # the Fortran layer names used within the module.
+            for layer_index, layer_names in enumerate( zip( original_layer_names, new_layer_names ) ):
+                original_layer_name, new_layer_name = layer_names
 
-                # Template to join successive bias values together with.  Note that
-                # this is not applied to the last one.
-                definition_join_str    = ", &\n{:s}".format( biases_indentation_str )
-
-                # Build the list of indented bias values, each printed with 10 digits
-                # after the decimal point, and aligned so that positive biases have a
-                # leading space to match negative biases' alignment.
-                #
-                # NOTE: This assumes the bias values' magnitudes are such that 10 digits
-                #       of precision is sufficient.
-                #
-                bias_values_str = definition_join_str.join(
-                    map( lambda x: "{: .10f}".format( x ),
-                         layer_parameters.cpu().numpy() ) )
-
-                print( "{:s}{:s}]".format(
-                    biases_definition_str,
-                    bias_values_str ),
-                      file=output_fp )
-
-        def _write_model_weights( model_state, output_fp, indentation_str ):
-            """
-            Internal routine that generates the weight initialization expressions for
-            all of the weights in the supplied model state.  This does not generate
-            initialization for biases nor does it generate a fully functional subroutine
-            (i.e. pre-amble/epilog).
-
-            Takes 3 arguments:
-
-              model_state     - PyTorch model state dictionary for the model to initialize.
-              output_fp       - File handle to write to.
-              indentation_str - String prepended to each line of the subroutine written.
-
-            Returns nothing.
-            """
-
-            # We rename each of the weights to Fortran-compatible symbols that are
-            # self-descriptive.
-            original_layer_names = expected_weights
-            new_layer_names      = ["layer1_weights",
-                                    "layer2_weights",
-                                    "layer3_weights",
-                                    "output_weights"]
-
-            for original_layer_name, new_layer_name in zip( original_layer_names, new_layer_names ):
                 layer_parameters = model_state[original_layer_name]
 
                 # Get the shape of the array while reversing the order from
-                # row-major (C, Python) to column-major (Fortran)
-                outer_size, inner_size = layer_parameters.shape
+                # row-major (C, Python) to column-major (Fortran).
+                if biases_flag:
+                    outer_size = 1
+                    inner_size = layer_parameters.shape[0]
+                else:
+                    outer_size, inner_size = layer_parameters.shape
 
-                # Start the array assignment to this weight's variable.
-                weights_definition_str = "{:s}{:s} = reshape( [".format(
-                    indentation_str,
-                    new_layer_name )
+                # 10 characters per float, 10 floats per line -> 100 characters long
+                # blocks of 13 values gives 128 floats per assignment statement in
+                # 14 lines.
+                MAX_VALUES_PER_LINE           = 10
+                MAX_VALUES_PER_DATA_STATEMENT = 128
 
-                # Create enough indentation so all of the weight's values are aligned
-                # at the first column after the open bracket.
-                weights_indentation_str = " " * len( weights_definition_str )
-
-                # Template to join successive weight's values together with.  Note that
-                # this is not applied to the last one.
-                definition_join_str    = ", &\n{:s}".format( weights_indentation_str )
-
-                # Build the list of indented weight values, each printed with 10 digits
-                # after the decimal point, and aligned so that positive weights have a
-                # leading space to match negative weights' alignment.  We ignore the
-                # weight's shape since we'll reshape a 1D vector at run-time of the
-                # compiled Fortran executable.
                 #
-                # NOTE: This assumes the weights values' magnitudes are such that 10 digits
-                #       of precision is sufficient.
+                # NOTE: We add an extra newline after each variable's assignment
+                #       so there is a break in between successive layers.
                 #
-                weights_values_str = definition_join_str.join(
-                    map( lambda x: "{: .10f}".format( x ),
-                         layer_parameters.cpu().numpy().ravel() ) )
+                if layer_index > 0:
+                    print( "\n",
+                           file=output_fp )
 
-                # Create the dimensions array supplied to reshape(), as well as the closing
-                # parenthsis.
-                weights_reshape_dimensions_str = "[{:d}, {:d}] )".format(
-                    inner_size,
-                    outer_size )
+                # Walk through each of the outer dimension of the PyTorch
+                # parameters (no-op for biases, columns for weights) and
+                # generate one or more multi-line Fortran assignment statements.
+                #
+                # NOTE: While this looks like we're transposing the data, we're
+                #       simply remapping the indices from Python to Fortran.
+                #
+                # NOTE: Be careful when converting indices between Python
+                #       (0-based) and Fortran (1-based)!
+                #
+                for outer_index in range( outer_size ):
+                    inner_start_index = 0
+                    for inner_chunk_index in range( (inner_size + MAX_VALUES_PER_DATA_STATEMENT - 1) // MAX_VALUES_PER_DATA_STATEMENT ):
+                        inner_end_index = min( inner_start_index + MAX_VALUES_PER_DATA_STATEMENT,
+                                               inner_size )
 
-                print( "{:s}{:s}], &\n{:s}{:s}".format(
-                    weights_definition_str,
-                    weights_values_str,
-                    weights_indentation_str,
-                    weights_reshape_dimensions_str ),
-                      file=output_fp )
+                        # Start the array assignment to this block of parameters.
+                        if biases_flag:
+                            parameters_data_str = "{:s}{:s}({:d}:{:d}) = [ &".format(
+                                indentation_str,
+                                new_layer_name,
+                                inner_start_index + 1,
+                                inner_end_index)
+                        else:
+                            parameters_data_str = "{:s}{:s}({:d}:{:d}, {:d}) = [ &".format(
+                                indentation_str,
+                                new_layer_name,
+                                inner_start_index + 1,
+                                inner_end_index,
+                                outer_index + 1)
+
+                        parameters_values_str = ""
+
+                        # Number of values in this assignment statement.
+                        number_chunk_values = inner_end_index - inner_start_index
+
+                        parameters_lines = []
+                        # Iterate through each of the lines in this assignment
+                        # statement.
+                        for local_line_index in range( (number_chunk_values + MAX_VALUES_PER_LINE) // MAX_VALUES_PER_LINE ):
+                            # Directly compute the indices into our Python
+                            # parameters array.
+                            line_value_start_index = inner_start_index + local_line_index * MAX_VALUES_PER_LINE
+                            line_value_end_index   = min( line_value_start_index + MAX_VALUES_PER_LINE,
+                                                          inner_end_index )
+
+                            # Take care to construct a 1D or 2D slice based on
+                            # whether we're operating on biases or weights.
+                            if biases_flag:
+                                parameters_index = (slice( line_value_start_index, line_value_end_index ))
+                            else:
+                                parameters_index = (slice( outer_index, outer_index + 1 ),
+                                                    slice( line_value_start_index, line_value_end_index ))
+
+                            # Build this line from the individual weights of
+                            # interest.
+                            #
+                            # NOTE: We have to flatten the array to 1D to
+                            #       iterate across it in the weights (2D) case
+                            #       as indexing via slices preserves the
+                            #       original array shape.
+                            #
+                            parameters_line_str = ", ".join(
+                                map( lambda x: "{: .10f}".format( x ),
+                                     layer_parameters[parameters_index].cpu().numpy().ravel() ) )
+                            parameters_lines.append( parameters_line_str )
+
+                        # Each line continues the assignment statement.
+                        parameters_values_str = ", &\n".join( parameters_lines )
+
+                        print( "{:s}\n"
+                               "{:s} &\n"
+                               "]".format(
+                                   parameters_data_str,
+                                   parameters_values_str
+                               ),
+                               file=output_fp )
+
+                        inner_start_index += MAX_VALUES_PER_DATA_STATEMENT
 
         def _write_model_metadata( model_parameter_ranges, output_fp, indentation_str ):
             """
@@ -1306,9 +1534,17 @@ end if
                 file=output_fp )
 
         # Write the weights and biases separated by an empty line.
-        _write_model_weights( model_state, output_fp, inner_indentation_str )
+        _write_model_parameters( model_state,
+                                 output_fp,
+                                 inner_indentation_str,
+                                 expected_weights,
+                                 biases_flag=False )
         print( "", file=output_fp )
-        _write_model_biases( model_state, output_fp, inner_indentation_str )
+        _write_model_parameters( model_state,
+                                 output_fp,
+                                 inner_indentation_str,
+                                 expected_biases,
+                                 biases_flag=True )
 
         # Report the parameter ranges at run-time so users have an idea of where
         # the model should perform well.
@@ -1336,6 +1572,41 @@ end if
         Returns nothing.
 
         """
+
+        intermediate_template_str = """
+    ! Compute x_{layer_number:d} = ReLU( W_{layer_number:d}*x_{previous_layer_number:d} + b_{layer_number:d} ).
+    do output_index = 1, NUMBER_HIDDEN_LAYER{layer_number:d}_NEURONS
+        layer{layer_number:d}_intermediate(output_index) = &
+             max( sum( layer{previous_layer_number:d}_intermediate(:) * layer{layer_number:d}_weights(:, output_index) ) + layer{layer_number:d}_biases(output_index), 0.0 )
+    end do
+"""
+        final_template_str = """
+    ! Compute O = W_{layer_number:d}*x_{previous_layer_number:d} + b_{layer_number:d}.
+    do output_index = 1, NUMBER_OUTPUTS
+        output(output_index) = sum( layer{previous_layer_number:d}_intermediate(:) * output_weights(:, output_index) ) + output_biases(output_index)
+    end do
+"""
+
+        # XXX: generate from number of layers
+        # XXX: assumes at least two layers
+        core_inference_str = """
+    ! Compute x_1 = ReLU( W_1*I + b_1 ).
+    do output_index = 1, NUMBER_HIDDEN_LAYER1_NEURONS
+        layer1_intermediate(output_index) = &
+             max( sum( normalized_input(:) * layer1_weights(:, output_index) ) + layer1_biases(output_index), 0.0 )
+    end do
+"""
+
+        for layer_number in range( 2, len( expected_weights[1:] ) + 1 ):
+            core_inference_str += intermediate_template_str.format(
+                layer_number=layer_number,
+                previous_layer_number=(layer_number - 1) )
+
+        core_inference_str += final_template_str.format(
+            layer_number=(layer_number + 1),
+            previous_layer_number=layer_number )
+        # XXX: drop the newline
+        core_inference_str = core_inference_str[:-1]
 
         residual_inference_str = """
     ! Add the model's input to its output since it's learned to compute a delta rather
@@ -1377,29 +1648,7 @@ subroutine estimate( input, output )
 
     ! Our integration time remains as is.
     normalized_input(TFINAL_INDEX)          = input(TFINAL_INDEX)
-
-    ! Compute x_1 = ReLU( W_1*I + b_1 ).
-    do output_index = 1, NUMBER_HIDDEN_LAYER1_NEURONS
-        layer1_intermediate(output_index) = &
-             max( sum( normalized_input(:) * layer1_weights(:, output_index) ) + layer1_biases(output_index), 0.0 )
-    end do
-
-    ! Compute x_2 = ReLU( W_2*x_1 + b_2 ).
-    do output_index = 1, NUMBER_HIDDEN_LAYER2_NEURONS
-        layer2_intermediate(output_index) = &
-             max( sum( layer1_intermediate(:) * layer2_weights(:, output_index) ) + layer2_biases(output_index), 0.0 )
-    end do
-
-    ! Compute x_3 = ReLU( W_3*x_2 + b_3 ).
-    do output_index = 1, NUMBER_HIDDEN_LAYER3_NEURONS
-        layer3_intermediate(output_index) = &
-             max( sum( layer2_intermediate(:) * layer3_weights(:, output_index) ) + layer3_biases(output_index), 0.0 )
-    end do
-
-    ! Compute O = W_4*x_3 + b_4.
-    do output_index = 1, NUMBER_OUTPUTS
-        output(output_index) = sum( layer3_intermediate(:) * output_weights(:, output_index) ) + output_biases(output_index)
-    end do
+{core_inference:s}
 {residual_inference:s}
     ! Scale the outputs to the expected ranges.
     output(RADIUS_INDEX)      = 10.0**(output(RADIUS_INDEX) * RADIUS_LOG_WIDTH + RADIUS_LOG_MEAN)
@@ -1408,6 +1657,7 @@ subroutine estimate( input, output )
 end subroutine estimate
 
 """.format(
+    core_inference=core_inference_str,
     residual_inference=residual_inference_str
 )
 
