@@ -203,7 +203,7 @@ def droplet_equilibrium( droplet_parameters ):
 
     mask = M<0
 
-    theta = np.acos(R/np.sqrt(Q**3.0))
+    theta = np.arccos(R/np.sqrt(Q**3.0))
     guess[mask] = (-(2*np.sqrt(Q)*np.cos((theta-pi2)/3.0))-a/3.0)[mask]
 
     guess[guess<0] = (-(2*np.sqrt(Q)*np.cos((theta+pi2)/3.0))-a/3.0)[guess < 0]
