@@ -800,7 +800,7 @@ def do_iterative_inference( input_parameters, integration_times, model, device, 
 
     return scale_droplet_parameters( normalized_data[:, :2] )
 
-def generate_fortran_module( output_path, model_name, model, parameter_ranges={} ):
+def generate_fortran_module( output_path, model_name, model, parameter_ranges={}, silu_flag=False, layer_norm_flag=False ):
     """
     Creates a Fortran 2003 module that allows use of the supplied model with a
     batch size of 1 during inference.
@@ -808,7 +808,7 @@ def generate_fortran_module( output_path, model_name, model, parameter_ranges={}
     NOTE: This currently expects the supplied model state to be a derivative of
           SimpleNet so as to ensure that we know how to serialize it.
 
-    Takes 4 arguments:
+    Takes 6 arguments:
 
       output_path      - File to write to.  If this exists it is overwritten.
       model_name       - Name of the model to write in the generated module's comments
@@ -817,6 +817,13 @@ def generate_fortran_module( output_path, model_name, model, parameter_ranges={}
       parameter_ranges - Optional dictionary of parameter ranges.  If omitted, defaults
                          to an empty dictionary and uses the current parameter ranges
                          returned by get_parameter_ranges().
+      silu_flag        - Optional flag specifying whether the provided model uses
+                         Sigmoid Linear Units (SiLU) instead of Rectified Linear Units
+                         for its activation functions.  If omitted, defaults to False.
+      layer_norm_flag  - Optional flag specifying whether the model uses layer
+                         normalization for each of the model's layers.  When True,
+                         each layer's output is normalized before applying it as the
+                         next layer's input.  If omitted, defaults to False.
 
     Returns nothing.
 
@@ -1573,13 +1580,135 @@ end if
 
         """
 
-        intermediate_template_str = """
-    ! Compute x_{layer_number:d} = ReLU( W_{layer_number:d}*x_{previous_layer_number:d} + b_{layer_number:d} ).
+        #
+        # NOTE: This is an awful piece of code - I'm sorry for whoever has to
+        #       maintain it.  It should be done with proper templates though was
+        #       written in haste with a (silly) goal to keep the generated
+        #       Fortran code readable for debugging/maintenance purposes.
+        #
+        #       Key things to note here is that both layer norm and the
+        #       activation function are variables captured from the caller's
+        #       context (not provided as function arguments - this is a holdover
+        #       from the original architecture).
+        #
+
+        layer_norm_initialization = ""
+        layer_norm_accumulation   = ""
+        layer_norm_application    = ""
+        layer_norm_comment        = ""
+
+        # Layer norm accumulates each layer's activations and then normalizes
+        # them in a separate loop.
+        if layer_norm_flag:
+            layer_norm_initialization = """
+    layer_sum      = real( 0.0, kind=4 )
+    layer_variance = real( 0.0, kind=4 )
+"""
+            layer_norm_accumulation = """
+        layer_sum                         = layer_sum + layer{layer_number:d}_intermediate(output_index)
+"""
+            layer_norm_application = """
+    ! Compute x_{layer_number:d} = (x_{layer_number:d} - mean( x_{layer_number:d} )) / std( x_{layer_number:d} ).
+    layer_sum = layer_sum / NUMBER_HIDDEN_LAYER{layer_number:d}_NEURONS
+
+    do output_index = 1, NUMBER_HIDDEN_LAYER{layer_number:d}_NEURONS
+        layer_variance = layer_variance + (layer{layer_number:d}_intermediate(output_index) - layer_sum)**2
+    end do
+    ! NOTE: We add a small epsilon to avoid division by zero.
+    layer_variance = sqrt( layer_variance / NUMBER_HIDDEN_LAYER{layer_number:d}_NEURONS ) + 1.0e-6
+
     do output_index = 1, NUMBER_HIDDEN_LAYER{layer_number:d}_NEURONS
         layer{layer_number:d}_intermediate(output_index) = &
-             max( sum( layer{previous_layer_number:d}_intermediate(:) * layer{layer_number:d}_weights(:, output_index) ) + layer{layer_number:d}_biases(output_index), 0.0 )
+            (layer{layer_number:d}_intermediate(output_index) - layer_sum) / layer_variance
     end do
 """
+            layer_norm_comment = " and accumulate this layer's sum"
+
+        if not silu_flag:
+            # ReLU.
+            core_inference_str = """
+    ! Compute x_1 = ReLU( W_1*I + b_1 ){layer_norm_comment:s}.{layer_norm_initialization:s}
+    do output_index = 1, NUMBER_HIDDEN_LAYER1_NEURONS
+        layer1_intermediate(output_index) = &
+             max( sum( normalized_input(:) * layer1_weights(:, output_index) ) + layer1_biases(output_index), 0.0 )
+{layer_norm_accumulation:s}
+    end do
+{layer_norm_application:s}
+""".format(
+    layer_norm_initialization=layer_norm_initialization,
+    layer_norm_accumulation=layer_norm_accumulation,
+    layer_norm_application=layer_norm_application,
+    layer_norm_comment=layer_norm_comment
+)
+
+            #
+            # NOTE: This template requires both "layer_number" and
+            #       "previous_layer_number" to be interpolated before it is
+            #       usable!
+            #
+            intermediate_template_str = """
+    ! Compute x_{{layer_number:d}} = ReLU( W_{{layer_number:d}}*x_{{previous_layer_number:d}} + b_{{layer_number:d}} ){layer_norm_comment:s}.{layer_norm_initialization:s}
+    do output_index = 1, NUMBER_HIDDEN_LAYER{{layer_number:d}}_NEURONS
+        layer{{layer_number:d}}_intermediate(output_index) = &
+             max( sum( layer{{previous_layer_number:d}}_intermediate(:) * layer{{layer_number:d}}_weights(:, output_index) ) + layer{{layer_number:d}}_biases(output_index), 0.0 )
+{layer_norm_accumulation:s}
+    end do
+{layer_norm_application:s}
+""".format(
+    layer_norm_initialization=layer_norm_initialization,
+    layer_norm_accumulation=layer_norm_accumulation,
+    layer_norm_application=layer_norm_application,
+    layer_norm_comment=layer_norm_comment
+)
+        else:
+            # SiLU.
+            core_inference_str = """
+    ! Compute x_1 = W_1*I + b_1.{layer_norm_initialization:s}
+    do output_index = 1, NUMBER_HIDDEN_LAYER1_NEURONS
+        layer1_intermediate(output_index) = &
+             sum( normalized_input(:) * layer1_weights(:, output_index) ) + layer1_biases(output_index)
+    end do
+    ! Compute x_1 = SiLU( x_1 ){layer_norm_comment:s}.
+    do output_index = 1, NUMBER_HIDDEN_LAYER1_NEURONS
+        layer1_intermediate(output_index) = &
+             layer1_intermediate(output_index) / (real( 1.0, kind=4 ) + &
+                                                  exp( real( -1.0, kind=4 ) * layer1_intermediate(output_index) ))
+{layer_norm_accumulation:s}
+    end do
+{layer_norm_application:s}
+""".format(
+    layer_norm_initialization=layer_norm_initialization,
+    layer_norm_accumulation=layer_norm_accumulation,
+    layer_norm_application=layer_norm_application,
+    layer_norm_comment=layer_norm_comment
+)
+
+            #
+            # NOTE: This template requires both "layer_number" and
+            #       "previous_layer_number" to be interpolated before it is
+            #       usable!
+            #
+            intermediate_template_str = """
+    ! Compute x_{{layer_number:d}} = W_{{layer_number:d}}*x_{{previous_layer_number:d}} + b_{{layer_number:d}}.
+    do output_index = 1, NUMBER_HIDDEN_LAYER{{layer_number:d}}_NEURONS
+        layer{{layer_number:d}}_intermediate(output_index) = &
+             sum( layer{{previous_layer_number:d}}_intermediate(:) * layer{{layer_number:d}}_weights(:, output_index) ) + layer{{layer_number:d}}_biases(output_index)
+    end do
+    ! Compute x_{{layer_number:d}} = SiLU( x_{{layer_number:d}} ){layer_norm_comment:s}.{layer_norm_initialization:s}
+    do output_index = 1, NUMBER_HIDDEN_LAYER{{layer_number:d}}_NEURONS
+        layer{{layer_number:d}}_intermediate(output_index) = &
+             layer{{layer_number:d}}_intermediate(output_index) / (real( 1.0, kind=4 ) + &
+                                                  exp( real( -1.0, kind=4 ) * layer{{layer_number:d}}_intermediate(output_index) ))
+{layer_norm_accumulation:s}
+    end do
+{layer_norm_application:s}
+""".format(
+    layer_norm_initialization=layer_norm_initialization,
+    layer_norm_accumulation=layer_norm_accumulation,
+    layer_norm_application=layer_norm_application,
+    layer_norm_comment=layer_norm_comment
+)
+
         final_template_str = """
     ! Compute O = W_{layer_number:d}*x_{previous_layer_number:d} + b_{layer_number:d}.
     do output_index = 1, NUMBER_OUTPUTS
@@ -1587,25 +1716,25 @@ end if
     end do
 """
 
-        # XXX: generate from number of layers
-        # XXX: assumes at least two layers
-        core_inference_str = """
-    ! Compute x_1 = ReLU( W_1*I + b_1 ).
-    do output_index = 1, NUMBER_HIDDEN_LAYER1_NEURONS
-        layer1_intermediate(output_index) = &
-             max( sum( normalized_input(:) * layer1_weights(:, output_index) ) + layer1_biases(output_index), 0.0 )
-    end do
-"""
+        # Assemble each of the inference strings together (core/initial layer,
+        # intermediate layer, and final layer).
+        core_inference_str = core_inference_str.format(
+            layer_number=1 )
 
         for layer_number in range( 2, len( expected_weights[1:] ) + 1 ):
             core_inference_str += intermediate_template_str.format(
                 layer_number=layer_number,
-                previous_layer_number=(layer_number - 1) )
+                previous_layer_number=(layer_number - 1),
+                layer_norm_accumulation=layer_norm_accumulation,
+                layer_norm_application=layer_norm_application,
+                layer_norm_comment=layer_norm_comment )
 
         core_inference_str += final_template_str.format(
             layer_number=(layer_number + 1),
             previous_layer_number=layer_number )
-        # XXX: drop the newline
+
+        # Remove the trailing new line to keep some semblance of aesthetics and
+        # adherence to coding style.
         core_inference_str = core_inference_str[:-1]
 
         residual_inference_str = """
@@ -1618,6 +1747,16 @@ end if
         # Only include the residual if the model supports it.
         if not isinstance( model, ResidualNet ):
             residual_inference_str = ""
+
+        layer_norm_declarations_str = """
+    ! Accumulator for intermediate layer's mean and standard deviation to
+    ! implement layer norm.
+    real*4                                         :: layer_sum      = 0.0
+    real*4                                         :: layer_variance = 0.0
+"""
+
+        if not layer_norm_flag:
+            layer_norm_declarations_str = ""
 
         inference_str = """
 ! Estimates a droplet's future size and temperature based on it's current size
@@ -1637,6 +1776,7 @@ subroutine estimate( input, output )
 
     real*4, dimension(NUMBER_INPUTS)               :: normalized_input
     integer                                        :: output_index
+{layer_norm_declarations:s}
 
     ! Normalize the non-temporal inputs so they're in the range [-1, 1].
     normalized_input(RADIUS_INDEX)          = (log10( input(RADIUS_INDEX) ) - RADIUS_LOG_MEAN) / RADIUS_LOG_WIDTH
@@ -1658,7 +1798,8 @@ end subroutine estimate
 
 """.format(
     core_inference=core_inference_str,
-    residual_inference=residual_inference_str
+    residual_inference=residual_inference_str,
+    layer_norm_declarations=layer_norm_declarations_str
 )
 
         for inference_line in inference_str.splitlines():
