@@ -16,6 +16,7 @@ from .config import get_config, get_config_as_dict, set_config_from_dict, valida
 from .data import BE_TAG_NAME, \
                   ParticleRecord, \
                   detect_timeline_gaps, \
+                  get_evaluation_column_names, \
                   get_evaluation_file_path, \
                   get_particle_file_path, \
                   _read_raw_particle_data, \
@@ -672,11 +673,14 @@ def particle_score_pipeline( config_dict, particle_ids_batches ):
                                                         radbins, tempbins ) )
 
         for particle_index, particle_id in enumerate( particle_ids ):
+            (reference_radii_name, reference_temperature_name), (comparison_radii_name, comparison_temperature_name) = (
+                get_evaluation_column_names( [reference_evaluation_tag, comparison_evaluation_tag] ))
+
             p_df                = particles_df.iloc[particle_index]
             simulation_times    = p_df["times"]
             particle_parameters = np.stack( p_df[[
-                                      "input {:s} radii".format( BE_TAG_NAME ),
-                                      "input {:s} temperatures".format( BE_TAG_NAME ),
+                                      reference_radii_name,
+                                      reference_temperature_name,
                                       "salt solutes",
                                       "air temperatures",
                                       "relative humidities",
@@ -685,17 +689,17 @@ def particle_score_pipeline( config_dict, particle_ids_batches ):
                                       ]].to_numpy(), axis=-1 )
 
             # If there are no outputs to compare, ignore this particle
-            if p_df["output {:s} radii".format( reference_evaluation_tag )].shape == ():
+            if particle_parameters[:, 0].shape == ():
                 continue
-            elif p_df["output {:s} radii".format( reference_evaluation_tag )].shape[0] == 0:
+            elif particle_parameters[:, 0].shape[0] == 0:
                 continue
 
-            normed_reference_output  = standard_norm( np.stack( p_df[["output {:s} radii".format( reference_evaluation_tag ),
-                                                              "output {:s} temperatures".format( reference_evaluation_tag )
-                                                            ]].to_numpy(), axis=-1 ) )
-            normed_comparison_output = standard_norm( np.stack( p_df[["output {:s} radii".format( comparison_evaluation_tag ),
-                                                              "output {:s} temperatures".format( comparison_evaluation_tag )
-                                                             ]].to_numpy(), axis=-1 ) )
+            normed_reference_output  = standard_norm( np.stack( p_df[[reference_radii_name,
+                                                             reference_temperature_name]]
+                                                      .to_numpy(), axis=-1 ) )
+            normed_comparison_output = standard_norm( np.stack( p_df[[comparison_radii_name,
+                                                             comparison_temperature_name]]
+                                                       .to_numpy(), axis=-1 ) )
 
             # Calculating the overall NRMSE directly would require copying all of the particle
             # data frames together. Instead, we just copy the square error and the sum of the truth
