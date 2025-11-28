@@ -697,17 +697,6 @@ def particle_score_pipeline( config_dict, particle_ids_batches ):
                                                               "output {:s} temperatures".format( comparison_evaluation_tag )
                                                              ]].to_numpy(), axis=-1 ) )
 
-            mask = ~np.isnan( normed_reference_output[:, 0] ) & ~np.isnan( normed_comparison_output[:, 0] )
-
-            # If we're masking out all remaining trials, ignore
-            if np.sum( mask ) == 0:
-                continue
-
-            particle_parameters      = particle_parameters[mask, :]
-            normed_reference_output  = normed_reference_output[mask, :]
-            normed_comparison_output = normed_comparison_output[mask, :]
-            simulation_times         = simulation_times[mask]
-
             # Calculating the overall NRMSE directly would require copying all of the particle
             # data frames together. Instead, we just copy the square error and the sum of the truth
             # parameters for each particle so that net NRMSE can be calculated later.
