@@ -986,9 +986,13 @@ class ScoreReport():
         self.deviation_times        = np.hstack( deviation_times )
         self.deviation_particle_ids = np.hstack( deviation_particle_ids )
 
+        self.log_deviations      = self.deviations
+        self.log_deviations[:, 0] = np.log10( self.deviations[:, 0] )
+        self.log_deviations[:, 2] = np.log10( self.deviations[:, 2] )
+
         # Clustering
         self.z_score_model           = StandardScaler()
-        z_scored_deviations          = self.z_score_model.fit_transform( self.deviations )
+        z_scored_deviations          = self.z_score_model.fit_transform( self.log_deviations )
         filtered_z_scored_deviations = z_scored_deviations[np.all( np.abs( z_scored_deviations < 3 ),
                                                                    axis=1)]
         self.z_score_mean            = np.mean( z_scored_deviations, axis=0 )
@@ -1031,9 +1035,9 @@ class ScoreReport():
         colormap = plt.get_cmap("tab20")
 
         # Gather all of the data in the desired coordinates. Thin the data out based on thinning_ratio
-        plot_data             = np.array( [np.log10( self.deviations[::thinning_ratio, 0] ),
-                                           self.deviations[::thinning_ratio, 1] - self.deviations[::thinning_ratio, 3],
-                                           self.deviations[::thinning_ratio, 4]] )
+        plot_data             = np.array( [self.log_deviations[::thinning_ratio, 0],
+                                           self.log_deviations[::thinning_ratio, 1] - self.log_deviations[::thinning_ratio, 3],
+                                           self.log_deviations[::thinning_ratio, 4]] )
         cluster_coordinates   = np.array( [np.log10( self.cluster_centers[:, 0] ),
                                            self.cluster_centers[:, 1] - self.cluster_centers[:, 3],
                                            self.cluster_centers[:, 4]] )
@@ -1118,7 +1122,7 @@ class ScoreReport():
         """
 
         self.z_score_model           = StandardScaler()
-        z_scored_deviations          = self.z_score_model.fit_transform( self.deviations )
+        z_scored_deviations          = self.z_score_model.fit_transform( self.log_deviations )
         filtered_z_scored_deviations = z_scored_deviations[np.all( np.abs( z_scored_deviations < z_score_outlier_threshold ),
                                                                    axis=1)]
         self.z_score_mean            = np.mean( z_scored_deviations, axis=0 )
