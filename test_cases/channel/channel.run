@@ -1,6 +1,6 @@
 #!/bin/bash
 
-group_storage=/afs/crc.nd.edu/group/RichterLab
+group_storage=/groups/drichte2
 
 #$ -M YOUR_EMAIL@nd.edu
 #$ -m n
