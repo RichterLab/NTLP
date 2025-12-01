@@ -19,7 +19,7 @@ Connect to the Notre Dame network via VPN if you're off campus.
 Login to the cluster's cswarmfe head node with your netID:
 
 ```shell
-$ ssh -C <netID>@cswarmfe.crc.nd.edu
+$ ssh -C <netID>@epycfe.crc.nd.edu
 ```
 
 Enter your password when prompted and read the system's message of the day
@@ -39,7 +39,7 @@ downloaded a sub-directory of your home directory named NTLP.
 Change into the working copy and list its contents.
 
 ```shell
-$ cd NTLP
+$ cd ~/NTLP
 $ ls
 defs.F  documentation/  fft.f  kdtree.f90  les.F  les.run  Makefile  netcdf_io.f90 particles.f90  postprocessing  README.md  tec_io.f90  test_cases
 ```
@@ -63,12 +63,17 @@ The following files and directories are of note:
 
 ## Compiling NTLP
 Now you must compile the code.  The compiler and MPI and NetCDF libraries must be
-loaded into your terminal's environment:
+loaded into your terminal's environment.
+
+***NOTE:*** The versions of software, and the associated paths in the compile
+command below, change from time to time.  So long as neither `module load` nor
+`make` generate an error, it is fine that the versions/paths do not match.
+
 
 ```shell
 $ module load mvapich2 intel netcdf
-Loading mvapich2/2.3.1/intel/19.0
-  Loading requirement: intel/19.0
+Loading mvapich2/2.3.1/intel/24.2
+  Loading requirement: intel/24.2
 ```
 
 Next, compile the code. This will take roughly a minute:
@@ -85,22 +90,19 @@ mpif90 -i4 -r8 -assume byterecl -xHost -fpp -traceback -O2  -c les.F -I/opt/crc/
 mpif90 defs.o fft.o kdtree.o les.o netcdf_io.o particles.o tec_io.o -o lesmpi.a  -i4 -r8 -assume byterecl -xHost -fpp -traceback -O2  -I/opt/crc/n/netcdf/4.7.4/parallel/include -L/opt/crc/n/netcdf/4.7.4/parallel/lib -lnetcdf -lnetcdff
 ```
 
-By default NTLP is compiled with optimizations and targets the Ivy Bridge
+By default NTLP is compiled with optimizations and targets the AMD Epyc Zen3
 cluster.  Each of the source files is compiled individually before linking their
 compiled outputs into an executable named `lesmpi.a`.
 
 ## Prepare the pi Chamber Test Case
-Change into the pi chamber's test directory and update the job submission script
-so it is customized to you and your environment:
+Change into the pi chamber's test directory and update the job submission
+script:
 
-```shell
-$ cd test_cases/pi_chamber
-$ sed -i -e "s#PATH_TO_SCRATCH#/scratch365/${USER}#" params.in
-$ sed -i -e "s#PATH_TO_SCRATCH#/scratch365/${USER}#" \
-         -e "s#PATH_TO_CODE#${HOME}/NTLP#" pi_chamber.run
-```
+1. Edit `params.in` and `pi_chamber.run` so `PATH_TO_SCRATCH` is replaced with
+   `/scratch365/<netID>`
+2. Edit `pi_chamber.run` so `PATH_TO_CODE` is replaced with `/users/<netID>`
 
-Both the parameters file (params.in) and the job submission script
+***NOTE:*** Both the parameters file (params.in) and the job submission script
 (`pi_chamber.run`) are generic templates. These need to be instantiated so they
 refer to paths that actually exist.
 
@@ -118,8 +120,8 @@ when interacting with the scheduling system should you need to stop a running
 job or query for its current state.
 
 ## Monitor the Test Case's Output
-The pi chamber test case runs 10,000 time steps and takes roughly 40 minutes on
-the Ivy Bridge cluster.  You can watch the simulation's execution by examining
+The pi chamber test case runs 10,000 time steps and takes roughly 20 minutes on
+the AMD cluster.  You can watch the simulation's execution by examining
 the contents of the log file as it is updated:
 
 ```shell
@@ -167,5 +169,5 @@ visualized.
 # Summary
 In this tutorial you downloaded the NTLP code base to the cluster's login node,
 compiled it, and ran the pi chamber test case for 10,000 steps using the Richter
-Lab's Ivy Bridge cluster.  This covers the general workflow for working with
+Lab's AMD Epyc Zen3 cluster.  This covers the general workflow for working with
 NTLP and running simulations via a cluster that is shared by multiple users.
