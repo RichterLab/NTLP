@@ -2152,7 +2152,7 @@ def train_model( model, criterion, optimizer, device, number_epochs, training_fi
                 for validation_batch_index in range( number_validation_batches ):
                     start_index = validation_batch_index * VALIDATION_BATCH_SIZE
                     if validation_batch_index == number_validation_batches - 1:
-                        end_index = -1
+                        end_index = validation_inputs.shape[0]
                     else:
                         end_index = start_index + VALIDATION_BATCH_SIZE
 
