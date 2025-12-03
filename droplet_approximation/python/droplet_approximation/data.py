@@ -269,8 +269,12 @@ def be_status_to_z_domain_quartile( be_statuses ):
             quantiles[quantile_index] = 2
         elif quantiles[quantile_index] == BEStatus.HEIGHT_Q3:
             quantiles[quantile_index] = 3
-        else:
+        elif quantiles[quantile_index] == BEStatus.HEIGHT_Q4:
             quantiles[quantile_index] = 4
+
+        #
+        # NOTE: Statues without domain information remain zero.
+        #
 
     return quantiles
 
