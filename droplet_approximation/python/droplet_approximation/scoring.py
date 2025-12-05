@@ -1,6 +1,7 @@
 import contextlib
 from dataclasses import dataclass
 from enum import Enum
+from typing import Optional
 
 import matplotlib.pyplot as plt
 from matplotlib import colors
@@ -637,6 +638,7 @@ def particle_score_pipeline( config_dict, particle_ids_batches ):
     comparison_evaluation_tag = error_config.get( "comparison_tag" )
     evaluation_tags           = [reference_evaluation_tag, comparison_evaluation_tag]
 
+    run_deviations        = error_config.getbool( "run_deviations" )
     cusum_error_tolerance = error_config.getfloat32_array( "cusum_error_tolerance" )
     cusum_error_threshold = error_config.getfloat32_array( "cusum_error_threshold" )
 
@@ -709,40 +711,48 @@ def particle_score_pipeline( config_dict, particle_ids_batches ):
             truth_sum           = np.abs( np.sum( normed_reference_output, axis=0 ) )
             number_observations = particle_parameters.shape[0]
 
-            # Calculate CUSUM. There structure of the result will be
-            # [ [ Positive Radius CUSUM array, Negative Radius CUSUM array ],
-            #   [ Positive Temperature CUSUM array, Negative Temperature CUSUM array ] ]
-            normed_output_differences = (normed_comparison_output - normed_reference_output).T
-            cusum                     = calculate_cusum( normed_output_differences, cusum_error_tolerance )
+            # Initialize deviation arrays
+            deviations             = np.empty( shape=(0,7), dtype=np.float32 )
+            deviation_directions   = np.empty( shape=(0), dtype=DeviationDirection )
+            deviation_parameters   = np.empty( shape=(0), dtype=DeviationDirection )
+            deviation_times        = np.empty( shape=(0), dtype=np.float32 )
+            deviation_particle_ids = np.empty( shape=(0), dtype=np.int32 )
 
-            # Create a mask for when positive/negative radius/temperature CUSUM exceeds
-            # the threshold. Flatten so that we can zip it into results with the enum arrays.
-            # The structure of this array will be
-            # [ Positive Radius Deviation Mask, Negative Radius Deviation Mask,
-            #   Positive Temperature Deviation Mask, Negative Temperature Deviation Mask ]
-            deviation_masks  = detect_cusum_deviations( cusum, cusum_error_threshold ).reshape( (4, -1) )
-            deviation_counts = deviation_masks.sum( axis=1 )
+            if run_deviations:
+                # Calculate CUSUM. There structure of the result will be
+                # [ [ Positive Radius CUSUM array, Negative Radius CUSUM array ],
+                #   [ Positive Temperature CUSUM array, Negative Temperature CUSUM array ] ]
+                normed_output_differences = (normed_comparison_output - normed_reference_output).T
+                cusum                     = calculate_cusum( normed_output_differences, cusum_error_tolerance )
 
-            # These arrays allow the deviations identified with each
-            # CUSUM array to be zipped with their corresponding enums.
+                # Create a mask for when positive/negative radius/temperature CUSUM exceeds
+                # the threshold. Flatten so that we can zip it into results with the enum arrays.
+                # The structure of this array will be
+                # [ Positive Radius Deviation Mask, Negative Radius Deviation Mask,
+                #   Positive Temperature Deviation Mask, Negative Temperature Deviation Mask ]
+                deviation_masks  = detect_cusum_deviations( cusum, cusum_error_threshold ).reshape( (4, -1) )
+                deviation_counts = deviation_masks.sum( axis=1 )
 
-            deviation_direction_vector = np.array( [ DeviationDirection.POSITIVE,
-                                                     DeviationDirection.NEGATIVE,
-                                                     DeviationDirection.POSITIVE,
-                                                     DeviationDirection.NEGATIVE ] )
-            deviation_parameter_vector = np.array( [ DeviationParameter.RADIUS,
-                                                     DeviationParameter.RADIUS,
-                                                     DeviationParameter.TEMPERATURE,
-                                                     DeviationParameter.TEMPERATURE ] )
+                # These arrays allow the deviations identified with each
+                # CUSUM array to be zipped with their corresponding enums.
 
-            # Record data about the deviations
-            deviations             = np.vstack( [ particle_parameters[mask] for mask in deviation_masks ] )
-            deviation_directions   = np.hstack( [ np.full( count, direction ) for count, direction
-                                                  in zip( deviation_counts, deviation_direction_vector ) ] )
-            deviation_parameters   = np.hstack( [ np.full( count, direction ) for count, direction
-                                                  in zip( deviation_counts, deviation_parameter_vector ) ] )
-            deviation_times        = np.hstack( [ simulation_times[mask] for mask in deviation_masks ] )
-            deviation_particle_ids = np.full( deviation_counts.sum(), particle_id )
+                deviation_direction_vector = np.array( [ DeviationDirection.POSITIVE,
+                                                         DeviationDirection.NEGATIVE,
+                                                         DeviationDirection.POSITIVE,
+                                                         DeviationDirection.NEGATIVE ] )
+                deviation_parameter_vector = np.array( [ DeviationParameter.RADIUS,
+                                                         DeviationParameter.RADIUS,
+                                                         DeviationParameter.TEMPERATURE,
+                                                         DeviationParameter.TEMPERATURE ] )
+
+                # Record data about the deviations
+                deviations             = np.vstack( [ particle_parameters[mask] for mask in deviation_masks ] )
+                deviation_directions   = np.hstack( [ np.full( count, direction ) for count, direction
+                                                      in zip( deviation_counts, deviation_direction_vector ) ] )
+                deviation_parameters   = np.hstack( [ np.full( count, direction ) for count, direction
+                                                      in zip( deviation_counts, deviation_parameter_vector ) ] )
+                deviation_times        = np.hstack( [ simulation_times[mask] for mask in deviation_masks ] )
+                deviation_particle_ids = np.full( deviation_counts.sum(), particle_id )
 
             particle_score = ParticleScore( particle_id, particle_nrmse, square_error, truth_sum,
                                             number_observations, deviations, deviation_directions,
@@ -819,6 +829,7 @@ class ScoreReport():
           radbins_range         - Two-Entry Float32 Array, minimum and maximum radius for radius histograms
                                   in log10.
           tempbin_range         - Two-Entry Float32 Array, minimum and maximum radius for temperature histograms.
+          run_deviations        - Boolean. If true, run CUSUM deviation/clustering analysis.
 
           [Simulation]
           All entries regarding data-loading. For more details see read_particles_data_from_config(),
@@ -837,6 +848,8 @@ class ScoreReport():
         error_config         = config["error_analysis"]
         general_config       = config["general"]
         self.analysis_config = get_config_as_dict()
+
+        self.run_deviations  = error_config.getbool( "run_deviations" )
 
         number_processes = general_config.getint( "number_processes" )
         subset_fraction  = error_config.getint( "subset_fraction" )
@@ -979,6 +992,17 @@ class ScoreReport():
         self.deviation_times        = np.hstack( deviation_times )
         self.deviation_particle_ids = np.hstack( deviation_particle_ids )
 
+        self.log_deviations     : Optional[np.ndarray]              = None
+        self.z_score_model      : Optional[StandardScaler]          = None
+        self.z_score_mean       : Optional[np.ndarray]              = None
+        self.cluster_model      : Optional[BayesianGaussianMixture] = None
+        self.deviation_clusters : Optional[np.ndarray]              = None
+        self.cluster_centers    : Optional[np.ndarray]              = None
+
+        # Only proceed to clustering if deviation analysis was run
+        if not self.run_deviations:
+            return
+
         self.log_deviations      = self.deviations
         self.log_deviations[:, 0] = np.log10( self.deviations[:, 0] )
         self.log_deviations[:, 2] = np.log10( self.deviations[:, 2] )
@@ -1010,6 +1034,9 @@ class ScoreReport():
         Likewise labels the coordinates of cluster centers if
         `label_centers=True`.
 
+        Requires that deviation analysis was run on this ScoreReport, i.e.
+        self.run_deviations = True.
+
         Takes 2 argument:
 
           label_centers  - Optional Boolean, determines whether to label
@@ -1024,6 +1051,8 @@ class ScoreReport():
           ax  - the axis of the graph
 
         """
+        if not self.run_deviations:
+            raise ValueError( "Deviation analysis was not run for this score report. Cannot plot deviations." )
 
         colormap = plt.get_cmap("tab20")
 
