@@ -835,12 +835,13 @@ class ScoreReport():
         validate_config( ["error_analysis", "simulation"] )
         config               = get_config( validate=False )
         error_config         = config["error_analysis"]
+        general_config       = config["general"]
         self.analysis_config = get_config_as_dict()
 
-        number_processes = config["general"].getint( "number_processes" )
-        subset_fraction  = config["error_analysis"].getint( "subset_fraction" )
-        number_batches   = config["error_analysis"].getint( "number_batches" )
-        max_clusters     = config["error_analysis"].getint( "max_clusters" )
+        number_processes = general_config.getint( "number_processes" )
+        subset_fraction  = error_config.getint( "subset_fraction" )
+        number_batches   = error_config.getint( "number_batches" )
+        max_clusters     = error_config.getint( "max_clusters" )
 
         particle_ids     = read_particle_ids_from_config()[::subset_fraction]
 
@@ -863,8 +864,6 @@ class ScoreReport():
         self.histogram_times   = simulation_times[[self.histogram_indexes]][0]
         self.radbins           = np.logspace( radbins_range[0], radbins_range[1], radbins_count )
         self.tempbins          = np.linspace( tempbins_range[0], tempbins_range[1], tempbins_count )
-
-
 
         print( "Evaluating {:d} particles with subset fraction {:d}".format( particle_ids.shape[0], subset_fraction ) )
 
