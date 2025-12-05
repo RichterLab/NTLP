@@ -171,7 +171,7 @@ class ExtendedConfigParser( ConfigParser ):
 
             self.load_subconfig( subconfig, profile )
 
-def load_subconfig( self, subconfig, profile_name ):
+    def load_subconfig( self, subconfig, profile_name ):
         """
         Loads the .ini file corresponding to the profile/subconfig into the
         current config.
