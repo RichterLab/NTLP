@@ -12,13 +12,7 @@ from .analysis import get_particles_data_simulation_times, \
                       plot_droplet_size_temperatures_score, \
                       plot_particles, \
                       plot_particle_history
-from .config import display_config, \
-                    get_config, \
-                    get_config_as_dict, \
-                    load_config, \
-                    load_subconfig, \
-                    set_config_from_dict, \
-                    validate_config
+from .config import ExtendedConfigParser
 from .data import BE_TAG_NAME, \
                   BEStatus, \
                   ParticleRecord, \
