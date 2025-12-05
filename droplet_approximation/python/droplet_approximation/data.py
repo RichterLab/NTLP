@@ -7,7 +7,7 @@ import warnings
 import numpy as np
 import pandas as pd
 
-from .config import get_config, validate_config
+from .config import ExtendedConfigParser
 
 from .physics import BDF_TOLERANCE_ABSOLUTE, \
                      BDF_TOLERANCE_RELATIVE, \
@@ -1989,7 +1989,7 @@ def _read_raw_particle_data( particle_path ):
 
     return observations_fp32
 
-def read_particle_ids_from_config():
+def read_particle_ids_from_config( config ):
     """
     Uses the currently loaded config to load the particle ids
     associated with the loaded simulation.
@@ -1999,7 +1999,8 @@ def read_particle_ids_from_config():
       [general]
       index_path - Path to the simulation particle index
 
-    Takes no arguments
+    Takes 1 argument:
+      config           - ExtendedConfigParser object with config settings and simulation subconfig.
 
     Returns 1 value:
 
@@ -2008,12 +2009,12 @@ def read_particle_ids_from_config():
 
     """
 
-    simulation_config   = get_config()["simulation"]
+    config.validate( ["simulation"] )
 
-    return np.fromfile( simulation_config["index_path"], dtype=np.int32 )
+    return np.fromfile( config.get( "simulation", "index_path" ), dtype=np.int32 )
 
 
-def read_particles_data_from_config( particle_ids=None, number_processes=0, **kwargs ):
+def read_particles_data_from_config( config, particle_ids=None, number_processes=0, **kwargs ):
     """
     Reads the particle data according to the currently loaded config.
     Considers the following fields:
@@ -2033,6 +2034,7 @@ def read_particles_data_from_config( particle_ids=None, number_processes=0, **kw
 
     Takes 3 Arguments:
 
+      config           - ExtendedConfigParser object with config settings and simulation subconfig.
       particle_ids     - Optional list of particle ids to load. Defaults to all
                          particles in a given simulation.
       number_processes - Optional number of processes to read with. Defaults to
@@ -2046,7 +2048,7 @@ def read_particles_data_from_config( particle_ids=None, number_processes=0, **kw
 
     """
 
-    config            = get_config()
+    config.validate( ["simulation"] )
     simulation_config = config["simulation"]
 
     if number_processes == 0:
@@ -2058,7 +2060,7 @@ def read_particles_data_from_config( particle_ids=None, number_processes=0, **kw
     filter_be_failures = simulation_config.getboolean( "filter_be_failures" )
 
     if particle_ids is None:
-        particle_ids = read_particle_ids_from_config()
+        particle_ids = read_particle_ids_from_config( config )
 
     if number_processes == 1:
         return read_particles_data( particles_root,
@@ -2076,28 +2078,29 @@ def read_particles_data_from_config( particle_ids=None, number_processes=0, **kw
                                           number_processes=number_processes,
                                           **kwargs )
 
-def read_particles_timeline_from_config():
+def read_particles_timeline_from_config( config ):
     """
     Reads the particle timeline from the simulation currently
     loaded into the config.
 
     Considers the following config fields:
 
-      [general]
+      [simulation]
       timeline_path - Path to the simulation timeline
 
-    Takes no arguments.
+    Takes 1 arguments:
+
+      config - ExtendedConfigParser object with simulation subconfig loaded.
 
     Returns 1 Value:
 
-        simulation_times - NumPy Float32 array of simulation times
+      simulation_times - NumPy Float32 array of simulation times
 
     """
 
-    validate_config( ["simulation"] )
-    simulation_config = get_config( validate=False )["simulation"]
+    config.validate( ["simulation"] )
 
-    return np.fromfile( simulation_config["timeline_path"],
+    return np.fromfile( config.get( "simulation", "timeline_path" ),
                         dtype=np.float32 )
 
 def read_training_file( file_name ):

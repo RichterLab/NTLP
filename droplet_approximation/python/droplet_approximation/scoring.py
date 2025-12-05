@@ -13,7 +13,7 @@ from sklearn.mixture import BayesianGaussianMixture
 
 from torch import multiprocessing
 
-from .config import get_config, get_config_as_dict, set_config_from_dict, validate_config
+from .config import ExtendedConfigParser
 from .data import BE_TAG_NAME, \
                   ParticleRecord, \
                   detect_timeline_gaps, \
@@ -623,8 +623,8 @@ def particle_score_pipeline( config_dict, particle_ids_batches ):
     """
 
     # Load configuration data to global config
-    set_config_from_dict( config_dict )
-    config = get_config()
+    config = ExtendedConfigParser()
+    config.set_from_dict( config_dict )
 
     # Enforce single-core utilization on child process
     config["general"]["number_processes"] = "1"
@@ -652,7 +652,7 @@ def particle_score_pipeline( config_dict, particle_ids_batches ):
     tempbins_range      = error_config.getfloat32_array( "tempbins_range" )
 
     # Load the corresponding timeline
-    simulation_times = read_particles_timeline_from_config()
+    simulation_times = read_particles_timeline_from_config( config )
 
     # Set up histogram/averages times and histogram bins
     averages_indexes  = np.linspace( 0, simulation_times.shape[0] - 1, averages_count, dtype=np.int32 )
@@ -666,7 +666,7 @@ def particle_score_pipeline( config_dict, particle_ids_batches ):
     particle_averages   = []
     particle_histograms = []
     for particle_ids in particle_ids_batches:
-        particles_df = read_particles_data_from_config( particle_ids=particle_ids, evaluations=evaluations )
+        particles_df = read_particles_data_from_config( config, particle_ids=particle_ids, evaluations=evaluations )
 
         # append averages/histograms for this batch
         particle_averages.append( average_particles_data( particles_df, evaluation_tags, averages_times,
@@ -806,7 +806,7 @@ class ScoreReport():
 
 """
 
-    def __init__( self ):
+    def __init__( self, config ):
         """
         Runs a score report based on the currently loaded config. Considers the following config entires:
 
@@ -835,7 +835,8 @@ class ScoreReport():
           All entries regarding data-loading. For more details see read_particles_data_from_config(),
             read_particle_ids_from_config(), and read_particles_timeline_from_config().
 
-        Takes no arguments.
+        Takes 1 argument:
+          config - ExtendedConfigParser object with simulation and error analysis subconfigs loaded.
 
         Returns no values.
 
@@ -843,11 +844,10 @@ class ScoreReport():
 
         # TODO fix simulation name/loading
 
-        validate_config( ["error_analysis", "simulation"] )
-        config               = get_config( validate=False )
+        config.validate( ["error_analysis", "simulation"] )
         error_config         = config["error_analysis"]
         general_config       = config["general"]
-        self.analysis_config = get_config_as_dict()
+        self.analysis_config = config.get_as_dict()
 
         self.run_deviations  = error_config.getbool( "run_deviations" )
 
@@ -856,7 +856,7 @@ class ScoreReport():
         number_batches   = error_config.getint( "number_batches" )
         max_clusters     = error_config.getint( "max_clusters" )
 
-        particle_ids     = read_particle_ids_from_config()[::subset_fraction]
+        particle_ids     = read_particle_ids_from_config( config )[config, ::subset_fraction]
 
         # Load histogram/averages settings
         background_averages = error_config.getlist( "background_averages" )
@@ -868,7 +868,7 @@ class ScoreReport():
         tempbins_range      = error_config.getfloat32_array( "tempbins_range" )
 
         # Load the corresponding timeline
-        simulation_times = read_particles_timeline_from_config()
+        simulation_times = read_particles_timeline_from_config( config )
 
         # Set up histogram/averages times and histogram bins
         self.averages_indexes  = np.linspace( 0, simulation_times.shape[0] - 1, averages_count, dtype=np.int32 )
