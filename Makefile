@@ -1,5 +1,5 @@
-FORTRAN=mpif90
-F90=ifort
+FORTRAN=mpiifort
+#FORTRAN=mpif90
 
 # Specify the architecture to optimize for.  Should be one of the following:
 #
@@ -16,16 +16,16 @@ F90=ifort
 # NOTE: Specifying this incorrectly will, at best, result in degraded execution
 #       times and, at worst, result in crashes due to illegal instructions.
 #
-ARCH ?= avx2
+ARCH ?= host
 
 ifeq ($(ARCH), host)
-ARCH_FLAGS = -xHost   # David's OLD Machine/Server on CRC
+ARCH_FLAGS = -xHost
 endif
 ifeq ($(ARCH), avx)
 ARCH_FLAGS = -march=corei7-avx
 endif
 ifeq ($(ARCH), avx2)
-ARCH_FLAGS = -march=core-avx2   # David's NEW Machine/Server on CRC
+ARCH_FLAGS = -march=core-avx2
 endif
 
 # Always used compilation flags:
@@ -41,7 +41,7 @@ endif
 #                     the error code path.  Note that it does not depend on the
 #                     level of debugging support.
 #
-FLAGS=-i4 -r8 -assume byterecl $(ARCH_FLAGS) -fpp -traceback
+FLAGS=-i4 -r8 -assume byterecl $(ARCH_FLAGS) -fpp -traceback -fc=ifx
 
 # Are we building a debug build?  This enables options useful for debugging
 # the solver's behavior but are not desirable to unconditionally enable.
@@ -58,7 +58,8 @@ DEBUG_FLAGS = -g
 # Enable all compilation warnings except for when temporary arrays are created
 # when passing to a subroutine or Fortran.  Temporary arrays occur throughout
 # the code base and will be addressed at a later date.
-DEBUG_FLAGS += -check all,noarg_temp_created
+#DEBUG_FLAGS += -check all,noarg_temp_created
+DEBUG_FLAGS += -check bounds -check pointers
 
 # Exit with a SIGFPE whenever a floating point exception (FPE) is detected.
 # This is useful for identifying precisely where an invalid value (infinities
@@ -96,9 +97,9 @@ OUTPUTLIB = -L$(NETCDFBASE)/lib
 LINKOPTS  = -lnetcdf -lnetcdff
 
 # TecPlot output is only used when requested.
-TECPLOT ?= yes
+TECPLOT ?= no
 TECFLAGS = -DTECIO
-TECLIB   = ~/Research/TecIO-MPI/libteciompi.a
+TECLIB   = ~/Research/tecio/libteciompi.a
 TECLINK  = -lm -lstdc++ -lgcc_eh
 
 SRC = data_structures.f90 \

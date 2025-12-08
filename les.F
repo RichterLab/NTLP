@@ -146,6 +146,9 @@ c
          !Call dns_vis even when doing LES since vis_m needs to be initialized with something
          call dns_vis
          call get_max
+	 
+	 !Call to populate the particle statistics with ICs
+         call particle_xy_stats
       else
 
          igrdr = 3
@@ -190,9 +193,10 @@ c
       write(*,*) 'Starting time loop'
       write(*,*) 'it,time = ',it,time
       end if
-      if (it == 1) numpart = 0
+
       part => first_particle
       do while (associated(part))
+
       if (part%pidx == 1 .and. part%procidx == 0) then
       write(*,'(a7,4e15.6)') 'xp1:  ',time,part%xp(1:3)
       write(*,'(a7,4e15.6)') 'vp1:  ',time,part%vp(1:3)
@@ -207,29 +211,20 @@ c
       write(*,'(a7,2e15.6)') 'res1:',time,part%res
       write(*,'(a7,e15.6,i)') 'mult1:',time,part%mult
       write(*,'(a7,2e15.6)') 'rc1:',time,part%rc
-
       end if
 
       part => part%next
-
-      if (it == 1) numpart = numpart + 1
       end do
 
       if (myid==0) then
-       write(*,*) 'time,tnumpart:',time,tnumpart
-       write(*,'(a15,3e15.6)') 'radmin,radmax:',time,radmin,radmax
-       write(*,'(a15,3e15.6)') 'tempmin,tempmax:',time,tempmin,tempmax
-       write(*,'(a15,3e15.6)') 'qmin,qmax:',time,qmin,qmax
-       write(*,'(a15,3e15.6)') 'time,radavg:',time,radavg
-       write(*,'(a15,e15.6,3i)'),'time,100,impos:',time,tnum100,tnumimpos
-      !if (myid==0) write(*,*), 'time,actnum',time,tactnum
-      !if (myid==0) write(*,*), 'time,denum',time,tdenum
+      write(*,*) 'time,tnumpart:',time,tnumpart
+      write(*,'(a15,3e15.6)') 'radmin,radmax:',time,radmin,radmax
+      write(*,'(a15,3e15.6)') 'tempmin,tempmax:',time,tempmin,tempmax
+      write(*,'(a15,3e15.6)') 'qmin,qmax:',time,qmin,qmax
+      write(*,'(a15,3e15.6)') 'time,radavg:',time,radavg
+      write(*,'(a15,e15.6,3i)'),'time,100,impos:',time,tnum100,tnumimpos
       end if
 
-!      if ( (nnz/2 .le. ize) .and. (nnz/2 .ge. izs)) then
-!         write(*,'(a7,i,3e15.6)') 'T,q:',myid,time,
-!     +   t(nnx/2,iys,1,nnz/2),t(nnx/2,iys,2,nnz/2)
-!      end if
 
 
       if(it .ge. new_vis .and. ivis0 .eq. 1) then
@@ -302,7 +297,6 @@ c
       endif
       call end_phase(measurement_id_eddy_viscosity_and_bcs)
 
-
 c
 c ------------ save history files
 c
@@ -315,21 +309,40 @@ c
       if(l_root) then
          if (inetcdf .eq. 1) then
            call start_phase(measurement_id_io_history)
-           if(mhis  .and. istage .eq. 1) then
+           if((mhis .or. it.eq.1) .and. istage .eq. 1) then
               call open_his_netcdf
               call write_his_netcdf
               call close_his_netcdf
 	   endif
            call end_phase(measurement_id_io_history)
-
-         else
-            call start_phase(measurement_id_io_history)
-            if(mhis  .and. istage .eq. 1)  call write_his(itop)
-            if(mhis  .and. istage .eq. 1 .and. mtape) call close_his
-            call end_phase(measurement_id_io_history)
-
          end if
       endif
+
+c
+c ------------ save histogram files
+c
+      if((mhis .or. it.eq.1)  .and. istage .eq. 1) then
+          call start_phase(measurement_id_io_histograms)
+          call open_histog_netcdf
+          call write_histograms
+          call close_histog_netcdf
+          call end_phase(measurement_id_io_histograms)
+      end if
+
+c
+c ------------ save viz files
+c
+      if((msave_v .or. it.eq.1) .and. istage .eq. 1) then
+         call start_phase(measurement_id_io_viz)
+         if (iviznetcdf) then
+            call open_viz_netcdf
+            call write_viz_netcdf
+            call close_viz_netcdf
+         end if
+         call end_phase(measurement_id_io_viz)
+      endif
+
+
 
 c
 c ------------ save velocity field
@@ -341,20 +354,6 @@ c
          call end_phase(measurement_id_io_particles)
       endif
 
-c
-c ------------ save viz files
-c
-      if(msave_v .and. istage .eq. 1) then
-         call start_phase(measurement_id_io_viz)
-         if (iviznetcdf) then
-            call open_viz_netcdf
-            call write_viz_netcdf
-            call close_viz_netcdf
-         else
-            call save_viz
-         end if
-         call end_phase(measurement_id_io_viz)
-      endif
 
 c
 c ------------ save pressure field
@@ -365,14 +364,6 @@ c
          call end_phase(measurement_id_io_pressure)
       endif
 
-
-      if(mhis  .and. istage .eq. 1) then
-          call start_phase(measurement_id_io_histograms)
-          call open_histog_netcdf
-          call write_histograms
-          call close_histog_netcdf
-          call end_phase(measurement_id_io_histograms)
-      end if
 
 c
 c --------- get rhs for all equations
@@ -412,19 +403,9 @@ c
          end if
 
 
-      call start_phase(measurement_id_io_histograms)
-      if(l_root) then
-         if (inetcdf .eq. 1) then
-           if(mhis  .and. istage .eq. 1 .and. mtape)  then
-              !call close_histog_netcdf
-           endif
-         else
-            if(mhis  .and. istage .eq. 1 .and. mtape) then
-              call close_histograms
-            end if
-         end if
-      endif
-      call end_phase(measurement_id_io_histograms)
+
+
+
 c
  8999 continue
 
@@ -439,6 +420,22 @@ c
          call end_phase(measurement_id_particle_solver)
 
       end if
+
+      !Do the two-way coupling. Shouldn't include SFS,reintro, or coalescence
+      !since these don't represent transfer between phases
+
+      call start_phase(measurement_id_particle_coupling)
+      call particle_coupling_update
+      call end_phase(measurement_id_particle_coupling)
+
+      call start_phase(measurement_id_particle_coupling_exchange)
+      call particle_coupling_exchange
+      call end_phase(measurement_id_particle_coupling_exchange)
+
+      call start_phase(measurement_id_particle_coupling)
+      call apply_particle_coupling
+      call end_phase(measurement_id_particle_coupling)
+
 
       !Call coalescence outside of RK loop since it's not appropriate as
       !part of RK scheme
@@ -470,7 +467,16 @@ c
          call end_phase(measurement_id_particle_reintro)
       end if
 
+
+      !After dust settles, calculate particle stats
+      call start_phase(measurement_id_particle_stats)
+      call particle_xy_stats
+      call end_phase(measurement_id_particle_stats)
+
+
+      !Calculate the histogram, save the particle trajectories
       if (mhis) then
+
          call start_phase(measurement_id_io_histograms)
          call radius_histogram
          call end_phase(measurement_id_io_histograms)
@@ -482,11 +488,14 @@ c
          call end_phase(measurement_id_io_traj)
       end if
 
+
 #ifdef TECIO
-      if (mod(it, 1000) .eq. 0) then
-      call start_phase(measurement_id_io_tecio)
-      call plt_fields
-      call end_phase(measurement_id_io_tecio)
+      if (mod(it, 10000) .eq. 0) then
+
+        call start_phase(measurement_id_io_tecio)
+        call plt_fields
+        call end_phase(measurement_id_io_tecio)
+
       end if
 #endif
 
@@ -618,7 +627,6 @@ c
       use con_stats
       use particles
 
-      real :: tauc,Dv,tauc_tmp
 c
 
       ucfl = umax
@@ -674,33 +682,23 @@ c
          endif
       endif
 
+      if (icouple.eq.1 .or.
+     +    iTcouple.eq.1 .or.
+     +    iHcouple.eq.1) then
 
-      !Now need to check time step against cloud timescale tau_c
-      !Using horizontal average Nc and diameter -- could use local
-      Dv = nuf/Sc  !Diffusivity of vapor in air
+          call calc_tauc_min
 
-      tauc = 5.0
-      do iz=1,nnz
-         
-         tauc_tmp = 1.0/(pi2*Dv*2.0*radmean(iz)*Nc(iz)+1.0e-10)
-
-
-         if (.not. isnan(tauc_tmp)) then
-            tauc = min(tauc,tauc_tmp)
-         end if
-
-
-      end do
-
-      if (tauc/50.0 .lt. dt_new) then   !"tauc/15.0"
-            dt_new = tauc/50.0
+      if (tauc_min .lt. dt_new) then
+            dt_new = tauc_min
             if (l_root) then
-            write(6,6210) dt_new, dt_cfl, tauc
+            write(6,6210) dt_new, dt_cfl, tauc_min
  6210       format(' 6210 cfl time step too large for droplets',/,
      +      '   tauc time step = ',e15.6,
      +      ' cfl time step = ',e15.6,' tauc = ',e15.6)
             end if
       end if
+
+      end if  !Particle coupling
       
 
       end if  !ifix_dt .eq. 0
@@ -1592,11 +1590,18 @@ c
 !         w_buy = batag*(t(ix,iy,1,iz)*weit1 +
 !     +                  t(ix,iy,1,izp1)*weit)
 
-         w_buy = bfac*grav/theta_base(iz)*
+         if (iz <= 127) then
+
+           w_buy = bfac*grav/theta_base(iz)*
      +        ( (t(ix,iy,1,iz)*weit1 + t(ix,iy,1,izp1)*weit)*
      +        (1.0+0.61*(weit1*t(ix,iy,2,iz) + weit*t(ix,iy,2,izp1))) - 
      +        (theta_base(iz)*weit1 + theta_base(izp1)*weit) )
 
+         else
+
+           w_buy = 0.0
+
+         end if
 
 c
 c ------------ geostrophic wind
@@ -1873,10 +1878,19 @@ c
 !         w_buy = batag*(t(ix,iy,1,iz)*weit1 +
 !     +                  t(ix,iy,1,izp1)*weit)
 
-         w_buy = bfac*grav/theta_base(iz)*
+         if (iz <= 127) then
+
+           w_buy = bfac*grav/theta_base(iz)*
      +        ( (t(ix,iy,1,iz)*weit1 + t(ix,iy,1,izp1)*weit)*
      +        (1.0+0.61*(weit1*t(ix,iy,2,iz) + weit*t(ix,iy,2,izp1))) - 
      +        (theta_base(iz)*weit1 + theta_base(izp1)*weit) )
+
+         else
+
+           w_buy = 0.0
+
+         end if
+
 c
 c ------------ geostrophic wind
 c
@@ -2389,39 +2403,6 @@ c
       enddo
 
 
-!---------add on the thermal coupling from the particles:
-      if (iscl == 1) then
-      if (iTcouple == 1) then
-      do iz=izs,ize
-         do iy=iys,iye
-         do ix=1,nnx
-          if (iexner) then
-          r4(ix,iy,1,iz) = r4(ix,iy,1,iz) + partTsrc(ix,iy,iz)/
-     +    exner(surf_p,func_p_base(surf_p,tsfcc(1),zz(iz)))
-          else
-             r4(ix,iy,1,iz) = r4(ix,iy,1,iz) + partTsrc(ix,iy,iz)
-          end if    
-         end do
-         end do
-      end do
-      end if
-      end if
-
-
-      if (iscl == 2) then
-      if (iHcouple == 1) then
-      do iz=izs,ize
-         do iy=iys,iye
-         do ix=1,nnx
-          r4(ix,iy,1,iz) = r4(ix,iy,1,iz) + partTEsrc(ix,iy,iz)
-          r4(ix,iy,2,iz) = r4(ix,iy,2,iz) + partHsrc(ix,iy,iz)
-         end do
-         end do
-      end do
-      end if
-      end if
-
-
 !---------add on simple radiation scheme:
       if (ilongwave == 1) then
       if (iscl == 1) then
@@ -2714,31 +2695,6 @@ c
          endif
       enddo
 
-!---------add on the thermal coupling from the particles:
-      if (iscl == 1) then 
-      if (iTcouple == 1) then
-      do iz=izs,ize
-         do iy=iys,iye
-         do ix=1,nnx
-          r4(ix,iy,1,iz) = r4(ix,iy,1,iz) + partTsrc(ix,iy,iz)
-         end do
-         end do
-      end do
-      end if
-      end if  
-
-      if (iscl == 2) then 
-      if (iHcouple == 1) then
-      do iz=izs,ize
-         do iy=iys,iye
-         do ix=1,nnx
-          r4(ix,iy,1,iz) = r4(ix,iy,1,iz) + partTEsrc(ix,iy,iz)
-          r4(ix,iy,2,iz) = r4(ix,iy,2,iz) + partHsrc(ix,iy,iz)
-         end do
-         end do
-      end do
-      end if
-      end if 
 
 !-----------add on the humidity wall sink 
 
@@ -3087,35 +3043,6 @@ c
       real sfc_flx(2+nscl)
       real upars(2)
 c
-
-          
-      !This was for the C-FOG setup
-      if (icase.eq.3) then
-      !! To change the lower surface temperature at some specified time
-      if (time .gt. 3600.0) then
-         tsfcc(1) = 282.0
-      else
-         tsfcc(1)  = 284.0
-      end if
-      end if
-
-      ! FATIMA ADV. CASE SETUP
-      !if (icase.eq.6) then
-
-        !if (time .gt. 1800.0) then   !3600.0
-
-          !tsfcc(1) = 291.0   !286.5
-          !surf_rho = surf_p/Rd/tsfcc(1)
-
-        !else
-
-          !tsfcc(1) = 287.5
-          !surf_rho = surf_p/Rd/tsfcc(1)
-
-        !end if
-
-      !end if 
-
 
       iz   = 1
       izm1 = iz - 1
@@ -3989,6 +3916,7 @@ c
          do ix=1,nnx
             r3(ix,iy,iz) = r3(ix,iy,iz) - r3_sum(iz)
             w(ix,iy,iz)  = w(ix,iy,iz) + dtgama*r3(ix,iy,iz)
+
          enddo
          enddo
       enddo
@@ -5525,8 +5453,8 @@ c
 
          elseif (icase.eq.6) then !FATIMA
 
-         dtdzf(1)=(289.5-287.51)/(128.0-70.0)
-         dtdzf(2)=(0.0094-0.0098)/(128.0-70.0)
+         dtdzf(1)=(299.5-298.0)/(256.0-205.0)   !(289.5-287.51)/(128.0-70.0)
+         dtdzf(2)=(9.5e-3-12.15e-3)/(256.0-160.0)   !(0.0094-0.0098)/(128.0-70.0)
 
          end if
 
@@ -6289,20 +6217,20 @@ c                 qv
           end if
 
             !u setup
-            z_switch_u = 128.0
-            u_surf = 3.8
-            u_switch = 4.1
-            u_top = 4.1
-            slope_u1 = (u_top-u_surf)/128.0
+!            z_switch_u = 128.0
+!            u_surf = 3.8
+!            u_switch = 4.1
+!            u_top = 4.1
+!            slope_u1 = (u_top-u_surf)/128.0
 
             !v setup
-            z_switch_v = 128.0
-            v_surf = 1.4
-            v_switch = 0.4
-            v_top = 0.4
-            slope_v1 = (v_top-v_surf)/128.0
+!            z_switch_v = 128.0
+!            v_surf = 1.4
+!            v_switch = 0.4
+!            v_top = 0.4
+!            slope_v1 = (v_top-v_surf)/128.0
 
-            !do iz=izs,ize
+!            do iz=izs,ize
             do iy=iys,iye
             do ix=1,nnx
 
@@ -7132,7 +7060,6 @@ c
       it=it+1
 c
       dt    = dt_new
-      dtg   = dt
       mnout = (mod(it,imean).eq.0).or. (it.eq.1)
       mtape = (mod(it,itape).eq.0)
       micut = (mod(it,itcut).eq.0)
@@ -7143,7 +7070,6 @@ c
 	 mhis     = (floor(time/ihst) .ne. 
      +              floor((time+dt)/ihst))
       endif
-       mtrans = mhis
 
       if (i_viz .lt. 0) then
          msave_v = .false.
@@ -7467,7 +7393,7 @@ c ------- indices for indexing array stat(.,.)
 c         js = number of non-scalar stats
 c         ns = number of scalar stats
 c
-      integer, parameter :: js = 43, ns = 5, nstat = js + ns*nscl
+      integer, parameter :: js = 19, ns = 5, nstat = js + ns*nscl
       real :: stat(1:nnz,nstat)
 
       integer :: ix,iy,iz,izm1,izp1,izp2,m1,m2,m3,m4,m5,i,l
@@ -7487,39 +7413,15 @@ c          stat(.,7) = sgs e at zu = engsbz
 c          stat(.,8) = sgs e at zw = eavg
 c          stat(.,9) = resolved uw at zw = uwle
 c          stat(.,10) = resolved vw at zw = vwle
-c          stat(.,11) = particle number in each cell 
-c          stat(.,12) = vpsum(1) 
-c          stat(.,13) = vpsum(2) 
-c          stat(.,14) = vpsum(3) 
-c          stat(.,15) = vpsqrsum(1) 
-c          stat(.,16) = vpsqrsum(2) 
-c          stat(.,17) = vpsqrsum(3) 
-c          stat(.,18) = partsrc(1) 
-c          stat(.,19) = partsrc(2) 
-c          stat(.,20) = partsrc(3) 
-c          stat(.,21) = upwp - up'*wp'
-c          stat(.,22) = Tpsum
-c          stat(.,23) = Tpsqrsum
-c          stat(.,24) = Tfsum
-c          stat(.,25) = qfsum
-c          stat(.,26) = wpTpsum
-c          stat(.,27) = Tpsrc
-c          stat(.,28) = radsum
-c          stat(.,29) = rad2sum
-c          stat(.,30) = mass_p_sum
-c          stat(.,31) = mass_w_sum
-c          stat(.,32) = Hpsrc
-c          stat(.,33) = TEpsrc
-c          stat(.,34) = qstarsum
-c          stat(.,35) = relative humidity
-c          stat(.,36) = temperature (NOT potential temp)
-c          stat(.,37) = RH^2
-c          stat(.,38) = ufsum(1) 
-c          stat(.,39) = ufsum(2) 
-c          stat(.,40) = ufsum(3) 
-c          stat(.,41) = ufsqrsum(1) 
-c          stat(.,42) = ufsqrsum(2) 
-c          stat(.,43) = ufsqrsum(3) 
+c          stat(.,11) = partsrc(1) 
+c          stat(.,12) = partsrc(2) 
+c          stat(.,13) = partsrc(3) 
+c          stat(.,14) = Tpsrc
+c          stat(.,15) = Hpsrc
+c          stat(.,16) = TEpsrc
+c          stat(.,17) = relative humidity
+c          stat(.,18) = temperature (NOT potential temp)
+c          stat(.,19) = RH^2
 c          stat(.,m1) = resolved scalar flux wt at zw = wtle
 c          stat(.,m2) = resolved scalar flux ut at zw = utle
 c          stat(.,m3) = resolved scalar flux vt at zw = vtle
@@ -7552,13 +7454,6 @@ c
       izp1 = iz + 1
       izm1 = iz - 1
 
-      !Set the density based on whether to take base state into account
-      if (iexner .eq. 1) then
-         rhoa = func_rho_base(surf_p,tsfcc(1),zz(iz))
-      else
-         rhoa = surf_rho
-      end if
-
 
       do iy=iys,iye
       do ix=1,nnx
@@ -7582,64 +7477,30 @@ c
          stat(iz,10) = stat(iz,10) + (w(ix,iy,iz)-wxym(iz))*
      +              0.5*((v(ix,iy,iz)-vxym(iz))+
      +                   (v(ix,iy,izp1)-vxym(izp1)))
-         stat(iz,11) = stat(iz,11) + partcount(ix,iy,iz)
-         stat(iz,12) = stat(iz,12) + vpsum(ix,iy,iz,1)
-         stat(iz,13) = stat(iz,13) + vpsum(ix,iy,iz,2)
-         stat(iz,14) = stat(iz,14) + vpsum(ix,iy,iz,3)
-         stat(iz,15) = stat(iz,15) + vpsqrsum(ix,iy,iz,1)
-         stat(iz,16) = stat(iz,16) + vpsqrsum(ix,iy,iz,2)
-         stat(iz,17) = stat(iz,17) + vpsqrsum(ix,iy,iz,3)
-         stat(iz,18) = stat(iz,18) + partsrc(ix,iy,iz,1)
-         stat(iz,19) = stat(iz,19) + partsrc(ix,iy,iz,2)
-         stat(iz,20) = stat(iz,20) + partsrc(ix,iy,iz,3)
-         stat(iz,21) = stat(iz,21) + upwp(ix,iy,iz)
-         stat(iz,22) = stat(iz,22) + Tpsum(ix,iy,iz)
-         stat(iz,23) = stat(iz,23) + Tpsqrsum(ix,iy,iz)
-         stat(iz,24) = stat(iz,24) + Tfsum(ix,iy,iz)
-         stat(iz,25) = stat(iz,25) + qfsum(ix,iy,iz)
-         stat(iz,26) = stat(iz,26) + wpTpsum(ix,iy,iz)
-         stat(iz,27) = stat(iz,27) + partTsrc(ix,iy,iz)
-         stat(iz,28) = stat(iz,28) + radsum(ix,iy,iz) 
-         stat(iz,29) = stat(iz,29) + rad2sum(ix,iy,iz) 
-         stat(iz,30) = stat(iz,30) + multcount(ix,iy,iz)
-         stat(iz,31) = stat(iz,31) + mwsum(ix,iy,iz)
-         stat(iz,32) = stat(iz,32) + partHsrc(ix,iy,iz)
-         stat(iz,33) = stat(iz,33) + partTEsrc(ix,iy,iz)
-         stat(iz,34) = stat(iz,34) + qstarsum(ix,iy,iz)
+         stat(iz,11) = stat(iz,11) + partsrc(ix,iy,iz,1)
+         stat(iz,12) = stat(iz,12) + partsrc(ix,iy,iz,2)
+         stat(iz,13) = stat(iz,13) + partsrc(ix,iy,iz,3)
+         stat(iz,14) = stat(iz,14) + partTsrc(ix,iy,iz)
+         stat(iz,15) = stat(iz,15) + partHsrc(ix,iy,iz)
+         stat(iz,16) = stat(iz,16) + partTEsrc(ix,iy,iz)
 
          if (iexner .eq. 1) then
-         Ttmp = t(ix,iy,1,iz)*
-     +   exner(surf_p,func_p_base(surf_p,tsfcc(1),zz(iz)))
+            Ttmp = t(ix,iy,1,iz)*
+     +      exner(surf_p,func_p_base(surf_p,tsfcc(1),zz(iz)))
+            !rhoa = func_rho_base(surf_p,tsfcc(1),zz(iz))
+	    rhoa = func_p_base(surf_p,tsfcc(1),zz(iz))/Rd/Ttmp
          else
-         Ttmp = t(ix,iy,1,iz)
+            Ttmp = t(ix,iy,1,iz)
+            rhoa = surf_rho
          end if
+
 
          RHtmp = Ttmp*
      +   t(ix,iy,2,iz)*Ru/Mw/mod_magnus(Ttmp)*rhoa*100.0
 
-         stat(iz,35) = stat(iz,35) + RHtmp
-         stat(iz,36) = stat(iz,36) + Ttmp
-         stat(iz,37) = stat(iz,37) + RHtmp**2
-
-         stat(iz,38) = stat(iz,38) + ufsum(ix,iy,iz,1)
-         stat(iz,39) = stat(iz,39) + ufsum(ix,iy,iz,2)
-         stat(iz,40) = stat(iz,40) + ufsum(ix,iy,iz,3)
-         stat(iz,41) = stat(iz,41) + ufsqrsum(ix,iy,iz,1)
-         stat(iz,42) = stat(iz,42) + ufsqrsum(ix,iy,iz,2)
-         stat(iz,43) = stat(iz,43) + ufsqrsum(ix,iy,iz,3)
-
-         !!! ** REMEMBER TO CHANGE BACK "js" VALUE **
-         !stat(iz,44) = stat(iz,44) + partcount_accum(ix,iy,iz)
-         !stat(iz,45) = stat(iz,45) + partcount_coarse(ix,iy,iz)
-
-         !stat(iz,46) = stat(iz,46) + multcount_accum(ix,iy,iz)
-         !stat(iz,47) = stat(iz,47) + multcount_coarse(ix,iy,iz)
-
-         !stat(iz,48) = stat(iz,48) + radsum_accum(ix,iy,iz)
-         !stat(iz,49) = stat(iz,49) + radsum_coarse(ix,iy,iz)
-
-         !stat(iz,50) = stat(iz, 50) + mwsum_accum(ix,iy,iz)
-         !stat(iz,51) = stat(iz, 51) + mwsum_coarse(ix,iy,iz)
+         stat(iz,17) = stat(iz,17) + RHtmp
+         stat(iz,18) = stat(iz,18) + Ttmp
+         stat(iz,19) = stat(iz,19) + RHtmp**2
 
       enddo
       enddo
@@ -7724,107 +7585,19 @@ c
       uwle(iz)   = stat(iz,9)*fnxy
       vwle(iz)   = stat(iz,10)*fnxy
 
-      if (stat(iz,11).eq.0) then
-         zconc(iz) = 0.0
-         vp1mean(iz) = 0.0
-         vp2mean(iz) = 0.0
-         vp3mean(iz) = 0.0
-         vp1msqr(iz) = 0.0
-         vp2msqr(iz) = 0.0
-         vp3msqr(iz) = 0.0
-         upwpm(iz) = 0.0
-         Tpmean(iz) = 0.0
-         Tpmsqr(iz) = 0.0
-         Tfmean(iz) = 0.0
-         qfmean(iz) = 0.0
-         wpTpm(iz) = 0.0
-         radmean(iz) = 0.0
-         rad2mean(iz) = 0.0
-         multmean(iz) = 0.0
-         mwmean(iz) = 0.0
-         qstarm(iz) = 0.0
-         uf1mean(iz) = 0.0
-         uf2mean(iz) = 0.0
-         uf3mean(iz) = 0.0
-         uf1msqr(iz) = 0.0
-         uf2msqr(iz) = 0.0
-         uf3msqr(iz) = 0.0
-
-      else
-
-         zconc(iz) = stat(iz,11)/xl/yl/dzw(iz)
-         vp1mean(iz) = stat(iz,12)/stat(iz,11)
-         vp2mean(iz) = stat(iz,13)/stat(iz,11)
-         vp3mean(iz) = stat(iz,14)/stat(iz,11)
-         vp1msqr(iz) = stat(iz,15)/stat(iz,11)-vp1mean(iz)**2
-         vp2msqr(iz) = stat(iz,16)/stat(iz,11)-vp2mean(iz)**2
-         vp3msqr(iz) = stat(iz,17)/stat(iz,11)-vp3mean(iz)**2
-         upwpm(iz) = stat(iz,21)/stat(iz,11)-(vp1mean(iz)*vp3mean(iz))
-         Tpmean(iz) = stat(iz,22)/stat(iz,11)
-         Tpmsqr(iz) = stat(iz,23)/stat(iz,11)-Tpmean(iz)**2
-         Tfmean(iz) = stat(iz,24)/stat(iz,11)
-         qfmean(iz) = stat(iz,25)/stat(iz,11)
-         wpTpm(iz) = stat(iz,26)/stat(iz,11)-(Tpmean(iz)*vp3mean(iz))
-         radmean(iz) = stat(iz,28)/stat(iz,11)
-         rad2mean(iz)= stat(iz,29)/stat(iz,11)
-         multmean(iz) = stat(iz,30)/stat(iz,11)
-         mwmean(iz) = stat(iz,31)/stat(iz,11)
-         qstarm(iz) = stat(iz,34)/stat(iz,11)
-         uf1mean(iz) = stat(iz,38)/stat(iz,11)
-         uf2mean(iz) = stat(iz,39)/stat(iz,11)
-         uf3mean(iz) = stat(iz,40)/stat(iz,11)
-         uf1msqr(iz) = stat(iz,41)/stat(iz,11)-uf1mean(iz)**2
-         uf2msqr(iz) = stat(iz,42)/stat(iz,11)-uf2mean(iz)**2
-         uf3msqr(iz) = stat(iz,43)/stat(iz,11)-uf3mean(iz)**2
-      end if
-
-      !if (stat(iz,44)==0) then
-
-        !zconc_accum(iz) = 0.0
-        !radmean_accum(iz) = 0.0
-
-      !else
-
-        !zconc_accum(iz) = stat(iz,44)/xl/yl/dzw(iz)
-        !radmean_accum(iz) = stat(iz,48)/stat(iz,44)
-
-      !end if
-
-      !if (stat(iz,45)==0) then
-
-        !zconc_coarse(iz) = 0.0
-        !radmean_coarse(iz) = 0.0
-
-      !else
-
-        !zconc_coarse(iz) = stat(iz,45)/xl/yl/dzw(iz)
-        !radmean_coarse(iz) = stat(iz,49)/stat(iz,45)
-
-      !end if
-         
-      m1src(iz) = stat(iz,18)*fnxy
-      m2src(iz) = stat(iz,19)*fnxy
-      m3src(iz) = stat(iz,20)*fnxy
+      m1src(iz) = stat(iz,11)*fnxy
+      m2src(iz) = stat(iz,12)*fnxy
+      m3src(iz) = stat(iz,13)*fnxy
       uw_tot(iz) = uwle(iz) + uwsb(iz)
       vw_tot(iz) = vwle(iz) + vwsb(iz)
-      Tpsrc(iz) = stat(iz,27)*fnxy
-      Nc(iz) = stat(iz,30)/xl/yl/dzw(iz)
-      !Nc_accum(iz) = stat(iz,46)/xl/yl/dzw(iz)
-      !Nc_coarse(iz) = stat(iz,47)/xl/yl/dzw(iz)
-      ql(iz) = stat(iz,31)/xl/yl/dzw(iz)/rhoa
-      !ql_accum(iz) = stat(iz,50)/xl/yl/dzw(iz)/rhoa
-      !ql_coarse(iz) = stat(iz,51)/xl/yl/dzw(iz)/rhoa
-      !LWC_accum(iz) = stat(iz,50)/xl/yl/dzw(iz)
-      !LWC_coarse(iz) = stat(iz,51)/xl/yl/dzw(iz)
-      Hpsrc(iz) = stat(iz,32)*fnxy
-      TEpsrc(iz) = stat(iz,33)*fnxy
-      RHxym(iz) = stat(iz,35)*fnxy
-      tempxym(iz) = stat(iz,36)*fnxy
-      RHmsqr(iz) = stat(iz,37)*fnxy
+      Tpsrc(iz) = stat(iz,14)*fnxy
+      Hpsrc(iz) = stat(iz,15)*fnxy
+      TEpsrc(iz) = stat(iz,16)*fnxy
+      RHxym(iz) = stat(iz,17)*fnxy
+      tempxym(iz) = stat(iz,18)*fnxy
+      RHmsqr(iz) = stat(iz,19)*fnxy
 
 
-      !Doesn't need averaging if basing radiation source on average ql:
-      radtend(iz) = radsrc(iz)
 
 
 c
@@ -8707,10 +8480,10 @@ c
       r4 = 0.0
       r5 = 0.0
 
-      allocate(p_base(nnz),
-     +         rho_base(nnz),
-     +         T_base(nnz),
-     +         theta_base(nnz))
+      allocate(p_base(0:nnz+1),
+     +         rho_base(0:nnz+1),
+     +         T_base(0:nnz+1),
+     +         theta_base(0:nnz+1))
       p_base = 0.0
       rho_base = 0.0
       T_base = 0.0
@@ -8756,58 +8529,7 @@ c
       T_t = 0.0
       T2_t = 0.0
 
-      allocate(partcount(nnx,iys:iye,izs-1:ize+1))
-      partcount = 0.0
-      !allocate(partcount_accum(nnx,iys:iye,izs-1:ize+1))
-      !partcount_accum = 0.0
-      !allocate(partcount_coarse(nnx,iys:iye,izs-1:ize+1))
-      !partcount_coarse = 0.0
-      allocate(partcount_t(0:nnz+1,iys:iye,mxs:mxe))
-      partcount_t = 0.0
-      !allocate(partcount_accum_t(0:nnz+1,iys:iye,mxs:mxe))
-      !partcount_accum_t = 0.0
-      !allocate(partcount_coarse_t(0:nnz+1,iys:iye,mxs:mxe))
-      !partcount_coarse_t = 0.0
-      allocate(upwp_t(0:nnz+1,iys:iye,mxs:mxe))
-      upwp_t = 0.0
-      allocate(upwp(nnx,iys:iye,izs-1:ize+1))
-      upwp = 0.0
-      allocate(vpsum(nnx,iys:iye,izs-1:ize+1,1:3))
-      vpsum = 0.0
-      allocate(vpsum_t(0:nnz+1,iys:iye,mxs:mxe,1:3))
-      vpsum_t = 0.0
-      allocate(vpsqrsum(nnx,iys:iye,izs-1:ize+1,1:3))
-      vpsqrsum = 0.0
-      allocate(vpsqrsum_t(0:nnz+1,iys:iye,mxs:mxe,1:3))
-      vpsqrsum_t = 0.0
-      allocate(ufsum(nnx,iys:iye,izs-1:ize+1,1:3))
-      ufsum = 0.0
-      allocate(ufsum_t(0:nnz+1,iys:iye,mxs:mxe,1:3))
-      ufsum_t = 0.0
-      allocate(ufsqrsum(nnx,iys:iye,izs-1:ize+1,1:3))
-      ufsqrsum = 0.0
-      allocate(ufsqrsum_t(0:nnz+1,iys:iye,mxs:mxe,1:3))
-      ufsqrsum_t = 0.0
-      allocate(Tpsum(nnx,iys:iye,izs-1:ize+1))
-      Tpsum = 0.0
-      allocate(Tpsum_t(0:nnz+1,iys:iye,mxs:mxe))
-      Tpsum_t = 0.0
-      allocate(Tpsqrsum(nnx,iys:iye,izs-1:ize+1))
-      Tpsqrsum = 0.0
-      allocate(Tpsqrsum_t(0:nnz+1,iys:iye,mxs:mxe))
-      Tpsqrsum_t = 0.0
-      allocate(Tfsum(nnx,iys:iye,izs-1:ize+1))
-      Tfsum = 0.0
-      allocate(Tfsum_t(0:nnz+1,iys:iye,mxs:mxe))
-      Tfsum_t = 0.0
-      allocate(qfsum(nnx,iys:iye,izs-1:ize+1))
-      qfsum = 0.0
-      allocate(qfsum_t(0:nnz+1,iys:iye,mxs:mxe))
-      qfsum_t = 0.0
-      allocate(wpTpsum(nnx,iys:iye,izs-1:ize+1))
-      wpTpsum = 0.0
-      allocate(wpTpsum_t(0:nnz+1,iys:iye,mxs:mxe))
-      wpTpsum_t = 0.0
+      !Column-oriented array to calculate max. droplet relaxation time
       allocate(partsrc(nnx,iys:iye,izs-1:ize+1,1:3))
       partsrc = 0.0
       allocate(partsrc_t(0:nnz+1,iys:iye+1,mxs:mxe+1,1:3))
@@ -8816,46 +8538,6 @@ c
       partTsrc = 0.0
       allocate(partTsrc_t(0:nnz+1,iys:iye+1,mxs:mxe+1))
       partTsrc_t = 0.0
-      allocate(radsum(nnx,iys:iye,izs-1:ize+1))
-      radsum = 0.0
-      !allocate(radsum_accum(nnx,iys:iye,izs-1:ize+1))
-      !radsum_accum = 0.0
-      !allocate(radsum_coarse(nnx,iys:iye,izs-1:ize+1))
-      !radsum_coarse = 0.0
-      allocate(radsum_t(0:nnz+1,iys:iye,mxs:mxe)) 
-      radsum_t = 0.0
-      !allocate(radsum_accum_t(0:nnz+1,iys:iye,mxs:mxe))
-      !radsum_accum_t = 0.0
-      !allocate(radsum_coarse_t(0:nnz+1,iys:iye,mxs:mxe)) 
-      !radsum_coarse_t = 0.0
-      allocate(rad2sum(nnx,iys:iye,izs-1:ize+1)) 
-      rad2sum = 0.0
-      allocate(rad2sum_t(0:nnz+1,iys:iye,mxs:mxe))
-      rad2sum_t = 0.0
-      allocate(multcount(nnx,iys:iye,izs-1:ize+1)) 
-      multcount = 0.0
-      !allocate(multcount_accum(nnx,iys:iye,izs-1:ize+1))
-      !multcount_accum = 0.0
-      !allocate(multcount_coarse(nnx,iys:iye,izs-1:ize+1))
-      !multcount_coarse = 0.0
-      allocate(multcount_t(0:nnz+1,iys:iye,mxs:mxe)) 
-      multcount_t = 0.0
-      !allocate(multcount_accum_t(0:nnz+1,iys:iye,mxs:mxe))
-      !multcount_accum_t = 0.0
-      !allocate(multcount_coarse_t(0:nnz+1,iys:iye,mxs:mxe))
-      !multcount_coarse_t = 0.0
-      allocate(mwsum(nnx,iys:iye,izs-1:ize+1)) 
-      mwsum = 0.0
-      !allocate(mwsum_accum(nnx,iys:iye,izs-1:ize+1))
-      !mwsum_accum = 0.0
-      !allocate(mwsum_coarse(nnx,iys:iye,izs-1:ize+1))
-      !mwsum_coarse = 0.0
-      allocate(mwsum_t(0:nnz+1,iys:iye,mxs:mxe)) 
-      mwsum_t = 0.0
-      !allocate(mwsum_accum_t(0:nnz+1,iys:iye,mxs:mxe))
-      !mwsum_accum_t = 0.0
-      !allocate(mwsum_coarse_t(0:nnz+1,iys:iye,mxs:mxe))
-      !mwsum_coarse_t = 0.0
       allocate(partHsrc(nnx,iys:iye,izs-1:ize+1))
       partHsrc = 0.0
       allocate(partHsrc_t(0:nnz+1,iys:iye+1,mxs:mxe+1))
@@ -8864,10 +8546,6 @@ c
       partTEsrc = 0.0
       allocate(partTEsrc_t(0:nnz+1,iys:iye+1,mxs:mxe+1))
       partTEsrc_t = 0.0
-      allocate(qstarsum(nnx,iys:iye,izs-1:ize+1)) 
-      qstarsum = 0.0
-      allocate(qstarsum_t(0:nnz+1,iys:iye,mxs:mxe)) 
-      qstarsum_t = 0.0
 
       allocate(LWP(mxs:mxe,iys:iye))
       LWP = 0.0
@@ -9310,7 +8988,6 @@ c
                !temp_z(6,i,j) = partsrc(i,j,k,1)
                !temp_z(7,i,j) = partsrc(i,j,k,2)
                !temp_z(8,i,j) = partsrc(i,j,k,3)
-               !temp_z(9,i,j) = partcount(i,j,k)/dx/dy/dzw(k)
             enddo
             enddo
 #if defined(SWAP)
@@ -9352,7 +9029,6 @@ c
                !temp_y(6,i,k) = partsrc(i,j,k,1)
                !temp_y(7,i,k) = partsrc(i,j,k,2)
                !temp_y(8,i,k) = partsrc(i,j,k,3)
-               !temp_y(9,i,k) = partcount(i,j,k)/dx/dy/dzw(k)
             enddo
             enddo
 #if defined(SWAP)
@@ -9398,7 +9074,6 @@ c
               !buf_send(6,j,k) = partsrc(i,j,k,1)
               !buf_send(7,j,k) = partsrc(i,j,k,2)
               !buf_send(8,j,k) = partsrc(i,j,k,3)
-              !buf_send(9,j,k) = partcount(i,j,k)/dx/dy/dzw(k)
             enddo
             enddo
             if(myid .ne. iss) then
@@ -10871,7 +10546,7 @@ c
       include 'mpif.h'
 
       real :: LWP_tmp(nnz-1),LWP_rad(nnz-1)  !Have to calulate the integral from top down, then reverse ordering
-      real :: rhoa,func_rho_base
+      real :: rhoa,func_rho_base,Ttmp,exner,func_p_base
       integer :: iz,lc
 
       !Do trapezoidal integration from the TOP down:
@@ -10883,7 +10558,10 @@ c
          if (lc .eq. 1) then
 
          if (iexner.eq.1) then
-            rhoa = func_rho_base(surf_p,tsfcc(1),zz(iz))
+            Ttmp = txym(iz,1)*
+     +      exner(surf_p,func_p_base(surf_p,tsfcc(1),zz(iz)))
+            !rhoa = func_rho_base(surf_p,tsfcc(1),zz(iz))
+	    rhoa = func_p_base(surf_p,tsfcc(1),zz(iz))/Rd/txym(iz,1)
          else
             rhoa = surf_rho
          end if
@@ -10928,7 +10606,10 @@ c
       do iz=1,nnz
 
          if (iexner.eq.1) then
-            rhoa = func_rho_base(surf_p,tsfcc(1),zz(iz))
+            Ttmp = txym(iz,1)*
+     +      exner(surf_p,func_p_base(surf_p,tsfcc(1),zz(iz)))
+            !rhoa = func_rho_base(surf_p,tsfcc(1),zz(iz))
+	    rhoa = func_p_base(surf_p,tsfcc(1),zz(iz))/Rd/txym(iz,1)
          else
             rhoa = surf_rho
          end if
@@ -11034,14 +10715,40 @@ c
       use fields
       use pars
       use con_stats
+      use con_data
       implicit none
 
       integer :: iz
       real, intent(in) :: T_surf
       real :: func_T_base,func_p_base,func_rho_base
 
+          
+      !This was for the C-FOG setup
+      if (icase.eq.3) then
+      !! To change the lower surface temperature at some specified time
+      if (time .gt. 3600.0) then
+         tsfcc(1) = 282.0
+      else
+         tsfcc(1)  = 284.0
+      end if
+      end if
+
+
+      ! FATIMA ADV. CASE SETUP
+!      if (icase.eq.6) then
+!      if (time .gt. 3600.0) then
+!         tsfcc(1) = 286.5
+!         surf_rho = surf_p/Rd/tsfcc(1)
+!      else
+!         tsfcc(1) = 287.5
+!         surf_rho = surf_p/Rd/tsfcc(1)
+!      end if
+!      end if 
+
+
+
       if (iexner.eq.1) then
-         do iz=1,nnz 
+         do iz=0,nnz+1
             theta_base(iz) = T_surf
             T_base(iz) = func_T_base(T_surf,zz(iz))
             p_base(iz) = func_p_base(surf_p,T_surf,zz(iz))
@@ -11093,7 +10800,7 @@ c
      +         Cpp,Mw,Ms,Ru,Gam,Ion,Sal,Rd,
      +         radius_init,radius_std,kappas_init,kappas_std,
      +         grav, t00,fcor,zo,zos,
-     +         vp_init,Tp_init,nprime
+     + vp_init,Tp_init,nprime,t_reintro,t_stop_accum,t_stop_coarse
 
 
       !params.in contains namelists to read
@@ -11237,7 +10944,7 @@ c
       real :: d,CDF,M,S,cdf_func_single
 
       cdf_func_single = 1.0/2.0*
-     + (1.0 + erf((log(d) - M)/S/sqrt(2.0))) - CDF
+     + (1.0 + erf((log(d) - M)/S/sqrt(2.0)))  - CDF
 
       end function cdf_func_single
       function cdf_func(d,CDF,factor,Ma,Sa,Mc,Sc)
