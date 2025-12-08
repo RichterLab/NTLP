@@ -31,7 +31,9 @@ from .models import do_bdf, \
 from .physics import BDF_TOLERANCE_ABSOLUTE, \
                      BDF_TOLERANCE_RELATIVE, \
                      get_parameter_ranges, \
-                     set_parameter_ranges
+                     set_parameter_ranges, \
+                     normalize_droplet_parameters, \
+                     scale_droplet_parameters
 
 def average_particles_data( particles_df, evaluation_tags, simulation_times, background_columns=[] ):
     """
@@ -798,6 +800,8 @@ class ScoreReport():
       per_particle_nrmse     - Dictionary, keys are particle IDs, values are floats
                                corresponding to the model's NRMSE on the
                                given particle.
+      run_deviations         - Boolean, records whether CUSUM/deviation analysis
+                               was performed.
       z_score_model          - Scikit-learn StandardScaler, z-scores deviation
                                parameters.
       z_score_mean           - The mean of each droplet parameter pre-zscore.
@@ -992,6 +996,7 @@ class ScoreReport():
         self.deviation_times        = np.hstack( deviation_times )
         self.deviation_particle_ids = np.hstack( deviation_particle_ids )
 
+        # These are set to optional since they are only set if clustering was run
         self.log_deviations     : Optional[np.ndarray]              = None
         self.z_score_model      : Optional[StandardScaler]          = None
         self.z_score_mean       : Optional[np.ndarray]              = None
@@ -1051,8 +1056,12 @@ class ScoreReport():
           ax  - the axis of the graph
 
         """
-        if not self.run_deviations:
-            raise ValueError( "Deviation analysis was not run for this score report. Cannot plot deviations." )
+
+        if hasattr( self, "run_deviations" ):
+            if not self.run_deviations:
+                raise ValueError( "Deviation analysis was not run for this score report. Cannot plot deviations." )
+        else:
+            warnings.warn( "Loaded a legacy ScoreReport without run_deviations attribute! Assuming deviations were run..." )
 
         colormap = plt.get_cmap("tab20")
 
@@ -1146,18 +1155,24 @@ class ScoreReport():
         self.z_score_model           = StandardScaler()
         z_scored_deviations          = self.z_score_model.fit_transform( self.log_deviations )
         filtered_z_scored_deviations = z_scored_deviations[np.all( np.abs( z_scored_deviations < z_score_outlier_threshold ),
-                                                                   axis=1)]
+                                                                   axis=1 )]
+        z_score_mask                 = np.all( np.abs( z_scored_deviations < z_score_outlier_threshold ),
+                                                                   axis=1 )
+        print(z_score_mask)
         self.z_score_mean            = np.mean( z_scored_deviations, axis=0 )
+
+        normed_deviations  = normalize_droplet_parameters( self.deviations )
 
         self.cluster_model = ( BayesianGaussianMixture( init_params=init_params,
                                                         n_init=n_init,
                                                         n_components=n_components,
                                                         **kwargs )
-                                                       .fit( filtered_z_scored_deviations ) )
+                                                       .fit( normed_deviations ) )
 
         self.deviation_clusters = self.cluster_model.predict( z_scored_deviations )
-        self.cluster_centers    = ( self.z_score_model.inverse_transform( self.cluster_model.means_ )
-                                  + self.z_score_mean )
+        self.cluster_centers    = scale_droplet_parameters( self.cluster_model.means_ )
+        #self.cluster_centers    = ( self.z_score_model.inverse_transform( self.cluster_model.means_ )
+        #                          + self.z_score_mean )
 
 def standard_norm( rt_data ):
     """
