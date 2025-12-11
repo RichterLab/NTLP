@@ -2759,7 +2759,7 @@ CONTAINS
   real :: dFdr(100), dFdr_sum(101), totAerosols
   real :: a, rad_init, r_interval
   real :: xv, yv, zv, xp_init(3)
-  real :: rand, ran2, Tp_init, vp_init(3), m_s
+  real :: rand, ran2, m_s
   integer :: i, np, iter, it_delay, tot_reintro
   integer :: my_reintro
   integer*8 :: mult_SSGF
@@ -2951,7 +2951,9 @@ CONTAINS
         ! Store the spatial location of this mass crossing the surface -- surface precipitation
         ipt = floor(part%xp(1) / dx) + 1
         jpt = floor(part%xp(2) / dy) + 1
+        if (ipt.le.mxe .and. ipt.ge.mxs .and. jpt.le.iye .and. jpt.gt.iys) then
         surf_precip(ipt, jpt) = surf_precip(ipt, jpt) + real(part%mult)*(rhow*2.0/3.0*pi2*part%radius**3)
+        end if
 
         !t_stop_accum = 12600.0   !36000.0 (for Case II A) !12600.0 (for Case II B)
 
@@ -3887,7 +3889,11 @@ CONTAINS
 
             Ttmp = txym(iz,1)*exner(surf_p,func_p_base(surf_p,tsfcc(1),zz(iz)))
             !rhoa = func_rho_base(surf_p,tsfcc(1),zz(iz))
-            rhoa = func_p_base(surf_p,tsfcc(1),zz(iz))/Rd/Ttmp
+            if (abs(Ttmp) .lt. 1e-8) then
+               rhoa = surf_rho
+            else
+               rhoa = func_p_base(surf_p,tsfcc(1),zz(iz))/Rd/Ttmp
+            end if
 
         else
 
