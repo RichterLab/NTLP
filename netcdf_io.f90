@@ -11,6 +11,11 @@ integer :: utau_vid,uwsfc_vid
 integer :: Tsfc_vid,qsfc_vid,wtsfc_vid,wqsfc_vid
 integer :: tnumpart_vid,tnum_destroy_vid,tot_reintro_vid
 integer :: tnumdrop_vid,tnumaerosol_vid
+integer :: tnum_coarse_vid,tnum_accum_vid
+integer :: tnum_act_coarse_vid,tnum_act_accum_vid
+integer :: tnum_de_coarse_vid,tnum_de_accum_vid
+integer :: tnum_destroy_coarse_vid,tnum_destroy_accum_vid
+integer :: tnum_inject_coarse_vid,tnum_inject_accum_vid
 integer :: Swall_vid
 integer :: meanRH_vid,varRH_vid
 integer :: radavg_vid,radmsqr_vid
@@ -123,6 +128,36 @@ subroutine netcdf_init
 
       call netcdf_check( nf90_def_var(ncid, "tnumpart", NF90_REAL, dimids,tnumpart_vid) )
       call netcdf_check( nf90_put_att(ncid,tnumpart_vid,"title","Total number of particles") )
+
+      call netcdf_check( nf90_def_var(ncid, "tnum_coarse", NF90_REAL, dimids,tnum_coarse_vid) )
+      call netcdf_check( nf90_put_att(ncid,tnum_coarse_vid,"title","Total number of coarse mode particles") )
+
+      call netcdf_check( nf90_def_var(ncid, "tnum_accum", NF90_REAL, dimids,tnum_accum_vid) )
+      call netcdf_check( nf90_put_att(ncid,tnum_accum_vid,"title","Total number of accum mode particles") )
+
+      call netcdf_check( nf90_def_var(ncid, "tnum_act_coarse", NF90_REAL, dimids,tnum_act_coarse_vid) )
+      call netcdf_check( nf90_put_att(ncid,tnum_act_coarse_vid,"title","Total number of coarse mode particles activated") )
+
+      call netcdf_check( nf90_def_var(ncid, "tnum_act_accum", NF90_REAL, dimids,tnum_act_accum_vid) )
+      call netcdf_check( nf90_put_att(ncid,tnum_act_accum_vid,"title","Total number of accum mode particles activated") )
+
+      call netcdf_check( nf90_def_var(ncid, "tnum_de_coarse", NF90_REAL, dimids,tnum_de_coarse_vid) )
+      call netcdf_check( nf90_put_att(ncid,tnum_de_coarse_vid,"title","Total number of coarse mode particles deactivated") )
+
+      call netcdf_check( nf90_def_var(ncid, "tnum_de_accum", NF90_REAL, dimids,tnum_de_accum_vid) )
+      call netcdf_check( nf90_put_att(ncid,tnum_de_accum_vid,"title","Total number of accum mode particles deactivated") )
+
+      call netcdf_check( nf90_def_var(ncid, "tnum_destroy_coarse", NF90_REAL, dimids,tnum_destroy_coarse_vid) )
+      call netcdf_check( nf90_put_att(ncid,tnum_destroy_coarse_vid,"title","Total number of coarse mode particles destroyed") )
+
+      call netcdf_check( nf90_def_var(ncid, "tnum_destroy_accum", NF90_REAL, dimids,tnum_destroy_accum_vid) )
+      call netcdf_check( nf90_put_att(ncid,tnum_destroy_accum_vid,"title","Total number of accum mode particles destroyed") )
+
+      call netcdf_check( nf90_def_var(ncid, "tnum_inject_coarse", NF90_REAL, dimids,tnum_inject_coarse_vid) )
+      call netcdf_check( nf90_put_att(ncid,tnum_inject_coarse_vid,"title","Total number of coarse mode particles injected") )
+
+      call netcdf_check( nf90_def_var(ncid, "tnum_inject_accum", NF90_REAL, dimids,tnum_inject_accum_vid) )
+      call netcdf_check( nf90_put_att(ncid,tnum_inject_accum_vid,"title","Total number of accum mode particles injected") )
 
       call netcdf_check( nf90_def_var(ncid, "tnumdrop", NF90_REAL, dimids,tnumdrop_vid) )
       call netcdf_check( nf90_put_att(ncid,tnumdrop_vid,"title","Total number of droplets defined by r>rc") )
@@ -444,6 +479,16 @@ subroutine netcdf_res
       call netcdf_check( nf90_inq_varid(ncid,"utau",utau_vid) )
       call netcdf_check( nf90_inq_varid(ncid,"uwsfc",uwsfc_vid) )
       call netcdf_check( nf90_inq_varid(ncid,"tnumpart",tnumpart_vid) )
+      call netcdf_check( nf90_inq_varid(ncid,"tnum_coarse",tnum_coarse_vid) )
+      call netcdf_check( nf90_inq_varid(ncid,"tnum_accum",tnum_accum_vid) )
+      call netcdf_check( nf90_inq_varid(ncid,"tnum_act_coarse",tnum_act_coarse_vid) )
+      call netcdf_check( nf90_inq_varid(ncid,"tnum_act_accum",tnum_act_accum_vid) )
+      call netcdf_check( nf90_inq_varid(ncid,"tnum_de_coarse",tnum_de_coarse_vid) )
+      call netcdf_check( nf90_inq_varid(ncid,"tnum_de_accum",tnum_de_accum_vid) )
+      call netcdf_check( nf90_inq_varid(ncid,"tnum_destroy_coarse",tnum_destroy_coarse_vid) )
+      call netcdf_check( nf90_inq_varid(ncid,"tnum_destroy_accum",tnum_destroy_accum_vid) )
+      call netcdf_check( nf90_inq_varid(ncid,"tnum_inject_coarse",tnum_inject_coarse_vid) )
+      call netcdf_check( nf90_inq_varid(ncid,"tnum_inject_accum",tnum_inject_accum_vid) )
       call netcdf_check( nf90_inq_varid(ncid,"tnumdrop",tnumdrop_vid) )
       call netcdf_check( nf90_inq_varid(ncid,"tnumaerosol",tnumaerosol_vid) )
       call netcdf_check( nf90_inq_varid(ncid,"tnum_destroy",tnum_destroy_vid) )
@@ -569,9 +614,19 @@ subroutine write_his_netcdf
       call netcdf_check( nf90_put_var(ncid, utau_vid, real(utau),start=(/his_counter/)) )
       call netcdf_check( nf90_put_var(ncid, uwsfc_vid, real(uwsfc),start=(/his_counter/)) )
       call netcdf_check( nf90_put_var(ncid, tnumpart_vid, real(tnumpart),start=(/his_counter/)) )
+      call netcdf_check( nf90_put_var(ncid, tnum_coarse_vid, real(tnum_coarse),start=(/his_counter/)) )
+      call netcdf_check( nf90_put_var(ncid, tnum_accum_vid, real(tnum_accum),start=(/his_counter/)) )
+      call netcdf_check( nf90_put_var(ncid, tnum_act_coarse_vid, real(tnum_act_coarse),start=(/his_counter/)) )
+      call netcdf_check( nf90_put_var(ncid, tnum_act_accum_vid, real(tnum_act_accum),start=(/his_counter/)) )
+      call netcdf_check( nf90_put_var(ncid, tnum_de_coarse_vid, real(tnum_de_coarse),start=(/his_counter/)) )
+      call netcdf_check( nf90_put_var(ncid, tnum_de_accum_vid, real(tnum_de_accum),start=(/his_counter/)) )
+      call netcdf_check( nf90_put_var(ncid, tnum_destroy_coarse_vid, real(tnum_destroy_coarse),start=(/his_counter/)) )
+      call netcdf_check( nf90_put_var(ncid, tnum_destroy_accum_vid, real(tnum_destroy_accum),start=(/his_counter/)) )
+      call netcdf_check( nf90_put_var(ncid, tnum_inject_coarse_vid, real(tnum_inject_coarse),start=(/his_counter/)) )
+      call netcdf_check( nf90_put_var(ncid, tnum_inject_accum_vid, real(tnum_inject_accum),start=(/his_counter/)) )
       call netcdf_check( nf90_put_var(ncid, tnumdrop_vid, real(tnumdrop),start=(/his_counter/)) )
       call netcdf_check( nf90_put_var(ncid, tnumaerosol_vid, real(tnumaerosol),start=(/his_counter/)) )
-      call netcdf_check( nf90_put_var(ncid, tnum_destroy_vid, real(tnum_destroy_accum),start=(/his_counter/)) )
+      call netcdf_check( nf90_put_var(ncid, tnum_destroy_vid, real(tnum_destroy),start=(/his_counter/)) )
       call netcdf_check( nf90_put_var(ncid, tdenum_vid, real(tdenum),start=(/his_counter/)) )
       call netcdf_check( nf90_put_var(ncid, tactnum_vid, real(tactnum),start=(/his_counter/)) )
       call netcdf_check( nf90_put_var(ncid, tnum100_vid, real(tnum100),start=(/his_counter/)) )
@@ -697,7 +752,16 @@ subroutine write_his_netcdf
 
 
       !Reset some cumulative quantities
-      tnum_destroy_accum = 0
+
+      num_act_coarse = 0
+      num_act_accum = 0
+      num_de_coarse = 0
+      num_de_accum = 0
+      num_destroy_coarse = 0
+      num_destroy_accum = 0
+      num_inject_coarse = 0
+      num_inject_accum = 0
+
       his_counter = his_counter + 1
 
 end subroutine write_his_netcdf

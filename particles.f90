@@ -30,6 +30,17 @@ module particles
   integer :: num_destroy=0,tnum_destroy=0
   integer :: tot_reintro=0
 
+  integer :: num_coarse,tnum_coarse
+  integer :: num_accum,tnum_accum
+  integer :: tnum_act_coarse
+  integer :: tnum_act_accum
+  integer :: tnum_de_coarse
+  integer :: tnum_de_accum
+  integer :: tnum_destroy_coarse
+  integer :: tnum_destroy_accum
+  integer :: tnum_inject_coarse
+  integer :: tnum_inject_accum
+
   real :: Rep_avg,part_grav(3)
   real :: radavg,radmin,radmax,radmsqr,tempmin,tempmax,qmin,qmax
   real :: twmass,tpmass,tpvol
@@ -3563,7 +3574,7 @@ CONTAINS
       integer :: ierr
       real :: rhop,pi,rhoa,func_rho_base,func_p_base,exner
       
-      integer,parameter :: num0_int=8,num0_real=6,num0_max=3,num0_min=3   ! Number of 0-dimensional particle statistics
+      integer,parameter :: num0_int=18,num0_real=6,num0_max=3,num0_min=3   ! Number of 0-dimensional particle statistics
       integer,parameter :: num1 = 32   ! Number of 1-dimensional particle statistics
 
       real :: partcount(maxnz), partcount_accum(maxnz), partcount_coarse(maxnz)
@@ -3584,6 +3595,8 @@ CONTAINS
       numpart = 0
       numdrop = 0
       numaerosol = 0
+      num_coarse = 0
+      num_accum = 0
 
       myradavg = 0.0
       myradmsqr = 0.0
@@ -3644,6 +3657,18 @@ CONTAINS
       statsvec0_int(7) = num100
       statsvec0_int(8) = numimpos
 
+      statsvec0_int(9) = num_coarse
+      statsvec0_int(10) = num_accum
+      statsvec0_int(11) = num_act_coarse
+      statsvec0_int(12) = num_act_accum
+      statsvec0_int(13) = num_de_coarse
+      statsvec0_int(14) = num_de_accum
+      statsvec0_int(15) = num_destroy_coarse
+      statsvec0_int(16) = num_destroy_accum
+      statsvec0_int(17) = num_inject_coarse
+      statsvec0_int(18) = num_inject_accum
+
+
       call mpi_allreduce(mpi_in_place,statsvec0_int,num0_int,mpi_integer,mpi_sum,mpi_comm_world,ierr)
 
       tnumpart = statsvec0_int(1)
@@ -3655,7 +3680,17 @@ CONTAINS
       tnum100 = statsvec0_int(7)
       tnumimpos = statsvec0_int(8)
 
-      tnum_destroy_accum = tnum_destroy_accum + tnum_destroy
+      tnum_coarse = statsvec0_int(9)
+      tnum_accum = statsvec0_int(10)
+      tnum_act_coarse = statsvec0_int(11)
+      tnum_act_accum = statsvec0_int(12)
+      tnum_de_coarse = statsvec0_int(13)
+      tnum_de_accum = statsvec0_int(14)
+      tnum_destroy_coarse = statsvec0_int(15)
+      tnum_destroy_accum = statsvec0_int(16)
+      tnum_inject_coarse = statsvec0_int(17)
+      tnum_inject_accum = statsvec0_int(18)
+
 
       !Compute sums of real quantities
       statsvec0_real(1) = myRep_avg
