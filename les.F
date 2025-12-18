@@ -318,6 +318,24 @@ c
          end if
       endif
 
+      !This is ugly but quick fix -- need every proc to reset when his written
+      if((mhis .or. it.eq.1) .and. istage .eq. 1) then
+        num_act_coarse = 0
+        num_act_accum = 0
+        num_de_coarse = 0
+        num_de_accum = 0
+        num_destroy_coarse_d = 0
+        num_destroy_accum_d = 0
+        num_inject_coarse = 0
+        num_inject_accum = 0
+        num_destroy_coarse_a = 0
+        num_destroy_accum_a = 0
+        denum = 0
+        actnum = 0
+        num_destroy = 0
+      end if
+       
+
 c
 c ------------ save histogram files
 c

@@ -26,18 +26,20 @@ module particles
   integer :: iseed
   integer :: tnum100=0,tnumimpos=0
   integer :: num100=0, numimpos=0
-  integer :: denum, actnum, tdenum, tactnum
-  integer :: num_destroy=0,tnum_destroy=0
+  integer :: tdenum, tactnum
+  integer :: tnum_destroy=0
   integer :: tot_reintro=0
 
-  integer :: num_coarse,tnum_coarse
-  integer :: num_accum,tnum_accum
+  integer :: num_coarse_a,tnum_coarse_a
+  integer :: num_coarse_d,tnum_coarse_d
+  integer :: num_accum_a,tnum_accum_a
+  integer :: num_accum_d,tnum_accum_d
   integer :: tnum_act_coarse
   integer :: tnum_act_accum
   integer :: tnum_de_coarse
   integer :: tnum_de_accum
-  integer :: tnum_destroy_coarse
-  integer :: tnum_destroy_accum
+  integer :: tnum_destroy_coarse_a,tnum_destroy_coarse_d
+  integer :: tnum_destroy_accum_a,tnum_destroy_accum_d
   integer :: tnum_inject_coarse
   integer :: tnum_inject_accum
 
@@ -1864,6 +1866,21 @@ CONTAINS
       partHsrc_t = 0.0
       partTEsrc = 0.0
       partTEsrc_t = 0.0
+
+      num_act_coarse = 0
+      num_act_accum = 0
+      num_de_coarse = 0
+      num_de_accum = 0
+      num_destroy_coarse_a = 0
+      num_destroy_accum_a = 0
+      num_destroy_coarse_d = 0
+      num_destroy_accum_d = 0
+      num_inject_coarse = 0
+      num_inject_accum = 0
+
+      denum = 0
+      actnum = 0
+      num_destroy = 0
       
   end subroutine particle_init
 
@@ -2815,7 +2832,7 @@ CONTAINS
     !t_reintro = 1800.0   ! Time to start injecting
     !t_stop_coarse = 12600.0   ! Time to stop injecting
     !t_stop_coarse = 1260000.0   ! Time to stop injecting
-    it_delay = 500   ! Number of time steps between injection events (make sure it is larger than numprocs)
+    it_delay = 100   ! Number of time steps between injection events (make sure it is larger than numprocs)
 
     mult_SSGF = 1e8   !1e8(ori) !5e8/5e7(sensitivity studies) ! Multiplicity of injected coarse mode aerosols
 
@@ -2831,7 +2848,9 @@ CONTAINS
 
     end if
 
+
     if (mod(it, it_delay) == 0) then
+      num_inject_coarse = num_inject_coarse + my_reintro
 
       tot_reintro = my_reintro * numprocs
 
@@ -2948,6 +2967,12 @@ CONTAINS
           call add_histogram(bins_acttodeath, hist_acttodeath_accum, histbins + 2, part%actres, part%mult)
           call add_histogram_integer(bins_numact, hist_numact_accum, histbins + 2, part%numact)
 
+          if (part%radius < part%rc) then
+            num_destroy_accum_a = num_destroy_accum_a + 1
+          else
+            num_destroy_accum_d = num_destroy_accum_d + 1
+          end if
+
         end if
 
         if (abs(part%kappa_s - 1.2) < 1.0e-8) then
@@ -2956,6 +2981,12 @@ CONTAINS
           call add_histogram(bins_res, hist_res_coarse, histbins + 2, part%res, part%mult)
           call add_histogram(bins_acttodeath, hist_acttodeath_coarse, histbins + 2, part%actres, part%mult)
           call add_histogram_integer(bins_numact, hist_numact_coarse, histbins + 2, part%numact)
+
+          if (part%radius < part%rc) then
+            num_destroy_coarse_a = num_destroy_coarse_a + 1
+          else
+            num_destroy_coarse_d = num_destroy_coarse_d + 1
+          end if
 
         end if
 
@@ -2989,6 +3020,8 @@ CONTAINS
               xp_init = (/xv, yv, zv/)
 
               call create_particle(xp_init, vp_init, Tp_init, m_s, kappa_s, mult, rad_init, idx_old, procidx_old)
+
+              num_inject_accum = num_inject_accum + 1
 
             end if
 
@@ -3235,9 +3268,6 @@ CONTAINS
       pmassflux = 0.0
       penegflux = 0.0
 
-      denum = 0
-      actnum = 0
-      num_destroy = 0
       num100 = 0
       numimpos = 0
 
@@ -3245,6 +3275,13 @@ CONTAINS
       !loop over the linked list of particles
       part => first_particle
       do while (associated(part))
+
+         !Critical radius
+         if (ievap.eq.1) then
+            part%rc = crit_radius(part%m_s,part%kappa_s,part%Tp) 
+         else
+            part%rc = 0.0
+         end if
 
 	 !Store original values for two-way coupling
          part%vp_old(1:3) = part%vp(1:3)
@@ -3360,10 +3397,12 @@ CONTAINS
 
                  if (abs(part%kappa_s - 0.6) < 1.0e-8) then
                    call add_histogram(bins_actres, hist_actres_accum, histbins + 2, part%actres, part%mult)
+                   num_de_accum = num_de_accum + 1
                  end if
 
                  if (abs(part%kappa_s - 1.2) < 1.0e-8) then
                    call add_histogram(bins_actres, hist_actres_coarse, histbins + 2, part%actres, part%mult)
+                   num_de_coarse = num_de_coarse + 1
                  end if
 
                elseif (part%radius < part%rc .AND. part%radius*rt_zeroes(1) > part%rc) then
@@ -3373,6 +3412,14 @@ CONTAINS
 
                  ! Reset the activation lifetime
                  part%actres = 0.0
+
+                 if (abs(part%kappa_s - 0.6) < 1.0e-8) then
+                   num_act_accum = num_act_accum + 1
+                 end if
+
+                 if (abs(part%kappa_s - 1.2) < 1.0e-8) then
+                   num_act_coarse = num_act_coarse + 1
+                 end if
 
                endif
 
@@ -3574,7 +3621,7 @@ CONTAINS
       integer :: ierr
       real :: rhop,pi,rhoa,func_rho_base,func_p_base,exner
       
-      integer,parameter :: num0_int=18,num0_real=6,num0_max=3,num0_min=3   ! Number of 0-dimensional particle statistics
+      integer,parameter :: num0_int=22,num0_real=6,num0_max=3,num0_min=3   ! Number of 0-dimensional particle statistics
       integer,parameter :: num1 = 32   ! Number of 1-dimensional particle statistics
 
       real :: partcount(maxnz), partcount_accum(maxnz), partcount_coarse(maxnz)
@@ -3595,8 +3642,10 @@ CONTAINS
       numpart = 0
       numdrop = 0
       numaerosol = 0
-      num_coarse = 0
-      num_accum = 0
+      num_coarse_a = 0
+      num_accum_a = 0
+      num_coarse_d = 0
+      num_accum_d = 0
 
       myradavg = 0.0
       myradmsqr = 0.0
@@ -3620,6 +3669,26 @@ CONTAINS
             numdrop = numdrop + 1
          else
             numaerosol = numaerosol + 1
+         end if
+
+         if (abs(part%kappa_s - 0.6) < 1.0e-8) then
+
+           if (part%radius .gt. part%rc) then
+             num_accum_d = num_accum_d + 1
+           else
+             num_accum_a = num_accum_a + 1
+           end if
+            
+         end if
+
+         if (abs(part%kappa_s - 1.2) < 1.0e-8) then
+
+           if (part%radius .gt. part%rc) then
+             num_coarse_d = num_coarse_d + 1
+           else
+             num_coarse_a = num_coarse_a + 1
+           end if
+
          end if
 
          myradavg = myradavg + part%radius
@@ -3657,16 +3726,20 @@ CONTAINS
       statsvec0_int(7) = num100
       statsvec0_int(8) = numimpos
 
-      statsvec0_int(9) = num_coarse
-      statsvec0_int(10) = num_accum
+      statsvec0_int(9) = num_coarse_a
+      statsvec0_int(10) = num_accum_a
       statsvec0_int(11) = num_act_coarse
       statsvec0_int(12) = num_act_accum
       statsvec0_int(13) = num_de_coarse
       statsvec0_int(14) = num_de_accum
-      statsvec0_int(15) = num_destroy_coarse
-      statsvec0_int(16) = num_destroy_accum
-      statsvec0_int(17) = num_inject_coarse
-      statsvec0_int(18) = num_inject_accum
+      statsvec0_int(15) = num_destroy_coarse_a
+      statsvec0_int(16) = num_destroy_accum_a
+      statsvec0_int(17) = num_destroy_coarse_d
+      statsvec0_int(18) = num_destroy_accum_d
+      statsvec0_int(19) = num_inject_coarse
+      statsvec0_int(20) = num_inject_accum
+      statsvec0_int(21) = num_coarse_d
+      statsvec0_int(22) = num_accum_d
 
 
       call mpi_allreduce(mpi_in_place,statsvec0_int,num0_int,mpi_integer,mpi_sum,mpi_comm_world,ierr)
@@ -3680,16 +3753,20 @@ CONTAINS
       tnum100 = statsvec0_int(7)
       tnumimpos = statsvec0_int(8)
 
-      tnum_coarse = statsvec0_int(9)
-      tnum_accum = statsvec0_int(10)
+      tnum_coarse_a = statsvec0_int(9)
+      tnum_accum_a = statsvec0_int(10)
       tnum_act_coarse = statsvec0_int(11)
       tnum_act_accum = statsvec0_int(12)
       tnum_de_coarse = statsvec0_int(13)
       tnum_de_accum = statsvec0_int(14)
-      tnum_destroy_coarse = statsvec0_int(15)
-      tnum_destroy_accum = statsvec0_int(16)
-      tnum_inject_coarse = statsvec0_int(17)
-      tnum_inject_accum = statsvec0_int(18)
+      tnum_destroy_coarse_a = statsvec0_int(15)
+      tnum_destroy_accum_a = statsvec0_int(16)
+      tnum_destroy_coarse_d = statsvec0_int(17)
+      tnum_destroy_accum_d = statsvec0_int(18)
+      tnum_inject_coarse = statsvec0_int(19)
+      tnum_inject_accum = statsvec0_int(20)
+      tnum_coarse_d = statsvec0_int(21)
+      tnum_accum_d = statsvec0_int(22)
 
 
       !Compute sums of real quantities

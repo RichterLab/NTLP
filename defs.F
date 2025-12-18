@@ -170,16 +170,22 @@ c     ----------------------------------------------------------------------
       sequence
       integer :: his_counter,histog_counter,viz_counter,itn,it,
      + num_act_coarse,num_act_accum,
-     + num_de_coarse,num_de_accum,num_destroy_coarse,num_destroy_accum,
-     + num_inject_coarse,num_inject_accum
+     + num_de_coarse,num_de_accum,
+     + num_destroy_coarse_a,num_destroy_accum_a,
+     + num_destroy_coarse_d,num_destroy_accum_d,
+     + num_inject_coarse,num_inject_accum,
+     + denum,actnum,num_destroy
       end type con_i
 
       type(con_i), target :: c_i
       integer, pointer :: 
      + his_counter,histog_counter,viz_counter,itn,it,
      + num_act_coarse,num_act_accum,
-     + num_de_coarse,num_de_accum,num_destroy_coarse,num_destroy_accum,
-     + num_inject_coarse,num_inject_accum
+     + num_de_coarse,num_de_accum,
+     + num_destroy_coarse_a,num_destroy_accum_a,
+     + num_destroy_coarse_d,num_destroy_accum_d,
+     + num_inject_coarse,num_inject_accum,
+     + denum,actnum,num_destroy
        
    
       contains
@@ -243,10 +249,15 @@ c
       num_act_accum  => c_i%num_act_accum
       num_de_coarse => c_i%num_de_coarse
       num_de_accum  => c_i%num_de_accum
-      num_destroy_coarse => c_i%num_destroy_coarse
-      num_destroy_accum  => c_i%num_destroy_accum
+      num_destroy_coarse_a => c_i%num_destroy_coarse_a
+      num_destroy_accum_a  => c_i%num_destroy_accum_a
+      num_destroy_coarse_d => c_i%num_destroy_coarse_d
+      num_destroy_accum_d  => c_i%num_destroy_accum_d
       num_inject_coarse => c_i%num_inject_coarse
       num_inject_accum  => c_i%num_inject_accum
+      denum  => c_i%denum
+      actnum  => c_i%actnum
+      num_destroy  => c_i%num_destroy
 
       end subroutine fill_ci
       end module con_data
