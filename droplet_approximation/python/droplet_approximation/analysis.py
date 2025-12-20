@@ -43,7 +43,8 @@ def get_particles_data_simulation_times( particles_df ):
     return np.array( simulation_times )
 
 def plot_droplet_size_temperatures( times, size_temperatures, background_parameters={},
-                                    compare_flag=None, ax_h=None, title_string=None ):
+                                    compare_flag=None, ax_h=None, title_string=None,
+                                    time_range=None ):
     """
     Plots a single particle's radius and temperature data and, optionally, their
     associated background parameters.  Also plots the absolute and relative
@@ -93,6 +94,8 @@ def plot_droplet_size_temperatures( times, size_temperatures, background_paramet
                               and a new figure with N * 2 axes is created.
       title_string          - Optional string to title the plot with.  If omitted,
                               defaults to "Droplet Size and Temperature."
+      time_range            - Optional list deciding the time range for the data plotted.
+                              Defaults to the entire timeline.
 
     Returns 2 values:
 
@@ -108,6 +111,14 @@ def plot_droplet_size_temperatures( times, size_temperatures, background_paramet
         compare_flag = len( size_temperatures ) > 1
     if title_string is None:
         title_string = "Droplet Size and Temperature"
+
+    # Prepare indexes for slicing the series data based
+    # on the time ranges provided
+    if time_range is not None:
+        time_window_indexes = np.searchsorted( times, time_range )
+    else:
+        time_window_indexes = [0, None]
+    times = times[time_window_indexes[0]:time_window_indexes[1]]
 
     time_series_count = len( size_temperatures )
 
@@ -135,6 +146,7 @@ def plot_droplet_size_temperatures( times, size_temperatures, background_paramet
     cmap   = plt.get_cmap( "Set1" )
     colors = cmap( np.linspace( 0.0, 1.0, time_series_count ) )
     for color, (label, time_series_data) in zip( colors, size_temperatures.items() ):
+        time_series_data = time_series_data[time_window_indexes[0]:time_window_indexes[1]]
         ax_h[0][0].plot( times, time_series_data[..., 0], label=label, color=color )
         ax_h[0][1].plot( times, time_series_data[..., 1], label=label, color=color )
 
@@ -157,9 +169,12 @@ def plot_droplet_size_temperatures( times, size_temperatures, background_paramet
         # Get the first label and datapoint to use a reference in the
         # comparisons.  Plot the remaining relative to it.
         reference_label, reference_data = next( iter( size_temperatures.items() ) )
+        reference_data                  = reference_data[time_window_indexes[0]:time_window_indexes[1]]
         for color, (label, comparison_data) in islice( zip( colors, size_temperatures.items() ),
                                                        1,
                                                        None ):
+            comparison_data = comparison_data[time_window_indexes[0]:time_window_indexes[1]]
+
             ax_h[1][0].plot( times,
                              (np.abs( reference_data[:, 0] - comparison_data[:, 0] ) /
                               reference_data[:, 0] * 100),
@@ -219,6 +234,8 @@ def plot_droplet_size_temperatures( times, size_temperatures, background_paramet
     # Plot background parameters in the remaining subplots.
     starting_index = 4 if compare_flag else 2
     for index, (label, time_series) in enumerate( background_parameters.items() ):
+        time_series = time_series[time_window_indexes[0]:time_window_indexes[1]]
+
         axis_row_index    = (starting_index + index) // 2
         axis_column_index = (starting_index + index) % 2
         current_axis      = ax_h[axis_row_index][axis_column_index]
