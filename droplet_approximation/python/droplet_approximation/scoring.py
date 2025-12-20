@@ -2,6 +2,7 @@ import contextlib
 from dataclasses import dataclass
 from enum import Enum
 from typing import Optional
+import warnings
 
 import matplotlib.pyplot as plt
 from matplotlib import colors
