@@ -321,7 +321,8 @@ class ExtendedConfigParser( ConfigParser ):
         old_config = deepcopy( self )
 
         for section in config_dict:
-            self.add_section( section )
+            if section not in self:
+                self.add_section( section )
             for option, value in config_dict[section].items():
                 self.set( section, option, value )
 
