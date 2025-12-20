@@ -14,6 +14,7 @@ from .physics import BDF_TOLERANCE_ABSOLUTE, \
 from .scoring import calculate_nrmse
 
 from itertools import islice
+import warnings
 
 def get_particles_data_simulation_times( particles_df ):
     """
@@ -421,7 +422,7 @@ def plot_droplet_size_temperatures_domain( input_parameters, model=None, dt=None
 
     return fig_h, ax_h
 
-def plot_droplet_size_temperatures_score( particle_dataframe, score_report, **kwargs ):
+def plot_droplet_size_temperatures_score( particle_dataframe, score_report, cluster_filter=None, max_deviations=1, time_range=None, **kwargs ):
     """
     Wrapper for plot_droplet_size_temperature_dataframe() that plots the
     a single particle's differences between a reference and an evaluation, and
@@ -435,6 +436,14 @@ def plot_droplet_size_temperatures_score( particle_dataframe, score_report, **kw
       score_report       - ScoringReport object to plot deviations from.  The
                            .reference_evaluation and .comparison_evaluation tags
                            must exist in particles_dataframe.
+      cluster_filter     - Optional integer list containing which deviation clusters to
+                           plot. Defaults to all clusters.
+      deviation_cap      - Optional integer capping the number of deviations plotted.
+                           Defaults to 1. Prioritizes plotting earliet deviations from
+                           clusters which have been plotted the least.
+      time_range         - Optional list deciding the time range for the data and
+                           deviations plotted.
+                           Defaults to the entire timeline.
       **kwargs           - Optional keyword arguments to pass to
                            plot_droplet_size_temperatures_dataframe().
 
@@ -446,14 +455,33 @@ def plot_droplet_size_temperatures_score( particle_dataframe, score_report, **kw
               plot_droplet_size_temperatures() for details.
 
     """
-    analysis_config = score_report.analysis_config
+
+    # Determine whether CUSUM/deviation analysis was run in the ScoreReport
+    if hasattr( score_report, "run_deviations" ):
+        if not score_report.run_deviations and deviation_cap > 0:
+            warnings.warn( "Deviation analysis was not run for this score report. " \
+                           "Cannot plot deviations. Setting deviation_cap to 0." )
+            deviation_cap = 0
+    else:
+        warnings.warn( "Loaded a legacy ScoreReport without run_deviations attribute! " \
+                       "Assuming deviations were run..." )
+
+    # If no cluster filter is set, default to including all clusters
+    if cluster_filter is None:
+        cluster_filter = np.arange( score_report.cluster_centers.shape[0] )
+
+    # Determine range of times for deviation plotting
+    if time_range is None:
+        time_range = [0.0, np.inf]
 
     # The score report has the evaluation tags for our DataFrame.
+    analysis_config = score_report.analysis_config
+
     simulation_name           = analysis_config["simulation"].get( "name" )
     reference_evaluation_tag  = analysis_config["error_analysis"].get( "reference_tag" )
     comparison_evaluation_tag = analysis_config["error_analysis"].get( "comparison_tag" )
-    cusum_error_tolerance     = analysis_config["error_analysis"].get( "cusum_error_tolerance" )
-    cusum_error_threshold     = analysis_config["error_analysis"].get( "cusum_error_threshold" )
+    cusum_error_tolerance     = analysis_config["error_analysis"].get( "cusum_error_tolerance" ).replace( "\n", "" )
+    cusum_error_threshold     = analysis_config["error_analysis"].get( "cusum_error_threshold" ).replace( "\n", "" )
 
     # Add a default title to the figure if the user did not provide one.
     if "title_string" not in kwargs:
@@ -462,7 +490,7 @@ def plot_droplet_size_temperatures_score( particle_dataframe, score_report, **kw
         particle_nrmse = score_report.per_particle_nrmse[particle_id]
 
         # Provide the comparison's details and results.
-        kwargs["title_string"] = ("Scoring Particle {:d} from {:s} for {:s} vs. {:s}\n" +
+        kwargs["title_string"] = ("Score Report for Particle {:d} from {:s} for {:s} vs. {:s}\n" +
                                   "NRMSE: {:.3e}\n" +
                                   "CUSUM Tolerance: {}, CUSUM Threshold: {}").format(
                                       particle_id,
@@ -476,25 +504,64 @@ def plot_droplet_size_temperatures_score( particle_dataframe, score_report, **kw
     fig_h, ax_h = plot_droplet_size_temperatures_dataframe( particle_dataframe,
                                                             [reference_evaluation_tag,
                                                              comparison_evaluation_tag],
+                                                            time_range=time_range,
                                                             **kwargs )
+
+    # Only plot deviations if requested
+    if max_deviations == 0:
+        return fig_h, ax_h
+
+    # We want to prioritize the earliest deviations from clusters that have not
+    # been plotted yet. This requires sorting the array by time and then group by
+    # value/interleave by occurance. The deviations are already stored by time,
+    # so this just leaves the second step: group by cluster/interleave by occurance.
+    unsorted_deviation_indexes = np.where(
+            score_report.deviation_particle_ids == particle_dataframe.name )[0]
+
+    # filter out deviations outside of our time window
+    time_mask                   = ((score_report.deviation_times[unsorted_deviation_indexes] >= time_range[0]) &
+                                   (score_report.deviation_times[unsorted_deviation_indexes] <= time_range[1]))
+    unsorted_deviation_indexes = unsorted_deviation_indexes[time_mask]
+
+    unsorted_deviation_clusters  = score_report.deviation_clusters[unsorted_deviation_indexes]
+
+    deviation_count = unsorted_deviation_indexes.shape[0]
+    if deviation_count == 0:
+        return fig_h, ax_h
+
+    # Create an index of the index of devations from each cluster
+    cluster_order = np.argsort( unsorted_deviation_clusters, kind="stable" )
+    # An algorithm to create an array counting the occurances of each cluster
+    cluster_occurances = np.arange( deviation_count ) - np.repeat(
+            np.unique( unsorted_deviation_clusters[cluster_order], return_index=True)[1],
+            np.diff( np.append( np.unique( unsorted_deviation_clusters[cluster_order], return_index=True)[1],
+                     deviation_count )))
+    # Lexsort back to ordering
+    sorted_deviation_indexes = unsorted_deviation_indexes[
+        cluster_order[np.lexsort( ( unsorted_deviation_clusters[cluster_order],
+                                    cluster_occurances) )]]
+
+    # Then filter by cluster filter and apply max_deviations
+    filtered_sorted_deviation_indexes = sorted_deviation_indexes[
+        np.isin( score_report.deviation_clusters[sorted_deviation_indexes],
+                 cluster_filter )][:max_deviations]
 
     # We use a qualitative colormap with 9 distinct colors so we have enough for
     # datasets with a large number of deviation clusters.
     cmap = plt.get_cmap( "Set1" )
-
-    # Plot each of the deviations found.
-    for deviation_index in np.where( score_report.deviation_particle_ids == particle_dataframe.name )[0]:
+    for deviation_index in filtered_sorted_deviation_indexes:
+        deviation_cluster   = score_report.deviation_clusters[deviation_index]
         deviation_parameter = score_report.deviation_parameters[deviation_index]
         deviation_time      = score_report.deviation_times[deviation_index]
-        deviation_cluster   = score_report.deviation_clusters[deviation_index]
-        deviation_label     = "{:s} deviation, cluster {:d}".format( deviation_parameter.name.lower(),
-                                                                     deviation_cluster )
+        deviation_label     = "{:s} - cl. {:d}".format( deviation_parameter.name.lower(),
+                                                           deviation_cluster )
 
+        # Plot on each subplot
         for ax in ax_h.flat:
             ax.axvline( x=deviation_time, linewidth=1, linestyle="--", label=deviation_label,
                         color=cmap( deviation_cluster ) )
 
-    # Update the legends, if any, so as to include the deviations' labels.
+    # Update the legends to include the deviations' labels.
     for ax in ax_h[0]:
         ax.legend()
 
