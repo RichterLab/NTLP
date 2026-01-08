@@ -26,13 +26,17 @@ DROPLET_DELTA_AIR_TEMPERATURE = 3.0
 # the small parameters (e.g. radius) as they won't contribute as much as
 # the big parameters (e.g. temperature).  As a result, we use log-scale
 # for the parameters that have a large dynamic range.
-DROPLET_RADIUS_LOG_RANGE        = np.array( (-8.0, -3.0) )
-DROPLET_TEMPERATURE_RANGE       = np.array( (273.0, 310.0) )
-DROPLET_SALT_SOLUTE_LOG_RANGE   = np.array( (-22.0, -8.0) )
-DROPLET_AIR_TEMPERATURE_RANGE   = np.array( (273.0, 310.0) )
-DROPLET_RELATIVE_HUMIDITY_RANGE = np.array( (0.55, 1.1) )
-DROPLET_RHOA_RANGE              = np.array( (0.8, 1.3) )
-DROPLET_TIME_LOG_RANGE          = np.array( (-2.0, 1.0) )
+#
+# NOTE: We force the data type of each array to avoid NumPy's "help" should
+#       someone specify both ranges as integers.
+#
+DROPLET_RADIUS_LOG_RANGE        = np.array( (-8.0, -3.0),   dtype=np.float64 )
+DROPLET_TEMPERATURE_RANGE       = np.array( (273.0, 310.0), dtype=np.float64 )
+DROPLET_SALT_SOLUTE_LOG_RANGE   = np.array( (-22.0, -8.0),  dtype=np.float64 )
+DROPLET_AIR_TEMPERATURE_RANGE   = np.array( (273.0, 310.0), dtype=np.float64 )
+DROPLET_RELATIVE_HUMIDITY_RANGE = np.array( (0.55, 1.1),    dtype=np.float64 )
+DROPLET_RHOA_RANGE              = np.array( (0.8, 1.3),     dtype=np.float64 )
+DROPLET_TIME_LOG_RANGE          = np.array( (-2.0, 1.0),    dtype=np.float64 )
 
 # Tolerances for BDF solves.  Per solve_ivp() the effective tolerance is:
 #
