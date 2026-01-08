@@ -2293,10 +2293,11 @@ def train_model( model, criterion, optimizer, device, number_epochs, training_fi
             # mini-batch.
             running_loss /= number_batches
 
-            training_loss.append( running_loss )
-            training_loss_history.append( running_loss )
+            if running_loss > 0.0:
+                training_loss.append( running_loss )
+                training_loss_history.append( running_loss )
 
-            running_loss = 0.0
+                running_loss = 0.0
 
         # We finished all of the batches.  Adjust the learning rate before we
         # checkpoint so it can be loaded and training resumed without additional
