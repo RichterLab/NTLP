@@ -21,8 +21,8 @@ program inference_test
 
     if (number_arguments /= 7) then
         write( *, "(A)" ) "Error: Expected 7 command line arguments"
-        write( *, "(A)" ) "Usage: ./inference_test <radius> <temperature> <salt_solute> <air_temperature> <rh> <air_density> <dt>"
-        write( *, "(A)" ) "Example: ./inference_test 1.09402e-07 295.765 1.75657e-20 295.203 1.08863 1.28343 0.1"
+        write( *, "(A)" ) "Usage: ./inference_test.x <radius> <temperature> <salt_solute> <air_temperature> <rh> <air_density> <dt>"
+        write( *, "(A)" ) "Example: ./inference_test.x 1.09402e-07 295.765 1.75657e-20 295.203 1.08863 1.28343 0.1"
         stop 1
     end if
 
