@@ -2146,10 +2146,13 @@ def train_model( model, criterion, optimizer, device, number_epochs, training_fi
     else:
         number_validation_inputs = 0
 
+    # Compute the number of batches we have.
     #
-    # NOTE: This ignores parameters if the last batch isn't complete.
+    # NOTE: This ignore a partial batch if there are more than one so as to not
+    #       bias statistics, while retaining the short batch if it is the only
+    #       one.
     #
-    number_batches = training_inputs.shape[0] // batch_size
+    number_batches = max( training_inputs.shape[0] // batch_size, 1 )
 
     # Track each mini-batch's training loss for analysis.
     training_loss_history = []
