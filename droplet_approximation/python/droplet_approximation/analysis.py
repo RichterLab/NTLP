@@ -16,6 +16,8 @@ from .scoring import calculate_nrmse
 from itertools import islice
 import warnings
 
+PLOTTING_CMAP = plt.get_cmap( "Set1" )
+
 def get_particles_data_simulation_times( particles_df ):
     """
     Generates one "simulation times" numpy array that includes
@@ -144,8 +146,7 @@ def plot_droplet_size_temperatures( times, size_temperatures, background_paramet
 
     # Plot the radius and temperature data.  Use a qualitative colormap with 9
     # darker colors so each of the evaluations is distinct from each other.
-    cmap   = plt.get_cmap( "Set1" )
-    colors = cmap( np.linspace( 0.0, 1.0, time_series_count ) )
+    colors = PLOTTING_CMAP( np.linspace( 0.0, 1.0, time_series_count ) )
     for color, (label, time_series_data) in zip( colors, size_temperatures.items() ):
         time_series_data = time_series_data[time_window_indexes[0]:time_window_indexes[1]]
         ax_h[0][0].plot( times, time_series_data[..., 0], label=label, color=color )
