@@ -166,10 +166,10 @@ def droplet_equilibrium( droplet_parameters ):
                            and air density.
 
     Returns 2 Values:
-      equilibria - Numpy array of radius/temperature equilibria. If no equilibrium is found, returns
-                   the inputed radius/temperature. This follows the behavior found in NTLP.
-      flags      - Whether a successful equilibrium was found. Note: if RH > 100%, the equilibrium
-                   only has imaginary roots ==> there will be flags.
+      equilibria    - Numpy array of radius equilibria. If no equilibrium is found, returns
+                      the inputed radius. This follows the behavior found in NTLP.
+      success_flags - Boolean, whether a successful equilibrium was found. Note: if RH > 100%, the
+                      equilibrium only has imaginary roots ==> there will be flags.
     """
 
     r           = droplet_parameters[..., 0]
@@ -185,7 +185,7 @@ def droplet_equilibrium( droplet_parameters ):
     Ru   = np.float64( 8.3144 )
     Gam  = np.float64( 7.28e-2 )
 
-    flag  = np.zeros_like( r )
+    success_flags = np.repeat( True, r.shape )
 
     einf = 610.94*np.exp((17.6257*(Tf-273.15))/(243.04+(Tf-273.15)))  #NTLP
     qinf = RH/rhoa*(einf*Mw/Ru/Tf)
@@ -218,10 +218,10 @@ def droplet_equilibrium( droplet_parameters ):
     T = Q/S
     guess[~mask] = (S + T - a/3.0)[~mask]
 
-    flag[guess < 0] = 1
+    success_flags[guess < 0] = False
     guess[guess < 0] = r[guess < 0]
 
-    return guess, flag
+    return guess, success_flags
 
 def dydt( t, y, parameters ):
     """
