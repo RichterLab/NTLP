@@ -8,6 +8,7 @@ from .data import BE_TAG_NAME, \
 from .models import do_iterative_inference
 from .physics import BDF_TOLERANCE_ABSOLUTE, \
                      BDF_TOLERANCE_RELATIVE, \
+                     droplet_equilibrium, \
                      dydt, \
                      get_parameter_ranges, \
                      timed_solve_ivp
@@ -263,7 +264,7 @@ def plot_droplet_size_temperatures( times, size_temperatures, background_paramet
 
     return fig_h, ax_h
 
-def plot_droplet_size_temperatures_dataframe( particle_dataframe, evaluation_tags, **kwargs ):
+def plot_droplet_size_temperatures_dataframe( particle_dataframe, evaluation_tags, equilibrium_flag=False, **kwargs ):
     """
     Wrapper for plot_droplet_size_temperatures() that plots a single particle's
     radius and temperatures provided in a DataFrame.  Time series columns are
@@ -277,6 +278,8 @@ def plot_droplet_size_temperatures_dataframe( particle_dataframe, evaluation_tag
                            first being the reference for comparison if two or
                            more tags are supplied.  As a convenience, may be
                            specified as a scalar string which is treated as if
+      equilibrium_flag   - Optional Boolean, determines whether to plot the radius/temperature
+                           equilibrium for the first time series provided.
                            it was a list with one element.
       **kwargs           - Optional keyword arguments to pass to plot_droplet_size_temperatures().
 
@@ -330,6 +333,26 @@ def plot_droplet_size_temperatures_dataframe( particle_dataframe, evaluation_tag
         kwargs["background_parameters"] = background_parameters
 
     fig_h, ax_h = plot_droplet_size_temperatures( times, size_temperatures, **kwargs )
+
+    if equilibrium_flag:
+        column_names = get_evaluation_column_names( evaluation_tags[0] ) + ["salt solutes",
+                                                                            "air temperatures",
+                                                                            "relative humidities",
+                                                                            "air densities"]
+        equilibrium, success_flags = droplet_equilibrium( np.stack( particle_dataframe[column_names].values,
+                                                                    axis=-1 ) )
+
+        # Get the color of the first time series
+        color = PLOTTING_CMAP( 0.0 )
+
+        ax_h[0][0].plot( times[success_flags],
+                         equilibrium[success_flags],
+                         label="Radius Equilirium for {:s}".format( evaluation_tags[0] ),
+                         color=color,
+                         alpha=0.3 )
+
+        ax_h[0][0].legend()
+
 
     return fig_h, ax_h
 
