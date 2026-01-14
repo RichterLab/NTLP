@@ -1202,6 +1202,32 @@ def _read_particles_data_wrapper( particles_root, particle_ids, dirs_per_level, 
                                 dirs_per_level,
                                 **kwargs )
 
+def merge_score_report_metrics( particles_df, per_particle_nrmse ):
+    """
+    Merges per particle NRMSE data from a score report with a provided particles dataframe.
+    Directly modifies the provided particles dataframe to avoid copying.
+
+    Takes 2 Arguments:
+      particles_df       - Pandas DataFrame containing the particles data.
+      per_particle_nrmse - Dictionary of particle id (integer key) and particle NRMSE (float value).
+                           Usually corresponds to score_report.per_particle_nrmse.
+
+    Modifies 1 Value:
+      particles_df["NRMSE"] - records the per particle NRMSE from the score_report object as a new
+                              column.
+    """
+    particle_ids    = np.array( list( per_particle_nrmse.keys() ), np.int32 )
+    particle_NRMSEs = np.array( list( per_particle_nrmse.values() ), np.float64 )
+
+    # Verify that we have scoring data for all relavent particles
+    particles_df_ids = particles_df.index.to_numpy()
+    if not np.all( np.isin( particles_df_ids, particle_ids ) ):
+        raise ValueError( "Not all particles in the provided dataframe have corresponding metrics in the score report!" )
+
+    # Sort based on the particles dataframe index
+    nrmse_index = np.searchsorted( particle_ids, particles_df_ids, side="left" )
+    particles_df["NRMSE"] = particle_NRMSEs[[nrmse_index]][0]
+
 def read_particles_data( particles_root, particle_ids, dirs_per_level, quiet_flag=True, cold_threshold=-np.inf, filter_be_failures=False, time_range=[-np.inf, np.inf], evaluations={}, debug_time_ranges=False ):
     """
     Reads one or more raw particle files and creates a particle-centric

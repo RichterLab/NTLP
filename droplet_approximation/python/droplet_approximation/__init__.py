@@ -32,6 +32,7 @@ from .data import BE_TAG_NAME, \
                   get_particles_parameter_extrema_path, \
                   get_particles_timeline_path, \
                   insert_timeseries_gaps, \
+                  merge_score_report_metrics, \
                   read_particles_data, \
                   read_particles_data_from_config, \
                   read_particle_ids_from_config, \
