@@ -44,6 +44,7 @@ class SimpleNet( nn.Module ):
 
         self._model_name = model_name
         self._activation = torch.relu
+        self._norms      = []
 
         self._layer_sizes    = [32, 32, 32]
         self._number_inputs  = 7
@@ -177,6 +178,28 @@ class SimpleNet( nn.Module ):
         x = self.fc4( x )
 
         return x
+
+    def to( self, device ):
+        """
+        Moves a copy of the model to the specified device.
+
+        Takes 1 argument:
+
+          device - Torch device string/object specifying where to copy the
+                   model to.
+
+        Returns 1 value:
+
+          moved_model - Copy of this model on device.
+
+        """
+
+        # Some normalization functions are really callable objects and need to
+        # be manually moved.  This avoids Torch errors complaining about the
+        # model being located one place and some variables located elsewhere.
+        self._norms = list( map( lambda x: x.to( device ), self._norms ) )
+
+        return super().to( device )
 
 class ResidualNet( SimpleNet ):
     """
