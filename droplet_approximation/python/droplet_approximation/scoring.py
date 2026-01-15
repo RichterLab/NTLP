@@ -344,6 +344,66 @@ class EvaluationType( Enum ):
     # Evaluate using a trained MLP model.
     MLP = 2
 
+def generate_analysis_directory_name( config ):
+    """
+    Generates the directory name for an error analysis report from a config. The config must have
+    a simulation and error_analysis subconfig loaded. This function serves as a deterministic method
+    for storing/retrieving error analysis reports.
+
+    The directory name is formatted as follows:
+    error_analysis-{simulation_name}-{reference_tag}_vs_{evaluation_tag}
+
+    Considers the following config entires:
+      [simulation]
+      [error_analysis]
+
+    Returns 1 Value:
+      analysis_directory_name - String containing the generated directory name
+    """
+
+    # Ensure the proper subconfigs are loaded
+    config.validate( ["simulation", "error_analysis"] )
+
+    error_config      = config["error_analysis"]
+    simulation_config = config["simulation"]
+
+    reference_tag  = error_config.get( "reference_tag" )
+    comparison_tag = error_config.get( "comparison_tag" )
+
+    simulation_name    = (simulation_config.get( "name" ).replace(",", "")
+                                                         .replace("~","_")
+                                                         .replace("%","")
+                                                         .replace(" - ", "_")
+                                                         .replace("-", "_")
+                                                         .replace(" ", "_"))
+
+    filter_be_failures = simulation_config.getboolean( "filter_be_failures" )
+    cold_threshold     = simulation_config.getfloat32( "cold_threshold" )
+
+    # Create a list of additional settings to record and turn them into
+    # a string
+    descriptors = []
+    if filter_be_failures:
+        descriptors.append( "be_failure_filtered" )
+    if cold_threshold != -np.inf:
+        descriptors.append( "cold_threshold_{:.1f}k".format( cold_threshold ) )
+
+    additional_description = ", ".join( descriptors )
+
+    analysis_suffix   = ("-{:s}".format( additional_description.lower()
+                                                               .replace( ", ", "-" )
+                                                               .replace( " ", "_" ) )
+                         if additional_description != "" else "" )
+
+    analysis_dir_name = ("error_analysis-{:s}-{:s}_vs_{:s}{:s}/".format( simulation_name,
+                                                                         reference_tag,
+                                                                         comparison_tag,
+                                                                         analysis_suffix )
+                                                                .lower()
+                                                                .replace(" ", "_"))
+
+    return analysis_dir_name
+
 def identity_norm( rt_data ):
     """
     A blank norm to use as a placeholder in analysis functions. Does

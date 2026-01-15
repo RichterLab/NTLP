@@ -76,6 +76,7 @@ from .scoring import average_particles_data, \
                      DeviationDirection, \
                      DeviationParameter, \
                      EvaluationType, \
+                     generate_analysis_directory_name, \
                      ParticleScore, \
                      ScoreReport, \
                      calculate_cusum, \
