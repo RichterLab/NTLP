@@ -3261,7 +3261,6 @@ CONTAINS
       call end_phase(measurement_id_particle_bcs)
 
 
-      call start_phase(measurement_id_particle_stats)
       !Get particle count:
       numpart = 0
 
@@ -3274,7 +3273,6 @@ CONTAINS
 
 
       call mpi_allreduce(numpart,tnumpart,1,mpi_integer,mpi_sum,mpi_comm_world,ierr)
-      call end_phase(measurement_id_particle_stats)
 
 
   end subroutine particle_update_BE
