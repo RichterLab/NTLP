@@ -1,21 +1,16 @@
-# NTLP (NCAR Turbulence with Lagrangian Particles)
+# NCAR Turbulence with Lagrangian Particles (NTLP)
+NTLP is a MPI-based incompressible Navier-Stokes solver suitable for simulating
+marine fog.  It supports three dimensional grids, periodic in the horizontal
+with a second-order finite difference scheme in the vertical, along with two-way
+coupled Lagrangian particles.
 
-## Compilation
-To build on the CRC machines you must run the following commands:
-```
-module load mvapich2
-module load intel
-module load netcdf
+Intel ifort is required for compilation, as is either serial NetCDF or TecPlot.
+Intel MPI is assumed to be available though NTLP should be compatible with any
+MPI distribution installed with ifort.
 
-make clean
-make
-```
+Documentation is available in the [`documentation/`](documentation/README.md)
+subdirectory.  New users should start with the following:
 
-## SETUP AND RUNNING
-To run, make a directory ("case1" or something) where les.run and params.in will go (i.e., not out of the same directory as the code files)
-
-Set up the I/O directory on scratch: /scratch365/netID/tutorial/case1
-
-Make sure all paths in params.in and les.run point to the proper locations
-
-
+- [An NTLP Overview](documentation/explanation/ntlp-overview.md)
+- [How to Setup and Run NTLP](documentation/tutorials/setup-and-run.md)
+- [Post-processing Simulation Outputs](documentation/tutorials/post-processing-simulations.md)
