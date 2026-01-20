@@ -1079,7 +1079,8 @@ class ScoreReport():
         self.z_score_mean            = np.mean( z_scored_deviations, axis=0 )
 
         self.cluster_model = (BayesianGaussianMixture( init_params="k-means++",
-                                                       n_init=5,
+                                                       n_init=3,
+                                                       max_iter=5000,
                                                        n_components=max_clusters )
                               .fit( filtered_z_scored_deviations ))
 
@@ -1087,7 +1088,7 @@ class ScoreReport():
         self.cluster_centers    = (self.z_score_model.inverse_transform( self.cluster_model.means_ ) +
                                    self.z_score_mean)
 
-    def plot_deviations( self, label_centers=True, thinning_ratio=1 ):
+    def plot_deviations( self, thinning_ratio=1, cluster_filter=None ):
         """
         Plots the deviations in their clusters in 3d coordinates:
 
@@ -1103,11 +1104,11 @@ class ScoreReport():
 
         Takes 2 argument:
 
-          label_centers  - Optional Boolean, determines whether to label
-                           the center of each deviation cluster. Defaults
-                           to True.
           thinning_ratio - Optional Integer, determines what fraction of
                            droplets to plot. Defaults to 1.
+          cluster_filter - Optional List, if none, graph all clusters.
+                           Otherwise, only plot deviations from the given
+                           list.
 
         Returns 2 values:
 
@@ -1122,52 +1123,65 @@ class ScoreReport():
         else:
             warnings.warn( "Loaded a legacy ScoreReport without run_deviations attribute! Assuming deviations were run..." )
 
-        colormap = plt.get_cmap("tab20")
+        if cluster_filter is None:
+            cluster_filter = np.arange( int( self.analysis_config["error_analysis"]["max_clusters"] ) )
+
+        # Ensure cluster filter is a numpy array
+        cluster_filter = np.array( cluster_filter )
+
+        colormap = plt.get_cmap("Set1")
+
+        # Calculate Affected Particle Count
+        deviation_count            = self.deviations.shape[0]
+        _, cluster_fraction        = 100.0* np.array( np.unique( self.deviation_clusters,
+                                                      return_counts=True ) )/float( deviation_count )
 
         # Gather all of the data in the desired coordinates. Thin the data out based on thinning_ratio
         plot_data             = np.array( [self.log_deviations[::thinning_ratio, 0],
                                            self.log_deviations[::thinning_ratio, 1] - self.log_deviations[::thinning_ratio, 3],
                                            self.log_deviations[::thinning_ratio, 4]] )
-        cluster_coordinates   = np.array( [np.log10( self.cluster_centers[:, 0] ),
+        cluster_coordinates   = np.array( [self.cluster_centers[:, 0],
                                            self.cluster_centers[:, 1] - self.cluster_centers[:, 3],
                                            self.cluster_centers[:, 4]] )
-        cluster_center_labels = [f"Cluster { cluster_index }: { cluster_coordinates.T[cluster_index] }"
-                                 for cluster_index in range( self.cluster_model.n_components )]
 
         fig = plt.figure()
         ax  = plt.axes( projection="3d" )
 
-        for cluster_id in np.unique( self.deviation_clusters ):
-            cluster_plot_data = plot_data[:, self.deviation_clusters[::thinning_ratio] == cluster_id]
+        particles_affected = 0.0
+        for cluster_id in cluster_filter:
+            cluster_mask      = self.deviation_clusters[::thinning_ratio] == cluster_id
+            cluster_plot_data = plot_data[:, cluster_mask]
             cluster_colors    = np.full( (cluster_plot_data.shape[1], 4), colormap( cluster_id ) )
             ax.scatter( cluster_plot_data[0],
                         cluster_plot_data[1],
                         cluster_plot_data[2],
                         color=cluster_colors,
-                        label=f"Cluster {cluster_id}" )
+                        label="Id: {:d} - Ctr: [{:.2f}, {:.2f}, {:.2f}] - Frac: {:.2f}%".format(
+                            cluster_id, 
+                            *cluster_coordinates.T[cluster_id],
+                            cluster_fraction[cluster_id]
+                        ))
+
+            particles_affected += np.unique( self.deviation_particle_ids[cluster_mask] ).shape[0]
+
+        percent_particles_affected = 100.0 * particles_affected / len( self.per_particle_nrmse.keys() )
 
         # Label the cluster centers
-        ax.scatter( cluster_coordinates[0],
-                    cluster_coordinates[1],
-                    cluster_coordinates[2],
-                    c=np.arange( self.cluster_model.n_components ),
-                    s=20 )
-
-        if label_centers:
-            for cluster_index in range( self.cluster_model.n_components ):
-                ax.text( cluster_coordinates[0][cluster_index], cluster_coordinates[1][cluster_index],
-                         cluster_coordinates[2][cluster_index], cluster_center_labels[cluster_index],
-                         fontweight="bold",
-                         color="r" )
+        ax.scatter( cluster_coordinates[0][[cluster_filter]],
+                    cluster_coordinates[1][[cluster_filter]],
+                    cluster_coordinates[2][[cluster_filter]],
+                    c=colormap( cluster_filter ),
+                    s=100 )
 
         ax.set_xlabel( "Log Radius (m)" )
         ax.set_ylabel( "Temperature Difference (K)" )
         ax.set_zlabel( "Relative Humidity (%)" )
 
-        reference_tag  = self.analysis_config["error_analysis"].get( "reference_tag" )
-        comparison_tag = self.analysis_config["error_analysis"].get( "comparison_tag" )
+        reference_tag   = self.analysis_config["error_analysis"].get( "reference_tag" )
+        comparison_tag  = self.analysis_config["error_analysis"].get( "comparison_tag" )
+        simulation_name = self.analysis_config["simulation"].get( "name" )
 
-        comparison_label = "{:s} vs {:s}".format( reference_tag, comparison_tag )
+        comparison_label = "{:s} vs {:s} in {:s}".format( reference_tag, comparison_tag, simulation_name )
 
         # Do not pad these curly braces with spaces.
         # ':3f ' is not the same as ':3f'. The former
@@ -1177,12 +1191,14 @@ class ScoreReport():
         cusum_radius_threshold      = np.float32( self.analysis_config["error_analysis"].get( "cusum_error_threshold_radius" ) )
         cusum_temperature_threshold = np.float32( self.analysis_config["error_analysis"].get( "cusum_error_threshold_temperature" ) )
 
-        ax.set_title( f"Deviation Clusters " +
-                      f"for { comparison_label }\n" +
-                      f"Radius Tolerance: {100*cusum_radius_tolerance:.3f}%," +
-                      f" Temperature Tolerance: {cusum_temperature_tolerance:.3f} degrees\n" +
-                      f"Radius Threshold: {cusum_radius_threshold:.3f}," +
-                      f" Temperature Threshold: {cusum_temperature_threshold:.3f}\n" )
+        cluster_filter_string = ", ".join( [str( cluster_id ) for cluster_id in cluster_filter] )
+
+        ax.set_title( f"Deviation Clusters for {comparison_label}\n" +
+                      f"Affected {percent_particles_affected:.2f}% of All Particles - Clusters {cluster_filter_string}\n" +
+                      f"Radius Tolerance: {cusum_radius_tolerance:.2f}," +
+                      f" Temperature Tolerance: {cusum_temperature_tolerance:.2f} degrees\n" +
+                      f"Radius Threshold: {cusum_radius_threshold:.2f}," +
+                      f" Temperature Threshold: {cusum_temperature_threshold:.2f}\n" )
 
         # Zooming out prevents clipping the z-axis label
 
@@ -1191,7 +1207,7 @@ class ScoreReport():
 
         return fig, ax
 
-    def recluster( self, z_score_outlier_threshold = 3, n_init = 5, n_components = 7, init_params="k-means++", **kwargs ):
+    def recluster( self, z_score_outlier_threshold=3, n_init=3, n_components=4, init_params="k-means++", max_iter=5000, **kwargs ):
         """
         Reruns deviation clustering with the given arguments.
 
@@ -1205,11 +1221,15 @@ class ScoreReport():
                                       Defaults to 7.
           init_params               - Optional String, specifies what method BayesianGaussianMixture
                                       uses for initialization. Defaults to 'k-means++'.
+          max_iter                  - Optional Integer, specifies the number of iterations to use when
+                                      clustering. Higher takes longer but improves performance.
           **kwargs                  - Additional arguments for BayesianGaussianMixture.
 
         Returns nothing.
 
         """
+
+        self.analysis_config["error_analysis"]["max_clusters"] = str( n_components )
 
         self.z_score_model           = StandardScaler()
         z_scored_deviations          = self.z_score_model.fit_transform( self.log_deviations )
@@ -1220,6 +1240,7 @@ class ScoreReport():
         self.cluster_model = ( BayesianGaussianMixture( init_params=init_params,
                                                         n_init=n_init,
                                                         n_components=n_components,
+                                                        max_iter=max_iter,
                                                         **kwargs )
                                                        .fit( filtered_z_scored_deviations ) )
 
