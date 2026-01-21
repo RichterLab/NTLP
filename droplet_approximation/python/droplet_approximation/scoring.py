@@ -1,3 +1,4 @@
+from contextlib import contextmanager
 from dataclasses import dataclass
 from enum import Enum
 
@@ -375,14 +376,18 @@ def particle_evaluation_pipeline( particles_root, particle_ids, dirs_per_level,
         raise ValueError( "evaluation_type must be either EvaluationTyep.BDF or EvaluationType.MLP, got {}!".format(
             evaluation_type ) )
 
-    # MLP evaluation requires us to have the correct parameter ranges set,
-    # otherwise our scaling will generate garbage results.
-    previous_parameter_ranges = get_parameter_ranges()
-
+    # Figure out which context manager to use.  We need to use the correct
+    # parameter ranges for MLP evaluations as the current ranges aren't
+    # guaranteed to be compatible.
+    #
+    # NOTE: We've instantiated the context but haven't entered it!
+    #
     if evaluation_type == EvaluationType.MLP:
-        set_parameter_ranges( parameter_ranges )
+        context_manager = temporary_parameter_ranges()
+    else:
+        context_manager = contextlib.nullcontext()
 
-    try:
+    with context_manager:
         # Walk through each of the particles, read the raw observations,
         # evaluate them according to the caller's specifications, and write them
         # to disk.
@@ -417,13 +422,6 @@ def particle_evaluation_pipeline( particles_root, particle_ids, dirs_per_level,
             #       necessarily match the raw particles!
             #
             outputs.tofile( evaluation_path )
-    #
-    # NOTE: We don't catch exceptions here, only guarantee that the original
-    #       parameter ranges are restored before returning.
-    #
-
-    finally:
-        set_parameter_ranges( previous_parameter_ranges )
 
 def particle_scoring_pipeline( particles_root, particle_ids_batches, dirs_per_level, reference_evaluation, comparison_evaluation, cusum_error_tolerance, cusum_error_threshold, norm, cold_threshold, filter_be_failures ):
     """

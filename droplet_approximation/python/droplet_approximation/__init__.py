@@ -66,6 +66,7 @@ from .physics import DisplayType, \
                      scale_droplet_parameters, \
                      set_parameter_ranges, \
                      solve_ivp_float32_outputs, \
+                     temporary_parameter_ranges, \
                      timed_solve_ivp
 from .scoring import DeviationDirection, \
                      DeviationParameter, \

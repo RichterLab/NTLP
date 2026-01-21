@@ -1,3 +1,4 @@
+from contextlib import contextmanager
 from enum import Enum
 import errno
 import functools
@@ -618,6 +619,35 @@ def set_parameter_ranges( parameter_ranges ):
         DROPLET_RHOA_RANGE = parameter_ranges["rhoa"]
     if "time" in parameter_ranges:
         DROPLET_TIME_LOG_RANGE = parameter_ranges["time"]
+
+@contextmanager
+def temporary_parameter_ranges( parameter_ranges ):
+    """
+    Context manager that temporarily sets the droplet parameter ranges to the
+    supplied values.  When the context exits the original parameter ranges are
+    restored.
+
+    Takes 1 value:
+
+      parameter_ranges - Dictionary with one or more of the following keys:
+                         "radius", "temperature", "salt_solute",
+                         "air_temperature", "relative_humidity", "rhoa", "time"
+
+    Returns nothing.
+
+    """
+
+    # Track the original parameter ranges so we can restore them.
+    old_parameter_ranges = get_parameter_ranges()
+
+    # Install the temporary ranges and let the caller do their thing.
+    try:
+        set_parameter_ranges( parameter_ranges )
+        yield
+    finally:
+
+        # Revert back to the original parameter ranges.
+        set_parameter_ranges( old_parameter_ranges )
 
 def normalize_droplet_parameters( droplet_parameters, parameter_ranges={} ):
     """
