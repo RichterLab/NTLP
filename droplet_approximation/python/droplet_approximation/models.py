@@ -15,7 +15,8 @@ from .physics import dydt,\
                      get_parameter_ranges, \
                      normalize_droplet_parameters, \
                      scale_droplet_parameters, \
-                     solve_ivp_float32_outputs
+                     solve_ivp_float32_outputs, \
+                     temporary_parameter_ranges
 from .wandb import NoOpWandB, log_wandb_checkpoint, prepare_wandb_run
 
 # See if Weights and Biases is installed.  Load the package if it is.
@@ -290,7 +291,7 @@ class UnhandledCheckpointVersionError( ValueError ):
     package.
     """
 
-def create_new_model( model_class_name, model_name=None ):
+def create_new_model( model_class_name, model_name=None, parameter_ranges={} ):
     """
     Instantiates a PyTorch model object from a droplet_approximation's class
     name.  The object is created with default arguments.
@@ -298,7 +299,7 @@ def create_new_model( model_class_name, model_name=None ):
     Raises ValueError if the supplied name does not exist in the
     droplet_approximation package or if it doesn't represent a class name.
 
-    Takes 2 arguments:
+    Takes 3 arguments:
 
       model_class_name - String specifying the model class name to instantiate.
                          Must be one of the classes exposed in the
@@ -307,6 +308,9 @@ def create_new_model( model_class_name, model_name=None ):
                          omitted, defaults to None.   This is passed as the
                          value for the "model_name" keyword argument for
                          model_class_name's constructor.
+      parameter_ranges - Optional dictionary containing parameter ranges to use
+                         when evaluating model.  See set_parameter_ranges() for
+                         details.
 
     Returns 1 value:
 
@@ -2156,14 +2160,18 @@ def load_model_checkpoint( checkpoint_path, model=None, optimizer=None ):
 
         """
 
-        model = create_new_model( checkpoint["architecture"],
-                                  model_name=checkpoint["model_name"] )
+        parameter_ranges = checkpoint["droplet_parameter_ranges"]
+
+        # Create the model with its parameter ranges in effect to correctly
+        # instantiate those that set internal state based on the current ranges.
+        with temporary_parameter_ranges( parameter_ranges ):
+            model = create_new_model( checkpoint["architecture"],
+                                      model_name=checkpoint["model_name"] )
 
         model.load_state_dict( checkpoint["model_weights"] )
         if optimizer is not None:
             optimizer.load_state_dict( checkpoint["optimizer_state"] )
 
-        parameter_ranges = checkpoint["droplet_parameter_ranges"]
         loss_function    = checkpoint["loss_function"]
         training_loss    = checkpoint["training_loss"]
 
