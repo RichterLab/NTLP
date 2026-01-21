@@ -785,8 +785,6 @@ def do_iterative_inference( input_parameters, integration_times, model, device, 
     # it to the target device.
     normalized_data = torch.from_numpy( normalized_data ).to( device )
 
-    device_parameter_ranges = get_parameter_ranges( tensor_flag=True, tensor_device=device )
-
     with torch.no_grad():
         # Evaluate each input in succession.  We either use the previous output
         # or the current input depending on whether we passed a gap.
