@@ -38,6 +38,7 @@ from .data import BE_TAG_NAME, \
                   write_particles_index
 from .models import BiggerResidualNet_4x128, \
                     SimpleNet, \
+                    QuadraticResidualNet_intrepid_data, \
                     ResidualNet, \
                     InvalidCheckpointError, \
                     MismatchedLoadInterfaceError, \
@@ -49,6 +50,7 @@ from .models import BiggerResidualNet_4x128, \
                     do_iterative_bdf, \
                     do_iterative_inference, \
                     generate_fortran_module, \
+                    intrepid_data_l1_loss, \
                     load_model_checkpoint, \
                     ode_residual, \
                     save_model_checkpoint, \

@@ -271,6 +271,104 @@ class BiggerResidualNet_4x128( ResidualNet ):
 
         return out
 
+class QuadraticResidualNet_intrepid_data( ResidualNet ):
+    """
+    4-layer multi-layer perceptron (MLP) with ReLU activations.  This aims to
+    balance parameter count vs computational efficiency so that inferencing with
+    it is faster than Gauss-Newton iterative solvers.
+
+    This residual network learns the delta between the input particle size and
+    temperature and the outputs, given the provided background conditions.
+
+    "Quadratic" refers to the model learning the residual on the radius squared
+    instead of the log radius. This residual keeps a consistent scale across
+    various orders of magnitude.
+
+    NOTE: This calculates a scaled residual of the form:
+
+            residual / (2 * 10^(2 * r_bar))
+
+          Since r_bar is typically negative, this is equivalent of learning:
+
+            residual * 10^(2 * |r_bar|) / 2
+
+    """
+    def __init__( self, model_name=None, log_radius_range=None ):
+        super().__init__( model_name=model_name )
+
+        self._activation     = torch.nn.ReLU()
+
+        self._norms          = []
+
+        # Calculate the delta and mean of the log-radius parameter range.  Use
+        # the range provided and fall back to the current range if necessary.
+        local_log_radius_range = log_radius_range
+        if log_radius_range is None:
+            local_log_radius_range = get_parameter_ranges()["radius"]
+
+        self.sigma_r = (local_log_radius_range[1] - local_log_radius_range[0])
+
+    def forward( self, x ):
+        # Add the input to the final result to force the model to learn the
+        # delta instead of the approximation itself.
+        out = self._activation( self.fc1( x ) )
+        out = self._activation( self.fc2( out ) )
+        out = self._activation( self.fc3( out ) )
+        out = self.fc4( out )
+
+        # Convert the delta from r^2 back to log(r) to match the inputs.
+        #
+        # NOTE: There is no constraint that prevents negative radii!  We must
+        #       penalize invalid radii in the loss function (or worst case,
+        #       ignore them, and let the optimization process naturally improve
+        #       predictions).
+        #
+        out[..., 0] = torch.log10(out[..., 0] * 2 + (10 ** (self.sigma_r * x[..., 0])))/self.sigma_r
+        out[..., 1] += x[..., 1]
+
+        return out
+
+def intrepid_data_l1_loss( normalized_approximations, normalized_outputs ):
+    """
+    Creates a scaled L1 loss that penalizes errors when approximating large
+    particles.  The scaling weights and constants in the radii penalty are ad
+    hoc though the radii penalty is modeled after the r^2 residual approximation
+    implemented in in QuadraticResidualNet_intrepid_data().
+
+    NOTE: This does not deal with NaNs generated from invalid radii
+          (non-positive) approximations!
+
+    Takes 2 arguments:
+
+      normalized_approximations - Torch Tensor, sized batch_size x 2, containing
+                                  the approximated radii and temperatures for
+                                  the batch.
+      normalized_outputs        - Torch Tensor, sized batch_size x 2, containing
+                                  the truth radii and temperatures for the
+                                  batch.
+
+    Returns 1 value:
+
+      loss - Scalar value denoting the batch's loss.
+
+    """
+
+    # Start with L1.
+    differences = torch.abs( normalized_approximations - normalized_outputs )
+
+    # Scale to match temperature's magnitude (see Darius, this doesn't make
+    # sense to Greg since it's in normalized space).
+    differences[:, 0] /= 25.0
+
+    # Penalize large particles.  Small particles growing or large particles
+    # shrinking are penalized heavily, while large particles slightly adjusting
+    # don't get penalized as much.
+    differences[:, 0] += torch.abs( 10.0**(2.5 * normalized_approximations[..., 0] -1.5) - 10.0**(2.5 * normalized_outputs[..., 0] - 1.5) )
+
+    loss = torch.mean( differences )
+
+    return loss
+
 class InvalidCheckpointError( ValueError ):
     """
     Represents an invalid checkpoint that was consistent enough to be loaded but
