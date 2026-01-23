@@ -38,6 +38,7 @@ from .data import BE_TAG_NAME, \
                   write_particles_index
 from .models import BiggerResidualNet_4x128, \
                     SimpleNet, \
+                    QuadraticResidualNet_volatile_emotion, \
                     ResidualNet, \
                     InvalidCheckpointError, \
                     MismatchedLoadInterfaceError, \
@@ -53,6 +54,7 @@ from .models import BiggerResidualNet_4x128, \
                     ode_residual, \
                     save_model_checkpoint, \
                     train_model, \
+                    volatile_emotion_l1_loss, \
                     weighted_mse_loss
 from .names import generate_name
 from .physics import DisplayType, \

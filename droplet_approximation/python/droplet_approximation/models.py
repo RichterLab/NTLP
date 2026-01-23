@@ -271,6 +271,118 @@ class BiggerResidualNet_4x128( ResidualNet ):
 
         return out
 
+class QuadraticResidualNet_volatile_emotion( ResidualNet ):
+    """
+    4-layer multi-layer perceptron (MLP) with ReLU activations.  This aims to
+    balance parameter count vs computational efficiency so that inferencing with
+    it is faster than Gauss-Newton iterative solvers.
+
+    This residual network learns the delta between the input particle size and
+    temperature and the outputs, given the provided background conditions.
+
+    "Quadratic" refers to the model learning the residual on the radius squared
+    instead of the log radius. This residual keeps a consistent scale across
+    various orders of magnitude.
+
+    NOTE: This calculates a scaled residual of the form:
+
+            residual / 10^(2 * r_bar)
+
+          Since r_bar is typically negative, this is equivalent of learning:
+
+            residual * 10^(2 * |r_bar|)
+
+    """
+    def __init__( self, model_name=None, log_radius_range=None ):
+        super().__init__( model_name=model_name )
+
+        self._activation     = torch.nn.SiLU()
+
+        self._norms          = [torch.nn.modules.normalization.LayerNorm( [self._layer_sizes[0]] ),
+                                torch.nn.modules.normalization.LayerNorm( [self._layer_sizes[1]] ),
+                                torch.nn.modules.normalization.LayerNorm( [self._layer_sizes[2]] )]
+
+        # Calculate the delta and mean of the log-radius parameter range.  Use
+        # the range provided and fall back to the current range if necessary.
+        local_log_radius_range = log_radius_range
+        if log_radius_range is None:
+            local_log_radius_range = get_parameter_ranges()["radius"]
+
+        self.sigma_r = (local_log_radius_range[1] - local_log_radius_range[0])
+
+    def forward( self, x ):
+        # Add the input to the final result to force the model to learn the
+        # delta instead of the approximation itself.
+        out = self._norms[0]( self._activation( self.fc1( x ) ) )
+        out = self._norms[1]( self._activation( self.fc2( out ) ) )
+        out = self._norms[2]( self._activation( self.fc3( out ) ) )
+        out = self.fc4( out )
+
+        # Convert the delta from r^2 back to log(r) to match the inputs.
+        #
+        # NOTE: There is no constraint that prevents negative radii!  We
+        #       penalize invalid radii in the loss function (or worst case,
+        #       ignore them, and let the optimization process naturally improve
+        #       predictions).
+        #
+        # NOTE: The factor of 2 from QuadraticResidualNet_intrepid_data has been
+        #       removed!
+        #
+        out[..., 0] = torch.log10(out[..., 0] + (10 ** (self.sigma_r * x[..., 0])))/self.sigma_r
+        out[..., 1] += x[..., 1]
+
+        return out
+
+def volatile_emotion_l1_loss( normalized_approximations, normalized_outputs ):
+    """
+    Creates a scaled L1 loss that penalizes errors when approximating large
+    particles.  The scaling weights and constants in the radii penalty are ad
+    hoc though the radii penalty is modeled after the r^2 residual approximation
+    implemented in in QuadraticResidualNet_volatile_emotion().
+
+    NOTE: This only partially deals with NaNs generated from invalid radii
+          (non-positive) approximations!  This implementation reportedly only
+          works with large, initial learning rates (O(1e-3)).  See Darius for
+          details.
+
+    Takes 2 arguments:
+
+      normalized_approximations - Torch Tensor, sized batch_size x 2, containing
+                                  the approximated radii and temperatures for
+                                  the batch.
+      normalized_outputs        - Torch Tensor, sized batch_size x 2, containing
+                                  the truth radii and temperatures for the
+                                  batch.
+
+    Returns 1 value:
+
+      loss - Scalar value denoting the batch's loss.
+
+    """
+
+    # Start with L1.
+    differences = torch.abs( normalized_approximations - normalized_outputs )
+
+    # Scale to match temperature's magnitude (see Darius, this doesn't make
+    # sense to Greg since it's in normalized space).
+    differences[:, 0] /= 25.0
+
+    # Penalize large particles.  Small particles growing or large particles
+    # shrinking are penalized heavily, while large particles slightly adjusting
+    # don't get penalized as much.
+    differences[:, 0] += torch.abs( 10.0**(2.5 * normalized_approximations[..., 0] -105) - 10.0**(2.5 * normalized_outputs[..., 0] - 1.0) )
+
+    # Convert NaNs to zeros.  This kills the gradient flowing to the weights
+    # contributing to the invalid radii.
+    #
+    # NOTE: This doesn't guarantee removal of NaNs in the backwards graph!
+    #
+    torch.nan_to_num( differences, 0.0 )
+
+    loss = torch.mean( differences )
+
+    return loss
+
 class InvalidCheckpointError( ValueError ):
     """
     Represents an invalid checkpoint that was consistent enough to be loaded but
@@ -2664,6 +2776,17 @@ def train_model( model, criterion, optimizer, device, number_epochs, training_fi
         # Add this callback.
         epoch_callbacks.append( wandb_save_checkpoint )
 
+    # Number of actual batches to let our weights refine before ratcheting up
+    # the learning rate.
+    #
+    # NOTE: We should be smarter about choosing batch counts, particularly when
+    #       we have small training data sets.
+    #
+    #warmup_batches   = min( 2000, number_batches // 20 )
+    #warmup_scheduler =
+    #cosine_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR( optimizer,
+    #                                                               T_max=(number_epochs * number_batches) )
+
     # Log the initial learning rate for the first epoch/batch.
     epoch_metrics = {
         "epoch":           0,
@@ -2726,6 +2849,7 @@ def train_model( model, criterion, optimizer, device, number_epochs, training_fi
             # Backwards pass and optimization.
             loss.backward()
             optimizer.step()
+            #scheduler.step()
 
             running_loss += loss.item()
 
@@ -2745,6 +2869,7 @@ def train_model( model, criterion, optimizer, device, number_epochs, training_fi
                     #
                     "epoch":         epoch_index,
                     "batch":         epoch_index * number_batches + batch_index,
+#                    "learning_rate": optimizer.param_groups[0]["lr"],
                     "training_loss": running_loss,
                 }
                 run.log( batch_metrics )
@@ -2764,8 +2889,8 @@ def train_model( model, criterion, optimizer, device, number_epochs, training_fi
         # We finished all of the batches.  Adjust the learning rate before we
         # checkpoint so it can be loaded and training resumed without additional
         # preparation.
-        for parameter_group in optimizer.param_groups:
-            parameter_group["lr"] *= lr_scale
+        #for parameter_group in optimizer.param_groups:
+        #    parameter_group["lr"] *= lr_scale
 
         # Checkpoint if requested.
         if checkpoint_prefix is not None:
