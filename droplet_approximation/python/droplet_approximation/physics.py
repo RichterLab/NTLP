@@ -876,7 +876,7 @@ def solve_ivp_float32_outputs( dydt, t_span, y0, atol=BDF_TOLERANCE_ABSOLUTE, rt
           same arguments and returns the same values.  See that function's
           help for a (way more) detailed explanation of each argument and value.
 
-    Takes 4 arguments:
+    Takes 6 arguments:
 
       dydt   - Right-hand side of the system to solve.  The calling signature
                is 'dydt( t, y, parameters )'.
