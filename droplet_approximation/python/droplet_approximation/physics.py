@@ -939,13 +939,13 @@ def solve_ivp_float32_outputs( dydt, t_span, y0, atol=BDF_TOLERANCE_ABSOLUTE, rt
                            "inputs=np.array( [{:.15g}, {:.15g}] ), "
                            "parameters=np.array( [{:.15g}, {:.15g}, {:.15g}, {:.15g}] ), "
                            "time={:15g}, kwargs={}\n{:s}.".format(
-                               y0[0],
-                               y0[1],
-                               kwargs["args"][0][0],
-                               kwargs["args"][0][1],
-                               kwargs["args"][0][2],
-                               kwargs["args"][0][3],
-                               t_span[-1],
+                               float( y0[0] ),
+                               float( y0[1] ),
+                               float( kwargs["args"][0][0] ),
+                               float( kwargs["args"][0][1] ),
+                               float( kwargs["args"][0][2] ),
+                               float( kwargs["args"][0][3] ),
+                               float( t_span[-1] ),
                                kwargs,
                                failure_message ) )
 
