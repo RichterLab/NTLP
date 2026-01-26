@@ -342,8 +342,8 @@ def volatile_emotion_l1_loss( normalized_approximations, normalized_outputs ):
 
     NOTE: This only partially deals with NaNs generated from invalid radii
           (non-positive) approximations!  This implementation reportedly only
-          works with large, initial learning rates (O(1e-3)).  See Darius for
-          details.
+          works with moderately large, initial learning rates (O(1e-4)).  See
+          Darius for details.
 
     Takes 2 arguments:
 
