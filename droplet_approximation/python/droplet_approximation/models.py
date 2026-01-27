@@ -2889,8 +2889,8 @@ def train_model( model, criterion, optimizer, device, number_epochs, training_fi
         # We finished all of the batches.  Adjust the learning rate before we
         # checkpoint so it can be loaded and training resumed without additional
         # preparation.
-        #for parameter_group in optimizer.param_groups:
-        #    parameter_group["lr"] *= lr_scale
+        for parameter_group in optimizer.param_groups:
+            parameter_group["lr"] *= lr_scale
 
         # Checkpoint if requested.
         if checkpoint_prefix is not None:
