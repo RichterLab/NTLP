@@ -202,6 +202,29 @@ class SimpleNet( nn.Module ):
 
         return super().to( device )
 
+    def _apply( self, function ):
+        """
+        Applies a function to the model.
+
+        Takes 1 argument:
+
+          function - Function to apply.  Must be compatible with nn.Module._apply().
+
+        Returns 1 value:
+
+          applied_model - Copy of this model with function ._apply()'d to it.
+
+        """
+
+        # Update the normalization objects since the parent class doesn't know
+        # anything about them.
+        self._norms = list( map( lambda norm: norm._apply( function ), self._norms ) )
+
+        # Let the parent take care of the rest.
+        super()._apply( function )
+
+        return self
+
 class ResidualNet( SimpleNet ):
     """
     4-layer multi-layer perceptron (MLP) with ReLU activations.  This aims to
