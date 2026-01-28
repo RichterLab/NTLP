@@ -370,7 +370,7 @@ def volatile_emotion_l1_loss( normalized_approximations, normalized_outputs ):
     # Penalize large particles.  Small particles growing or large particles
     # shrinking are penalized heavily, while large particles slightly adjusting
     # don't get penalized as much.
-    differences[:, 0] += torch.abs( 10.0**(2.5 * normalized_approximations[..., 0] -105) - 10.0**(2.5 * normalized_outputs[..., 0] - 1.0) )
+    differences[:, 0] += torch.abs( 10.0**(2.5 * normalized_approximations[..., 0] - 1.0) - 10.0**(2.5 * normalized_outputs[..., 0] - 1.0) )
 
     # Convert NaNs to zeros.  This kills the gradient flowing to the weights
     # contributing to the invalid radii.
