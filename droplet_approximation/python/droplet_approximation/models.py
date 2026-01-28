@@ -335,7 +335,7 @@ def intrepid_data_l1_loss( normalized_approximations, normalized_outputs ):
     hoc though the radii penalty is modeled after the r^2 residual approximation
     implemented in in QuadraticResidualNet_intrepid_data().
 
-    NOTE: This does not deal with NaNs generated from invalid radii
+    NOTE: This only partially deals with NaNs generated from invalid radii
           (non-positive) approximations!
 
     Takes 2 arguments:
@@ -353,17 +353,33 @@ def intrepid_data_l1_loss( normalized_approximations, normalized_outputs ):
 
     """
 
-    # Start with L1.
-    differences = torch.abs( normalized_approximations - normalized_outputs )
+    # Prevent incorporating NaNs into any of the loss calculations, otherwise these
+    # will back propagate and corrupt the model.
+    negative_radii_mask = torch.isnan( normalized_approximations[..., 0] )
+
+    # Start with L1 on the valid approximations.
+    #
+    # NOTE: This prevents updating weights contributing to negative radii
+    #       predictions!!!  This does *NOT* guarantee that the model will
+    #       actually learn, though empirically it seems that simply learning
+    #       valid predictions is sufficent to update the offending weights to
+    #       reduce invalid future predictions.
+    #
+    differences                         = torch.zeros_like( normalized_approximations )
+    differences[:, 1]                   = torch.abs( normalized_approximations[:, 1] -
+                                                     normalized_outputs[:, 1] )
+    differences[~negative_radii_mask, 0] = torch.abs( normalized_approximations[~negative_radii_mask, 0] -
+                                                      normalized_outputs[~negative_radii_mask, 0] )
 
     # Scale to match temperature's magnitude (see Darius, this doesn't make
     # sense to Greg since it's in normalized space).
-    differences[:, 0] /= 25.0
+    differences[~negative_radii_mask, 0] /= 25.0
 
     # Penalize large particles.  Small particles growing or large particles
     # shrinking are penalized heavily, while large particles slightly adjusting
     # don't get penalized as much.
-    differences[:, 0] += torch.abs( 10.0**(2.5 * normalized_approximations[..., 0] -1.5) - 10.0**(2.5 * normalized_outputs[..., 0] - 1.5) )
+    differences[~negative_radii_mask, 0] += torch.abs( 10.0**(2.5 * normalized_approximations[~negative_radii_mask, 0] - 1.5) -
+                                                       10.0**(2.5 * normalized_outputs[~negative_radii_mask, 0] - 1.5) )
 
     loss = torch.mean( differences )
 
