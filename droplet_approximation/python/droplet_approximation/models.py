@@ -2401,7 +2401,7 @@ def save_model_checkpoint( checkpoint_prefix, checkpoint_number, model, optimize
 
     return checkpoint_path
 
-def train_model( model, criterion, optimizer, device, number_epochs, training_file, validation_file=None, checkpoint_prefix=None, epoch_callback=None, lr_scale=0.5, batch_size=1024, project_name=None, pinn_loss_flag=False ):
+def train_model( model, criterion, optimizer, device, number_epochs, training_file, validation_file=None, checkpoint_prefix=None, epoch_callback=None, lr_scale=0.5, batch_size=1024, project_name=None, pinn_loss_flag=False, lr_scheduler=None ):
     """
     Trains the supplied model for one or more epochs using all of the droplet parameters
     in an on-disk training file.  The parameters are read into memory once and then
@@ -2409,7 +2409,7 @@ def train_model( model, criterion, optimizer, device, number_epochs, training_fi
     are logged when requested.  Model performance may be evaluated when a validation
     file is provided and is done so at the end of each epoch.
 
-    Takes 13 arguments:
+    Takes 14 arguments:
 
       model             - PyTorch model to optimize.
       criterion         - PyTorch loss object to use during optimization.
@@ -2481,6 +2481,13 @@ def train_model( model, criterion, optimizer, device, number_epochs, training_fi
 
                           If omitted, defaults to False and non-physics-based criterion
                           expected.
+
+      lr_scheduler      - Optional learning rate scheduler object, an instance of
+                          a subclass of torch.optim.lr_scheduler.LRScheduler, to
+                          govern the learning rate.  If omitted, defaults to None
+                          and a multiplicative schedule using lr_scale factor is
+                          used.  Otherwise, it overrides any provided lr_scale
+                          factor.
 
     Returns 2 values:
 
@@ -2633,11 +2640,17 @@ def train_model( model, criterion, optimizer, device, number_epochs, training_fi
 
     # Compute the number of batches we have.
     #
-    # NOTE: This ignore a partial batch if there are more than one so as to not
+    # NOTE: This ignores a partial batch if there are more than one so as to not
     #       bias statistics, while retaining the short batch if it is the only
     #       one.
     #
     number_batches = max( training_inputs.shape[0] // batch_size, 1 )
+
+    # Construct a multiplicative learning rate scheduler if we were only
+    # provided a scale factor.
+    if lr_scheduler is None:
+        lr_scheduler = torch.optim.lr_scheduler.LambdaLR( optimizer,
+                                                          lr_lambda=lambda batch: lr_scale**(batch // number_batches) )
 
     # Track each mini-batch's training loss for analysis.
     training_loss_history = []
@@ -2749,6 +2762,7 @@ def train_model( model, criterion, optimizer, device, number_epochs, training_fi
             # Backwards pass and optimization.
             loss.backward()
             optimizer.step()
+            lr_scheduler.step()
 
             running_loss += loss.item()
 
@@ -2768,6 +2782,7 @@ def train_model( model, criterion, optimizer, device, number_epochs, training_fi
                     #
                     "epoch":         epoch_index,
                     "batch":         epoch_index * number_batches + batch_index,
+                    "learning_rate": optimizer.param_groups[0]["lr"],
                     "training_loss": running_loss,
                 }
                 run.log( batch_metrics )
@@ -2783,12 +2798,6 @@ def train_model( model, criterion, optimizer, device, number_epochs, training_fi
                 training_loss_history.append( running_loss )
 
                 running_loss = 0.0
-
-        # We finished all of the batches.  Adjust the learning rate before we
-        # checkpoint so it can be loaded and training resumed without additional
-        # preparation.
-        for parameter_group in optimizer.param_groups:
-            parameter_group["lr"] *= lr_scale
 
         # Checkpoint if requested.
         if checkpoint_prefix is not None:
