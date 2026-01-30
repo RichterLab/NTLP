@@ -51,6 +51,7 @@ from .models import BiggerResidualNet_4x128, \
                     generate_fortran_module, \
                     load_model_checkpoint, \
                     ode_residual, \
+                    print_loss, \
                     save_model_checkpoint, \
                     train_model, \
                     weighted_mse_loss

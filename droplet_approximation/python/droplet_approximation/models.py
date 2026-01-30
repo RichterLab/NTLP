@@ -1,4 +1,5 @@
 import copy
+import datetime
 import functools
 import pickle
 import sys
@@ -2317,6 +2318,32 @@ def ode_residual( inputs, outputs, model ):
     dTdt *= np.diff( parameter_ranges["temperature"] ).astype( float ) * 0.5
 
     return [drdt, dTdt]
+
+def print_loss( model, epoch_number, optimizer, training_loss, validation_loss ):
+    """
+    Training callback that prints the mean training and validation loss to standard
+    output.
+
+    Takes 5 arguments:
+
+      model           - Torch model object.
+      epoch_number    - Epoch number that just completed.
+      optimizer       - Torch optimizer object.
+      training_loss   - Sequence of training loss values for the last epoch.
+      validation_loss - Scalar validation loss for the last epoch.
+
+    Returns nothing.
+
+    """
+
+    now = datetime.datetime.now()
+
+    print( "[{:s}] Epoch #{:d}: loss: ({:f}, {:f}), LR: {:g}".format(
+        now.strftime( "%Y/%m/%d %H:%M:%S" ),
+        epoch_number,
+        np.mean( training_loss ),
+        validation_loss,
+        optimizer.param_groups[0]["lr"] ) )
 
 def save_model_checkpoint( checkpoint_prefix, checkpoint_number, model, optimizer, loss_function, training_loss, parameter_ranges={} ):
     """
