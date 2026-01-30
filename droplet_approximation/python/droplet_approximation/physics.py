@@ -864,6 +864,51 @@ def scale_droplet_parameters( droplet_parameters, parameter_ranges={} ):
 
     return scaled_droplet_parameters
 
+def scale_radius_from_normalized_to_quadratic( normalized_radii, bar_r, sigma_r ):
+    """
+    Scales radii from normalized radii (proportional to log r) to a quadratic (r^2) scale.
+
+    Takes 3 Arguments:
+      normalized_radii - NumPy or PyTorch array of normalized radius data.
+                         Data type determines whether NumPy or Torch functions
+                         are used.
+      bar_r            - The average of the log radius range
+      sigma_r          - The width of the log radius range
+
+    Returns 1 Value:
+      quadratic_radii  - The input radii scaled to a r^2 range.
+    """
+
+    if isinstance( normalized_radii, np.ndarray ):
+        xp = np
+    else:
+        xp = torch
+
+    return 10.0 ** (normalized_radii * sigma_r + 2 * bar_r)
+
+def scale_radius_from_quadratic_to_normalized( normalized_radii, bar_r, sigma_r ):
+    """
+    Scales radii from normalized radii (proportional to log r) to a quadratic (r^2) scale.
+
+    Takes 3 Arguments:
+      quadratic_radii  - NumPy or PyTorch array of quadratic radius data.
+                         Data type determines whether NumPy or Torch functions
+                         are used.
+      bar_r            - The average of the log radius range
+      sigma_r          - The width of the log radius range
+
+    Returns 1 Value:
+      normalized_radii  - The normalized radii
+    """
+
+    if isinstance( normalized_radii, np.ndarray ):
+        xp = np
+    else:
+        xp = torch
+
+    return ( xp.log10( normalized_radii ) - 2.0*bar_r ) / sigma_r
+
+
 def solve_ivp_float32_outputs( dydt, t_span, y0, atol=BDF_TOLERANCE_ABSOLUTE, rtol=BDF_TOLERANCE_RELATIVE, **kwargs ):
     """
     Solves an initial value problem and returns the solutions in 32-bit precision.

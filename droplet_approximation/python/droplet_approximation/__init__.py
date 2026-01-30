@@ -66,6 +66,8 @@ from .physics import DisplayType, \
                      generate_random_droplets, \
                      normalize_droplet_parameters, \
                      scale_droplet_parameters, \
+                     scale_radius_from_normalized_to_quadratic, \
+                     scale_radius_from_quadratic_to_normalized, \
                      set_parameter_ranges, \
                      solve_ivp_float32_outputs, \
                      temporary_parameter_ranges, \
