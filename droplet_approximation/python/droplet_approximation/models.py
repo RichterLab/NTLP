@@ -1893,6 +1893,83 @@ end subroutine estimate
         # Write out the end of the module.
         _write_module_epilog( model_state, output_fp )
 
+def get_cosine_annealing_lr_schedule( optimizer, number_samples, batch_size, number_epochs, initial_learning_rate, warmup_fraction=0.025 ):
+    """
+    Creates a cosine annealing learning rate schedule, optionally preceded by a
+    linear warmup period.  The object returned is suitable to be stepped once
+    per batch seen by the supplied optimizer.
+
+    Takes 6 arguments:
+
+      optimizer             - Optimizer used during training.  Its learning rate will be adjusted
+                              each time lr_scheduler.step() is invoked.
+      number_samples        - Number of samples in one training epoch.
+      batch_size            - Number of samples in one training batch.
+      number_epochs         - Number of training epochs planned.
+      initial_learning_rate - Learning rate to start the warmup at.
+      warmup_fraction       - Fraction of total training samples, across all epochs, to warm up
+                              the learning rate.  If non-zero, optimizer's learning rate will
+                              be linearly ramped up from initial_learning_rate to the rate
+                              it was provided with before entering a cosine annealing schedule.
+                              If specified as zero, then warmup is skipped and the annealing
+                              schedule executes immediately.  If omitted, defaults to a warmup
+                              using 2.5% of the training samples budget.
+
+    Returns 1 value:
+
+      lr_scheduler - torch.optim.lr_scheduler.LRScheduler object that adjusts optimizer's
+                     learning rate everytime lr_scheduler.step() is invoked.  The
+                     scheduler is constructed with the assumption that it is stepped
+                     once per batch.
+
+    """
+
+    # We create a SequentialLR object that contains one or more sub-schedulers.  Track
+    # individual LRScheduler objects and the batches we transition from one to the next.
+    # milestones contains 1 fewer entry than schedulers.
+    schedulers = []
+    milestones = []
+
+    # Calculate the total number of batches across training.
+    #
+    # NOTE: This ignores partial, last batches!  This should match what train_model()
+    #       does, otherwise our schedule will be misaligned!
+    #
+    number_total_batches = (number_samples // batch_size) * number_epochs
+
+    # Create a linear warmup schedule when requested.
+    if warmup_fraction > 0.0:
+        # Get the optimizer's current learning rate as the end of the warmup.
+        warmed_learning_rate = optimizer.param_groups[0]["lr"]
+
+        number_warmup_batches = round( number_total_batches * warmup_fraction )
+
+        # The warmup is specified as a linear schedule starting at initial_learning_rate
+        # and ending at warmed_learning_rate, in number_warmup_batches steps.
+        linear_scheduler = torch.optim.lr_scheduler.LinearLR( optimizer,
+                                                              start_factor=initial_learning_rate / warmed_learning_rate,
+                                                              total_iters=number_warmup_batches )
+
+        schedulers.append( linear_scheduler )
+        milestones.append( number_warmup_batches )
+    else:
+        number_warmup_batches = 0
+
+    # Apply cosine annealing to the remaining batches.
+    number_cosine_batches = number_total_batches - number_warmup_batches
+
+    # Cosine annealing schedulers use the optimizer's current learning rate and ramp
+    # it down over the specified window.
+    cosine_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR( optimizer,
+                                                                   T_max=number_cosine_batches )
+
+    schedulers.append( cosine_scheduler )
+
+    # Build a sequential scheduler out of each of the sub-schedulers.
+    return torch.optim.lr_scheduler.SequentialLR( optimizer,
+                                                  schedulers,
+                                                  milestones )
+
 def load_model_checkpoint( checkpoint_path, model=None, optimizer=None ):
     """
     Loads a checkpoint from disk and updates the provided model and optimizer

@@ -49,6 +49,7 @@ from .models import BiggerResidualNet_4x128, \
                     do_iterative_bdf, \
                     do_iterative_inference, \
                     generate_fortran_module, \
+                    get_cosine_annealing_lr_schedule, \
                     load_model_checkpoint, \
                     ode_residual, \
                     print_loss, \
