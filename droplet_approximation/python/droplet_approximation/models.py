@@ -2776,10 +2776,32 @@ def train_model( model, criterion, optimizer, device, number_epochs, training_fi
     # Get the training inputs/outputs as normalized tensors on the host.  We'll
     # transfer these in batches as needed to minimize the device's memory
     # footprint.
-    training_inputs  = normalize_droplet_parameters( torch.from_numpy( training_inputs ),
-                                                     tensor_parameter_ranges_host )
-    training_outputs = normalize_droplet_parameters( torch.from_numpy( training_outputs ),
-                                                     tensor_parameter_ranges_host )
+
+    # Convert to tensor
+    training_inputs = torch.from_numpy( training_inputs )
+    training_outputs = torch.from_numpy( training_outputs )
+
+    # Temporary memory efficient norm
+    def _norm( series, range ):
+        bar   = torch.mean( range )
+        sigma = torch.diff( range )/2.0
+        return (series - bar)/sigma
+
+    training_inputs[:, 0] = _norm( torch.log10( training_inputs[:, 0] ), tensor_parameter_ranges["radius"] )
+    training_inputs[:, 1] = _norm( training_inputs[:, 1], tensor_parameter_ranges["temperature"] )
+    training_inputs[:, 2] = _norm( torch.log10( training_inputs[:, 2] ), tensor_parameter_ranges["salt_solute"] )
+    training_inputs[:, 3] = _norm( training_inputs[:, 3], tensor_parameter_ranges["air_temperature"] )
+    training_inputs[:, 4] = _norm( training_inputs[:, 4], tensor_parameter_ranges["relative_humidity"] )
+    training_inputs[:, 5] = _norm( training_inputs[:, 5], tensor_parameter_ranges["rhoa"] )
+
+    training_outputs[:, 0] = _norm( torch.log10( training_outputs[:, 0] ), tensor_parameter_ranges["radius"] )
+    training_outputs[:, 1] = _norm( training_outputs[:, 1], tensor_parameter_ranges["temperature"] )
+
+    # Running in batches to avoid copying the entire data set at once
+    #training_inputs  = normalize_droplet_parameters( training_inputs,
+    #                                                 tensor_parameter_ranges_host )
+    #training_outputs = normalize_droplet_parameters( training_outputs,
+    #                                                 tensor_parameter_ranges_host )
     # If quadratic residual, scale the training data accordingly
     if quadratic_loss_flag:
         bar_r   = torch.mean( tensor_parameter_ranges["radius"] )
