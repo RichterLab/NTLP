@@ -15,6 +15,8 @@ from .physics import dydt,\
                      get_parameter_ranges, \
                      normalize_droplet_parameters, \
                      scale_droplet_parameters, \
+                     scale_radius_from_normalized_to_quadratic, \
+                     scale_radius_from_quadratic_to_normalized, \
                      solve_ivp_float32_outputs, \
                      temporary_parameter_ranges
 from .wandb import NoOpWandB, log_wandb_checkpoint, prepare_wandb_run
@@ -2490,7 +2492,7 @@ def save_model_checkpoint( checkpoint_prefix, checkpoint_number, model, optimize
 
     return checkpoint_path
 
-def train_model( model, criterion, optimizer, device, number_epochs, training_file, validation_file=None, checkpoint_prefix=None, epoch_callback=None, lr_scale=0.5, batch_size=1024, project_name=None, pinn_loss_flag=False ):
+def train_model( model, criterion, optimizer, device, number_epochs, training_file, validation_file=None, checkpoint_prefix=None, epoch_callback=None, lr_scale=0.5, batch_size=1024, project_name=None, pinn_loss_flag=False, quadratic_loss_flag=False ):
     """
     Trains the supplied model for one or more epochs using all of the droplet parameters
     in an on-disk training file.  The parameters are read into memory once and then
@@ -2500,76 +2502,93 @@ def train_model( model, criterion, optimizer, device, number_epochs, training_fi
 
     Takes 13 arguments:
 
-      model             - PyTorch model to optimize.
-      criterion         - PyTorch loss object to use during optimization.
-      optimizer         - PyTorch optimizer associated with model.
-      device            - Device string indicating where the optimization is
-                          being performed.
-      number_epochs     - Number of epochs to train model for.  All training
-                          data in training_file will be seen by the model
-                          this many times.
-      training_file     - Path to the file containing training data created by
-                          create_training_file() OR a tuple containing three NumPy
-                          arrays: input parameters, output parameters, and
-                          integration times (sized N x 6, N x 2, and N x 1,
-                          respectively, where N are the number of training
-                          samples).
-      validation_file   - Optional path to the file containing validation data created by
-                          create_training_file() OR a tuple containing three NumPy
-                          arrays: input parameters, output parameters, and
-                          integration times (sized N x 6, N x 2, and N x 1,
-                          respectively, where N are the number of training
-                          samples).  If omitted, defaults to None and no
-                          validation evaluations are performed
-      checkpoint_prefix - Optional path prefix where model checkpoints should
-                          be stored.  If omitted, defaults to None and
-                          checkpoints are not written.  Otherwise, the epoch
-                          number is appended to construct the path where each
-                          epoch's checkpoint is written.
-      epoch_callback    - Optional function to be called after each training
-                          epoch.  If omitted, defaults to None.  When provided
-                          must take:
+      model               - PyTorch model to optimize.
+      criterion           - PyTorch loss object to use during optimization.
+      optimizer           - PyTorch optimizer associated with model.
+      device              - Device string indicating where the optimization is
+                            being performed.
+      number_epochs       - Number of epochs to train model for.  All training
+                            data in training_file will be seen by the model
+                            this many times.
+      training_file       - Path to the file containing training data created by
+                            create_training_file() OR a tuple containing three NumPy
+                            arrays: input parameters, output parameters, and
+                            integration times (sized N x 6, N x 2, and N x 1,
+                            respectively, where N are the number of training
+                            samples).
+      validation_file     - Optional path to the file containing validation data created by
+                            create_training_file() OR a tuple containing three NumPy
+                            arrays: input parameters, output parameters, and
+                            integration times (sized N x 6, N x 2, and N x 1,
+                            respectively, where N are the number of training
+                            samples).  If omitted, defaults to None and no
+                            validation evaluations are performed
+      checkpoint_prefix   - Optional path prefix where model checkpoints should
+                            be stored.  If omitted, defaults to None and
+                            checkpoints are not written.  Otherwise, the epoch
+                            number is appended to construct the path where each
+                            epoch's checkpoint is written.
+      epoch_callback      - Optional function to be called after each training
+                            epoch.  If omitted, defaults to None.  When provided
+                            must take:
 
-                            model:           Torch model object
-                            epoch_number:    Training epoch that just completed
-                            optimizer:       Torch optimizer object
-                            training_loss:   Sequence of training loss for the
-                                             last epoch
-                            validation_loss: Scalar validation loss for the last
-                                             epoch
+                              model:           Torch model object
+                              epoch_number:    Training epoch that just completed
+                              optimizer:       Torch optimizer object
+                              training_loss:   Sequence of training loss for the
+                                               last epoch
+                              validation_loss: Scalar validation loss for the last
+                                               epoch
 
-      lr_scale          - Optional floating point value, in the range of (0, 1],
-                          to scale the learning rate at the end of each epoch.
-                          If omitted, defaults to 0.5.
-      batch_size        - Optional batch size used during training.  If omitted,
-                          defaults to 1024 samples.
-      project_name      - Optional Weights and Biases (W&B) project name.  If
-                          omitted, defaults to None and W&B integrations are
-                          skipped.  Otherwise this specifies the project to
-                          log to for the currently logged in entity.
-      pinn_loss_flag    - Optional Boolean specifying whether a physics-based
-                          loss function is supplied or not.  When False the supplied
-                          criterion takes 2 arguments to compute a non-physics-based
-                          loss:
+      lr_scale            - Optional floating point value, in the range of (0, 1],
+                            to scale the learning rate at the end of each epoch.
+                            If omitted, defaults to 0.5.
+      batch_size          - Optional batch size used during training.  If omitted,
+                            defaults to 1024 samples.
+      project_name        - Optional Weights and Biases (W&B) project name.  If
+                            omitted, defaults to None and W&B integrations are
+                            skipped.  Otherwise this specifies the project to
+                            log to for the currently logged in entity.
+      pinn_loss_flag      - Optional Boolean specifying whether a physics-based
+                            loss function is supplied or not.  When False the supplied
+                            criterion takes 2 arguments to compute a non-physics-based
+                            loss:
 
-                            normalized_approximations - The normalized model estimates
-                            normalized_outputs        - The normalized truth values
+                              normalized_approximations - The normalized model estimates
+                              normalized_outputs        - The normalized truth values
 
-                          Otherwise criterion takes 4 arguments to compute a
-                          physics-based loss:
+                            Otherwise criterion takes 4 arguments to compute a
+                            physics-based loss:
 
-                            normalized_approximations - The normalized model estimates
-                            normalized_outputs        - The normalized truth values
-                            normalized_inputs         - The normalized model inputs
-                            parameter_ranges          - Parameter ranges suitable to
-                                                        scale the inputs to physical
-                                                        units
+                              normalized_approximations - The normalized model estimates
+                              normalized_outputs        - The normalized truth values
+                              normalized_inputs         - The normalized model inputs
+                              parameter_ranges          - Parameter ranges suitable to
+                                                          scale the inputs to physical
+                                                          units
 
-                          It expected that all loss function arguments are PyTorch
-                          tensors on device.
+                            It expected that all loss function arguments are PyTorch
+                            tensors on device.
 
-                          If omitted, defaults to False and non-physics-based criterion
-                          expected.
+                            If omitted, defaults to False and non-physics-based criterion
+                            expected.
+      quadratic_loss_flag - Optional Boolean specifying whether to train on the quadratic
+                            radius residual instead of normalized log radius. If True, will
+                            scale the radius component of normalized approximations so that
+                            it stores the quadratic radius residual. Then, the model will
+                            be trained on forward_quadratic, a forward function that outputs the
+                            quadratic radius residual instead of the normalized log radius.
+
+                            This circumvents NaNs which result from applying log10 to a potentially
+                            negative output radius, which can occur early in training when
+                            approximations are poor.
+
+                            Also provides input_parameters and parameter_ranges to the loss
+                            function to allow for scaling. This is the same interface as
+                            pinn loss functions.
+
+                            If omitted, defaults to True and normalized-radius loss function
+                            expected.
 
     Returns 2 values:
 
@@ -2681,6 +2700,13 @@ def train_model( model, criterion, optimizer, device, number_epochs, training_fi
                                                      tensor_parameter_ranges_host )
     training_outputs = normalize_droplet_parameters( torch.from_numpy( training_outputs ),
                                                      tensor_parameter_ranges_host )
+    # If quadratic residual, scale the training data accordingly
+    if quadratic_loss_flag:
+        bar_r   = torch.mean( tensor_parameter_ranges["radius"] )
+        sigma_r = torch.diff( tensor_parameter_ranges["radius"] )
+        training_outputs[:, 0] = (scale_radius_from_normalized_to_quadratic( training_outputs[:, 0], bar_r, sigma_r )
+                                - scale_radius_from_normalized_to_quadratic( training_inputs[:, 0], bar_r, sigma_r ))
+
 
     # XXX: Hack to disable validation with physics-based loss until its fixed.
     #
@@ -2706,6 +2732,11 @@ def train_model( model, criterion, optimizer, device, number_epochs, training_fi
                                                            tensor_parameter_ranges_host )
         validation_outputs = normalize_droplet_parameters( torch.from_numpy( validation_outputs ),
                                                            tensor_parameter_ranges_host )
+
+        # If using quadratic loss, scale the normalized radius into quadratic residual
+        if quadratic_loss_flag:
+            validation_outputs[:, 0] = (scale_radius_from_normalized_to_quadratic( validation_outputs[:, 0], bar_r, sigma_r )
+                                      - scale_radius_from_normalized_to_quadratic( validation_inputs[:, 0], bar_r, sigma_r ))
 
         # Ensure we accumulate gradients for our validation tensors.
         #
@@ -2833,12 +2864,15 @@ def train_model( model, criterion, optimizer, device, number_epochs, training_fi
             optimizer.zero_grad()
 
             # Perform the forward pass.
-            normalized_approximations = model( normalized_inputs )
+            if quadratic_loss_flag:
+                normalized_approximations = model.quadratic_forward( normalized_inputs )
+            else:
+                normalized_approximations = model( normalized_inputs )
 
             # Estimate the loss - using weights if needed.
             if criterion == weighted_mse_loss:
                 loss = weighted_mse_loss( normalized_approximations, normalized_outputs, current_weights )
-            elif pinn_loss_flag:
+            elif pinn_loss_flag or quadratic_loss_flag:
                 loss = criterion( normalized_approximations,
                                   normalized_outputs,
                                   normalized_inputs,
@@ -2926,14 +2960,17 @@ def train_model( model, criterion, optimizer, device, number_epochs, training_fi
                     else:
                         end_index = start_index + VALIDATION_BATCH_SIZE
 
-                    validation_approximations = model( validation_inputs[start_index:end_index].to( device ) )
+                    if quadratic_loss_flag:
+                        validation_approximations = model.quadratic_forward( validation_inputs[start_index:end_index].to( device ) )
+                    else:
+                        validation_approximations = model( validation_inputs[start_index:end_index].to( device ) )
 
                     # Estimate the loss - using weights if needed.
                     if criterion == weighted_mse_loss:
                         loss = weighted_mse_loss( validation_approximations,
                                                   validation_outputs[start_index:end_index].to( device ),
                                                   current_weights )
-                    elif pinn_loss_flag:
+                    elif pinn_loss_flag or quadratic_loss_flag:
                         loss = criterion( validation_approximations,
                                           validation_outputs.to( device ),
                                           validation_inputs.to( device ),
