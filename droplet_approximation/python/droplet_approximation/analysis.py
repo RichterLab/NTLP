@@ -509,7 +509,7 @@ def plot_droplet_size_temperatures_domain( input_parameters, model=None, dt=None
                                   t_eval=t_eval,
                                   args=(input_parameters[2:],),
                                   atol=BDF_TOLERANCE_ABSOLUTE,
-                                  rtol=BDF_TOLERANCE_RELATIVE )
+                                  rtol=BDF_TOLERANCE_RELATIVE )[1:, :]
 
     # Package the BDF outputs for visualization.
     size_temperatures = { "bdf": bdf_output }
@@ -522,7 +522,7 @@ def plot_droplet_size_temperatures_domain( input_parameters, model=None, dt=None
                                                         dt,
                                                         dtype=np.float32 ),
                                                model,
-                                               "cpu" )
+                                              "cpu" )[:-1, :]
         model_nrmse  = calculate_nrmse( bdf_output, model_output )
 
         # Add the MLP output to the visualization.
@@ -542,7 +542,7 @@ def plot_droplet_size_temperatures_domain( input_parameters, model=None, dt=None
             kwargs["title_string"] += ("\n" +
                                        "Model NRMSE: {:.3e}").format( model_nrmse )
 
-    fig_h, ax_h = plot_droplet_size_temperatures( t_eval, size_temperatures, **kwargs )
+    fig_h, ax_h = plot_droplet_size_temperatures( t_eval[1:], size_temperatures, **kwargs )
 
     return fig_h, ax_h
 
