@@ -169,7 +169,7 @@ droplet_model.o: droplet_model.f90
 clean:
 	rm -f *.o *.mod lesmpi.a benchmark_approximation.x mach.file
 
-benchmark_approximation.x: $(BENCHMARK_OBJS) measurement.o data_structures.o droplet_model.o
+benchmark_approximation.x: $(BENCHMARK_OBJS) measurement.o data_structures.o defs.o droplet_model.o
 	$(FORTRAN) $(FLAGS) $(DEBUG_FLAGS) $(MODEL_FLAGS) $(OUTPUTLIB) $(LINKOPTS) -o $@ $^
 
 inference_test.x: $(INFERENCE_OBJS) defs.o droplet_model.o
