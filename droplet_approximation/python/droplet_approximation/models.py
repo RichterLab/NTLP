@@ -459,6 +459,12 @@ def volatile_emotion_l1_loss( quadratic_approximations, quadratic_outputs, norma
 
     return loss
 
+volatile_emotion_l1_loss_reduced_temp = functools.partial( volatile_emotion_l1_loss, radius_temperature_weighting=[0.1, 0.1] )
+"""
+This is just volatile-emotion's loss function with 1/10 of the temperature loss weighting to emphasize
+radius learning. Used for devlish taker
+"""
+
 class InvalidCheckpointError( ValueError ):
     """
     Represents an invalid checkpoint that was consistent enough to be loaded but
