@@ -335,8 +335,10 @@ class QuadraticResidualNet_volatile_emotion( ResidualNet ):
 
         return out
 
-def volatile_emotion_l1_loss( normalized_approximations, normalized_outputs ):
+def volatile_emotion_l1_loss( quadratic_approximations, quadratic_outputs, normalized_inputs, parameter_ranges, radius_temperature_weighting=[0.1, 1.0], normalized_radius_penalty=0.04 ):
     """
+    Assumes quadratic_loss_flag=True
+
     Creates a scaled L1 loss that penalizes errors when approximating large
     particles.  The scaling weights and constants in the radii penalty are ad
     hoc though the radii penalty is modeled after the r^2 residual approximation
@@ -347,39 +349,82 @@ def volatile_emotion_l1_loss( normalized_approximations, normalized_outputs ):
           works with large, initial learning rates (O(1e-3)).  See Darius for
           details.
 
-    Takes 2 arguments:
+    Takes 6 arguments:
 
-      normalized_approximations - Torch Tensor, sized batch_size x 2, containing
-                                  the approximated radii and temperatures for
-                                  the batch.
-      normalized_outputs        - Torch Tensor, sized batch_size x 2, containing
-                                  the truth radii and temperatures for the
-                                  batch.
+      quadratic_approximations     - Torch Tensor, sized batch_size x 2, containing
+                                     the approximated quadratic radii and normalized
+                                     temperatures for the batch.
+      quadratic_outputs            - Torch Tensor, sized batch_size x 2, containing
+                                     the truth quadratic radii and normalized
+                                     temperatures for the batch.
+      normalized_inputs            - Torch Tensor, sized batch_size x 2, containing
+                                     the input parameters.
+      parameter_ranges             - Dictionary of current the parameter ranges.
+      radius_temperature_weighting - List of two floats. The first weights quadratic
+                                     radius loss. The second weights temperature loss.
+
+                                     NOTE: This does NOT affect the weighting on the
+                                     normalized radius penalty. This is so that
+                                     normalized_radius_penalty corresponds directly
+                                     to some percentage of MAE loss on normalized radius
+                                     because this loss function and its scaling has
+                                     been thoroughly explored.
+      normalized_radius_penalty    - Optional float, specifies what fraction of the mean
+                                     absolute error on the normalized radius to add to the
+                                     radius loss. This functions as a penalty for small particles.
+                                     Defaults to 0.04 ==> 4% of normalized radius MAE loss.
+
 
     Returns 1 value:
 
       loss - Scalar value denoting the batch's loss.
 
     """
+    radius_temperature_weighting = torch.tensor( radius_temperature_weighting )
 
-    # Start with L1.
-    differences = torch.abs( normalized_approximations - normalized_outputs )
+    sigma_r = torch.diff( parameter_ranges["radius"] )
+    bar_r   = torch.mean( parameter_ranges["radius"] )
 
-    # Scale to match temperature's magnitude (see Darius, this doesn't make
-    # sense to Greg since it's in normalized space).
-    differences[:, 0] /= 25.0
+    # Start with L1 and apply weighting
+    differences = torch.abs( quadratic_approximations - quadratic_outputs )
 
-    # Penalize large particles.  Small particles growing or large particles
-    # shrinking are penalized heavily, while large particles slightly adjusting
-    # don't get penalized as much.
-    differences[:, 0] += torch.abs( 10.0**(2.5 * normalized_approximations[..., 0] - 1.0) - 10.0**(2.5 * normalized_outputs[..., 0] - 1.0) )
+    # Weighting for quadratic radius vs. temperature loss
+    # This is a reconstruction of volatile-emotion's loss weighting
+    # It first undoes the radius scale factor in the quadratic forward function by
+    #   multiplying by 10**(-2.0*bar_r). Then it divides by 10 (by default) to
+    #   weight temperature slightly more aggressively.
+    differences[:, 0] *= 10**(-2.0*bar_r)
+    differences *= radius_temperature_weighting
 
-    # Convert NaNs to zeros.  This kills the gradient flowing to the weights
-    # contributing to the invalid radii.
-    #
-    # NOTE: This doesn't guarantee removal of NaNs in the backwards graph!
-    #
-    torch.nan_to_num( differences, 0.0 )
+    # Scale back into log range for a small radii penalty
+
+    # First get full radii instead of residual
+    quadratic_radius_input = scale_radius_from_normalized_to_quadratic( normalized_inputs[:, 0],
+                                                                        bar_r,
+                                                                        sigma_r )
+    # Add the residual to get the full radii in quadratic scale
+    quadratic_radius_approximations = quadratic_radius_input + quadratic_approximations[:, 0]
+    quadratic_radius_outputs        = quadratic_radius_input + quadratic_outputs[:, 0]
+
+    # Any negative radius will yield a NaN for the log radius
+    # Only normalize the positive radii
+    normalized_loss_mask = quadratic_radius_approximations > 0.0
+
+    normalized_radius_approximations = scale_radius_from_quadratic_to_normalized(
+                                           quadratic_radius_approximations[normalized_loss_mask],
+                                           bar_r,
+                                           sigma_r )
+    normalized_radius_outputs        = scale_radius_from_quadratic_to_normalized(
+                                           quadratic_radius_outputs[normalized_loss_mask],
+                                           bar_r,
+                                           sigma_r )
+
+    # Calculate L1 Loss on normalized parameters with scale factor
+    normalized_radius_loss = normalized_radius_penalty * torch.abs(normalized_radius_approximations
+                                                                 - normalized_radius_outputs )
+
+    # Add the normalized radius penalty
+    differences[normalized_loss_mask, 0] += normalized_radius_loss
 
     loss = torch.mean( differences )
 
