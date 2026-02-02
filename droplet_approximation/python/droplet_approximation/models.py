@@ -531,6 +531,11 @@ def create_new_model( model_class_name, model_name=None, parameter_ranges={} ):
             model_class_name ) )
 
     # Instantiate it with the default arguments.
+    # If it is derived from a quadratic residual net, initialize with log radius range
+    if isinstance( obj, QuadraticResidualNet_volatile_emotion ):
+        model = obj( model_name=model_name, log_radius_range=parameter_ranges["radius"] )
+        return model
+
     model = obj( model_name=model_name )
 
     return model
