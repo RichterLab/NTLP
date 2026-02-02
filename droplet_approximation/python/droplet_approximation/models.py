@@ -275,12 +275,12 @@ class BiggerResidualNet_4x128( ResidualNet ):
 
 class QuadraticResidualNet_volatile_emotion( ResidualNet ):
     """
-    4-layer multi-layer perceptron (MLP) with ReLU activations.  This aims to
+    4-layer multi-layer perceptron (MLP) with Silu activations.  This aims to
     balance parameter count vs computational efficiency so that inferencing with
     it is faster than Gauss-Newton iterative solvers.
 
-    This residual network learns the delta between the input particle size and
-    temperature and the outputs, given the provided background conditions.
+    This residual network learns the delta between the square of the input particle size
+    and temperature and the outputs, given the provided background conditions.
 
     "Quadratic" refers to the model learning the residual on the radius squared
     instead of the log radius. This residual keeps a consistent scale across
@@ -311,28 +311,57 @@ class QuadraticResidualNet_volatile_emotion( ResidualNet ):
             local_log_radius_range = get_parameter_ranges()["radius"]
 
         self.sigma_r = (local_log_radius_range[1] - local_log_radius_range[0])
+        self.bar_r   = (local_log_radius_range[1] + local_log_radius_range[0]) / 2.0
 
-    def forward( self, x ):
-        # Add the input to the final result to force the model to learn the
-        # delta instead of the approximation itself.
+        # Scaling factor to scale model outputs closer to O(1)
+        # Quadratic residuals output on ~O(10^-12)
+        # This scale factor maintains backwards compatibility
+        # With volatile emotion
+        self.radius_scale_factor = 10.0 ** (2*self.bar_r)
+
+    def quadratic_forward( self, x ):
+        """
+        A forward function that outputs the quadratic radius residual instead
+        of normalized droplet parameters. Used for training the network.
+
+        This avoids applying log10 to negative radii, making it more suitable
+        for training networks when early approximations may yield unphysical results.
+        """
+
         out = self._norms[0]( self._activation( self.fc1( x ) ) )
         out = self._norms[1]( self._activation( self.fc2( out ) ) )
         out = self._norms[2]( self._activation( self.fc3( out ) ) )
         out = self.fc4( out )
 
-        # Convert the delta from r^2 back to log(r) to match the inputs.
-        #
-        # NOTE: There is no constraint that prevents negative radii!  We
-        #       penalize invalid radii in the loss function (or worst case,
-        #       ignore them, and let the optimization process naturally improve
-        #       predictions).
-        #
-        # NOTE: The factor of 2 from QuadraticResidualNet_intrepid_data has been
-        #       removed!
-        #
-        out[..., 0] = torch.log10(out[..., 0] + (10 ** (self.sigma_r * x[..., 0])))/self.sigma_r
+        # Only do the residual on temperature
         out[..., 1] += x[..., 1]
 
+        # Scale radius output based on scale_factor
+        out[..., 0] *= self.radius_scale_factor
+
+        # Output quadratic residual and normalized temperature
+        return out
+
+    def forward( self, x ):
+        """
+        A forward function that outputs the new normalized radius and temperature.
+
+        Calls quadratic_forward. Then adds the quadratic radius residual and
+        normalizes the result.
+        """
+        # Get the output in terms of the quadratic residual and normalized temperature
+        out = self.quadratic_forward( x )
+
+        # Add the quadratic residual to the quadratic radius input
+        quadratic_input_radii  = scale_radius_from_normalized_to_quadratic( x[..., 0],
+                                                                            self.bar_r,
+                                                                            self.sigma_r )
+        quadratic_output_radii = quadratic_input_radii + out[..., 0]
+
+        # Convert back to normalized parameters
+        out[..., 0] = scale_radius_from_quadratic_to_normalized( quadratic_output_radii, self.bar_r, self.sigma_r )
+
+        # Output normalized radius/temperature
         return out
 
 def volatile_emotion_l1_loss( quadratic_approximations, quadratic_outputs, normalized_inputs, parameter_ranges, radius_temperature_weighting=[0.1, 1.0], normalized_radius_penalty=0.04 ):
