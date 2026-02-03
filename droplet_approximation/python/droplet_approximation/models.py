@@ -46,7 +46,7 @@ class SimpleNet( nn.Module ):
 
         self._model_name = model_name
         self._activation = torch.relu
-        self._norms      = []
+        self._norms      = torch.nn.ModuleList( [] )
 
         self._layer_sizes    = [32, 32, 32]
         self._number_inputs  = 7
@@ -180,51 +180,6 @@ class SimpleNet( nn.Module ):
         x = self.fc4( x )
 
         return x
-
-    def to( self, device ):
-        """
-        Moves a copy of the model to the specified device.
-
-        Takes 1 argument:
-
-          device - Torch device string/object specifying where to copy the
-                   model to.
-
-        Returns 1 value:
-
-          moved_model - Copy of this model on device.
-
-        """
-
-        # Some normalization functions are really callable objects and need to
-        # be manually moved.  This avoids Torch errors complaining about the
-        # model being located one place and some variables located elsewhere.
-        self._norms = list( map( lambda x: x.to( device ), self._norms ) )
-
-        return super().to( device )
-
-    def _apply( self, function ):
-        """
-        Applies a function to the model.
-
-        Takes 1 argument:
-
-          function - Function to apply.  Must be compatible with nn.Module._apply().
-
-        Returns 1 value:
-
-          applied_model - Copy of this model with function ._apply()'d to it.
-
-        """
-
-        # Update the normalization objects since the parent class doesn't know
-        # anything about them.
-        self._norms = list( map( lambda norm: norm._apply( function ), self._norms ) )
-
-        # Let the parent take care of the rest.
-        super()._apply( function )
-
-        return self
 
 class ResidualNet( SimpleNet ):
     """
@@ -1103,11 +1058,13 @@ def generate_fortran_module( output_path, model_name, model, parameter_ranges={}
 
         import datetime
 
-        expected_parameters = set( expected_weights + expected_biases )
-
-        # Confirm we have the weights and biases that we expect.
-        if expected_parameters != set( model_state.keys() ):
-            raise ValueError( "Model provided does not match a 4-layer MLP!" )
+        # Confirm we have the weights and biases that we expect.  There may be
+        # other trainable parameters in the model, but these are the only ones
+        # needed for serialization.
+        for expected_parameter in expected_weights + expected_biases:
+            if expected_parameter not in model_state:
+                raise ValueError( "Model provided does not match a 4-layer MLP! (missing '{:s}')".format(
+                    expected_parameter ) )
 
         # Ensure that the weights are 2D matrices.
         #
@@ -2233,6 +2190,16 @@ def load_model_checkpoint( checkpoint_path, model=None, optimizer=None ):
         name, and its weights loaded.  The model and parameter ranges use salt
         solute.
 
+        NOTE: This has a workaround for SimpleNet-derived classes that
+              implemented per-layer normalization using a Python list instead
+              of torch.nn.ModuleList object.  Care is taken to load models
+              without normalization parameters, and then add any normalization
+              parameters to the optimizer afterwards.
+
+              This workaround maintains backwards compatibility for layers
+              that accepted the defaults for any optional parameters (e.g.
+              LayerNorm's Beta parameter).
+
         Takes 3 arguments:
 
           checkpoint_path -
@@ -2267,9 +2234,34 @@ def load_model_checkpoint( checkpoint_path, model=None, optimizer=None ):
             model = create_new_model( checkpoint["architecture"],
                                       model_name=checkpoint["model_name"] )
 
-        model.load_state_dict( checkpoint["model_weights"] )
+        model.load_state_dict( checkpoint["model_weights"], strict=False )
+
         if optimizer is not None:
+            # Remove reference to the weights it is currently optimizing.
+            optimizer.param_groups.clear()
+            optimizer.state.clear()
+
+            # Work around a mistake in SimpleNet's ._norms implementation.
+            # These were originally implemented as a list of normalization
+            # objects which prevented PyTorch from serializing their weights
+            # during a checkpoint.
+            old_parameters = []
+            new_parameters = []
+
+            for name, parameter in model.named_parameters():
+                if "_norms" in name:
+                    new_parameters.append( parameter )
+                else:
+                    old_parameters.append( parameter )
+
+            # Add the only the old, pre-fixed _norms, weights we just loaded.
+            optimizer.add_param_group( { "params": old_parameters } )
+
+            # Set the state for these old weights.
             optimizer.load_state_dict( checkpoint["optimizer_state"] )
+
+            # Now add the new parameters with their defaults.
+            optimizer.add_param_group( { "params": new_parameters } )
 
         loss_function    = checkpoint["loss_function"]
         training_loss    = checkpoint["training_loss"]
@@ -2277,6 +2269,70 @@ def load_model_checkpoint( checkpoint_path, model=None, optimizer=None ):
         # Sanity check that the parameter ranges are as expected.
         if "salt_solute" not in parameter_ranges:
             raise InvalidCheckpointError( "'{:s}' is not a valid v4 checkpoint.  "
+                                          "Its parameter ranges does not contain 'salt solute'!".format(
+                                              checkpoint_path ) )
+
+        return model, parameter_ranges, loss_function, training_loss
+
+    def _load_model_checkpoint_v5( checkpoint_path, optimizer, checkpoint ):
+        """
+        Loads a version 5 checkpoint.  These contain the model's architecture
+        and name, the droplet parameter ranges the model was trained on, the
+        optimizer's state, the loss function used in training, and the current
+        training loss.  The model is instantiated from its architecture and
+        name, and its weights loaded.  The model and parameter ranges use salt
+        solute.
+
+        Takes 3 arguments:
+
+          checkpoint_path -
+          optimizer       - Optional Torch optimizer whose state will be set to
+                            the checkpoint's contents.  If omitted, the loaded
+                            optimizer state is discarded.
+          checkpoint      - Dictionary containing the following keys:
+                            "architecture", "droplet_parameters", "loss_function",
+                            "model_name", "model_weights", "optimizer_state",
+                            "training_loss".
+
+        Returns 4 values:
+
+          model            - Torch model containing the weights loaded.  Its
+                             type is determined by the contents of
+                             checkpoint_path.
+          parameter_ranges - Dictionary containing the droplet parameter ranges
+                             associated with model.  See get_parameter_range()
+                             for details.
+          loss_function    - Function handle for the loss function associated
+                             with model.
+          training_loss    - Sequence containing model's training loss across
+                             batches.
+
+        """
+
+        parameter_ranges = checkpoint["droplet_parameter_ranges"]
+
+        # Create the model with its parameter ranges in effect to correctly
+        # instantiate those that set internal state based on the current ranges.
+        with temporary_parameter_ranges( parameter_ranges ):
+            model = create_new_model( checkpoint["architecture"],
+                                      model_name=checkpoint["model_name"] )
+
+        model.load_state_dict( checkpoint["model_weights"], strict=False )
+
+        if optimizer is not None:
+            # Remove reference to the weights it is currently optimizing.
+            optimizer.param_groups.clear()
+            optimizer.state.clear()
+
+            # Set the state for the model weights.
+            optimizer.load_state_dict( checkpoint["optimizer_state"] )
+
+        loss_function    = checkpoint["loss_function"]
+        training_loss    = checkpoint["training_loss"]
+
+        # Sanity check that the parameter ranges are as expected.
+        if "salt_solute" not in parameter_ranges:
+            raise InvalidCheckpointError( "'{:s}' is not a valid v5 checkpoint.  "
                                           "Its parameter ranges does not contain 'salt solute'!".format(
                                               checkpoint_path ) )
 
@@ -2365,6 +2421,13 @@ def load_model_checkpoint( checkpoint_path, model=None, optimizer=None ):
          parameter_ranges,
          loss_function,
          training_loss) = _load_model_checkpoint_v4( checkpoint_path,
+                                                     optimizer,
+                                                     checkpoint )
+    elif checkpoint_version == 5:
+        (model,
+         parameter_ranges,
+         loss_function,
+         training_loss) = _load_model_checkpoint_v5( checkpoint_path,
                                                      optimizer,
                                                      checkpoint )
     else:
@@ -2457,7 +2520,7 @@ def save_model_checkpoint( checkpoint_prefix, checkpoint_number, model, optimize
     #       cases where we need to write a specific version can be handled
     #       as needed.
     #
-    CHECKPOINT_VERSION = 4
+    CHECKPOINT_VERSION = 5
 
     # Build the checkpoint path.
     if checkpoint_number >= 0:
