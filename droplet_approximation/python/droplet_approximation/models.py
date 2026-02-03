@@ -1024,7 +1024,7 @@ def do_iterative_inference( input_parameters, integration_times, model, device, 
 
     return scale_droplet_parameters( normalized_data[:, :2] )
 
-def generate_fortran_module( output_path, model_name, model, parameter_ranges={}, silu_flag=False, layer_norm_flag=False ):
+def generate_fortran_module( output_path, model_name, model, parameter_ranges={}, silu_flag=False, layer_norm_flag=False, quadratic_flag=False ):
     """
     Creates a Fortran 2003 module that allows use of the supplied model with a
     batch size of 1 during inference.
@@ -1048,6 +1048,12 @@ def generate_fortran_module( output_path, model_name, model, parameter_ranges={}
                          normalization for each of the model's layers.  When True,
                          each layer's output is normalized before applying it as the
                          next layer's input.  If omitted, defaults to False.
+      quadratic_flag   - Optional flag specifies whether the model's layers output
+                         a scaled quadratic residual instead of the log radius residual.
+                         When True, the final radius output is square rooted to yield a
+                         linear radius term. When False, the output is assumed to be a
+                         normalized radius and is scaled accordingly. If omitted,
+                         defaults to False.
 
     Returns nothing.
 
@@ -1961,12 +1967,21 @@ end if
         # adherence to coding style.
         core_inference_str = core_inference_str[:-1]
 
-        residual_inference_str = """
-    ! Add the model's input to its output since it's learned to compute a delta rather
-    ! than the final answer.
-    output(RADIUS_INDEX)      = output(RADIUS_INDEX)      + normalized_input(RADIUS_INDEX)
-    output(TEMPERATURE_INDEX) = output(TEMPERATURE_INDEX) + normalized_input(TEMPERATURE_INDEX)
-"""
+        if quadratic_flag:
+            residual_inference_str = """
+        ! Add the model's input to its output since it's learned to compute a delta rather
+        ! than the final answer.
+        output(RADIUS_INDEX)      = output(RADIUS_INDEX)*(10.0**(2.0*RADIUS_LOG_MEAN)) + input(RADIUS_INDEX)**2
+        output(TEMPERATURE_INDEX) = output(TEMPERATURE_INDEX) + normalized_input(TEMPERATURE_INDEX)
+    """
+        else:
+            residual_inference_str = """
+        ! Add the model's input to its output since it's learned to compute a delta rather
+        ! than the final answer.
+        output(RADIUS_INDEX)      = output(RADIUS_INDEX)      + normalized_input(RADIUS_INDEX)
+        output(TEMPERATURE_INDEX) = output(TEMPERATURE_INDEX) + normalized_input(TEMPERATURE_INDEX)
+    """
+
 
         # Only include the residual if the model supports it.
         if not isinstance( model, ResidualNet ):
@@ -2014,17 +2029,29 @@ subroutine estimate( input, output )
     normalized_input(TFINAL_INDEX)          = input(TFINAL_INDEX)
 {core_inference:s}
 {residual_inference:s}
-    ! Scale the outputs to the expected ranges.
-    output(RADIUS_INDEX)      = 10.0**(output(RADIUS_INDEX) * RADIUS_LOG_WIDTH + RADIUS_LOG_MEAN)
-    output(TEMPERATURE_INDEX) = output(TEMPERATURE_INDEX) * TEMPERATURE_WIDTH + TEMPERATURE_MEAN
-
-end subroutine estimate
-
 """.format(
     core_inference=core_inference_str,
     residual_inference=residual_inference_str,
     layer_norm_declarations=layer_norm_declarations_str
 )
+        # Scale the outputs appropriately depending upon whether
+        # the radius output is a quadratic residual or log residual.
+        if quadratic_flag:
+            inference_str += """
+        ! Scale the outputs to the expected ranges.
+        output(RADIUS_INDEX)      = sqrt(output(RADIUS_INDEX))
+        output(TEMPERATURE_INDEX) = output(TEMPERATURE_INDEX) * TEMPERATURE_WIDTH + TEMPERATURE_MEAN
+
+    end subroutine estimate
+"""
+        else:
+            inference_str += """
+        ! Scale the outputs to the expected ranges.
+        output(RADIUS_INDEX)      = 10.0**(output(RADIUS_INDEX) * RADIUS_LOG_WIDTH + RADIUS_LOG_MEAN)
+        output(TEMPERATURE_INDEX) = output(TEMPERATURE_INDEX) * TEMPERATURE_WIDTH + TEMPERATURE_MEAN
+
+    end subroutine estimate
+"""
 
         for inference_line in inference_str.splitlines():
             print( "{:s}{:s}".format(
