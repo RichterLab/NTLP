@@ -3009,8 +3009,8 @@ def train_model( model, criterion, optimizer, device, number_epochs, training_fi
                                                   current_weights )
                     elif pinn_loss_flag:
                         loss = criterion( validation_approximations,
-                                          validation_outputs.to( device ),
-                                          validation_inputs.to( device ),
+                                          validation_outputs[start_index:end_index].to( device ),
+                                          validation_inputs[start_index:end_index].to( device ),
                                           parameter_ranges=tensor_parameter_ranges )
                     else:
                         loss = criterion( validation_approximations,
