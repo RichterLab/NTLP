@@ -2840,6 +2840,7 @@ def train_model( model, criterion, optimizer, device, number_epochs, training_fi
                              model,
                              criterion,
                              optimizer,
+                             number_epochs,
                              batch_size,
                              lr_scale,
                              (training_file,
