@@ -51,6 +51,7 @@ from .models import BiggerResidualNet_4x128, \
                     generate_fortran_module, \
                     get_cosine_annealing_lr_schedule, \
                     load_model_checkpoint, \
+                    lr_scheduler_to_str, \
                     ode_residual, \
                     print_loss, \
                     save_model_checkpoint, \

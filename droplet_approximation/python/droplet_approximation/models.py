@@ -2441,6 +2441,73 @@ def load_model_checkpoint( checkpoint_path, model=None, optimizer=None ):
     else:
         return parameter_ranges, loss_function, training_loss
 
+def lr_scheduler_to_str( lr_scheduler, total_number_batches=-1 ):
+    """
+    Returns a string representation of the supplied learning rate scheduler object.
+    Intended to provide a consistent representation of Torch's LRScheduler-derived
+    objects suitable for logging.
+
+    NOTE: This does not handle all of the schedulers and raises ValueError when
+          an unknown scheduler is encountered!
+
+    Takes 2 arguments:
+
+      lr_scheduler         - torch.optim.lr_scheduler.LRScheduler object to get
+                             its string representation.
+      total_number_batches - Optional total number of batches lr_scheduler will
+                             be used for.  When specified, the schedule's
+                             representation will training duration as a
+                             percentage of all batches across every epoch.
+                             Otherwise, training durations will be reported as
+                             numbers of batches.
+
+    Returns 1 value:
+
+      lr_scheduler_str - String representation of lr_scheduler.
+
+    """
+
+    if isinstance( lr_scheduler, torch.optim.lr_scheduler.SequentialLR ):
+        # Get the representation for each of the sub-schedulers.
+        sub_scheduler_strings = map( lambda s: lr_scheduler_to_str( s, total_number_batches ),
+                                     lr_scheduler._schedulers )
+
+        return "SequentialLR( [{:s}] )".format(
+            ", ".join( sub_scheduler_strings ) )
+
+    elif isinstance( lr_scheduler, torch.optim.lr_scheduler.LinearLR ):
+        # Get the duration as a percentage or count.
+        if total_number_batches > 0:
+            duration_percentage = lr_scheduler.total_iters / total_number_batches * 100.0
+            duration_string     = "{:.2f}%".format( duration_percentage )
+        else:
+            duration_string = "{:d}".format( lr_scheduler.total_iters )
+
+        # .last_lr refers to the current learning rate, which we assume is the
+        # start of the linear ramp.  .start_factor is (start_lr / warmed_lr).
+        return "LinearLR( lr=[{:.1e}, {:.1e}], duration={:s} )".format(
+            lr_scheduler._last_lr[0],
+            lr_scheduler._last_lr[0] / lr_scheduler.start_factor,
+            duration_string )
+
+    elif isinstance( lr_scheduler, torch.optim.lr_scheduler.CosineAnnealingLR ):
+        # Get the duration as a percentage or count.
+        if total_number_batches > 0:
+            duration_percentage = lr_scheduler.T_max / total_number_batches * 100.0
+            duration_string     = "{:.2f}%".format( duration_percentage )
+        else:
+            duration_string = "{:d}".format( lr_scheduler.T_max )
+
+        return "CosineAnnealingLR( [{:.1e}, {:.1e}], duration={:s} )".format(
+            lr_scheduler.base_lrs[0],
+            lr_scheduler.eta_min,
+            duration_string )
+
+    # Blow up so someone fixes this immediately instead of silently logging an
+    # "Unknown scheduler" string and limiting the ability to trace a model's
+    # provenance.
+    raise ValueError( "Unknown learning rate scheduler ({})!".format( lr_scheduler ) )
+
 def ode_residual( inputs, outputs, model ):
 
     parameter_ranges = get_parameter_ranges()
@@ -2842,7 +2909,8 @@ def train_model( model, criterion, optimizer, device, number_epochs, training_fi
                              optimizer,
                              number_epochs,
                              batch_size,
-                             lr_scale,
+                             lr_scheduler_to_str( lr_scheduler,
+                                                  number_epochs * number_batches ),
                              (training_file,
                               validation_file),
                              (training_inputs.shape[0],

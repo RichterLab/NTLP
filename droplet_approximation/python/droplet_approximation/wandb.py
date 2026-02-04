@@ -301,7 +301,7 @@ def log_wandb_checkpoint( model, epoch_index, optimizer, training_loss, validati
     del api_run
     del api
 
-def prepare_wandb_run( wandb, project_name, model, criterion, optimizer, number_epochs, batch_size, lr_scale, file_paths, number_droplets ):
+def prepare_wandb_run( wandb, project_name, model, criterion, optimizer, number_epochs, batch_size, lr_schedule_str, file_paths, number_droplets ):
     """
     Creates a Weights and Biases (W&B) Run object to log checkpoints (artifacts)
     and training metrics (metrics) to.  This captures metadata related to the
@@ -317,8 +317,7 @@ def prepare_wandb_run( wandb, project_name, model, criterion, optimizer, number_
       optimizer       - Torch optimizer object.
       number_epochs   - Number of epochs planned for training.
       batch_size      - Integer batch size used during training.
-      lr_scale        - Floating point learning rate scale factor.  The optimizer's
-                        learning rate is scaled by this after each epoch.
+      lr_schedule_str - String describing the learning rate schedule.
       file_paths      - Sequence of two string paths specifying the location of
                         training and validation.  The validation data path may
                         be None when validation is not used.
@@ -366,7 +365,7 @@ def prepare_wandb_run( wandb, project_name, model, criterion, optimizer, number_
         # Optimizer hyperparameters.
         "optimizer":                    optimizer.__class__,
         "learning_rate":                optimizer.defaults["lr"],
-        "learning_rate_scale_factor":   lr_scale,
+        "learning_rate_schedule":       lr_schedule_str,
         "weight_decay":                 optimizer.defaults["weight_decay"],
 
         # Training configuration.
