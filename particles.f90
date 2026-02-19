@@ -2923,6 +2923,7 @@ CONTAINS
       use pars
       use con_data
       use con_stats
+      use profiling
       implicit none
       include 'mpif.h'
 
@@ -2938,8 +2939,9 @@ CONTAINS
       real :: mod_magnus,exner,func_p_base,rhoa,func_rho_base
 
 
+      call start_phase(measurement_id_particle_fill_ext)
       call fill_ext
-
+      call end_phase(measurement_id_particle_fill_ext)
 
       !If you want, you can have the particles calculate nearest neighbor
       !Brute is there for checking, but WAY slower
@@ -2951,6 +2953,7 @@ CONTAINS
       end if
 
 
+      call start_phase(measurement_id_particle_loop)
       !Loop over the linked list of particles:
       part => first_particle
       do while (associated(part))
@@ -3051,19 +3054,25 @@ CONTAINS
 
           part => part%next
       end do
+      call end_phase(measurement_id_particle_loop)
 
-
+      call start_phase(measurement_id_particle_bcs)
       call particle_bcs_nonperiodic
+      call end_phase(measurement_id_particle_bcs)
 
       !Check to see if particles left processor
       !If they did, remove from one list and add to another
+      call start_phase(measurement_id_particle_exchange)
       call particle_exchange
+      call end_phase(measurement_id_particle_exchange)
 
       !Now enforce periodic bcs
       !just updates x,y locations if over xl,yl or under 0
+      call start_phase(measurement_id_particle_bcs)
       call particle_bcs_periodic
+      call end_phase(measurement_id_particle_bcs)
 
-
+      call start_phase(measurement_id_particle_loop_stats)
       !Get particle count:
       numpart = 0
       part => first_particle
@@ -3073,7 +3082,7 @@ CONTAINS
       end do
 
       call mpi_allreduce(numpart,tnumpart,1,mpi_integer,mpi_sum,mpi_comm_world,ierr)
-
+      call end_phase(measurement_id_particle_loop_stats)
 
   end subroutine particle_update_rk3
 
@@ -3248,6 +3257,8 @@ CONTAINS
 
               numpart_processed = numpart_processed + 1
 
+              call start_phase( measurement_id_particle_estimation )
+
               !Gives initial guess into nonlinear solver
               !mflag = 0, has equilibrium radius; mflag = 1, no
               !equilibrium (uses itself as initial guess)
@@ -3279,6 +3290,8 @@ CONTAINS
                   call LV_solver(part%vp,dt_taup0,rhoa,rt_start, rt_zeroes,flag)
 
               end if
+
+              call end_phase( measurement_id_particle_estimation )
 
               if ((flag == 1)  &
                    .OR. isnan(rt_zeroes(1)) &
@@ -3433,7 +3446,7 @@ CONTAINS
       call end_phase(measurement_id_particle_bcs)
 
 
-      call start_phase(measurement_id_particle_stats)
+      call start_phase(measurement_id_particle_loop_stats)
       !Get particle count:
       numpart = 0
 
@@ -3446,7 +3459,7 @@ CONTAINS
 
 
       call mpi_allreduce(numpart,tnumpart,1,mpi_integer,mpi_sum,mpi_comm_world,ierr)
-      call end_phase(measurement_id_particle_stats)
+      call end_phase(measurement_id_particle_loop_stats)
 
       ! Dump data to the myid file
       if (iwritebe .eq. 1 .and. be_write_buffer_index .gt. 0) then
@@ -3614,7 +3627,9 @@ CONTAINS
 
 
               if (part%radius .gt. 1.8e-7 .and. part%Tp .gt. 278.0 .and. droplet_parameters(5) .gt. 0.85) then
+                  call start_phase( measurement_id_particle_estimation )
                   call estimate( droplet_parameters, rt_zeroes )
+                  call end_phase( measurement_id_particle_estimation )
               else
                   write(*,*) "Weird input radius/temperature/RH: ", part%radius_old, part%Tp_old, droplet_parameters(5)
                   rt_zeroes(1) = part%radius
@@ -3774,7 +3789,7 @@ CONTAINS
       call end_phase(measurement_id_particle_bcs)
 
 
-      call start_phase(measurement_id_particle_stats)
+      call start_phase(measurement_id_particle_loop_stats)
       !Get particle count:
       numpart = 0
 
@@ -3787,7 +3802,7 @@ CONTAINS
 
 
       call mpi_allreduce(numpart,tnumpart,1,mpi_integer,mpi_sum,mpi_comm_world,ierr)
-      call end_phase(measurement_id_particle_stats)
+      call end_phase(measurement_id_particle_loop_stats)
 
 
   end subroutine particle_update_ANN

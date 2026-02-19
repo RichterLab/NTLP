@@ -188,7 +188,11 @@ c
       call get_dt
  9000 continue
       call start_phase( measurement_id_timestepping_loop)
+
+      call start_phase( measurement_id_io_histograms )
       call set_sav(iti)
+      call end_phase( measurement_id_io_histograms )
+
       if (myid==0) then
       write(*,*) 'Starting time loop'
       write(*,*) 'it,time = ',it,time
@@ -506,9 +510,10 @@ c
       end if
 #endif
 
-
+      call start_phase(measurement_id_cfl_dt_calculations)
       call get_max
       call get_dt
+      call end_phase(measurement_id_cfl_dt_calculations)
 
       call end_phase(measurement_id_timestepping_loop)
 

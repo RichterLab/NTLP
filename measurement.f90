@@ -1022,23 +1022,19 @@ module profiling
          measurement_id_io_viz, &
 
          ! Time spent advecting particles with the computed flow.
-         measurement_id_particle_solver, &
-         measurement_id_particle_reintro, &
-         measurement_id_particle_diff, &
          measurement_id_particle_coalesce, &
+         measurement_id_particle_diff, &
          measurement_id_particle_estimation, &
-         measurement_id_particle_estimation_call, &
-         measurement_id_particle_estimation_checks, &
-         measurement_id_particle_estimation_assignment, &
-         measurement_id_particle_estimation_cr, &
          measurement_id_particle_fill_ext, &
          measurement_id_particle_loop, &
+         measurement_id_particle_loop_stats, &
          measurement_id_particle_bcs, &
-         measurement_id_particle_exchange, &
          measurement_id_particle_coupling, &
-         measurement_id_particle_ztox, &
-         measurement_id_particle_stats, &
          measurement_id_particle_coupling_exchange, &
+         measurement_id_particle_exchange, &
+         measurement_id_particle_reintro, &
+         measurement_id_particle_solver, &
+         measurement_id_particle_stats, &
 
          ! Time spent setting the simulation up.
          measurement_id_setup, &
@@ -1048,7 +1044,8 @@ module profiling
          measurement_id_solver, &
 
          ! Time spent in the main timestepping loop.
-         measurement_id_timestepping_loop
+         measurement_id_timestepping_loop, &
+         measurement_id_cfl_dt_calculations
 
     public :: &
          initialize_profiling, &
@@ -1092,21 +1089,18 @@ contains
         measurement_id_particle_diff                  = create_phase( "particle_diff" )
         measurement_id_particle_coalesce              = create_phase( "particle_coalesce" )
         measurement_id_particle_estimation            = create_phase( "particle size/temp estimation" )
-        measurement_id_particle_estimation_call       = create_phase( "particle size/temp estimation (estimate())" )
-        measurement_id_particle_estimation_checks     = create_phase( "particle size/temp estimation (sanity checks)" )
-        measurement_id_particle_estimation_assignment = create_phase( "particle size/temp estimation (activated/deactivated)" )
-        measurement_id_particle_estimation_cr         = create_phase( "particle size/temp estimation (crit radius)" )
         measurement_id_particle_fill_ext              = create_phase( "particle_fill_ext" )
         measurement_id_particle_loop                  = create_phase( "particle_loop" )
+        measurement_id_particle_loop_stats            = create_phase( "particle_loop_stats" )
         measurement_id_particle_bcs                   = create_phase( "particle_bcs" )
         measurement_id_particle_exchange              = create_phase( "particle_exchange" )
         measurement_id_particle_coupling              = create_phase( "particle_coupling" )
         measurement_id_particle_coupling_exchange     = create_phase( "particle_coupling_exchange" )
-        measurement_id_particle_ztox                  = create_phase( "particle_ztox" )
         measurement_id_particle_stats                 = create_phase( "particle_stats" )
         measurement_id_setup                          = create_phase( "setup" )
         measurement_id_solver                         = create_phase( "solver" )
         measurement_id_timestepping_loop              = create_phase( "solver time stepping loop" )
+        measurement_id_cfl_dt_calculations            = create_phase( "CFL and dt calculation" )
 
     end subroutine initialize_profiling
 
@@ -1139,27 +1133,26 @@ contains
                                 duration_particle_diff, &
                                 duration_particle_coalesce, &
                                 duration_particle_estimation, &
-                                duration_particle_estimation_call, &
-                                duration_particle_estimation_checks, &
-                                duration_particle_estimation_assignment, &
-                                duration_particle_estimation_cr, &
                                 duration_particle_fill_ext, &
                                 duration_particle_loop, &
+                                duration_particle_loop_stats, &
                                 duration_particle_bcs, &
                                 duration_particle_exchange, &
                                 duration_particle_coupling, &
                                 duration_particle_coupling_exchange, &
                                 duration_particle_stats, &
-                                duration_particle_ztox, &
                                 duration_setup, &
                                 duration_solver, &
-                                duration_timestepping_loop
+                                duration_timestepping_loop, &
+                                duration_cfl_dt_calculations
 
         ! Computed durations.
         real                 :: total_duration, &
                                 io_duration, &
                                 particles_duration, &
-                                flow_duration
+                                particle_loop_calculation_duration, &
+                                flow_duration, &
+                                missing_time_duration
 
         character, parameter :: newline = new_line( "a" )
 
@@ -1190,20 +1183,18 @@ contains
         duration_particle_diff                  = get_duration( measurement_id_particle_diff )
         duration_particle_coalesce              = get_duration( measurement_id_particle_coalesce )
         duration_particle_estimation            = get_duration( measurement_id_particle_estimation )
-        duration_particle_estimation_call       = get_duration( measurement_id_particle_estimation_call )
-        duration_particle_estimation_checks     = get_duration( measurement_id_particle_estimation_checks )
-        duration_particle_estimation_assignment = get_duration( measurement_id_particle_estimation_assignment )
-        duration_particle_estimation_cr         = get_duration( measurement_id_particle_estimation_cr )
         duration_particle_fill_ext              = get_duration( measurement_id_particle_fill_ext )
         duration_particle_loop                  = get_duration( measurement_id_particle_loop )
+        duration_particle_loop_stats            = get_duration( measurement_id_particle_loop_stats )
         duration_particle_bcs                   = get_duration( measurement_id_particle_bcs )
         duration_particle_exchange              = get_duration( measurement_id_particle_exchange )
         duration_particle_coupling              = get_duration( measurement_id_particle_coupling )
-        duration_particle_ztox                  = get_duration( measurement_id_particle_ztox )
+        duration_particle_coupling_exchange     = get_duration( measurement_id_particle_coupling_exchange )
         duration_particle_stats                 = get_duration( measurement_id_particle_stats )
         duration_setup                          = get_duration( measurement_id_setup )
         duration_solver                         = get_duration( measurement_id_solver )
         duration_timestepping_loop              = get_duration( measurement_id_timestepping_loop )
+        duration_cfl_dt_calculations            = get_duration( measurement_id_cfl_dt_calculations )
 
         ! Sum the measured durations into higher-level phases.
 
@@ -1228,14 +1219,32 @@ contains
              duration_io_viz &
              )
 
+        ! Compute the aggregate time spent handling particles.
+        !
+        ! NOTE: duration_particle_solver encompasses the particle_loop,
+        !      particle_bcs, particle_exchange, and particle_loop_stats so we
+        !      not need to track them here.
+        !
         particles_duration = ( &
              duration_particle_solver + &
-             duration_particle_reintro + &
+             duration_particle_coupling + &
+             duration_particle_coupling_exchange + &
+             duration_particle_coalesce + &
              duration_particle_diff + &
-             duration_particle_coalesce &
+             duration_particle_reintro + &
+             duration_particle_stats &
+             )
+
+        ! Calculate the time spent for miscellaneous calculations within
+        ! particle_loop that aren't otherwise measured.
+        particle_loop_calculation_duration = ( &
+             duration_particle_loop - &
+             duration_particle_estimation - &
+             duration_particle_loop_stats &
              )
 
         flow_duration = ( &
+             duration_derivatives + &
              duration_flow_solve_1 + &
              duration_flow_solve_p + &
              duration_flow_solve_2 + &
@@ -1243,16 +1252,29 @@ contains
              duration_humidity &
              )
 
+        ! Measure how much time we have missed with the top-level aggregations.
+        missing_time_duration = ( &
+             total_duration - &
+             flow_duration - &
+             particles_duration - &
+             io_duration - &
+             duration_cfl_dt_calculations &
+             )
+
         write( file_unit, "(A,2A)" ) "Measurements report:", newline
 
         write( file_unit, "(A,2A)" )    "  Program run-time:", newline
         call print_duration( file_unit, "      Total:                         ", &
              duration_solver, total_duration )
+        call print_duration( file_unit, "      Unaccounted time:              ", &
+             missing_time_duration, total_duration )
 
         write( file_unit, "(A)" ) ""
 
         call print_duration( file_unit, "      Setup:                         ", &
              duration_setup, duration_solver )
+        call print_duration( file_unit, "      Timestepping - CFL/dt:         ", &
+             duration_cfl_dt_calculations, duration_timestepping_loop )
 
         write( file_unit, "(A)" ) ""
 
@@ -1275,39 +1297,35 @@ contains
         write( file_unit, "(A)" ) ""
 
         call print_duration( file_unit, "      Particles:                     ", &
-             particles_duration, duration_solver )
-        call print_duration( file_unit, "          particle_reintro:              ", &
-             duration_particle_reintro, particles_duration )
-        call print_duration( file_unit, "          particle_diff:                 ", &
-             duration_particle_diff, particles_duration )
-        call print_duration( file_unit, "          particle_coalesce:             ", &
-             duration_particle_coalesce, particles_duration )
+             particles_duration,                  duration_solver )
         call print_duration( file_unit, "          particle_solver:               ", &
-             duration_particle_solver, particles_duration )
-        call print_duration( file_unit, "               particle_fill_ext:              ", &
-             duration_particle_fill_ext, duration_particle_solver )
-        call print_duration( file_unit, "               particle_loop:                  ", &
-             duration_particle_loop, duration_particle_solver )
-        call print_duration( file_unit, "               particle_estimation:            ", &
-             duration_particle_estimation, duration_particle_loop )
-        call print_duration( file_unit, "                   estimate():                     ", &
-             duration_particle_estimation_call, duration_particle_estimation )
-        call print_duration( file_unit, "                   checks:                         ", &
-             duration_particle_estimation_checks, duration_particle_estimation )
-        call print_duration( file_unit, "                   critical radius:                ", &
-             duration_particle_estimation_cr, duration_particle_estimation )
-        call print_duration( file_unit, "                   assignment:                     ", &
-             duration_particle_estimation_assignment, duration_particle_estimation )
-        call print_duration( file_unit, "               particle_bcs:                   ", &
-             duration_particle_bcs, duration_particle_solver )
-        call print_duration( file_unit, "               particle_exchange:              ", &
-             duration_particle_exchange, duration_particle_solver )
-        call print_duration( file_unit, "               particle_coupling:              ", &
-             duration_particle_coupling, duration_particle_solver )
-        call print_duration( file_unit, "               particle_coupling_exchange:     ", &
-             duration_particle_coupling_exchange, duration_particle_solver )
-        call print_duration( file_unit, "               particle_stats:                 ", &
-             duration_particle_stats, duration_particle_solver )
+             duration_particle_solver,            particles_duration )
+        call print_duration( file_unit, "              particle_fill_ext:            ", &
+             duration_particle_fill_ext,          duration_particle_solver )
+        call print_duration( file_unit, "              particle_loop:                ", &
+             duration_particle_loop,              duration_particle_solver )
+        call print_duration( file_unit, "                  Particle calculations:        ", &
+             particle_loop_calculation_duration,  duration_particle_loop )
+        call print_duration( file_unit, "                  particle_estimation:          ", &
+             duration_particle_estimation,        duration_particle_loop )
+        call print_duration( file_unit, "                  particle_loop_stats:          ", &
+             duration_particle_loop_stats,        duration_particle_loop )
+        call print_duration( file_unit, "              particle_bcs:                 ", &
+             duration_particle_bcs,               duration_particle_solver )
+        call print_duration( file_unit, "              particle_exchange:            ", &
+             duration_particle_exchange,          duration_particle_solver )
+        call print_duration( file_unit, "          particle_coupling:             ", &
+             duration_particle_coupling,          particles_duration )
+        call print_duration( file_unit, "          particle_coupling_exchange:    ", &
+             duration_particle_coupling_exchange, particles_duration )
+        call print_duration( file_unit, "          particle_coalesce:             ", &
+             duration_particle_coalesce,          particles_duration )
+        call print_duration( file_unit, "          particle_diff:                 ", &
+             duration_particle_diff,              particles_duration )
+        call print_duration( file_unit, "          particle_reintro:              ", &
+             duration_particle_reintro,           particles_duration )
+        call print_duration( file_unit, "          particle_stats:                ", &
+             duration_particle_stats,             particles_duration )
 
         write( file_unit, "(A)" ) ""
 
@@ -1356,30 +1374,27 @@ contains
         measurement_id_io_histograms                  = 0
         measurement_id_io_history                     = 0
         measurement_id_io_particles                   = 0
-        measurement_id_io_traj                        = 0
         measurement_id_io_pressure                    = 0
         measurement_id_io_tecio                       = 0
+        measurement_id_io_traj                        = 0
         measurement_id_io_viz                         = 0
-        measurement_id_particle_solver                = 0
-        measurement_id_particle_reintro               = 0
-        measurement_id_particle_diff                  = 0
-        measurement_id_particle_coalesce              = 0
-        measurement_id_particle_estimation            = 0
-        measurement_id_particle_estimation_call       = 0
-        measurement_id_particle_estimation_checks     = 0
-        measurement_id_particle_estimation_assignment = 0
-        measurement_id_particle_estimation_cr         = 0
-        measurement_id_particle_fill_ext              = 0
-        measurement_id_particle_loop                  = 0
         measurement_id_particle_bcs                   = 0
-        measurement_id_particle_exchange              = 0
+        measurement_id_particle_coalesce              = 0
         measurement_id_particle_coupling              = 0
         measurement_id_particle_coupling_exchange     = 0
-        measurement_id_particle_ztox                  = 0
+        measurement_id_particle_diff                  = 0
+        measurement_id_particle_estimation            = 0
+        measurement_id_particle_exchange              = 0
+        measurement_id_particle_fill_ext              = 0
+        measurement_id_particle_loop                  = 0
+        measurement_id_particle_loop_stats            = 0
+        measurement_id_particle_reintro               = 0
+        measurement_id_particle_solver                = 0
         measurement_id_particle_stats                 = 0
         measurement_id_setup                          = 0
         measurement_id_solver                         = 0
         measurement_id_timestepping_loop              = 0
+        measurement_id_cfl_dt_calculations            = 0
 
     end subroutine shutdown_profiling
 
