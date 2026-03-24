@@ -295,73 +295,72 @@ class QuadraticResidualNet_volatile_emotion( ResidualNet ):
             residual * 10^(2 * |r_bar|)
 
     """
-    def __init__( self, model_name=None, log_radius_range=None ):
-        super().__init__( model_name=model_name )
+    def __init__( self, model_name=None, parameter_ranges=None ):
+        super().__init__( )
 
         self._activation     = torch.nn.SiLU()
+
+        # Calculate the delta and mean of the log-radius parameter range.  Use
+        # the range provided and fall back to the current range if necessary.
+        if parameter_ranges is None:
+            parameter_ranges = get_parameter_ranges()
+
+        self.parameter_ranges = nn.Buffer(torch.tensor(np.array([
+                parameter_ranges["radius"],
+                parameter_ranges["temperature"],
+                parameter_ranges["salt_solute"],
+                parameter_ranges["air_temperature"],
+                parameter_ranges["relative_humidity"],
+                parameter_ranges["rhoa"],
+                [-1.0, 1.0] # this leaves integration time unchanged
+            ]), dtype=torch.float32))
 
         self._norms          = [torch.nn.modules.normalization.LayerNorm( [self._layer_sizes[0]] ),
                                 torch.nn.modules.normalization.LayerNorm( [self._layer_sizes[1]] ),
                                 torch.nn.modules.normalization.LayerNorm( [self._layer_sizes[2]] )]
 
-        # Calculate the delta and mean of the log-radius parameter range.  Use
-        # the range provided and fall back to the current range if necessary.
-        local_log_radius_range = log_radius_range
-        if log_radius_range is None:
-            local_log_radius_range = get_parameter_ranges()["radius"]
+        self.bars   = torch.nn.Buffer( torch.tensor((self.parameter_ranges[:, 0] + self.parameter_ranges[:, 1])/2.0, dtype=torch.float32) )
+        self.sigmas = torch.nn.Buffer( torch.tensor((self.parameter_ranges[:, 1] - self.parameter_ranges[:, 0])/2.0, dtype=torch.float32) )
 
-        self.sigma_r = (local_log_radius_range[1] - local_log_radius_range[0])
-        self.bar_r   = (local_log_radius_range[1] + local_log_radius_range[0]) / 2.0
+        self.model = nn.Sequential(
+                     self.fc1,
+                     self._activation,
+                     self._norms[0],
+                     self.fc2,
+                     self._activation,
+                     self._norms[1],
+                     self.fc3,
+                     self._activation,
+                     self._norms[2],
+                     self.fc4
+        )
 
-        # Scaling factor to scale model outputs closer to O(1)
-        # Quadratic residuals output on ~O(10^-12)
-        # This scale factor maintains backwards compatibility
-        # With volatile emotion
-        self.radius_scale_factor = 10.0 ** (2*self.bar_r)
-
-    def quadratic_forward( self, x ):
-        """
-        A forward function that outputs the quadratic radius residual instead
-        of normalized droplet parameters. Used for training the network.
-
-        This avoids applying log10 to negative radii, making it more suitable
-        for training networks when early approximations may yield unphysical results.
-        """
-
-        out = self._norms[0]( self._activation( self.fc1( x ) ) )
-        out = self._norms[1]( self._activation( self.fc2( out ) ) )
-        out = self._norms[2]( self._activation( self.fc3( out ) ) )
-        out = self.fc4( out )
-
-        # Only do the residual on temperature
-        out[..., 1] += x[..., 1]
-
-        # Scale radius output based on scale_factor
-        out[..., 0] *= self.radius_scale_factor
-
-        # Output quadratic residual and normalized temperature
-        return out
+        self.radius_scale_factor = nn.Buffer( torch.tensor( 10.0 ** (2*self.bars[0]), dtype=torch.float32) )
 
     def forward( self, x ):
         """
-        A forward function that outputs the new normalized radius and temperature.
-
-        Calls quadratic_forward. Then adds the quadratic radius residual and
-        normalizes the result.
+        This forward function accepts unscaled parameters and outputs unscaled parameters.
+        It also only accepts two dimensional arrays for the input. No dynamic broadcasting.
         """
-        # Get the output in terms of the quadratic residual and normalized temperature
-        out = self.quadratic_forward( x )
 
-        # Add the quadratic residual to the quadratic radius input
-        quadratic_input_radii  = scale_radius_from_normalized_to_quadratic( x[..., 0],
-                                                                            self.bar_r,
-                                                                            self.sigma_r )
-        quadratic_output_radii = quadratic_input_radii + out[..., 0]
+        # Normalize inputs
+        normalized_x = ( torch.concat([
+            torch.log10(x[:, 0:1]),
+                        x[:, 1:2],
+            torch.log10(x[:, 2:3]),
+                        x[:, 3:4],
+                        x[:, 4:5],
+                        x[:, 5:6],
+                        x[:, 6:7]
+        ], dim=1) - self.bars ) / self.sigmas
 
-        # Convert back to normalized parameters
-        out[..., 0] = scale_radius_from_quadratic_to_normalized( quadratic_output_radii, self.bar_r, self.sigma_r )
+        # Run main model
+        out   = self.model( normalized_x )
 
-        # Output normalized radius/temperature
+        # Scale output
+        out[:, 0] = torch.sqrt( x[:, 0] ** 2 + out[:, 0]*self.radius_scale_factor )
+        out[:, 1] = x[:, 1] + self.sigmas[1] * out[:, 1]
+
         return out
 
 def volatile_emotion_l1_loss( quadratic_approximations, quadratic_outputs, normalized_inputs, parameter_ranges, radius_temperature_weighting=[0.1, 1.0], normalized_radius_penalty=0.04 ):
