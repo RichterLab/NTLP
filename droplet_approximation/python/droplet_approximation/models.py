@@ -532,7 +532,7 @@ def create_new_model( model_class_name, model_name=None, parameter_ranges={} ):
     # Instantiate it with the default arguments.
     # If it is derived from a quadratic residual net, initialize with log radius range
     if isinstance( obj, QuadraticResidualNet_volatile_emotion ):
-        model = obj( model_name=model_name, log_radius_range=parameter_ranges["radius"] )
+        model = obj( model_name=model_name, parameter_ranges=parameter_ranges )
         return model
 
     model = obj( model_name=model_name )
@@ -2391,7 +2391,7 @@ def load_model_checkpoint( checkpoint_path, model=None, optimizer=None ):
             model = create_new_model( checkpoint["architecture"],
                                       model_name=checkpoint["model_name"] )
 
-        model.load_state_dict( checkpoint["model_weights"] )
+        model.load_state_dict( checkpoint["model_weights"], strict=False )
         if optimizer is not None:
             optimizer.load_state_dict( checkpoint["optimizer_state"] )
 
