@@ -1,5 +1,6 @@
 FORTRAN=mpif90
 F90=ifort
+CC=g++
 
 # Specify the architecture to optimize for.  Should be one of the following:
 #
@@ -133,15 +134,30 @@ SRC = data_structures.f90 \
       particles.f90 \
       tec_io.f90
 
-BENCHMARK_SRC = benchmark_approximation.f90
+BENCHMARK_SRC   = benchmark_approximation.f90
 
-INFERENCE_SRC = inference_test.f90
+# System libraries and TVM runtime
+TVM_LIBS           = libtvm_runtime.a \
+                     libtvm_ffi.a \
+                     tvm_model.a
+TVM_CPP_LIBS       = -Wl,--no-whole-archive \
+                     -lstdc++ \
+                     -ldl \
+                     -lpthread \
+                      /users/dcolange/local/lib/libbacktrace.a
+TVM_LIBS_LD_FLAGS  = -Wl,--whole-archive
+
+# NOTE - you must have the following directories in your CPLUS_INCLUDE_PATH (otherwise, use the commented out include flags and substitute the appropriate path)
+# 	TVM     - tvm/include
+# 	TVM FFI - tvm/3rdparty/tvm-ffi/include
+# 	DLPACK  - tvm/3rdparty/tvm-ffi/3rdparty/dlpack/include
+TVM_WRAPPER_FLAGS = -c -fPIC -O3 -march=native # -I../tvm/include -I../tvm/3rdparty/tvm-ffi/include -I../tvm/3rdparty/tvm-ffi/3rdparty/dlpack/include
+
 
 OBJS = $(addsuffix .o, $(basename $(SRC)))
 
-BENCHMARK_OBJS = $(addsuffix .o, $(basename $(BENCHMARK_SRC)))
-
-INFERENCE_OBJS = $(addsuffix .o, $(basename $(INFERENCE_SRC)))
+BENCHMARK_OBJS  = $(addsuffix .o, $(basename $(BENCHMARK_SRC)))
+BENCHMARK_OBJS += measurement.o inference_wrapper.o droplet_model.o tvm_bindings.o data_structures.o
 
 ifeq ($(TECPLOT), yes)
 FLAGS    += $(TECFLAGS)
@@ -151,10 +167,16 @@ endif
 lesmpi.a: $(OBJS)
 	$(FORTRAN) $^ -o $@  $(FLAGS) $(DEBUG_FLAGS) $(OUTPUTINC) $(OUTPUTLIB) $(LINKOPTS)
 
+benchmark_approximation.x: $(BENCHMARK_OBJS) $(TVM_LIBS)
+	$(FORTRAN) $(FLAGS) $(MODEL_FLAGS) -o $@ $(BENCHMARK_OBJS) $(TVM_LIBS_LD_FLAGS) $(TVM_LIBS) $(TVM_CPP_LIBS)
+
 # Apply the model compilation flags so we have finer-grained control on
 # generating optimized code.
 droplet_model.o: droplet_model.f90
 	$(FORTRAN) $(FLAGS) $(MODEL_FLAGS) $(DEBUG_FLAGS) -c $< $(OUTPUTINC) $(OUTPUTLIB)
+
+tvm_bindings.o: tvm_bindings.cpp
+	$(CC) $(TVM_WRAPPER_FLAGS) $< -o $@
 
 %.o: %.f
 	$(FORTRAN) $(FLAGS) $(DEBUG_FLAGS) -c $< $(OUTPUTINC) $(OUTPUTLIB)
@@ -169,12 +191,6 @@ droplet_model.o: droplet_model.f90
 clean:
 	rm -f *.o *.mod lesmpi.a benchmark_approximation.x mach.file
 
-benchmark_approximation.x: $(BENCHMARK_OBJS) measurement.o data_structures.o droplet_model.o
-	$(FORTRAN) $(FLAGS) $(DEBUG_FLAGS) $(MODEL_FLAGS) $(OUTPUTLIB) $(LINKOPTS) -o $@ $^
-
-inference_test.x: $(INFERENCE_OBJS) defs.o droplet_model.o
-	$(FORTRAN) $(FLAGS) $(DEBUG_FLAGS) $(MODEL_FLAGS) $(OUTPUTLIB) $(LINKOPTS) -o $@ $^
-
 # Dependencies between the individual objects.
 droplet_model.o: defs.o
 les.o: defs.o measurement.o netcdf_io.o particles.o tec_io.o
@@ -182,5 +198,5 @@ measurement.o: data_structures.o
 particles.o: defs.o droplet_model.o measurement.o
 netcdf_io.o: particles.o
 tec_io.o: particles.o
-
-benchmark_approximation.o: measurement.o droplet_model.o
+inference_wrapper.o: tvm_bindings.o
+benchmark_approximation.o: measurement.o inference_wrapper.o droplet_model.o
