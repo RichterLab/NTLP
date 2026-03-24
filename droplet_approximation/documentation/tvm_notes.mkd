@@ -1,0 +1,247 @@
+# LLVM Build
+Turns out you do not need to build llvm. This makes everything far easier. Just use conda and download `llvmdev`. It's way, way easier.
+
+# TVM Build
+These are exactly the recommended setting additions to `config.cmake` with the sole exception of adding `BUILD_STATIC_RUNTIME` to get a static `tvm_runtime.a`. See [TVM Build Tutorial](https://tvm.apache.org/docs/install/from_source.html#step-3-configure-and-build).
+```
+set(CMAKE_BUILD_TYPE RelWithDebInfo)
+set(USE_LLVM "llvm-config --ignore-libllvm --link-static")
+set(HIDE_PRIVATE_SYMBOLS ON)
+set(USE_CUDA   OFF)
+set(USE_METAL  OFF)
+set(USE_VULKAN OFF)
+set(USE_OPENCL OFF)
+set(USE_CUBLAS OFF)
+set(USE_CUDNN  OFF)
+set(USE_CUTLASS OFF)
+set(BUILD_STATIC_RUNTIME ON)
+```
+TVM was built on the CRC cluster.
+
+Just run `cmake ..` and `make -j $(nproc)`. Afterwards, follow the TVM docs for installing the Python package and setting `TVM_HOME` and `PYTHONPATH` environment variables.
+# Modifications to the Model Function
+static shape tuning is the most aggressive optimization pipeline I could find. It expects fixed array sizes. Between this an exporting the torch model, the following modifications were required:
+1. All instances of `[..., a] --> [:, a]` - i.e. remove dynamic broadcasting.
+1. No mutations. i.e. all instances of `+=, /=` and the like must be removed. If an operation copies instead of mutates, it is permissible.
+1. Normalization in the forward function so that the resulting function inputs and outputs in scaled units.
+1. All tensors/constants used in the forward function (e.g. for scaling/normalization) must be wrapped in torch.nn.Buffer. To keep backwards compatibility with previous checkpoints, set `strict=False` in `load_state_dict` in `load_model_checkpoint`. Additional buffers create entries in the state dictionary that are not present in legacy checkpoints.
+1. No flow control.
+1. TVM uses pattern matching to serialize. This process seems to work better by wrapping our main forward function with `torch.nn.Sequential` which tells TVM "I'm running each of these one after the other."
+1. ***CRUCIAL NOTE -- PLEASE READ:*** I haven't found a way to support two different forward functions. I tried setting creating two different forward functions and switching between `self.forward = self.tvm_forward` and `self.forward = self.standard_forward` (i.e. the normal forward function). However, this breaks `torch.export`. This is a very breaking change. Currently, the `QuadraticResidualNet_volatile_emotion` ONLY works for TVM export. i.e. it breaks this model for most python package applications.
+
+After these changes, the resultant initialization function is:
+```
+    def __init__( self, model_name=None, parameter_ranges=None ):
+        super().__init__( )
+
+        self._activation     = torch.nn.SiLU()
+
+        # Calculate the delta and mean of the log-radius parameter range.  Use
+        # the range provided and fall back to the current range if necessary.
+        if parameter_ranges is None:
+            parameter_ranges = get_parameter_ranges()
+
+        self.parameter_ranges = nn.Buffer(torch.tensor(np.array([
+                parameter_ranges["radius"],
+                parameter_ranges["temperature"],
+                parameter_ranges["salt_solute"],
+                parameter_ranges["air_temperature"],
+                parameter_ranges["relative_humidity"],
+                parameter_ranges["rhoa"],
+                [-1.0, 1.0] # this leaves integration time unchanged
+            ]), dtype=torch.float32))
+
+        self._norms          = [torch.nn.modules.normalization.LayerNorm( [self._layer_sizes[0]] ),
+                                torch.nn.modules.normalization.LayerNorm( [self._layer_sizes[1]] ),
+                                torch.nn.modules.normalization.LayerNorm( [self._layer_sizes[2]] )]
+
+        self.bars   = torch.nn.Buffer( torch.tensor((self.parameter_ranges[:, 0] + self.parameter_ranges[:, 1])/2.0, dtype=torch.float32) )
+        self.sigmas = torch.nn.Buffer( torch.tensor((self.parameter_ranges[:, 1] - self.parameter_ranges[:, 0])/2.0, dtype=torch.float32) )
+
+        self.model = nn.Sequential(
+                     self.fc1,
+                     self._activation,
+                     self._norms[0],
+                     self.fc2,
+                     self._activation,
+                     self._norms[1],
+                     self.fc3,
+                     self._activation,
+                     self._norms[2],
+                     self.fc4
+        )
+        # Scaling factor to scale model outputs closer to O(1)
+        # Quadratic residuals output on ~O(10^-12)
+        # This scale factor maintains backwards compatibility
+        # With volatile emotion
+        self.radius_scale_factor = nn.Buffer( torch.tensor( 10.0 ** (2*self.bars[0]), dtype=torch.float32) )
+```
+^^ Greg, feel free to remove `self.radius_scale_factor` for your models. I put this in for devilish taker. All testing was done on devilish taker.
+
+Here is `forward`:
+```
+# Normalize inputs
+normalized_x = torch.concat([
+    torch.log10(x[:, 0:1]),
+                x[:, 1:2],
+    torch.log10(x[:, 2:3]),
+                x[:, 3:4],
+                x[:, 4:5],
+                x[:, 5:6],
+                x[:, 6:7]
+], dim=1)
+
+normalized_x = ( normalized_x - self.bars ) / self.sigmas
+
+# Run main model
+out   = self.model( normalized_x )
+
+# Scale output
+out[:, 0] = torch.sqrt( x[:, 0] ** 2 + out[:, 0]*self.radius_scale_factor )
+out[:, 1] = x[:, 1] + self.sigmas[1] * out[:, 1]
+
+return out
+```
+
+Greg, for your models, remove self.radius_scale_factor. Again, to load legacy checkpoints I added `strict=False` to `load_state_dict`. 
+
+# Optimization Routine
+This functionality is contained in `optimize_tvm.py` and `optimize_tvm.sh` in `bin/`. **TODO:** Update script to take command line arguments for model load path and tvm output path.
+
+First we load/export our model from Torch and set it to use `tvm_forward`
+```
+import os
+
+from torch.export import export
+
+import tvm
+from tvm import relax
+from tvm.relax.frontend.torch import from_exported_program
+from tvm.contrib import cc
+
+import droplet_approximation
+
+# This batch size is not optimized - total guess
+BATCH_SIZE = 4096
+
+# Set number of threads to exactly one for single-threaded optimizations
+# This might not be necessary
+os.environ["TVM_NUM_THREADS"] = "1"
+tvm.runtime.num_threads = 1
+
+# Load checkpoint
+torch_model = droplet_approximation.load_model_checkpoint( "../models/devilish_taker.pt" )[0]
+
+# This sets torch_model.forward to torch.tvm_forward which has the proper broadcasting/normalization
+# for exporting through tvm.
+torch_model.tvm_eval()
+
+example_args = (torch.randn( BATCH_SIZE, 7, dtype=torch.float32), )
+
+with torch.no_grad():
+    exported_program = export( torch_model.eval(), example_args )
+    mod_from_torch = from_exported_program(
+        exported_program, keep_params_as_input=False, unwrap_unit_return_tuple=True
+    )
+```
+Then, we target our architecture
+```
+target = tvm.target.Target({
+    "kind": "llvm",
+    "mcpu": "znver3",          # Target Zen-3
+    "mattr": ["avx2","fma"],   # Target AVX2/Fused Multiply-Add
+    "num-cores": 1,            # Target single core
+    "libs": ["libxsmm"]        # Should be use libxsmm. Currently a NOP
+})
+```
+Finally, we pass to static shape tuning. In my testing, using LegalizeOps() and dropping down to `C` dramatically reduced performance (~2x). Likewise, directly using the metascheduler instead of `static_shape_tuning` reduced performance.
+
+**Note**: static shape tuning requires that all array dimensions are known ahead of time. This is why dynamic broadcasting was removed.
+```
+with tvm.transform.PassContext(opt_level=3):
+    # Lock in model weights/params
+    mod_from_torch, params_from_torch = relax.frontend.detach_params(mod_from_torch)
+    mod_from_torch = relax.transform.BindParams(
+        "main", params_from_torch
+    )(mod_from_torch)
+
+    # Show unoptimized IR
+    mod_from_torch.show()
+
+    # Tune model
+    optimized_mod = relax.get_pipeline(
+        "static_shape_tuning",
+        target=target,
+        work_dir="./tuning_logs",
+        total_trials=10000,
+        max_trials_per_task=256,
+        cpu_weight_prepack=True
+    )(mod_from_torch)
+
+    # Build to static library - compiled option reduces overhead
+    #                           as opposed to bytecode
+    ex = relax.build(optimized_mod, target, system_lib=True, exec_mode="compiled")
+    ex.export_library("tvm_model.a", fcompile=cc.create_staticlib)
+```
+# C++ Wrapper
+The wrapper is called `tvm_wrapper.cpp`. It loads the statically linked library and wrappes the inference calls in tvm FFI tensors. It has three functions:
+1. `int init_inference( input_count, output_count, batch_size )` - initializes buffer and loads the TVM IR function. Returns `-1` on failure.
+1. `void run_inference( c_float * in_data, c_float * out_data )` - runs inference on inputs and writes to outputs
+# Fortran C++ Interface
+Contains 3 hardcoded constants:
+1. `INPUT_COUNT`  - number of inputs
+1. `OUTPUT_COUNT` - number of inputs
+1. `BATCH_SIZE`   - batch inference size - **this must be changed if the IR batch size changes!**
+
+Also binds the three functions and constants listed above in `C++ Wrapper` to the same names but in Fortran. The only difference is `init_inference` is wrapped to always pass `INPUT_COUNT, OUTPUT_COUNT,` and `BATCH_SIZE`. To override this, either changes these constants or call `raw_init_inference( input_count, output_count, batch_size )`.
+
+Written in `inference_wrapper.f90` and contained in module `inference_wrapper`.
+
+Usage:
+```
+! Start of program
+initialize_inference()
+! ...
+
+! In particles loop
+run_inference( inputs, outputs )
+
+```
+Because Fortran is column major, inputs are shaped `INPUT_COUNT x BATCH_SIZE` and outputs are shaped `OUTPUT_COUNT x BATCH_SIZE`.
+
+# Helpful Docs
+1. `TVM FFI` - backend for TVM. Great documentation for Python and C++. [Link](https://tvm.apache.org/ffi/)
+1. `TVM` - poorer documentation.
+
+# Make
+Building not requires the following libraries. For linking, `TVM_LIBS` used `TVM_LIBS_LD_FLAGS`:
+```
+TVM_LIBS           = libtvm_runtime.a \
+                     libtvm_ffi.a \
+                     tvm_model.a
+TVM_CPP_LIBS       = -Wl,--no-whole-archive \
+                     -lstdc++ \
+                     -ldl \
+                     -lpthread \
+                      /users/dcolange/local/lib/libbacktrace.a
+TVM_LIBS_LD_FLAGS  = -Wl,--whole-archive
+```
+**IMPORTANT NOTE** - you will see libbacktrace hardcoded here. This dependancy seems to be missing on CRC machines, so I built and linked it and hardcoded it. This needs to be formalized for portability.
+
+Not sure what `-Wl,--whole-archive` does but it is required for static linking of TVM libraries/models.\\\\
+The TVM wrapper is build with the following options: `-c -fPIC -O3 -march=native`. For the compilation of this wrapper, the following libraries must be in `CPLUS_INCLUDE_PATH`:
+```
+* TVM     - tvm/include
+* TVM FFI - tvm/3rdparty/tvm-ffi/include
+* DLPACK  - tvm/3rdparty/tvm-ffi/3rdparty/dlpack/include 
+```
+`tvm_bindings.cpp` is compiled with the following flags:
+```
+TVM_WRAPPER_FLAGS = -c -fPIC -O3 -march=native
+```
+To test the TVM model, run `make benchmark_approximation.x` and `./benchmark_approximation.x`
+
+# libxsmm
+It seems that the update from the relay framework to relax removed support for `lixbsmm`. I think there is a way to use libxsmm to write optimized `C` GEMMs and directly write them into TVM.
+
+Another option is to use compiled libxsmm to accelerate our `droplet_model.f90`. This accelerated performance by 3x per droplet. However, the second layer norm was broken, so the results were NaN, but the matrix multiplications dominate the runtime and the timings across the board seemed reasonable.
