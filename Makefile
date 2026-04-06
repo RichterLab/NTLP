@@ -103,14 +103,16 @@ TECLIB   = ~/Research/tecio/libteciompi.a
 TECLINK  = -lm -lstdc++ -lgcc_eh
 
 SRC = data_structures.f90 \
-      defs.F \
+      defs.f90 \
       fft.f \
       kdtree.f90 \
-      les.F \
       measurement.f90 \
+      mod_mpi.f90 \
+      mod_fft.f90 \
       netcdf_io.f90 \
       particles.f90 \
-      tec_io.f90
+      tec_io.f90 \
+      les.F
 
 OBJS = $(addsuffix .o, $(basename $(SRC)))
 
@@ -136,7 +138,11 @@ clean:
 	rm -f *.o *.mod lesmpi.a mach.file
 
 # Dependencies between the individual objects.
-les.o: defs.o measurement.o netcdf_io.o particles.o tec_io.o
+# Module files (.mod) are produced by the compiler when the defining .o is built,
+# so listing foo.o as a prerequisite of bar.o is enough to enforce ordering.
+mod_mpi.o: defs.o
+mod_fft.o: defs.o mod_mpi.o
+les.o: defs.o mod_mpi.o mod_fft.o measurement.o netcdf_io.o particles.o tec_io.o
 measurement.o: data_structures.o
 particles.o: defs.o measurement.o
 netcdf_io.o: particles.o
