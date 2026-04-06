@@ -1,4 +1,6 @@
 module particles
+  use mod_mpi, only: xtoz_trans, ztox_trans
+  use mod_fft, only: xderivp, yd_mpi
   integer :: rproc,trproc,tproc,tlproc,lproc,blproc,bproc,brproc
   integer :: pr_r,pl_r,pt_r,pb_r,ptr_r,ptl_r,pbl_r,pbr_r
   integer :: pr_s,pl_s,pt_s,pb_s,ptr_s,ptl_s,pbl_s,pbr_s
@@ -85,9 +87,6 @@ module particles
   end type particle
 
   type(particle), pointer :: part,first_particle
-
-  use mod_mpi, only: xtoz_trans, ztox_trans
-  use mod_fft, only: xderivp, yd_mpi
 
 CONTAINS
 
