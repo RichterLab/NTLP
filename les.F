@@ -11,6 +11,7 @@ c
 #endif
       use profiling
       use mod_mpi
+      use mod_fft
       include 'mpif.h'
 c
 c ------------- definition of internal flags
@@ -1544,6 +1545,7 @@ c
       use con_stats
       use particles
       use mod_mpi
+      use mod_fft
 c
       real fntd(nnx,iys:iye,izs:ize)
       real fnt1(nnx,iys:iye), fnt2(nnx,iys:iye) 
@@ -1828,6 +1830,7 @@ c
       use con_stats
       use particles
       use mod_mpi
+      use mod_fft
 c
       real fntd(nnx,iys:iye,izs:ize)
       real fnt1(nnx,iys:iye), fnt2(nnx,iys:iye) 
@@ -2135,6 +2138,7 @@ c
       use con_data
       use con_stats
       use particles
+      use mod_fft
 c
 c
       real fnt1(nnx,iys:iye,izs:ize)
@@ -2447,6 +2451,7 @@ c
       use con_stats
       use particles
       use mod_mpi
+      use mod_fft
 c
 c
       real fnt1(nnx,iys:iye,izs:ize)
@@ -2767,6 +2772,7 @@ c
       use fftwk
       use con_data
       use con_stats
+      use mod_fft
 c
       real fnt1(nnx,iys:iye), fnt2(nnx,iys:iye,izs:ize)
       real fnt3(nnx,iys:iye)
@@ -3675,6 +3681,7 @@ c
       use fields
       use con_data
       use con_stats
+      use mod_fft
       include 'mpif.h'
       real fnt1(nnx,iys:iye,izs:ize)
       real fs(nnx,iys:iye,2), fr(nnx,iys:iye,2)
@@ -3809,6 +3816,7 @@ c
       real fnt1(nnx,iys:iye,izs:ize), fnt2(nnx,iys:iye)
       real r3_sum(1:nnz)
       use mod_mpi
+      use mod_fft
       include 'mpif.h'
       integer istatus(mpi_status_size)
 c
@@ -3939,6 +3947,7 @@ c
       real ptopfft(nny,jxs:jxe,1:2)
       real psum(1:nnz)
       use mod_mpi
+      use mod_fft
       include 'mpif.h'
       integer istatus(mpi_status_size)
 c
@@ -4165,6 +4174,7 @@ c
       use con_data
       use con_stats
       use mod_mpi
+      use mod_fft
 c
       iz_ss = izs-1
       iz_ee = ize+1
@@ -4382,228 +4392,6 @@ c
            enddo
         enddo
       endif
-c
-      return
-      end
-      subroutine xderivp(ax,trigx,xk,nnx,iys,iye)
-c
-c -------- get multiple x derivatives using fftpack routines
-c          use fftpack storage a0, (a1,b1), (a2,b2),...,an
-c          assumes that first wavenumber xk(1) = 0.0
-c
-c          assumes that wavenumbers are normalized by number of points
-c
-      real xk(nnx), trigx(2*nnx+15), ax(nnx,iys:iye)
-c
-c     fn = 1.0/float(nnx)
-      do iy=iys,iye
-         call rfftf(nnx,ax(1,iy),trigx)
-         ii = 1
-         ax(1,iy) = 0.0
-         ax(nnx,iy) = 0.0
-         do ix=2,nnx-1,2
-            ii          = ii + 1
-            temp        = ax(ix,iy)
-            ax(ix,iy)   = -xk(ii)*ax(ix+1,iy)
-            ax(ix+1,iy) = xk(ii)*temp
-         enddo
-         call rfftb(nnx,ax(1,iy),trigx)
-      enddo
-c
-      return
-      end
-      subroutine fft2d_mpi(ax,at,trigx,trigc,nx,ny,
-      use mod_mpi
-     +           jxs,jxe,jx_s,jx_e,iys,iye,iy_s,iy_e,
-     +           iz1,iz2,myid,ncpu,np,isgn)
-c
-c -------- get 2d fft using fftpack routines and parallel mpi
-c          use fftpack storage a0, (a1,b1), (a2,b2),...,
-c
-c         isgn = -1 do forward transform, get coefficients
-c                   incoming array is ax(nx+2,iys:iye,iz1:iz2)
-c                   outgoing array is ax(nx+2,iys:iye,iz1:iz2)
-c
-c         isgn = -2 do forward transform, get coefficients
-c                   incoming array is ax(nx+2,iys:iye,iz1:iz2)
-c                   outgoing array is at(ny,jxs:jxe,iz1:iz2)
-c
-c         isgn =  1 do inverse transform, move to physical space
-c                   incoming array is ax(nx+2,iys:iye,iz1:iz2)
-c                   outgoing array is ax(nx+2,iys:iye,iz1:iz2)
-c
-c         isgn =  2 do inverse transform, move to physical space
-c                   incoming array is at(ny,jxs:jxe,iz1:iz2)
-c                   outgoing array is ax(nx+2,iys:iye,iz1:iz2)
-c
-      real ax(nx+2,iys:iye,iz1:iz2), at(ny,jxs:jxe,iz1:iz2),
-     +     trigx(2*nx+15), trigc(4*ny+15),
-     +     a2d(2,ny), a_wrk(nx)
-      integer jx_s(0:np-1), jx_e(0:np-1),
-     +        iy_s(0:np-1), iy_e(0:np-1)
-c
-      nxp2 = nx + 2
-      if(isgn .lt. 0) then
-         fn   = 1.0/(float(nx)*float(ny))
-c
-c ------ 1d fft in x over [iys,iye] for all z
-c
-         do iz=iz1,iz2
-            do iy=iys,iye
-               do ix=1,nx
-                  a_wrk(ix) = ax(ix,iy,iz)*fn
-               enddo
-               call rfftf(nx,a_wrk(1),trigx(1))
-               ax(1,iy,iz) = a_wrk(1)
-               ax(2,iy,iz) = 0.0
-               do ix=2,nx
-                  ax(ix+1,iy,iz) = a_wrk(ix)
-               enddo
-               ax(nx+2,iy,iz) = 0.0
-            enddo
-         enddo
-         call xtoy_trans(ax,at,nxp2,ny,jxs,jxe,jx_s,jx_e,
-     +        iys,iye,iy_s,iy_e,iz1,iz2,myid,ncpu,np)
-c
-c ------ 1d fft in y over [jxs,jxe] for all z
-c
-         do iz=iz1,iz2
-            do ix=jxs,jxe,2
-               do iy=1,ny
-                  a2d(1,iy) = at(iy,ix,iz)
-                  a2d(2,iy) = at(iy,ix+1,iz)
-               enddo
-               call cfftf(ny,a2d(1,1),trigc(1))
-               do iy=1,ny
-                  at(iy,ix,iz)   = a2d(1,iy)
-                  at(iy,ix+1,iz) = a2d(2,iy)
-               enddo
-            enddo
-         enddo
-c
-c ---- decide whether to transpose back or leave as is
-c
-         if(isgn .eq. -1) then
-            call ytox_trans(at,ax,nxp2,ny,jxs,jxe,jx_s,jx_e,
-     +           iys,iye,iy_s,iy_e,iz1,iz2,myid,ncpu,np)
-         endif
-c
-      else
-c
-c ---- decide whether to first transpose or leave as is
-c
-         if(isgn .eq. 1) then
-            call xtoy_trans(ax,at,nxp2,ny,jxs,jxe,jx_s,jx_e,
-     +           iys,iye,iy_s,iy_e,iz1,iz2,myid,ncpu,np)
-         endif
-c
-c ------ 1d fft in y over [jxs,jxe] for all z
-c
-         do iz=iz1,iz2
-            do ix=jxs,jxe,2
-               do iy=1,ny
-                  a2d(1,iy) = at(iy,ix,iz)
-                  a2d(2,iy) = at(iy,ix+1,iz)
-               enddo
-               call cfftb(ny,a2d(1,1),trigc(1))
-               do iy=1,ny
-                  at(iy,ix,iz)   = a2d(1,iy)
-                  at(iy,ix+1,iz) = a2d(2,iy)
-               enddo
-            enddo
-         enddo
-         call ytox_trans(at,ax,nxp2,ny,jxs,jxe,jx_s,jx_e,
-     +        iys,iye,iy_s,iy_e,iz1,iz2,myid,ncpu,np)
-c
-c ------  1d fft in x over [iys,iye] for all z
-c
-         do iz=iz1,iz2
-            do iy=iys,iye
-               a_wrk(1) = ax(1,iy,iz)
-               do ix=2,nx
-                  a_wrk(ix) = ax(ix+1,iy,iz)
-               enddo
-               call rfftb(nx,a_wrk(1),trigx(1))
-               do ix=1,nx
-                  ax(ix,iy,iz) = a_wrk(ix)
-               enddo
-            enddo
-         enddo
-      endif
-c
-      return
-      end
-      subroutine yderiv(ay,trigy,yk,nnx,nny)
-c
-c -------- get multiple y derivatives using fftpack routines
-c          use fftpack storage a_0, (a1,b1), (a2,b2), ...,
-c          assumes that first wavenumber yk(1) = 0.0
-c
-c          assumes that wavenumbers are normalized by number of points
-c
-      real yk(nny), trigy(2*nny+15), ay(nnx,nny)
-      real a_trans(nny)
-c
-c     fn = 1.0/float(nny)
-      do ix=1,nnx
-         do iy=1,nny
-            a_trans(iy) = ay(ix,iy)
-         enddo
-         call rfftf(nny,a_trans(1),trigy)
-         ii = 1
-         a_trans(1)   = 0.0
-         a_trans(nny) = 0.0
-         do iy=2,nny-1,2
-            ii            = ii + 1
-            temp          = a_trans(iy)
-            a_trans(iy)   = -yk(ii)*a_trans(iy+1)
-            a_trans(iy+1) = yk(ii)*temp
-         enddo
-         call rfftb(nny,a_trans(1),trigy)
-         do iy=1,nny
-            ay(ix,iy) = a_trans(iy)
-         enddo
-      enddo
-c
-      return
-      end
-      subroutine yd_mpi(ay,trigy,yk,
-      use mod_mpi
-     +           nx,ny,ixs,ixe,ix_s,ix_e,
-     +           iys,iye,iy_s,iy_e,iz1,iz2,myid,ncpu,np)
-c
-c -------- get multiple y derivatives using fftpack routines and mpi
-c          use fftpack storage a_0, (a1,b1), (a2,b2), ...,
-c          assumes that first wavenumber yk(1) = 0.0
-c          wavenumbers are normalized by number of points, ny
-c
-      real yk(ny), trigy(2*ny+15), ay(nx,iys:iye,iz1:iz2)
-      real ayt(ny,ixs:ixe,iz1:iz2)
-c
-      integer ix_s(0:np-1), ix_e(0:np-1),
-     +        iy_s(0:np-1), iy_e(0:np-1)
-c
-      call xtoy_trans(ay,ayt,nx,ny,ixs,ixe,ix_s,ix_e,
-     +         iys,iye,iy_s,iy_e,iz1,iz2,myid,ncpu,np)
-c
-c     fn = 1.0/float(nny)
-      do iz=iz1,iz2
-         do ix=ixs,ixe
-            call rfftf(ny,ayt(1,ix,iz),trigy)
-            ii = 1
-            ayt(1,ix,iz)  = 0.0
-            ayt(ny,ix,iz) = 0.0
-            do iy=2,ny-1,2
-               ii              = ii + 1
-               temp            = ayt(iy,ix,iz)
-               ayt(iy,ix,iz)   = -yk(ii)*ayt(iy+1,ix,iz)
-               ayt(iy+1,ix,iz) = yk(ii)*temp
-            enddo
-            call rfftb(ny,ayt(1,ix,iz),trigy)
-         enddo
-      enddo
-      call ytox_trans(ayt,ay,nx,ny,ixs,ixe,ix_s,ix_e,
-     +         iys,iye,iy_s,iy_e,iz1,iz2,myid,ncpu,np)
 c
       return
       end
@@ -5901,6 +5689,7 @@ c
       use con_stats
       use particles
       use mod_mpi
+      use mod_fft
       implicit none
  
       real ::  psi(nnx,iys:iye), psix(nnx,iys:iye),
@@ -6429,6 +6218,7 @@ c
       use con_data
       use con_stats
       use mod_mpi
+      use mod_fft
       real psi(nnx,iys:iye), psix(nnx,iys:iye),
      +     psiy(nnx,iys:iye,izs:izs), uxx(nnx,iys:iye),
      +     vyy(nnx,iys:iye,izs:izs)
@@ -6720,6 +6510,7 @@ c
       use con_data
       use con_stats
       use mod_mpi
+      use mod_fft
       real psi(nnx,iys:iye), psix(nnx,iys:iye),
      +     psiy(nnx,iys:iye,izs:izs), uxx(nnx,iys:iye),
      +     vyy(nnx,iys:iye,izs:izs)
@@ -7915,6 +7706,7 @@ c
       use con_stats
       use fftwk
       use mod_mpi
+      use mod_fft
       implicit none
 
       real :: stat(1:nnz,4)
@@ -8214,122 +8006,6 @@ c -------------------- process write errors
  8100 format(' SR. SAVE_HIS: Trouble profile history file',
      +       ' not in path =',a80)
  8200 format(' SR. SAVE_RADPDF: Trouble rad histogram file =',a80)
-      end
-      subroutine dealias
-c
-c --------- wave cutoff filter using 2d fft
-c
-      use pars
-      use fields
-      use fftwk
-      use con_data
-      use con_stats
-      real wve(nny,jxs:jxe,izs:ize)
-      real wves(nnxp2,iys:iye,izs:ize)
-c
-c --------- sharp spectral cutoff, specific to current 2dfft
-c
-      ix_cut   = 2*int(float(nnx)/3.) + 3
-      iy_cut_l = int(float(nny)/3.) + 2
-      iy_cut_u = nnyp2 - iy_cut_l
-c
-c ---------- u-equation
-c
-      call fft2d_mpi(u(1,iys,izs),wve(1,jxs,izs),trigx(1,1),trigc,
-     +           nnx,nny,jxs,jxe,jx_s,jx_e,iys,iye,iy_s,iy_e,
-     +           izs,ize,myid,ncpu_s,numprocs,-2)
-      call sharp(wve,ix_cut,iy_cut_l,iy_cut_u)
-      call fft2d_mpi(u(1,iys,izs),wve(1,jxs,izs),trigx(1,1),trigc,
-     +           nnx,nny,jxs,jxe,jx_s,jx_e,iys,iye,iy_s,iy_e,
-     +           izs,ize,myid,ncpu_s,numprocs,2)
-c
-c ---------- v-equation
-c
-      call fft2d_mpi(v(1,iys,izs),wve(1,jxs,izs),trigx(1,1),trigc,
-     +           nnx,nny,jxs,jxe,jx_s,jx_e,iys,iye,iy_s,iy_e,
-     +           izs,ize,myid,ncpu_s,numprocs,-2)
-      call sharp(wve,ix_cut,iy_cut_l,iy_cut_u)
-      call fft2d_mpi(v(1,iys,izs),wve(1,jxs,izs),trigx(1,1),trigc,
-     +           nnx,nny,jxs,jxe,jx_s,jx_e,iys,iye,iy_s,iy_e,
-     +           izs,ize,myid,ncpu_s,numprocs,2)
-c
-c ---------- w-equation
-c
-      call fft2d_mpi(w(1,iys,izs),wve(1,jxs,izs),trigx(1,1),trigc,
-     +           nnx,nny,jxs,jxe,jx_s,jx_e,iys,iye,iy_s,iy_e,
-     +           izs,ize,myid,ncpu_s,numprocs,-2)
-      call sharp(wve,ix_cut,iy_cut_l,iy_cut_u)
-      call fft2d_mpi(w(1,iys,izs),wve(1,jxs,izs),trigx(1,1),trigc,
-     +           nnx,nny,jxs,jxe,jx_s,jx_e,iys,iye,iy_s,iy_e,
-     +           izs,ize,myid,ncpu_s,numprocs,2)
-c
-c ---------- e-equation
-c
-      call fft2d_mpi(e(1,iys,izs),wve(1,jxs,izs),trigx(1,1),trigc,
-     +           nnx,nny,jxs,jxe,jx_s,jx_e,iys,iye,iy_s,iy_e,
-     +           izs,ize,myid,ncpu_s,numprocs,-2)
-      call sharp(wve,ix_cut,iy_cut_l,iy_cut_u)
-      call fft2d_mpi(e(1,iys,izs),wve(1,jxs,izs),trigx(1,1),trigc,
-     +           nnx,nny,jxs,jxe,jx_s,jx_e,iys,iye,iy_s,iy_e,
-     +           izs,ize,myid,ncpu_s,numprocs,2)
-c
-c ------------- scalars, not stored in correct order
-c
-      do iscl=1,nscl
-         do iz=izs,ize
-         do iy=iys,iye
-         do ix=1,nnx
-            wves(ix,iy,iz) = t(ix,iy,iscl,iz)
-         enddo
-         enddo
-         enddo
-         call fft2d_mpi(wves(1,iys,izs),wve(1,jxs,izs),trigx(1,1),
-     +           trigc,nnx,nny,jxs,jxe,jx_s,jx_e,iys,iye,iy_s,iy_e,
-     +           izs,ize,myid,ncpu_s,numprocs,-2)
-         call sharp(wve,ix_cut,iy_cut_l,iy_cut_u)
-         call fft2d_mpi(wves(1,iys,izs),wve(1,jxs,izs),trigx(1,1),
-     +           trigc,nnx,nny,jxs,jxe,jx_s,jx_e,iys,iye,iy_s,iy_e,
-     +           izs,ize,myid,ncpu_s,numprocs,2)
-         do iz=izs,ize
-         do iy=iys,iye
-         do ix=1,nnx
-            t(ix,iy,iscl,iz) = wves(ix,iy,iz)
-         enddo
-         enddo
-         enddo
-      enddo
-c
-      return
-      end
-      subroutine sharp(wve,ix_cut,iy_cut_l,iy_cut_u)
-c
-c --------- sharp cutoff filter for field wve stored
-c           in 2d-fft order
-c
-      use pars
-      real wve(nny,jxs:jxe,izs:ize)
-c
-      do iz=izs,ize
-         do ix=jxs,jxe
-         do iy=iy_cut_l,iy_cut_u
-            wve(iy,ix,iz) = 0.0
-         enddo
-         enddo
-      enddo
-c
-      if(jxe .lt. ix_cut) go to 999
-c
-         do iz=izs,ize
-            do ix=max(jxs,ix_cut),jxe
-            do iy=1,nny
-               wve(iy,ix,iz) = 0.0
-            enddo
-            enddo
-         enddo
-c
-  999 continue
-c
-      return
       end
       subroutine gridd
 c
