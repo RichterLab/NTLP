@@ -38,6 +38,8 @@ module mod_solver
   public :: pbltop, get_zi
   ! Moisture / radiation
   public :: calc_radiation, humidity_control, change_RH_bcs_to_q, fill_base
+  ! Utility functions called from les.F and particles.f90
+  public :: ran1, rlim
 
 contains
 

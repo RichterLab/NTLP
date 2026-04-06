@@ -1397,7 +1397,7 @@ c
       use mod_solver
       implicit none
  
-      real :: psi(nnx, iys:iye), psix(nnx, iys:iye)
+      real :: psi(nnx, iys:iye), psix(nnx, iys:iye),
      +     psiy(nnx,iys:iye,izs:izs), uxx(nnx,iys:iye),
      +     vyy(nnx,iys:iye,izs:izs),Ttmp
 
@@ -2637,6 +2637,7 @@ c
       use particles
       use mod_mpi
       use mod_thermo
+      use mod_solver
       implicit none
 c
 c ------- indices for indexing array stat(.,.)
