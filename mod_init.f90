@@ -17,6 +17,7 @@ contains
 
 ! --- extracted from les.F: setcon ---
       subroutine setcon
+      implicit real(a-h,o-z), integer(i-n)
 !
 !
 ! ----------------- get machine type, can erad datadir also
@@ -111,6 +112,7 @@ contains
 
 ! --- extracted from les.F: setup ---
       subroutine setup
+      implicit real(a-h,o-z), integer(i-n)
 !
 !
 !
@@ -122,7 +124,7 @@ contains
           ivis = 0
       endif
 !
-      if(igrdr . eq. 3) then
+      if(igrdr .eq. 3) then
          if(l_root) then
             write(6,6)iti,utau,tsfcc(1) ,qstar(1)
             write(6,510)
@@ -317,6 +319,7 @@ contains
 
 ! --- extracted from les.F: init ---
       subroutine init
+      implicit real(a-h,o-z), integer(i-n)
 !
 !
 
@@ -515,6 +518,7 @@ contains
 
 ! --- extracted from les.F: vgrid ---
       subroutine vgrid(z1,zi,zl,nnz,z,l_root,ldebug)
+      implicit real(a-h,o-z), integer(i-n)
 !
       real z(0:nnz+1)
       logical l_root, l_debug
@@ -621,6 +625,7 @@ contains
 
 ! --- extracted from les.F: vgrid_channel ---
       subroutine vgrid_channel(z1,zi,zl,nnz,z,l_root,ldebug)
+      implicit real(a-h,o-z), integer(i-n)
 !
       real z(0:nnz+1)
       integer :: zidx
@@ -684,6 +689,7 @@ contains
 
 ! --- extracted from les.F: vgrid_channel_fstrm ---
       subroutine vgrid_channel_fstrm(z1,zi,zl,nnz,z,l_root,ldebug)
+      implicit real(a-h,o-z), integer(i-n)
 !
       real z(0:nnz+1)
       real s(0:2*nnz+1)
@@ -752,6 +758,7 @@ contains
 
 ! --- extracted from les.F: vgrid_uniform ---
       subroutine vgrid_uniform(z1,zi,zl,nnz,z,l_root,ldebug)
+      implicit real(a-h,o-z), integer(i-n)
 !
       real z(0:nnz+1),zdiff
       real s(0:2*nnz+1)
@@ -779,6 +786,7 @@ contains
 
 ! --- extracted from les.F: get_dz ---
       subroutine get_dz
+      implicit real(a-h,o-z), integer(i-n)
 !
 ! --------------- compute spacing for given vertical
 !                 point distribution
@@ -1337,6 +1345,7 @@ contains
 
 ! --- extracted from les.F: random_f ---
       subroutine random_f
+      implicit real(a-h,o-z), integer(i-n)
 !
 ! ---------- example of using given (sparse) initial 
 !            sounding profiles (FIX for ncpu_s).
@@ -1624,6 +1633,7 @@ contains
 
 ! --- extracted from les.F: randoc ---
       subroutine randoc
+      implicit real(a-h,o-z), integer(i-n)
 !
 ! -------- random initial conditions for an
 !          ocean simulation
@@ -1762,6 +1772,7 @@ contains
 
 ! --- extracted from les.F: gridd ---
       subroutine gridd
+      implicit real(a-h,o-z), integer(i-n)
 !
 ! ----------- allocate space and pass arrays using modules
 !
@@ -1998,6 +2009,7 @@ contains
 
 ! --- extracted from les.F: restart ---
       subroutine restart
+      implicit real(a-h,o-z), integer(i-n)
 !
 ! ----------- get restart file from local directory
 !
@@ -2054,6 +2066,7 @@ contains
 
 ! --- extracted from les.F: read_res ---
       subroutine read_res
+      implicit real(a-h,o-z), integer(i-n)
 !
 ! -------------- read restart file including constant file
 !                changed for iys:iye
