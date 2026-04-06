@@ -144,6 +144,6 @@ mod_mpi.o: defs.o
 mod_fft.o: defs.o mod_mpi.o
 les.o: defs.o mod_mpi.o mod_fft.o measurement.o netcdf_io.o particles.o tec_io.o
 measurement.o: data_structures.o
-particles.o: defs.o measurement.o
+particles.o: defs.o mod_mpi.o mod_fft.o measurement.o
 netcdf_io.o: particles.o
 tec_io.o: particles.o

@@ -86,6 +86,9 @@ module particles
 
   type(particle), pointer :: part,first_particle
 
+  use mod_mpi, only: xtoz_trans, ztox_trans
+  use mod_fft, only: xderivp, yd_mpi
+
 CONTAINS
 
   subroutine fill_ext
@@ -4437,7 +4440,7 @@ CONTAINS
 !     -------------------
 !     calculate x derivatives of sigma_s
 !     -------------------
-     call xderivp(sigm_sdx(1,iys,iz),trigx(1,1),xk(1),nnx,iys,iye)
+     call xderivp(sigm_sdx(1,iys,iz),trigx(:,1),xk,nnx,iys,iye)
 
   end do
 
@@ -4445,7 +4448,7 @@ CONTAINS
 !     calculate y derivative of sigma_s
 !     ------------------
 
-  call yd_mpi(sigm_sdy(1,iys,izs),trigx(1,2),yk(1),nnx,nny,ixs,ixe,ix_s,ix_e,iys,iye,iy_s,iy_e,izs,ize,myid,ncpu_s,numprocs)
+  call yd_mpi(sigm_sdy(1,iys,izs),trigx(:,2),yk,nnx,nny,ixs,ixe,ix_s,ix_e,iys,iye,iy_s,iy_e,izs,ize,myid,ncpu_s,numprocs)
 
 !     ----------------
 !    calculate extented fileds of sigm_s and its derivatives
