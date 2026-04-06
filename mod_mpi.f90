@@ -20,9 +20,9 @@ module mod_mpi
                       ix_s, ix_e, jx_s, jx_e, kx_s, kx_e, &
                       mx_s, mx_e, iy_s, iy_e, jy_s, jy_e, &
                       iz_s, iz_e, is_s, is_e, &
-                      nprt, l_debug
+                      nprt, l_debug, qstar
   use fields,   only: u, v, w, t, e, pbc, pbc2
-  use con_data, only: utau, u10, qstar
+  use con_data, only: utau, u10
 
   implicit none
   private
