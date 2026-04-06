@@ -412,11 +412,11 @@ contains
             z(iz) = dz*float(iz) + zwstrt
          enddo
       elseif (iz_space .eq. 1) then
-        call vgrid_channel(zw1,zi,zl,nnz,z(0),l_root,l_debug)
+        call vgrid_channel(zw1,zi,zl,nnz,z(0:),l_root,l_debug)
       elseif (iz_space .eq. 2) then
-        call vgrid_channel_fstrm(zw1,zi,zl,nnz,z(0),l_root,l_debug)
+        call vgrid_channel_fstrm(zw1,zi,zl,nnz,z(0:),l_root,l_debug)
       elseif (iz_space .eq. 3) then
-        call vgrid(zw1,zi,zl,nnz,z(0),l_root,l_debug)
+        call vgrid(zw1,zi,zl,nnz,z(0:),l_root,l_debug)
       endif
 !
       call get_dz
@@ -521,7 +521,7 @@ contains
       implicit real(a-h,o-z), integer(i-n)
 !
       real z(0:nnz+1)
-      logical l_root, l_debug
+      logical l_root, ldebug
 !
 ! ----------------- build grid up to zi first
 !
@@ -629,7 +629,7 @@ contains
 !
       real z(0:nnz+1)
       integer :: zidx
-      logical l_root, l_debug
+      logical l_root, ldebug
 !
 ! ----------------- build grid up to zi first
 !
@@ -694,7 +694,7 @@ contains
       real z(0:nnz+1)
       real s(0:2*nnz+1)
       integer :: zidx
-      logical l_root, l_debug
+      logical l_root, ldebug
 !      
                 nnz = 2.0*nnz
                 zi = 2.0*zi
@@ -763,7 +763,7 @@ contains
       real z(0:nnz+1),zdiff
       real s(0:2*nnz+1)
       integer :: zidx
-      logical l_root, l_debug
+      logical l_root, ldebug
 
       z_frst = z1
       n_pbl  = nnz
