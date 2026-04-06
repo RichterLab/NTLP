@@ -51,6 +51,7 @@ contains
       use fftwk
       use con_data
       use con_stats
+      implicit real(a-h,o-z), integer(i-n)
 !
       real u_send(5), u_recv(5)
 !
@@ -129,6 +130,7 @@ contains
       use con_data
       use con_stats
       use particles
+      implicit real(a-h,o-z), integer(i-n)
 
 !
 
@@ -212,6 +214,7 @@ contains
 
   ! ──────────────────────────────────────────────────────────────────
       subroutine lterp(n,zary,zpt,i,ip1,ratio)
+      implicit real(a-h,o-z), integer(i-n)
 !
 ! ---- linear interpolation for zpt in zary, where zary is 
 !      monotonic increasing or decreasing function
@@ -287,6 +290,7 @@ contains
       use con_data
       use con_stats
       use mod_mpi
+      implicit real(a-h,o-z), integer(i-n)
 !
       real sfk(1:nnz)
 !
@@ -407,6 +411,7 @@ contains
       use con_data
       use con_stats
       use mod_mpi
+      implicit real(a-h,o-z), integer(i-n)
       real xkvis(nnx,iys:iye), alwk(nnx,iys:iye)
 !
       real send(3), buf(3)
@@ -569,6 +574,7 @@ contains
       use con_data
       use con_stats
       use mod_fft
+      implicit real(a-h,o-z), integer(i-n)
 !
       real fnt1(nnx,iys:iye), fnt2(nnx,iys:iye,izs:ize)
       real fnt3(nnx,iys:iye)
@@ -833,6 +839,7 @@ contains
       use pars
       use con_data
       use con_stats
+      implicit real(a-h,o-z), integer(i-n)
 !
       if(iocean .eq. 1) then
 !
@@ -871,6 +878,7 @@ contains
 
   ! ──────────────────────────────────────────────────────────────────
       subroutine busngr(zeta,phim,phis,psim,psis)
+      implicit real(a-h,o-z), integer(i-n)
 !
 ! ---- Businger's version of similarity theory
 !
@@ -902,6 +910,7 @@ contains
 
   ! ──────────────────────────────────────────────────────────────────
       subroutine fzol(zeta,phim,phis,psim,psis)
+      implicit real(a-h,o-z), integer(i-n)
 !        estimate the stability functions for momentum, m
 !                                         and scalars,  c
 !        from input of the stability parameter zeta = z/L
@@ -983,6 +992,7 @@ contains
       use con_data
       use con_stats
       use mod_mpi
+      implicit real(a-h,o-z), integer(i-n)
       integer istatus(mpi_status_size)
 !
       parameter(js = 6, ns = 3, nstat = js + ns*nscl)
@@ -1149,6 +1159,7 @@ contains
       use particles
       use mod_mpi
       use mod_fft
+      implicit real(a-h,o-z), integer(i-n)
 !
       real fntd(nnx,iys:iye,izs:ize)
       real fnt1(nnx,iys:iye), fnt2(nnx,iys:iye) 
@@ -1436,6 +1447,7 @@ contains
       use particles
       use mod_mpi
       use mod_fft
+      implicit real(a-h,o-z), integer(i-n)
 !
       real fntd(nnx,iys:iye,izs:ize)
       real fnt1(nnx,iys:iye), fnt2(nnx,iys:iye) 
@@ -1746,6 +1758,7 @@ contains
       use con_stats
       use particles
       use mod_fft
+      implicit real(a-h,o-z), integer(i-n)
 !
 !
       real fnt1(nnx,iys:iye,izs:ize)
@@ -2061,6 +2074,7 @@ contains
       use particles
       use mod_mpi
       use mod_fft
+      implicit real(a-h,o-z), integer(i-n)
 !
 !
       real fnt1(nnx,iys:iye,izs:ize)
@@ -2362,6 +2376,7 @@ contains
       use con_data
       use con_stats
       use mod_fft
+      implicit real(a-h,o-z), integer(i-n)
       real fnt1(nnx,iys:iye,izs:ize)
       real fs(nnx,iys:iye,2), fr(nnx,iys:iye,2)
       integer istatus(mpi_status_size)
@@ -2496,6 +2511,7 @@ contains
       use con_stats
       use mod_mpi
       use mod_fft
+      implicit real(a-h,o-z), integer(i-n)
       real fnt1(nnx,iys:iye,izs:ize), fnt2(nnx,iys:iye)
       real r3_sum(1:nnz)
       integer istatus(mpi_status_size)
@@ -2626,6 +2642,7 @@ contains
       use con_stats
       use mod_mpi
       use mod_fft
+      implicit real(a-h,o-z), integer(i-n)
       real pfft(nny,jxs:jxe,izs-1:ize+1)
       real pt(0:nnz+1,jxs:jxe,jys:jye)
       real ptopfft(nny,jxs:jxe,1:2)
@@ -2717,6 +2734,7 @@ contains
       use pars
       use con_data
       use con_stats
+      implicit real(a-h,o-z), integer(i-n)
 !
       real ptop(nny,jxs:jxe,1:2)
       real pt(0:nnz+1,jxs:jxe,jys:jye)
@@ -2803,6 +2821,7 @@ contains
 
   ! ──────────────────────────────────────────────────────────────────
       subroutine tridv(b,d,a,r,n,j1,j2)
+      implicit real(a-h,o-z), integer(i-n)
 !
 ! --- tridiagonal matrix solver with multiple vectors
 !     (note j and i loops are reversed from cray version)
@@ -2862,6 +2881,7 @@ contains
       use con_stats
       use mod_mpi
       use mod_fft
+      implicit real(a-h,o-z), integer(i-n)
 !
       iz_ss = izs-1
       iz_ee = ize+1
@@ -2960,6 +2980,7 @@ contains
       use con_data
       use con_stats
       use mod_mpi
+      implicit real(a-h,o-z), integer(i-n)
 !
 !
 ! -------- set e to minimum value 
@@ -3087,6 +3108,7 @@ contains
 
   ! ──────────────────────────────────────────────────────────────────
       function rlim(d1,d2,d3)
+      implicit real(a-h,o-z), integer(i-n)
 !
 ! ------------- Cees's kappa=1/3 scheme
 !
@@ -3111,6 +3133,7 @@ contains
 
   ! ──────────────────────────────────────────────────────────────────
       function ran1(idum)
+      implicit real(a-h,o-z), integer(i-n)
 !
 ! ----------- stolen from numerical recipes,p. 271
 !
@@ -3144,6 +3167,7 @@ contains
 
   ! ──────────────────────────────────────────────────────────────────
       function ranf()
+      implicit real(a-h,o-z), integer(i-n)
       data inc /1/
       save inc, ix, ia, m, fm
       if(inc.eq.1) then
@@ -3170,6 +3194,7 @@ contains
       use fftwk
       use con_data
       use con_stats
+      implicit real(a-h,o-z), integer(i-n)
 !
       tsfcc(1) = t_surf_i - c_rate*time
 !
@@ -3306,6 +3331,7 @@ contains
       use con_stats
       use particles
       use mod_mpi
+      implicit real(a-h,o-z), integer(i-n)
       real sfc_flx(2+nscl)
       real upars(2)
 !
@@ -3602,6 +3628,7 @@ contains
       use con_data
       use con_stats
       use mod_mpi
+      implicit real(a-h,o-z), integer(i-n)
 !
       real u_level1(nnx,iys:iye,2+nscl), buf(2+2*nscl)
       real sbuf(2+2*nscl,mxs:mxe,iys:iye)
@@ -3774,6 +3801,7 @@ contains
   ! ──────────────────────────────────────────────────────────────────
       subroutine f_suft2(rbuf,nnx,mxs,mxe,iys,iye,nscl, &
                         tau13m,tau23m,taut3m,t_grnd)
+      implicit real(a-h,o-z), integer(i-n)
 !
 ! ------ fill surface arrays on root processors
 !
@@ -3812,6 +3840,7 @@ contains
       use con_data
       use con_stats
       use mod_mpi
+      implicit real(a-h,o-z), integer(i-n)
       integer istatus(mpi_status_size)
 !
       iz   = nnz
@@ -4253,6 +4282,7 @@ contains
       use con_data
       use con_stats
       use mod_mpi
+      implicit real(a-h,o-z), integer(i-n)
       real buf(3+nscl)
 !
 ! ------- version of similarity theory adpated for ocean flows
@@ -4406,6 +4436,7 @@ contains
       use fields
       use con_data
       use con_stats
+      implicit real(a-h,o-z), integer(i-n)
 !
       real u_level1(nnx,iys:iye,2+nscl)
 !
@@ -4550,6 +4581,7 @@ contains
       use fields
       use con_data
       use con_stats
+      implicit real(a-h,o-z), integer(i-n)
       real trun(maxnz)
       real gradloc(2,nnx,nny), gradmax(2,nnx,nny)
       external get_zi
@@ -4699,6 +4731,7 @@ contains
       subroutine get_zi(gradmax,gradout,len,itype)
 !
       use pars
+      implicit real(a-h,o-z), integer(i-n)
       real gradmax(*), gradout(*)
 !
 !     write(nprt,2001) myid, len
@@ -4956,7 +4989,7 @@ contains
   ! ──────────────────────────────────────────────────────────────────
       function mod_magnus(T)
       implicit none
-
+      real :: mod_magnus
       !Take in T in Kelvin and return saturation vapor pressure using function of Alduchov and Eskridge, 1996
       real,intent(in) :: T
 
@@ -4969,6 +5002,7 @@ contains
       function exner(p0,p)
       use pars
       implicit none
+      real :: exner
       real, intent(in) :: p0,p
 
       !Take in the reference pressure p0 and p(z), and compute exner = T/theta
@@ -4982,6 +5016,7 @@ contains
       function func_p_base(p_surf,T_surf,z)
       use pars, only: grav,Cpa,Rd
       implicit none
+      real :: func_p_base
       real, intent(in) :: p_surf,T_surf,z
 
       func_p_base = p_surf*(1 - z*grav/Cpa/T_surf)**(Cpa/Rd)
@@ -4992,8 +5027,9 @@ contains
       function func_T_base(T_surf,z)
       use pars, only: grav,Cpa
       implicit none
+      real :: func_T_base
       real, intent(in) :: T_surf,z
-      
+
       func_T_base = T_surf - grav/Cpa*z
 
       end function func_T_base
@@ -5002,8 +5038,9 @@ contains
       function func_rho_base(p_surf,T_surf,z)
       use pars, only: grav,Cpa,Rd
       implicit none
+      real :: func_rho_base
       real, intent(in) :: p_surf,T_surf,z
-      
+
       func_rho_base = p_surf*T_surf**(-Cpa/Rd)/Rd* &
                (T_surf - grav*z/Cpa)**(Cpa/Rd-1.0)
 
