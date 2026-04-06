@@ -794,8 +794,8 @@ c
 c
 c ----------- initialize fft
 c
-      call rffti(nnx,trigx(1,1))
-      call rffti(nny,trigx(1,2))
+      call rffti(nnx,trigx(:,1))
+      call rffti(nny,trigx(:,2))
       call cffti(nny,trigc(1))
 c
 c ----------- start step for history files
@@ -1693,9 +1693,9 @@ c
          fnt3(ix,iy) = tau13_u(ix,iy)
       enddo
       enddo
-      call xderivp(fnt1(1,iys),trigx(1,1),xk(1),nnx,iys,iye)
-      call xderivp(fnt2(1,iys),trigx(1,1),xk(1),nnx,iys,iye)
-      call xderivp(fnt3(1,iys),trigx(1,1),xk(1),nnx,iys,iye)
+      call xderivp(fnt1(1,iys),trigx(:,1),xk,nnx,iys,iye)
+      call xderivp(fnt2(1,iys),trigx(:,1),xk,nnx,iys,iye)
+      call xderivp(fnt3(1,iys),trigx(:,1),xk,nnx,iys,iye)
       do iy=iys,iye
       do ix=1,nnx
          r1(ix,iy,iz) = r1(ix,iy,iz) - fnt1(ix,iy)
@@ -1753,7 +1753,7 @@ c
          enddo
          enddo
       enddo
-      call yd_mpi(fntd(1,iys,izs),trigx(1,2),yk(1),
+      call yd_mpi(fntd(1,iys,izs),trigx(:,2),yk,
      +           nnx,nny,ixs,ixe,ix_s,ix_e,
      +           iys,iye,iy_s,iy_e,izs,ize,myid,ncpu_s,numprocs)
       do iz=izs,ize
@@ -1766,7 +1766,7 @@ c
          enddo
          enddo
       enddo
-      call yd_mpi(fntd(1,iys,izs),trigx(1,2),yk(1),
+      call yd_mpi(fntd(1,iys,izs),trigx(:,2),yk,
      +           nnx,nny,ixs,ixe,ix_s,ix_e,
      +           iys,iye,iy_s,iy_e,izs,ize,myid,ncpu_s,numprocs)
       do iz=izs,ize
@@ -1780,7 +1780,7 @@ c
          enddo
          enddo
       enddo
-      call yd_mpi(fntd(1,iys,izs),trigx(1,2),yk(1),
+      call yd_mpi(fntd(1,iys,izs),trigx(:,2),yk,
      +           nnx,nny,ixs,ixe,ix_s,ix_e,
      +           iys,iye,iy_s,iy_e,izs,ize,myid,ncpu_s,numprocs)
       do iz=1,nnz
@@ -1983,9 +1983,9 @@ c
          fnt3(ix,iy) = tau13_u(ix,iy)
       enddo
       enddo
-      call xderivp(fnt1(1,iys),trigx(1,1),xk(1),nnx,iys,iye)
-      call xderivp(fnt2(1,iys),trigx(1,1),xk(1),nnx,iys,iye)
-      call xderivp(fnt3(1,iys),trigx(1,1),xk(1),nnx,iys,iye)
+      call xderivp(fnt1(1,iys),trigx(:,1),xk,nnx,iys,iye)
+      call xderivp(fnt2(1,iys),trigx(:,1),xk,nnx,iys,iye)
+      call xderivp(fnt3(1,iys),trigx(:,1),xk,nnx,iys,iye)
       do iy=iys,iye
       do ix=1,nnx
          r1(ix,iy,iz) = r1(ix,iy,iz) - fnt1(ix,iy)
@@ -2060,7 +2060,7 @@ c
          enddo
          enddo
       enddo
-      call yd_mpi(fntd(1,iys,izs),trigx(1,2),yk(1),
+      call yd_mpi(fntd(1,iys,izs),trigx(:,2),yk,
      +           nnx,nny,ixs,ixe,ix_s,ix_e,
      +           iys,iye,iy_s,iy_e,izs,ize,myid,ncpu_s,numprocs)
       do iz=izs,ize
@@ -2073,7 +2073,7 @@ c
          enddo
          enddo
       enddo
-      call yd_mpi(fntd(1,iys,izs),trigx(1,2),yk(1),
+      call yd_mpi(fntd(1,iys,izs),trigx(:,2),yk,
      +           nnx,nny,ixs,ixe,ix_s,ix_e,
      +           iys,iye,iy_s,iy_e,izs,ize,myid,ncpu_s,numprocs)
       do iz=izs,ize
@@ -2086,7 +2086,7 @@ c
          enddo
          enddo
       enddo
-      call yd_mpi(fntd(1,iys,izs),trigx(1,2),yk(1),
+      call yd_mpi(fntd(1,iys,izs),trigx(:,2),yk,
      +           nnx,nny,ixs,ixe,ix_s,ix_e,
      +           iys,iye,iy_s,iy_e,izs,ize,myid,ncpu_s,numprocs)
       do iz=1,nnz
@@ -2173,7 +2173,7 @@ c
          tx(ix,iy) = t(ix,iy,iscl,iz)
       enddo
       enddo
-      call xderivp(tx(1,iys),trigx(1,1),xk(1),nnx,iys,iye)
+      call xderivp(tx(1,iys),trigx(:,1),xk,nnx,iys,iye)
 c
 c --------- compute tau_t3 at iz-1 
 c
@@ -2226,7 +2226,7 @@ c
 
       end if
 
-      call xderivp(fnt1(1,iys,iz),trigx(1,1),xk(1),nnx,iys,iye)
+      call xderivp(fnt1(1,iys,iz),trigx(:,1),xk,nnx,iys,iye)
       do iy=iys,iye
       do ix=1,nnx
          r4(ix,iy,iscl,iz) = - fnt1(ix,iy,iz)
@@ -2357,7 +2357,7 @@ c
 c
 c --------- y-derivative of t for [izs:ize]
 c
-      call yd_mpi(ty(1,iys,izs),trigx(1,2),yk(1),
+      call yd_mpi(ty(1,iys,izs),trigx(:,2),yk,
      +           nnx,nny,ixs,ixe,ix_s,ix_e,
      +           iys,iye,iy_s,iy_e,izs,ize,myid,ncpu_s,numprocs)
 c
@@ -2385,7 +2385,7 @@ c
 c
 c --------- y-derivatives of scalar fluxes for [izs:ize]
 c
-      call yd_mpi(fnt1(1,iys,izs),trigx(1,2),yk(1),
+      call yd_mpi(fnt1(1,iys,izs),trigx(:,2),yk,
      +            nnx,nny,ixs,ixe,ix_s,ix_e,
      +            iys,iye,iy_s,iy_e,izs,ize,myid,ncpu_s,numprocs)
 c
@@ -2487,7 +2487,7 @@ c
          tx(ix,iy) = t(ix,iy,iscl,iz)
       enddo
       enddo
-      call xderivp(tx(1,iys),trigx(1,1),xk(1),nnx,iys,iye)
+      call xderivp(tx(1,iys),trigx(:,1),xk,nnx,iys,iye)
 c
 c --------- compute tau_t3 at iz-1 
 c
@@ -2524,7 +2524,7 @@ c
      +                      (u(ix,iy,iz)+stokes(iz)))
       enddo
       enddo
-      call xderivp(fnt1(1,iys,iz),trigx(1,1),xk(1),nnx,iys,iye)
+      call xderivp(fnt1(1,iys,iz),trigx(:,1),xk,nnx,iys,iye)
       do iy=iys,iye
       do ix=1,nnx
          r4(ix,iy,iscl,iz) = - fnt1(ix,iy,iz)
@@ -2666,7 +2666,7 @@ c
 c
 c --------- y-derivative of t for [izs:ize]
 c
-      call yd_mpi(ty(1,iys,izs),trigx(1,2),yk(1),
+      call yd_mpi(ty(1,iys,izs),trigx(:,2),yk,
      +           nnx,nny,ixs,ixe,ix_s,ix_e,
      +           iys,iye,iy_s,iy_e,izs,ize,myid,ncpu_s,numprocs)
 c
@@ -2711,7 +2711,7 @@ c
 c
 c --------- y-derivatives of scalar fluxes for [izs:ize]
 c
-      call yd_mpi(fnt1(1,iys,izs),trigx(1,2),yk(1),
+      call yd_mpi(fnt1(1,iys,izs),trigx(:,2),yk,
      +            nnx,nny,ixs,ixe,ix_s,ix_e,
      +            iys,iye,iy_s,iy_e,izs,ize,myid,ncpu_s,numprocs)
 c
@@ -2871,7 +2871,7 @@ c
          ex(ix,iy) = e(ix,iy,iz)
       enddo
       enddo
-      call xderivp(ex(1,iys),trigx(1,1),xk(1),nnx,iys,iye)
+      call xderivp(ex(1,iys),trigx(:,1),xk,nnx,iys,iye)
 c
 c ------------ include stokes contribution in advection
 c              and horizontal x-diffusion
@@ -2884,7 +2884,7 @@ c
      +                    4.0*vis_m(ix,iy,iz)*ex(ix,iy)
       enddo
       enddo
-      call xderivp(fnt1(1,iys),trigx(1,1),xk(1),nnx,iys,iye)
+      call xderivp(fnt1(1,iys),trigx(:,1),xk,nnx,iys,iye)
       do iy=iys,iye
       do ix=1,nnx
          r5(ix,iy,iz) = -fnt1(ix,iy) - 
@@ -2990,7 +2990,7 @@ c
       enddo
       enddo
 c
-      call yd_mpi(ey(1,iys,izs),trigx(1,2),yk(1),
+      call yd_mpi(ey(1,iys,izs),trigx(:,2),yk,
      +           nnx,nny,ixs,ixe,ix_s,ix_e,
      +           iys,iye,iy_s,iy_e,izs,ize,myid,ncpu_s,numprocs)
 c
@@ -3012,7 +3012,7 @@ c
       enddo
       enddo
 c
-      call yd_mpi(fnt2(1,iys,izs),trigx(1,2),yk(1),
+      call yd_mpi(fnt2(1,iys,izs),trigx(:,2),yk,
      +           nnx,nny,ixs,ixe,ix_s,ix_e,
      +           iys,iye,iy_s,iy_e,izs,ize,myid,ncpu_s,numprocs)
 c
@@ -3734,7 +3734,7 @@ c
             fnt1(ix,iy,iz) = u(ix,iy,iz)*gami + r1(ix,iy,iz)
          enddo
          enddo
-         call xderivp(fnt1(1,iys,iz),trigx(1,1),xk(1),nnx,iys,iye)
+         call xderivp(fnt1(1,iys,iz),trigx(:,1),xk,nnx,iys,iye)
 c
          if(iz .eq. 1) then
             do iy=iys,iye
@@ -3787,7 +3787,7 @@ c
          enddo
       enddo
 c
-      call yd_mpi(fnt1(1,iys,izs),trigx(1,2),yk(1),
+      call yd_mpi(fnt1(1,iys,izs),trigx(:,2),yk,
      +           nnx,nny,ixs,ixe,ix_s,ix_e,
      +           iys,iye,iy_s,iy_e,izs,ize,myid,ncpu_s,numprocs)
 c
@@ -3834,7 +3834,7 @@ c
          enddo
       enddo
 c
-      call yd_mpi(fnt1(1,iys,izs),trigx(1,2),yk(1),
+      call yd_mpi(fnt1(1,iys,izs),trigx(:,2),yk,
      +           nnx,nny,ixs,ixe,ix_s,ix_e,
      +           iys,iye,iy_s,iy_e,izs,ize,myid,ncpu_s,numprocs)
 c
@@ -3848,7 +3848,7 @@ c
             fnt2(ix,iy) = p(ix,iy,iz)
          enddo
          enddo
-         call xderivp(fnt2(1,iys),trigx(1,1),xk(1),nnx,iys,iye)
+         call xderivp(fnt2(1,iys),trigx(:,1),xk,nnx,iys,iye)
          do iy=iys,iye
          do ix=1,nnx
             r1(ix,iy,iz) = r1(ix,iy,iz) - fnt2(ix,iy)
@@ -3957,7 +3957,7 @@ c
 c
 
 
-      call fft2d_mpi(p(1,iys,izs),pfft(1,jxs,izs),trigx(1,1),trigc,
+      call fft2d_mpi(p(1,iys,izs),pfft(1,jxs,izs),trigx(:,1),trigc,
      +           nnx,nny,jxs,jxe,jx_s,jx_e,iys,iye,iy_s,iy_e,
      +           izs,ize,myid,ncpu_s,numprocs,-2)
 
@@ -3966,7 +3966,7 @@ c ------------ Fourier analyze the radiation bc arrays
 c
       if(ibcu .eq. 1) then
         call fft2d_mpi(ptop(1,iys,1),ptopfft(1,jxs,1),
-     +           trigx(1,1),trigc,
+     +           trigx(:,1),trigc,
      +           nnx,nny,jxs,jxe,jx_s,jx_e,iys,iye,iy_s,iy_e,
      +           1,2,myid,ncpu_s,numprocs,-2)
       endif
@@ -3996,7 +3996,7 @@ c
 c --------- inverse fft at all iz=izs,iz_ee to get p
 c           see z indices
 c
-      call fft2d_mpi(p(1,iys,izs),pfft(1,jxs,izs),trigx(1,1),trigc,
+      call fft2d_mpi(p(1,iys,izs),pfft(1,jxs,izs),trigx(:,1),trigc,
      +           nnx,nny,jxs,jxe,jx_s,jx_e,iys,iye,iy_s,iy_e,
      +           izs,iz_ee,myid,ncpu_s,numprocs,2)
 c
@@ -4228,33 +4228,33 @@ c        else
          enddo
          enddo
 c        endif
-         call xderivp(ux(1,iys,iz),trigx(1,1),xk(1),
+         call xderivp(ux(1,iys,iz),trigx(:,1),xk,
      +                 nnx,iys,iye)
-         call xderivp(vx(1,iys,iz),trigx(1,1),xk(1),
+         call xderivp(vx(1,iys,iz),trigx(:,1),xk,
      +                 nnx,iys,iye)
-         call xderivp(wx(1,iys,iz),trigx(1,1),xk(1),
+         call xderivp(wx(1,iys,iz),trigx(:,1),xk,
      +                 nnx,iys,iye)
       enddo
 c
 c ---------- get y derivatives for (u,v,w)
 c
-c     call yd_mpi(uy(1,iys,iz_ss),trigx(1,2),yk(1),
+c     call yd_mpi(uy(1,iys,iz_ss),trigx(:,2),yk,
 c    +           nnx,nny,ixs,ixe,ix_s,ix_e,
 c    +           iys,iye,iy_s,iy_e,iz_ss,iz_ee,myid,ncpu_s,numprocs)
-c     call yd_mpi(vy(1,iys,iz_ss),trigx(1,2),yk(1),
+c     call yd_mpi(vy(1,iys,iz_ss),trigx(:,2),yk,
 c    +           nnx,nny,ixs,ixe,ix_s,ix_e,
 c    +           iys,iye,iy_s,iy_e,iz_ss,iz_ee,myid,ncpu_s,numprocs)
-c     call yd_mpi(wy(1,iys,iz_ss),trigx(1,2),yk(1),
+c     call yd_mpi(wy(1,iys,iz_ss),trigx(:,2),yk,
 c    +           nnx,nny,ixs,ixe,ix_s,ix_e,
 c    +           iys,iye,iy_s,iy_e,iz_ss,iz_ee,myid,ncpu_s,numprocs)
 c
-      call yd_mpi(uy(1,iys,izs-1),trigx(1,2),yk(1),
+      call yd_mpi(uy(1,iys,izs-1),trigx(:,2),yk,
      +           nnx,nny,ixs,ixe,ix_s,ix_e,
      +           iys,iye,iy_s,iy_e,izs-1,ize+1,myid,ncpu_s,numprocs)
-      call yd_mpi(vy(1,iys,izs-1),trigx(1,2),yk(1),
+      call yd_mpi(vy(1,iys,izs-1),trigx(:,2),yk,
      +           nnx,nny,ixs,ixe,ix_s,ix_e,
      +           iys,iye,iy_s,iy_e,izs-1,ize+1,myid,ncpu_s,numprocs)
-      call yd_mpi(wy(1,iys,izs-1),trigx(1,2),yk(1),
+      call yd_mpi(wy(1,iys,izs-1),trigx(:,2),yk,
      +           nnx,nny,ixs,ixe,ix_s,ix_e,
      +           iys,iye,iy_s,iy_e,izs-1,ize+1,myid,ncpu_s,numprocs)
 c
@@ -6121,8 +6121,8 @@ c
             psiy(ix,iy,izs) = psi(ix,iy)
          enddo
          enddo
-         call xderivp(psix(1,iys),trigx(1,1),xk(1),nnx,iys,iye)
-         call yd_mpi(psiy(1,iys,izs),trigx(1,2),yk(1),
+         call xderivp(psix(1,iys),trigx(:,1),xk,nnx,iys,iye)
+         call yd_mpi(psiy(1,iys,izs),trigx(:,2),yk,
      +           nnx,nny,ixs,ixe,ix_s,ix_e,
      +           iys,iye,iy_s,iy_e,izs,izs,myid,ncpu_s,numprocs)
          vmaxx = 0.0
@@ -6160,8 +6160,8 @@ c
             vyy(ix,iy,izs) = v(ix,iy,iz)
          enddo
          enddo
-         call xderivp(uxx(1,iys),trigx(1,1),xk(1),nnx,iys,iye)
-         call yd_mpi(vyy(1,iys,izs),trigx(1,2),yk(1),
+         call xderivp(uxx(1,iys),trigx(:,1),xk,nnx,iys,iye)
+         call yd_mpi(vyy(1,iys,izs),trigx(:,2),yk,
      +           nnx,nny,ixs,ixe,ix_s,ix_e,
      +           iys,iye,iy_s,iy_e,izs,izs,myid,ncpu_s,numprocs)
          do iy=iys,iye
@@ -6421,8 +6421,8 @@ c
             psiy(ix,iy,izs) = psi(ix,iy)
          enddo
          enddo
-         call xderivp(psix(1,iys),trigx(1,1),xk(1),nnx,iys,iye)
-         call yd_mpi(psiy(1,iys,izs),trigx(1,2),yk(1),
+         call xderivp(psix(1,iys),trigx(:,1),xk,nnx,iys,iye)
+         call yd_mpi(psiy(1,iys,izs),trigx(:,2),yk,
      +           nnx,nny,ixs,ixe,ix_s,ix_e,
      +           iys,iye,iy_s,iy_e,izs,izs,myid,ncpu_s,numprocs)
 c
@@ -6452,8 +6452,8 @@ c
             vyy(ix,iy,izs) = v(ix,iy,iz)
          enddo
          enddo
-         call xderivp(uxx(1,iys),trigx(1,1),xk(1),nnx,iys,iye)
-         call yd_mpi(vyy(1,iys,izs),trigx(1,2),yk(1),
+         call xderivp(uxx(1,iys),trigx(:,1),xk,nnx,iys,iye)
+         call yd_mpi(vyy(1,iys,izs),trigx(:,2),yk,
      +           nnx,nny,ixs,ixe,ix_s,ix_e,
      +           iys,iye,iy_s,iy_e,izs,izs,myid,ncpu_s,numprocs)
          do iy=iys,iye
@@ -6581,8 +6581,8 @@ c
             psiy(ix,iy,izs) = psi(ix,iy)
          enddo
          enddo
-         call xderivp(psix(1,iys),trigx(1,1),xk(1),nnx,iys,iye)
-         call yd_mpi(psiy(1,iys,izs),trigx(1,2),yk(1),
+         call xderivp(psix(1,iys),trigx(:,1),xk,nnx,iys,iye)
+         call yd_mpi(psiy(1,iys,izs),trigx(:,2),yk,
      +           nnx,nny,ixs,ixe,ix_s,ix_e,
      +           iys,iye,iy_s,iy_e,izs,izs,myid,ncpu_s,numprocs)
 c
@@ -6612,8 +6612,8 @@ c
             vyy(ix,iy,izs) = v(ix,iy,iz)
          enddo
          enddo
-         call xderivp(uxx(1,iys),trigx(1,1),xk(1),nnx,iys,iye)
-         call yd_mpi(vyy(1,iys,izs),trigx(1,2),yk(1),
+         call xderivp(uxx(1,iys),trigx(:,1),xk,nnx,iys,iye)
+         call yd_mpi(vyy(1,iys,izs),trigx(:,2),yk,
      +           nnx,nny,ixs,ixe,ix_s,ix_e,
      +           iys,iye,iy_s,iy_e,izs,izs,myid,ncpu_s,numprocs)
          do iy=iys,iye
@@ -7730,11 +7730,11 @@ c          stat(.,3) = Particle: <T' Q'>
          tx_tmp(i,j)  = t(i,j,iscl,iz)
       enddo
       enddo
-      call xderivp(tx_tmp(1,iys),trigx(1,1),xk(1),nnx,iys,iye)
+      call xderivp(tx_tmp(1,iys),trigx(:,1),xk,nnx,iys,iye)
       tx(1:nnx,iys:iye,iz) = tx_tmp(1:nnx,iys:iye)
       enddo
 
-      call yd_mpi(ty(1,iys,izs-1),trigx(1,2),yk(1),
+      call yd_mpi(ty(1,iys,izs-1),trigx(:,2),yk,
      +           nnx,nny,ixs,ixe,ix_s,ix_e,
      +           iys,iye,iy_s,iy_e,izs-1,ize+1,myid,ncpu_s,numprocs)
        
