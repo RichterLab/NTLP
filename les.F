@@ -3813,11 +3813,11 @@ c
       use fftwk
       use con_data
       use con_stats
-      real fnt1(nnx,iys:iye,izs:ize), fnt2(nnx,iys:iye)
-      real r3_sum(1:nnz)
       use mod_mpi
       use mod_fft
       include 'mpif.h'
+      real fnt1(nnx,iys:iye,izs:ize), fnt2(nnx,iys:iye)
+      real r3_sum(1:nnz)
       integer istatus(mpi_status_size)
 c
       do iz=1,nnz
@@ -3942,13 +3942,13 @@ c
       use fftwk
       use con_data
       use con_stats
+      use mod_mpi
+      use mod_fft
+      include 'mpif.h'
       real pfft(nny,jxs:jxe,izs-1:ize+1)
       real pt(0:nnz+1,jxs:jxe,jys:jye)
       real ptopfft(nny,jxs:jxe,1:2)
       real psum(1:nnz)
-      use mod_mpi
-      use mod_fft
-      include 'mpif.h'
       integer istatus(mpi_status_size)
 c
 c ------------ Fourier analyze the right hand side
@@ -4360,8 +4360,8 @@ c
          engsbz(iz) = engsbz(iz)*fnxy
          pxym(iz)   = pxym(iz)*fnxy
       enddo
-      call mpi_sum_z(engz(1),i_root,myid,nnzp1,1)
-      call mpi_sum_z(engsbz(1),i_root,myid,nnzp1,1)
+      call mpi_sum_z(engz,i_root,myid,nnzp1,1)
+      call mpi_sum_z(engsbz,i_root,myid,nnzp1,1)
       call mpi_sum_z(pxym(1),i_root,myid,nnz,1)
 c
 c ------------ save means and divergence for printout and compmn
@@ -4379,7 +4379,7 @@ c
            enddo
            divz(iz) = divz(iz)*fnxy
         enddo
-        call mpi_sum_z(divz(1),i_root,myid,nnz,1)
+        call mpi_sum_z(divz,i_root,myid,nnz,1)
 c
         do iz=0,nnz+1
            uxym(iz) = u_mn(iz)
@@ -6175,7 +6175,7 @@ c -------- end z loop
 c
       enddo
 c
-      call mpi_sum_z(divz(1),i_root,myid,nnz,1)
+      call mpi_sum_z(divz,i_root,myid,nnz,1)
 c
       write(nprt,6000)
  6000 format(' check of divergence for initial state',/,
@@ -6467,7 +6467,7 @@ c -------- end z loop
 c
       enddo
 c
-      call mpi_sum_z(divz(1),i_root,myid,nnz,1)
+      call mpi_sum_z(divz,i_root,myid,nnz,1)
 c
       write(nprt,6000)
  6000 format(' check of divergence for initial state',/,
@@ -6627,7 +6627,7 @@ c -------- end z loop
 c
       enddo
 c
-      call mpi_sum_z(divz(1),i_root,myid,nnz,1)
+      call mpi_sum_z(divz,i_root,myid,nnz,1)
 c
       write(nprt,6000)
  6000 format(' check of divergence for initial state',/,
@@ -7359,10 +7359,10 @@ c
       enddo
 
       !Append this with summing pflux and pfluxdiff
-      call mpi_sum_z(pflux(0),i_root,myid,nnz+1,1)
-      call mpi_sum_z(pfluxdiff(0),i_root,myid,nnz+1,1)
-      call mpi_sum_z(pmassflux(0),i_root,myid,nnz+1,1)
-      call mpi_sum_z(penegflux(0),i_root,myid,nnz+1,1)
+      call mpi_sum_z(pflux,i_root,myid,nnz+1,1)
+      call mpi_sum_z(pfluxdiff,i_root,myid,nnz+1,1)
+      call mpi_sum_z(pmassflux,i_root,myid,nnz+1,1)
+      call mpi_sum_z(penegflux,i_root,myid,nnz+1,1)
 
       !Make these fluxes with units per area per time:
       pflux = pflux/dt/yl/xl
@@ -7839,7 +7839,7 @@ c          stat(.,3) = Particle: <T' Q'>
 
       call mpi_sum_z(stat(1,1),i_root,myid,nnz*3,1)
       if (iscl .eq. 2 .and. iHcouple .eq. 1 ) then
-      call mpi_sum_z(Tv_part2(1),i_root,myid,nnz,1)
+      call mpi_sum_z(Tv_part2,i_root,myid,nnz,1)
       endif
 
 

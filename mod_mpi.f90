@@ -36,6 +36,14 @@ module mod_mpi
   public :: exchange
   public :: bcast_pbc, bcast_lbc
 
+  ! Generic interface: mpi_sum_xy dispatches on rank of first argument.
+  ! Callers passing a scalar (common for single-value sums) resolve to
+  ! mpi_sum_xy_scalar; callers passing an array resolve to mpi_sum_xy_arr.
+  interface mpi_sum_xy
+    module procedure mpi_sum_xy_arr
+    module procedure mpi_sum_xy_scalar
+  end interface mpi_sum_xy
+
 contains
 
   ! --------------------------------------------------------------------
@@ -132,7 +140,7 @@ contains
   ! mpi_sum_xy — horizontal x-y sum over processors [iss:ise]
   ! Overwrites f(1:nsend) with the sum. No-op for single processor.
   ! --------------------------------------------------------------------
-  subroutine mpi_sum_xy(f, myid_l, iss_l, ise_l, nsend)
+  subroutine mpi_sum_xy_arr(f, myid_l, iss_l, ise_l, nsend)
     integer, intent(in)    :: myid_l, iss_l, ise_l, nsend
     real,    intent(inout) :: f(nsend)
     real    :: work(nsend, iss_l:ise_l)
@@ -157,7 +165,35 @@ contains
         f(j) = f(j) + work(j, i)
       end do
     end do
-  end subroutine mpi_sum_xy
+  end subroutine mpi_sum_xy_arr
+
+  ! --------------------------------------------------------------------
+  ! mpi_sum_xy_scalar — scalar variant; resolves via the mpi_sum_xy
+  ! generic interface when the first actual argument is a scalar.
+  ! nsend is accepted but ignored (always 1 for scalar calls).
+  ! --------------------------------------------------------------------
+  subroutine mpi_sum_xy_scalar(f, myid_l, iss_l, ise_l, nsend)
+    real,    intent(inout) :: f
+    integer, intent(in)    :: myid_l, iss_l, ise_l, nsend
+    real    :: work(iss_l:ise_l)
+    integer :: istatus(mpi_status_size)
+    integer :: i, ierr
+
+    if (iss_l == ise_l) return
+
+    work(myid_l) = f
+    f = 0.0
+    do i = iss_l, ise_l
+      if (i /= myid_l) then
+        call mpi_sendrecv(work(myid_l), 1, mpi_real8, i, 1, &
+                          work(i),      1, mpi_real8, i, 1, &
+                          mpi_comm_world, istatus, ierr)
+      end if
+    end do
+    do i = iss_l, ise_l
+      f = f + work(i)
+    end do
+  end subroutine mpi_sum_xy_scalar
 
   ! --------------------------------------------------------------------
   ! mpi_sum_z — reduce 1-D vector across all z processors
