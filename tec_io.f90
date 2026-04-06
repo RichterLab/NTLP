@@ -308,6 +308,7 @@ subroutine fill_plt_fields(jmin,jmax,kmin,kmax,uplt,vplt,wplt,tplt,qplt,rhplt)
 use pars
 use fields
 use con_stats
+use mod_thermo
 implicit none
 include 'mpif.h'
 
@@ -316,8 +317,8 @@ integer, intent(in) :: jmin,jmax,kmin,kmax
 integer :: yfore,yback,nsend,nrecv
 integer :: ix,iy,iz,jloc,iscl
 integer :: ierr,istatus(mpi_status_size)
-real :: sendbuf(1:nnx,kmin:kmax,6),recvbuf(1:nnx,kmin:kmax,6)
-real :: Ttmp,mod_magnus,exner,func_p_base,rhoa,func_rho_base
+real :: sendbuf(1:nnx, kmin:kmax, 6), recvbuf(1:nnx, kmin:kmax, 6)
+real :: Ttmp, rhoa
 
   !First fill everything except y-halo
   do iz=kmin,kmax
@@ -426,7 +427,7 @@ subroutine fill_plt_part(npsize,xpart,ypart,zpart,upart,vpart,wpart,tpart,rpart)
   integer :: ip,npsize,nsend,nrecv
   integer :: procnext,procbefore
   integer :: ierr,istatus(mpi_status_size)
-  real :: sendbuf(8),recvbuf(8)
+  real :: sendbuf(8), recvbuf(8)
   real*4, intent(inout) :: xpart(npsize),ypart(npsize),zpart(npsize),upart(npsize),vpart(npsize),wpart(npsize),tpart(npsize),rpart(npsize)
 
   !Proc 0 has no "halo", sends its last one to proc 1, etc.

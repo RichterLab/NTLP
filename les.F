@@ -550,7 +550,6 @@ c
       use con_data
       use con_stats
       include 'mpif.h'
-      external get_zi
 c
 c ----------------- get machine type, can erad datadir also
 c
@@ -1395,21 +1394,22 @@ c
       use particles
       use mod_mpi
       use mod_fft
+      use mod_solver
       implicit none
  
-      real ::  psi(nnx,iys:iye), psix(nnx,iys:iye),
+      real :: psi(nnx, iys:iye), psix(nnx, iys:iye)
      +     psiy(nnx,iys:iye,izs:izs), uxx(nnx,iys:iye),
      +     vyy(nnx,iys:iye,izs:izs),Ttmp
 
-      real :: ampv,ampt,sum_psi,vmaxx,vmag,facv,ran1
+      real :: ampv, ampt, sum_psi, vmaxx, vmag, facv
 
-      real :: slope_q,slope_t,slope_u,slope_v
-      real :: slope_t1,slope_t2,slope_u1,slope_v1
-      real :: z_switch,t_switch,q_switch,u_switch,v_switch
-      real :: z_switch_q,z_switch_t,z_switch_v,z_switch_u
-      real :: t_surf,q_surf,u_surf,v_surf
-      real :: t_temp,q_temp,u_temp,v_temp
-      real :: q_top,t_top,u_top,v_top,slope_q1,slope_q2
+      real :: slope_q, slope_t, slope_u, slope_v
+      real :: slope_t1, slope_t2, slope_u1, slope_v1
+      real :: z_switch, t_switch, q_switch, u_switch, v_switch
+      real :: z_switch_q, z_switch_t, z_switch_v, z_switch_u
+      real :: t_surf, q_surf, u_surf, v_surf
+      real :: t_temp, q_temp, u_temp, v_temp
+      real :: q_top, t_top, u_top, v_top, slope_q1, slope_q2
 
       integer :: ix,iy,iz
       integer :: idum
@@ -2217,6 +2217,7 @@ c
       use con_stats
       use mod_mpi
       use mod_fft
+      use mod_solver
       real psi(nnx,iys:iye), psix(nnx,iys:iye),
      +     psiy(nnx,iys:iye,izs:izs), uxx(nnx,iys:iye),
      +     vyy(nnx,iys:iye,izs:izs)
@@ -2635,6 +2636,7 @@ c
       use con_stats
       use particles
       use mod_mpi
+      use mod_thermo
       implicit none
 c
 c ------- indices for indexing array stat(.,.)
@@ -2642,14 +2644,13 @@ c         js = number of non-scalar stats
 c         ns = number of scalar stats
 c
       integer, parameter :: js = 19, ns = 5, nstat = js + ns*nscl
-      real :: stat(1:nnz,nstat)
+      real :: stat(1:nnz, nstat)
 
       integer :: ix,iy,iz,izm1,izp1,izp2,m1,m2,m3,m4,m5,i,l
 
       real :: sgn
-      real :: rlim
-      real :: RHtmp,Ttmp,mod_magnus,exner,func_p_base,func_rho_base
-      real :: rhoa,msqrRH
+      real :: RHtmp, Ttmp
+      real :: rhoa, msqrRH
 c
 c -------- stat(.,1) = u*u = ups
 c          stat(.,2) = v*v = vps
@@ -2911,13 +2912,13 @@ c
       use con_stats
       use mod_mpi
 c
-      real :: stat(1:nnz,5)
-      real :: s11s,s22s,s33s,s12s,s13s,s23s,wz,wzp
-      real :: s13,s23,s33
-      real :: ufluc,ufluc_t,ufluc_b,vfluc,vfluc_t,vfluc_b,wfluc
-      real :: ffluc1,ffluc2,ffluc3
-      real :: ffluc1p,ffluc2p,ffluc3p
-      real :: weit,weit1
+      real :: stat(1:nnz, 5)
+      real :: s11s, s22s, s33s, s12s, s13s, s23s, wz, wzp
+      real :: s13, s23, s33
+      real :: ufluc, ufluc_t, ufluc_b, vfluc, vfluc_t, vfluc_b, wfluc
+      real :: ffluc1, ffluc2, ffluc3
+      real :: ffluc1p, ffluc2p, ffluc3p
+      real :: weit, weit1
       integer :: iz,i,j,izp1,izm1
 c
 c -------- stat(.,1) = tke transport  = wq
@@ -3098,13 +3099,13 @@ c
       use mod_fft
       implicit none
 
-      real :: stat(1:nnz,4)
-      real :: weit,weit1
-      real :: tx_tmp(nnx,iys:iye), ty(nnx,iys:iye,izs-1:ize+1)
-      real :: tx(nnx,iys:iye,izs-1:ize+1)
+      real :: stat(1:nnz, 4)
+      real :: weit, weit1
+      real :: tx_tmp(nnx, iys:iye), ty(nnx, iys:iye, izs-1:ize+1)
+      real :: tx(nnx, iys:iye, izs-1:ize+1)
       real :: trans(izs:ize)
-      real :: gradTp(3),Tfluc,dTpdz1,dTpdz,dTdz
-      real :: Tflucp1,Tflucm1,qfluc,qflucp1,Tmean
+      real :: gradTp(3), Tfluc, dTpdz1, dTpdz, dTdz
+      real :: Tflucp1, Tflucm1, qfluc, qflucp1, Tmean
       integer :: iz,i,j,izp1,izm1,iscl
 
 c -------- stat(.,1) = Transport: -del.[U<T'2> + <u T'2> - alpha*grad(T'2)]
@@ -4792,7 +4793,7 @@ c
       end subroutine read_input_file
       function ran2(idum)
       integer :: idum,IM1,IM2,IMM1,IA1,IA2,IQ1,IQ2,IR1,IR2,NTAB,NDIV
-      real :: ran2,AM,EPS,RNMX
+      real :: ran2, AM, EPS, RNMX
       PARAMETER (IM1=2147483563,IM2=2147483399,AM=1./IM1,IMM1=IM1-1,
      +     IA1=40014,IA2=40692,IQ1=53668,IQ2=52774,IR1=12211,
      +     IR2=3791,NTAB=32,NDIV=1+IMM1/NTAB,EPS=1.2e-7,RNMX=1.-EPS)
@@ -4828,7 +4829,7 @@ c
        integer :: idum
        real :: gasdev
        integer :: iset
-       real :: fac,gset,rsq,v1,v2,ran2
+       real :: fac, gset, rsq, v1, v2, ran2
        save iset,gset
        data iset/0/
 
@@ -4850,7 +4851,7 @@ c
       end
       function cdf_func_single(d,CDF,M,S)
       implicit none
-      real :: d,CDF,M,S,cdf_func_single
+      real :: d, CDF, M, S, cdf_func_single
 
       cdf_func_single = 1.0/2.0*
      + (1.0 + erf((log(d) - M)/S/sqrt(2.0)))  - CDF
@@ -4858,7 +4859,7 @@ c
       end function cdf_func_single
       function cdf_func(d,CDF,factor,Ma,Sa,Mc,Sc)
       implicit none
-      real :: d,CDF,factor,Ma,Sa,Mc,Sc,cdf_func
+      real :: d, CDF, factor, Ma, Sa, Mc, Sc, cdf_func
 
       cdf_func = 1.0/(1.0+factor)/2.0*
      + ( 1.0 + erf((log(d) - Ma)/Sa/sqrt(2.0)) +

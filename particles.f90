@@ -1,10 +1,11 @@
 module particles
   use mod_mpi, only: xtoz_trans, ztox_trans
   use mod_fft, only: xderivp, yd_mpi
+  use mod_thermo
   integer :: rproc,trproc,tproc,tlproc,lproc,blproc,bproc,brproc
   integer :: pr_r,pl_r,pt_r,pb_r,ptr_r,ptl_r,pbl_r,pbr_r
   integer :: pr_s,pl_s,pt_s,pb_s,ptr_s,ptl_s,pbl_s,pbr_s
-  real :: ymin,ymax,zmin,zmax,xmax,xmin,tauc_min
+  real :: ymin, ymax, zmin, zmax, xmax, xmin, tauc_min
   real, allocatable :: uext(:,:,:), vext(:,:,:), wext(:,:,:)
   real, allocatable :: u_t(:,:,:), v_t(:,:,:), w_t(:,:,:)
   real, allocatable :: Text(:,:,:),T_t(:,:,:)
@@ -32,12 +33,12 @@ module particles
   integer :: num_destroy=0,tnum_destroy=0
   integer :: tot_reintro=0
 
-  real :: Rep_avg,part_grav(3)
-  real :: radavg,radmin,radmax,radmsqr,tempmin,tempmax,qmin,qmax
-  real :: vp1min,vp1max,vp2min,vp2max,vp3min,vp3max
-  real :: twmass,tpmass,tpvol
-  real :: vp_init(3),Tp_init,radius_init,radius_std,kappas_init,kappas_std
-  real :: pdf_factor,pdf_prob
+  real :: Rep_avg, part_grav(3)
+  real :: radavg, radmin, radmax, radmsqr, tempmin, tempmax, qmin, qmax
+  real :: vp1min, vp1max, vp2min, vp2max, vp3min, vp3max
+  real :: twmass, tpmass, tpvol
+  real :: vp_init(3), Tp_init, radius_init, radius_std, kappas_init, kappas_std
+  real :: pdf_factor, pdf_prob
   integer*8 :: mult_init,mult_factor,mult_a,mult_c
 
   real,parameter :: Cvv=1463.0
@@ -77,11 +78,11 @@ module particles
   !REMEMBER: IF ADDING ANYTHING, MUST UPDATE MPI DATATYPE!
   type :: particle
     integer :: pidx,procidx,nbr_pidx,nbr_procidx
-    real :: vp(3),xp(3),uf(3),xrhs(3),vrhs(3),Tp,Tprhs_s
-    real :: Tprhs_L,Tf,radius,radrhs,qinf,qstar,dist
-    real :: res,m_s,kappa_s,rc,actres,numact
-    real :: u_sub(3),sigm_s
-    real :: vp_old(3),Tp_old,radius_old
+    real :: vp(3), xp(3), uf(3), xrhs(3), vrhs(3), Tp, Tprhs_s
+    real :: Tprhs_L, Tf, radius, radrhs, qinf, qstar, dist
+    real :: res, m_s, kappa_s, rc, actres, numact
+    real :: u_sub(3), sigm_s
+    real :: vp_old(3), Tp_old, radius_old
     integer*8 :: mult
     type(particle), pointer :: prev,next
   end type particle
@@ -103,26 +104,26 @@ CONTAINS
     !preceding letter: r=right,l=left,t=top,b=bot.
     !_s: buf of things to send TO r,l,t,b
     !_r: buf of things to recv FROM r,l,t,b
-    real :: tbuf_s(nnz+2,iye-iys+1,2,5),tbuf_r(nnz+2,iye-iys+1,3,5)
-    real :: bbuf_s(nnz+2,iye-iys+1,3,5),bbuf_r(nnz+2,iye-iys+1,2,5)
-    real :: rbuf_s(nnz+2,2,mxe-mxs+1,5),rbuf_r(nnz+2,3,mxe-mxs+1,5)
-    real :: lbuf_s(nnz+2,3,mxe-mxs+1,5),lbuf_r(nnz+2,2,mxe-mxs+1,5)
+    real :: tbuf_s(nnz+2, iye-iys+1, 2, 5), tbuf_r(nnz+2, iye-iys+1, 3, 5)
+    real :: bbuf_s(nnz+2, iye-iys+1, 3, 5), bbuf_r(nnz+2, iye-iys+1, 2, 5)
+    real :: rbuf_s(nnz+2, 2, mxe-mxs+1, 5), rbuf_r(nnz+2, 3, mxe-mxs+1, 5)
+    real :: lbuf_s(nnz+2, 3, mxe-mxs+1, 5), lbuf_r(nnz+2, 2, mxe-mxs+1, 5)
 
     !Corners:
-    real :: trbuf_s(nnz+2,2,2,5),trbuf_r(nnz+2,3,3,5)
-    real :: brbuf_s(nnz+2,2,3,5),brbuf_r(nnz+2,3,2,5)
-    real :: blbuf_s(nnz+2,3,3,5),blbuf_r(nnz+2,2,2,5)
-    real :: tlbuf_s(nnz+2,3,2,5),tlbuf_r(nnz+2,2,3,5)
+    real :: trbuf_s(nnz+2, 2, 2, 5), trbuf_r(nnz+2, 3, 3, 5)
+    real :: brbuf_s(nnz+2, 2, 3, 5), brbuf_r(nnz+2, 3, 2, 5)
+    real :: blbuf_s(nnz+2, 3, 3, 5), blbuf_r(nnz+2, 2, 2, 5)
+    real :: tlbuf_s(nnz+2, 3, 2, 5), tlbuf_r(nnz+2, 2, 3, 5)
 
     !MPI send counts:
     integer :: rc_s,rc_r,trc_s,trc_r,tc_s,tc_r,tlc_s,tlc_r
     integer :: lc_s,lc_r,blc_s,blc_r,bc_s,bc_r,brc_s,brc_r
 
     !Tmp array
-    real :: arg_tmp(1:nnx,iys:iye,izs-1:ize+1)
+    real :: arg_tmp(1:nnx, iys:iye, izs-1:ize+1)
 
     !Debugging:
-    real :: xv,yv,zv
+    real :: xv, yv, zv
 
     !To update the particle ODE in time, need the interpolated
     !velocity field
@@ -340,24 +341,24 @@ CONTAINS
 
     integer :: istatus(mpi_status_size),ierr
     integer :: ix,iy,iz
-    real :: sigm_st(0:nnz+1,iys:iye,mxs:mxe)
-    real :: sigm_sdxt(0:nnz+1,iys:iye,mxs:mxe)
-    real :: sigm_sdyt(0:nnz+1,iys:iye,mxs:mxe)
-    real :: sigm_sdzt(0:nnz+1,iys:iye,mxs:mxe)
-    real :: vis_st(0:nnz+1,iys:iye,mxs:mxe)
+    real :: sigm_st(0:nnz+1, iys:iye, mxs:mxe)
+    real :: sigm_sdxt(0:nnz+1, iys:iye, mxs:mxe)
+    real :: sigm_sdyt(0:nnz+1, iys:iye, mxs:mxe)
+    real :: sigm_sdzt(0:nnz+1, iys:iye, mxs:mxe)
+    real :: vis_st(0:nnz+1, iys:iye, mxs:mxe)
     !preceding letter: r=right,l=left,t=top,b=bot.
     !_s: buf of things to send TO r,l,t,b
     !_r: buf of things to recv FROM r,l,t,b
-    real :: tbuf_s(nnz+2,iye-iys+1,2,5),tbuf_r(nnz+2,iye-iys+1,3,5)
-    real :: bbuf_s(nnz+2,iye-iys+1,3,5),bbuf_r(nnz+2,iye-iys+1,2,5)
-    real :: rbuf_s(nnz+2,2,mxe-mxs+1,5),rbuf_r(nnz+2,3,mxe-mxs+1,5)
-    real :: lbuf_s(nnz+2,3,mxe-mxs+1,5),lbuf_r(nnz+2,2,mxe-mxs+1,5)
+    real :: tbuf_s(nnz+2, iye-iys+1, 2, 5), tbuf_r(nnz+2, iye-iys+1, 3, 5)
+    real :: bbuf_s(nnz+2, iye-iys+1, 3, 5), bbuf_r(nnz+2, iye-iys+1, 2, 5)
+    real :: rbuf_s(nnz+2, 2, mxe-mxs+1, 5), rbuf_r(nnz+2, 3, mxe-mxs+1, 5)
+    real :: lbuf_s(nnz+2, 3, mxe-mxs+1, 5), lbuf_r(nnz+2, 2, mxe-mxs+1, 5)
 
     !Corners:
-    real :: trbuf_s(nnz+2,2,2,5),trbuf_r(nnz+2,3,3,5)
-    real :: brbuf_s(nnz+2,2,3,5),brbuf_r(nnz+2,3,2,5)
-    real :: blbuf_s(nnz+2,3,3,5),blbuf_r(nnz+2,2,2,5)
-    real :: tlbuf_s(nnz+2,3,2,5),tlbuf_r(nnz+2,2,3,5)
+    real :: trbuf_s(nnz+2, 2, 2, 5), trbuf_r(nnz+2, 3, 3, 5)
+    real :: brbuf_s(nnz+2, 2, 3, 5), brbuf_r(nnz+2, 3, 2, 5)
+    real :: blbuf_s(nnz+2, 3, 3, 5), blbuf_r(nnz+2, 2, 2, 5)
+    real :: tlbuf_s(nnz+2, 3, 2, 5), tlbuf_r(nnz+2, 2, 3, 5)
 
 
     !MPI send counts:
@@ -562,9 +563,9 @@ CONTAINS
        
   integer :: ix,iy,izuv,izw,iz,i,k,j
   integer :: first,last
-  real :: xkval,xjval,pj,dxvec(2)
+  real :: xkval, xjval, pj, dxvec(2)
   integer :: ijpts(2,6),kuvpts(6),kwpts(6)
-  real :: wt(4,6)
+  real :: wt(4, 6)
   real :: ran2
       
   !get the "leftmost" node
@@ -775,8 +776,8 @@ CONTAINS
    
   integer :: ix,iy,izuv,izw,iz,i,k,j
   integer :: ipt,jpt,kpt,kwpt
-  real :: wtx,wty,wtz,wtzw,wtt
-  real :: xv,yv,zv,zwv
+  real :: wtx, wty, wtz, wtzw, wtt
+  real :: xv, yv, zv, zwv
   
 
   ipt = floor(part%xp(1)/dx) + 1 
@@ -857,11 +858,11 @@ CONTAINS
 
   integer :: ix,iy,izuv,izw,iz,i,k,j
   integer :: first,last
-  real :: xkval,xjval,pj,dxvec(2)
+  real :: xkval, xjval, pj, dxvec(2)
   integer :: ijpts(2,6),kuvpts(6),kwpts(6),iz_part
-  real :: wt(4,6)
+  real :: wt(4, 6)
   real :: ran2
-  real :: sigm_sdxp,sigm_sdyp,sigm_sdzp,vis_sp
+  real :: sigm_sdxp, sigm_sdyp, sigm_sdzp, vis_sp
   !get the "leftmost" node
   !This is just the minimum (i,j,k) on the volume
 
@@ -1072,8 +1073,8 @@ CONTAINS
       use profiling
       implicit none
       include 'mpif.h'
-      real :: ctbuf_s(nnz+2,1:iye-iys+2,6),cbbuf_r(nnz+2,1:iye-iys+2,6)
-      real :: crbuf_s(nnz+2,1:mxe-mxs+1,6),clbuf_r(nnz+2,1:mxe-mxs+1,6)
+      real :: ctbuf_s(nnz+2, 1:iye-iys+2, 6), cbbuf_r(nnz+2, 1:iye-iys+2, 6)
+      real :: crbuf_s(nnz+2, 1:mxe-mxs+1, 6), clbuf_r(nnz+2, 1:mxe-mxs+1, 6)
       integer :: istatus(mpi_status_size),ierr,ncount
 
 
@@ -1156,12 +1157,12 @@ CONTAINS
   use con_stats
   implicit none
   include 'mpif.h'
-  real :: wtx,wty,wtz,wtt,dV
-  real :: rhop,taup_i,partmass,rhoa,func_rho_base,func_p_base
-  real :: vrhs(3),radrhs,Tprhs_L,Tprhs_s
-  real :: xv,yv,zv
-  real :: ctbuf_s(nnz+2,1:iye-iys+2,6),cbbuf_r(nnz+2,1:iye-iys+2,6)
-  real :: crbuf_s(nnz+2,1:mxe-mxs+1,6),clbuf_r(nnz+2,1:mxe-mxs+1,6)
+  real :: wtx, wty, wtz, wtt, dV
+  real :: rhop, taup_i, partmass, rhoa
+  real :: vrhs(3), radrhs, Tprhs_L, Tprhs_s
+  real :: xv, yv, zv
+  real :: ctbuf_s(nnz+2, 1:iye-iys+2, 6), cbbuf_r(nnz+2, 1:iye-iys+2, 6)
+  real :: crbuf_s(nnz+2, 1:mxe-mxs+1, 6), clbuf_r(nnz+2, 1:mxe-mxs+1, 6)
   integer :: i,j,k,ncount,ipt,jpt,kpt,kwpt
   integer :: istatus(mpi_status_size),ierr
   integer :: ix,iy,iz
@@ -1286,7 +1287,6 @@ CONTAINS
     include 'mpif.h'
 
     integer :: ix,iy,iz
-    real :: exner,func_p_base
 
 
     do iz=izs,ize
@@ -2157,7 +2157,7 @@ CONTAINS
 
       integer :: it_delay
       integer :: ierr,randproc,np,my_reintro
-      real :: totdrops,t_reint
+      real :: totdrops, t_reint
 
 
       if (inewpart.eq.4) then
@@ -2213,7 +2213,7 @@ CONTAINS
       use pars
       implicit none
 
-      real :: xp(3),vp(3),Tp,qinfp,rad_init,pi,m_s,kappa_s
+      real :: xp(3), vp(3), Tp, qinfp, rad_init, pi, m_s, kappa_s
       integer :: idx,procidx
       integer*8 :: mult
 
@@ -2278,13 +2278,13 @@ CONTAINS
   use con_data
   implicit none
 
-  real :: xv,yv,zv,ran2,m_s
-  real :: kappas_dinit,radius_dinit
+  real :: xv, yv, zv, ran2, m_s
+  real :: kappas_dinit, radius_dinit
   real :: xp_init(3)
   integer :: idx,procidx
 
   !C-FOG and FATIMA parameters: lognormal of accumulation + lognormal of coarse, with extra "resolution" on the coarse mode
-  real :: S,M,kappa_s,rad_init
+  real :: S, M, kappa_s, rad_init
   integer*8 :: mult
 
   if (inewpart.eq.1) then  !Simple: properties as in params.in, randomly located in domain
@@ -2460,9 +2460,9 @@ CONTAINS
   include 'mpif.h'
 
   real, intent(inout) :: rad_init,m_s,kappa_s
-  real :: ran2,cdf_func_single
-  real :: M,S
-  real :: d1,d2,err,dhalf,ftest,CDF
+  real :: ran2, cdf_func_single
+  real :: M, S
+  real :: d1, d2, err, dhalf, ftest, CDF
   real :: daerosol
   real :: a(4), rtr(3), rti(3)
   integer :: iter, k
@@ -2534,21 +2534,21 @@ CONTAINS
   include 'mpif.h'
 
   real :: rad_init
-  real :: ran2,cdf_func,prob
-  real :: M_a,S_a,M_c,S_c,totarea
-  real :: daerosol,totdrops
-  real :: c1,c2,c3,u14,cdn10,a
-  real :: a1,a2,r80,r0,dh,binsdata(100),binsdata10(100)
-  real :: m,c4,r_interval,rand
+  real :: ran2, cdf_func, prob
+  real :: M_a, S_a, M_c, S_c, totarea
+  real :: daerosol, totdrops
+  real :: c1, c2, c3, u14, cdn10, a
+  real :: a1, a2, r80, r0, dh, binsdata(100), binsdata10(100)
+  real :: m, c4, r_interval, rand
   real :: dFssum(101)
-  real :: dFsdr80(100),dFmsdr0(100),dr80_dr0
-  real :: t_reint,xp_init(3),m_s
+  real :: dFsdr80(100), dFmsdr0(100), dr80_dr0
+  real :: t_reint, xp_init(3), m_s
   integer :: iter,i,nbin,num_create,j,np
   integer :: ssgf_type,it_delay,my_reintro
 
   ! implementing the Andreas 1998 sea spray generation function
   !Set the parameters of the two lognormals:
-  real :: rmin,rmax,rmin10,rmax10
+  real :: rmin, rmax, rmin10, rmax10
 
     !ssgf_type = 1 is Andreas 1998, ssgf_type = 2 augments with Ortiz-Suslow 2016 for spume
     ssgf_type = 1
@@ -2687,16 +2687,16 @@ CONTAINS
   use con_data
   use pars
   implicit none
-  real :: top,bot
+  real :: top, bot
   integer :: idx,procidx,idx_old,procidx_old
 
-  real :: xv,yv,zv,ran2,m_s
-  real :: kappas_dinit,radius_dinit
+  real :: xv, yv, zv, ran2, m_s
+  real :: kappas_dinit, radius_dinit
   real :: xp_init(3)
   integer :: ipt,jpt
 
   !C-FOG and FATIMA parameters: lognormal of accumulation + lognormal of coarse, with extra "resolution" on the coarse mode
-  real :: S,M,kappa_s,rad_init
+  real :: S, M, kappa_s, rad_init
   integer*8 :: mult
 
 
@@ -2854,14 +2854,14 @@ CONTAINS
 
       integer :: istage,ierr
       real :: pi
-      real :: denom,dtl,sigma
+      real :: denom, dtl, sigma
       integer :: ix,iy,iz
-      real :: Rep,diff(3),diffnorm,corrfac,Volp
-      real :: xtmp(3),vtmp(3),Tptmp,radiustmp
-      real :: Nup,Shp,rhop,taup_i,estar,einf
-      real :: Eff_C,Eff_S
-      real :: t_s,t_f,t_s1,t_f1
-      real :: mod_magnus,exner,func_p_base,rhoa,func_rho_base
+      real :: Rep, diff(3), diffnorm, corrfac, Volp
+      real :: xtmp(3), vtmp(3), Tptmp, radiustmp
+      real :: Nup, Shp, rhop, taup_i, estar, einf
+      real :: Eff_C, Eff_S
+      real :: t_s, t_f, t_s1, t_f1
+      real :: rhoa
 
 
       call fill_ext 
@@ -3008,19 +3008,18 @@ CONTAINS
       include 'mpif.h'
 
       integer :: ierr,fluxloc,fluxloci
-      real :: denom,dtl,sigma
+      real :: denom, dtl, sigma
       integer :: ix,iy,iz,im,flag,mflag
-      real :: Rep,diff(3),diffnorm,corrfac
-      real :: Nup,Shp,rhop,taup_i,estar,einf,rhoa,func_rho_base
+      real :: Rep, diff(3), diffnorm, corrfac
+      real :: Nup, Shp, rhop, taup_i, estar, einf, rhoa
       real :: Volp
-      real :: Eff_C,Eff_S
-      real :: t_s,t_f,t_s1,t_f1
+      real :: Eff_C, Eff_S
+      real :: t_s, t_f, t_s1, t_f1
       real :: rt_start(2)
       real :: rt_zeroes(2)
       real :: taup0, dt_taup0, temp_r, temp_t, guess
       real :: tmp_coeff
       real :: xp3i
-      real :: mod_magnus,exner,func_p_base
 
 
 
@@ -3316,9 +3315,9 @@ CONTAINS
 
       integer :: ipt,jpt,kpt,ierr
       integer :: ix,iy,iz
-      real :: radavg_tmp,denom,Nc_tmp
-      real :: radius_array(mxs:mxe,iys:iye,1:nnz)
-      real :: Nc_array(mxs:mxe,iys:iye,1:nnz)
+      real :: radavg_tmp, denom, Nc_tmp
+      real :: radius_array(mxs:mxe, iys:iye, 1:nnz)
+      real :: Nc_array(mxs:mxe, iys:iye, 1:nnz)
       integer :: num_array(mxs:mxe,iys:iye,1:nnz)
 
       radius_array = 0.0
@@ -3376,19 +3375,19 @@ CONTAINS
 
       integer :: iz,ipt,jpt,kpt
       integer :: ierr
-      real :: rhop,pi,rhoa,func_rho_base,func_p_base,exner
+      real :: rhop, pi, rhoa
       
       integer,parameter :: num0_int=8,num0_real=6,num0_max=6,num0_min=6  !Number of 0-dimensional particle statistics
       integer,parameter :: num1 = 24  !Number of 1-dimensional particle statistics
 
       real :: partcount(maxnz)
-      real :: statsvec1(maxnz,num1)
+      real :: statsvec1(maxnz, num1)
       integer :: statsvec0_int(num0_int)
-      real :: statsvec0_real(num0_real),statsvec0_max(num0_max),statsvec0_min(num0_min)
+      real :: statsvec0_real(num0_real), statsvec0_max(num0_max), statsvec0_min(num0_min)
 
-      real :: myradavg,myradmsqr,myradmax,myradmin,mytempmin,mytempmax,myqmin,myqmax
-      real :: myRep_avg,Rep,diff(3),diffnorm,Volp
-      real :: mywmass,mypmass,mypvol,Ttmp
+      real :: myradavg, myradmsqr, myradmax, myradmin, mytempmin, mytempmax, myqmin, myqmax
+      real :: myRep_avg, Rep, diff(3), diffnorm, Volp
+      real :: mywmass, mypmass, mypvol, Ttmp
 
 
       !!!! 0th order stats
@@ -3812,10 +3811,10 @@ CONTAINS
       integer :: i,nq,coal_idx,j,ran_idx,tmp_int,gm,gam_til
       integer :: ns,k_idx,j_idx
       integer*8 :: mult_tmp_j,mult_tmp_k,xi_j,xi_k
-      real :: qv(3),dist_tmp,xdist,ydist,zdist,ran2
-      real :: phi,K,Pjk,veldiff,E,dV,p_alpha,pvol_j,pvol_k,golovin_b
-      real :: rad_j_tmp,rad_k_tmp
-      real ::   kappa_s_j_temp, kappa_s_k_temp,  ms_j_temp,  ms_k_temp
+      real :: qv(3), dist_tmp, xdist, ydist, zdist, ran2
+      real :: phi, K, Pjk, veldiff, E, dV, p_alpha, pvol_j, pvol_k, golovin_b
+      real :: rad_j_tmp, rad_k_tmp
+      real :: kappa_s_j_temp, kappa_s_k_temp, ms_j_temp, ms_k_temp
 
       !For whatever reason, the kd-search sometimes misses edge cases,
       !and you should do nq+1 if you actually want nq
@@ -4074,7 +4073,7 @@ CONTAINS
         real, intent(in) :: vnext(3), h,rhoa,vec1(2)
         real, intent(out) :: vec2(2)
         integer, intent(out) :: flag
-        real :: error,fv1(2),fv2(2),v1(2),v_output(3),rel,det
+        real :: error, fv1(2), fv2(2), v1(2), v_output(3), rel, det
         real :: diff, temp1(2), temp2(2), relax, coeff, correct(2)
         real, dimension(1:2, 1:2) :: J, fancy, inv, finalJ
         integer :: iterations,neg,counts,iteration_max
@@ -4146,8 +4145,8 @@ CONTAINS
         real, intent(in) :: vnext(3),h,rhoa,vec1(2)
         real, intent(out) :: vec2(2)
         integer, intent(out) :: flag
-        real :: error,fv1(2),fv2(2),v1(2),v_output(3),rel,det
-        real :: diff, lambda,lup,ldown
+        real :: error, fv1(2), fv2(2), v1(2), v_output(3), rel, det
+        real :: diff, lambda, lup, ldown
         real :: C(2), newC(2), gradC(2), correct(2)
         real, dimension(1:2, 1:2) :: J,I,g,invg
         integer :: iterations,neg,iterations_max
@@ -4227,7 +4226,7 @@ CONTAINS
 
         real, intent(in) :: rhoa,vnext(3), rnext, tnext, h
         real, intent(out), dimension(1:2, 1:2) :: J
-        real :: diff = 0, v_output(3), rt_output(2),xper(2),fxper(2), ynext(2),xper2(2),fxper2(2)
+        real :: diff = 0, v_output(3), rt_output(2), xper(2), fxper(2), ynext(2), xper2(2), fxper2(2)
 
         diff = 1E-12
 
@@ -4270,10 +4269,9 @@ CONTAINS
       real, intent(in) :: rhoa,vnext(3), tempr, tempt, h
       real, intent(out) :: v_output(3), rT_output(2)
 
-      real :: esa, dnext,  m_w, rhop, Rep, taup,vprime(3), rprime, Tprime, qstr, Shp, Nup, dp, VolP
+      real :: esa, dnext, m_w, rhop, Rep, taup, vprime(3), rprime, Tprime, qstr, Shp, Nup, dp, VolP
       real :: diff(3), diffnorm, Tnext, rnext, T
       real :: taup0, g(3)
-      real :: mod_magnus
 
 
         taup0 = (((part%m_s)/((2./3.)*pi2*radius_init**3) + rhow)*(radius_init*2)**2)/(18*rhoa*nuf)
@@ -4336,7 +4334,6 @@ CONTAINS
       integer, intent(OUT) :: mflag
       real, intent(in) :: rhoa
       real :: a, c, esa, Q, R, M, val, theta, S, T
-      real :: mod_magnus
 
       mflag = 0
       esa = mod_magnus(part%Tf)
@@ -4380,13 +4377,13 @@ CONTAINS
   use con_stats
   implicit none
   include 'mpif.h'
-  real :: sigm_sdxp,sigm_sdyp,sigm_sdzp,vis_sp
-  real :: sigm_su,sigm_sl,us_ran,gasdev,tengz,englez_bar
-  real :: engsbz_bar,sigm_w, sigm_ws
-  real :: L_flt,epsn,fs,C0,a1,a2,a3,sigm_sprev,fs1
-  real :: weit,weit1,weit3,weit4, T_lagr
+  real :: sigm_sdxp, sigm_sdyp, sigm_sdzp, vis_sp
+  real :: sigm_su, sigm_sl, us_ran, gasdev, tengz, englez_bar
+  real :: engsbz_bar, sigm_w, sigm_ws
+  real :: L_flt, epsn, fs, C0, a1, a2, a3, sigm_sprev, fs1
+  real :: weit, weit1, weit3, weit4, T_lagr
   real :: us(3)
-  real :: xp3i,Volp,rhop
+  real :: xp3i, Volp, rhop
   integer :: ix,iy,iz,izp1,izm1,ind,iz_part,ierr
   integer :: fluxloc,fluxloci
 
@@ -4623,9 +4620,9 @@ CONTAINS
   implicit none
   include 'mpif.h'
 
-  real :: sigm_sdxp,sigm_sdyp,sigm_sdzp,vis_sp
-  real :: phim,phis,psim,psis,zeta
-  real :: dadz,gasdev
+  real :: sigm_sdxp, sigm_sdyp, sigm_sdzp, vis_sp
+  real :: phim, phis, psim, psis, zeta
+  real :: dadz, gasdev
   real :: xp3i
   integer :: ix,iy,iz,izp1,izm1,ind,iz_part,ierr
   integer :: fluxloc,fluxloci
@@ -4738,7 +4735,7 @@ CONTAINS
   integer, allocatable :: index_data(:,:),indexes(:)
 
   integer :: i,nq,idx_check,idx_diff
-  real :: qv(3),dist_check,dist_tmp,xdist,ydist,zdist,dist_diff
+  real :: qv(3), dist_check, dist_tmp, xdist, ydist, zdist, dist_diff
 
   !For whatever reason, the kd-search sometimes misses edge cases if
   !nq = 2. nq = 3 fixes it
@@ -4823,7 +4820,7 @@ CONTAINS
   implicit none 
 
   type(particle), pointer :: part_ref,part_query
-  real :: dist_tmp,xdist,ydist,zdist,distance
+  real :: dist_tmp, xdist, ydist, zdist, distance
   integer :: nbr_pidx,nbr_procidx,ip
 
   
@@ -4881,7 +4878,7 @@ CONTAINS
   integer,intent(in) :: sizea
   real,intent(inout) :: binsdata(sizea)
 
-  real :: rmin,rmax,rmin10,rmax10
+  real :: rmin, rmax, rmin10, rmax10
 
     nbin = histbins !From Module Particle 
 
@@ -4946,7 +4943,7 @@ CONTAINS
   real,intent(in) :: binsdata(sizea)
   real,intent(inout) :: histdata(sizea)
 
-  real :: rmin,rmax,logval1
+  real :: rmin, rmax, logval1
 
     rmin = binsdata(2)
     nbin = histbins !From Module Particle 
@@ -4985,7 +4982,7 @@ CONTAINS
   real,intent(in) :: binsdata(sizea)
   real,intent(inout) :: histdata(sizea)
 
-  real :: rmin,rmax
+  real :: rmin, rmax
 
     rmin = binsdata(2)
     nbin = histbins !From Module Particle 
@@ -5026,10 +5023,10 @@ CONTAINS
    !whose eigenvalues are the desired roots, and then use the routines balanc and hqr . The real and imaginary parts of the roots are returned in rtr(1:m) and rti(1:m) , respectively.
    
       INTEGER :: m,MAXM
-      real :: a(m+1),rtr(m),rti(m)
+      real :: a(m+1), rtr(m), rti(m)
       PARAMETER (MAXM=50)
       INTEGER :: j,k
-      real :: hess(MAXM,MAXM),xr,xi
+      real :: hess(MAXM, MAXM), xr, xi
    
       if (m.gt.MAXM.or.a(m+1).eq.0.) then
          write(*,*)'bad args in zrhqr'
@@ -5293,7 +5290,7 @@ CONTAINS
 
   subroutine setup_radval()
       integer :: i
-      real    :: radstart,radend,dr
+      real    :: radstart, radend, dr
 
       radstart = -8
       radend   = -3
@@ -5310,7 +5307,7 @@ CONTAINS
     implicit none
 
     integer :: i,maxidx(1)
-    real :: m_s,kappa_s,Tf
+    real :: m_s, kappa_s, Tf
     real :: SS(NUMBER_RADIUS_STEPS)
     real :: crit_radius
 
@@ -5328,8 +5325,8 @@ CONTAINS
 
   function smithssgf(u10,r80,vk)
   implicit none
-  real :: u10,r80,cdn10,vk,u14
-  real :: a1,a2,smithssgf
+  real :: u10, r80, cdn10, vk, u14
+  real :: a1, a2, smithssgf
 
 
   ! added SEA93 function
