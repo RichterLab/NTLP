@@ -153,4 +153,3 @@ measurement.o: data_structures.o
 particles.o: defs.o mod_mpi.o mod_fft.o mod_thermo.o measurement.o
 netcdf_io.o: particles.o
 tec_io.o: particles.o mod_thermo.o
-tec_io.o: particles.o
