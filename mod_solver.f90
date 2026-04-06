@@ -38,7 +38,7 @@ module mod_solver
   ! Moisture / radiation
   public :: calc_radiation, humidity_control, change_RH_bcs_to_q, fill_base
 
-!ontains
+contains
 
   ! ──────────────────────────────────────────────────────────────────
       subroutine get_max
@@ -51,7 +51,6 @@ module mod_solver
       use fftwk
       use con_data
       use con_stats
-      include 'mpif.h'
 !
       real u_send(5), u_recv(5)
 !
@@ -288,7 +287,6 @@ module mod_solver
       use con_data
       use con_stats
       use mod_mpi
-      include 'mpif.h'
 !
       real sfk(1:nnz)
 !
@@ -409,7 +407,6 @@ module mod_solver
       use con_data
       use con_stats
       use mod_mpi
-      include 'mpif.h'
       real xkvis(nnx,iys:iye), alwk(nnx,iys:iye)
 !
       real send(3), buf(3)
@@ -836,7 +833,6 @@ module mod_solver
       use pars
       use con_data
       use con_stats
-      include 'mpif.h'
 !
       if(iocean .eq. 1) then
 !
@@ -987,7 +983,6 @@ module mod_solver
       use con_data
       use con_stats
       use mod_mpi
-      include 'mpif.h'
       integer istatus(mpi_status_size)
 !
       parameter(js = 6, ns = 3, nstat = js + ns*nscl)
@@ -2367,7 +2362,6 @@ module mod_solver
       use con_data
       use con_stats
       use mod_fft
-      include 'mpif.h'
       real fnt1(nnx,iys:iye,izs:ize)
       real fs(nnx,iys:iye,2), fr(nnx,iys:iye,2)
       integer istatus(mpi_status_size)
@@ -2502,7 +2496,6 @@ module mod_solver
       use con_stats
       use mod_mpi
       use mod_fft
-      include 'mpif.h'
       real fnt1(nnx,iys:iye,izs:ize), fnt2(nnx,iys:iye)
       real r3_sum(1:nnz)
       integer istatus(mpi_status_size)
@@ -2633,7 +2626,6 @@ module mod_solver
       use con_stats
       use mod_mpi
       use mod_fft
-      include 'mpif.h'
       real pfft(nny,jxs:jxe,izs-1:ize+1)
       real pt(0:nnz+1,jxs:jxe,jys:jye)
       real ptopfft(nny,jxs:jxe,1:2)
@@ -3178,7 +3170,6 @@ module mod_solver
       use fftwk
       use con_data
       use con_stats
-      include 'mpif.h'
 !
       tsfcc(1) = t_surf_i - c_rate*time
 !
@@ -3611,7 +3602,6 @@ module mod_solver
       use con_data
       use con_stats
       use mod_mpi
-      include 'mpif.h'
 !
       real u_level1(nnx,iys:iye,2+nscl), buf(2+2*nscl)
       real sbuf(2+2*nscl,mxs:mxe,iys:iye)
@@ -3822,7 +3812,6 @@ module mod_solver
       use con_data
       use con_stats
       use mod_mpi
-      include 'mpif.h'
       integer istatus(mpi_status_size)
 !
       iz   = nnz
@@ -4562,7 +4551,6 @@ module mod_solver
       use con_data
       use con_stats
       real trun(maxnz)
-      include 'mpif.h'
       real gradloc(2,nnx,nny), gradmax(2,nnx,nny)
       external get_zi
 !
@@ -4739,7 +4727,6 @@ module mod_solver
       use con_stats
       use con_data
       implicit none
-      include 'mpif.h'
 
       real :: LWP_tmp(nnz-1),LWP_rad(nnz-1)  !Have to calulate the integral from top down, then reverse ordering
       real :: rhoa,func_rho_base,Ttmp,exner,func_p_base
@@ -4827,7 +4814,6 @@ module mod_solver
       use con_stats
 
       implicit none
-      include 'mpif.h'
 
       real :: meanRH_curr,meanRH_target,msqrRH
       integer :: iz,ierr
