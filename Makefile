@@ -109,6 +109,7 @@ SRC = data_structures.f90 \
       measurement.f90 \
       mod_mpi.f90 \
       mod_fft.f90 \
+      mod_solver.f90 \
       netcdf_io.f90 \
       particles.f90 \
       tec_io.f90 \
@@ -142,7 +143,8 @@ clean:
 # so listing foo.o as a prerequisite of bar.o is enough to enforce ordering.
 mod_mpi.o: defs.o
 mod_fft.o: defs.o mod_mpi.o
-les.o: defs.o mod_mpi.o mod_fft.o measurement.o netcdf_io.o particles.o tec_io.o
+mod_solver.o: defs.o mod_mpi.o mod_fft.o particles.o
+les.o: defs.o mod_mpi.o mod_fft.o mod_solver.o measurement.o netcdf_io.o particles.o tec_io.o
 measurement.o: data_structures.o
 particles.o: defs.o mod_mpi.o mod_fft.o measurement.o
 netcdf_io.o: particles.o
