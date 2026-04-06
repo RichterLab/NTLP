@@ -4691,6 +4691,7 @@ contains
       implicit none
 
       real :: LWP_tmp(nnz-1),LWP_rad(nnz-1)  !Have to calulate the integral from top down, then reverse ordering
+      real :: Ttmp, rhoa
       integer :: iz,lc
 
       !Do trapezoidal integration from the TOP down:
@@ -4823,6 +4824,7 @@ contains
       use con_data
       implicit none
 
+      real :: RHT, RHB
       !Assuming tsfcc(2),Ttop(2),Tbot(2) in params.in are giving RH:
       if (iDNS .eq. 1) then
 
