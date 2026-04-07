@@ -13,6 +13,7 @@ module mod_io
   implicit none
   private
   public :: nblnk, blnk, print, xy_stats, tke_budget, Tvar_budget, write_his, write_prof, close_histograms, close_his, save_viz, recv_yz_var, save_v, save_c, save_p, get_units, get_output_filenames, open_histograms, open_his, viz_output_filename, open_viz
+  public :: get_fields, set_sav, read_input_file
 contains
       subroutine nblnk(word)
       implicit real(a-h,o-z), integer(i-n)
@@ -1760,5 +1761,261 @@ contains
 !
       return
       end subroutine open_viz
+
+
+  ! ──────────────────────────────────────────────────────────────────
+      subroutine get_fields
+      implicit real(a-h,o-z), integer(i-n)
+!
+! ----------- special routine to read just 3d fields
+!             as an initial guess, easy to customize
+!             if missing data, etc..
+!
+#if defined(SWAP)
+      use module_byteswap
+#endif
+!
+      integer status(mpi_status_size), ierr
+      integer(kind=mpi_offset_kind) :: offset, disp
+      integer(kind=k8)              :: nsize, nsize2
+      real, allocatable, dimension(:,:,:) :: temp
+      logical there
+!
+      allocate(temp(nvar,nnx,iys:iye))
+!
+! ---------- input file to read from
+!
+!      path_ran = 'XXXXXXXXX/u.le.cou000'
+!
+! --------------------- get restart file from local directory
+!                       reuse unit number
+!
+      close(nvel)
+!
+      inquire(file=path_ran,exist=there)
+      if(there) then
+         if(l_root) write(6,6001) path_ran
+      else
+         if(l_root) write(6,6005) path_ran
+         stop
+      endif
+!
+! ---- open file
+!
+      call mpi_file_open(mpi_comm_world, path_ran, &
+      mpi_mode_create+mpi_mode_rdwr, &
+      mpi_info_null, nvel, ierr)
+!
+! ---- set file view
+!
+      disp = 0
+      call mpi_file_set_view(nvel,disp,mpi_real8,mpi_real8, &
+      'native',mpi_info_null,ierr)
+!
+! ------------ read 3d fields, make rhs*8
+!
+      nsize  = int(nvar,k8)*nnx*nny
+      nsize2 = int(nvar,k8)*nnx*(iys-1)
+      n_read = nvar*nnx*(iye+1-iys)
+!
+      do k=izs,ize
+         offset = int((k-1),k8)*nsize + nsize2
+         call mpi_file_read_at_all(nvel,offset,temp,n_read, &
+      mpi_real8,status,ierr)
+         if (ierr /= 0) goto 9992
+#if defined(SWAP)
+         call byteswap(temp)
+#endif
+         do j=iys,iye
+         do i=1,nnx
+            u(i,j,k) = temp(1,i,j) 
+            v(i,j,k) = temp(2,i,j)
+            w(i,j,k) = temp(3,i,j)
+            e(i,j,k) = temp(nvar,i,j)
+         enddo
+         enddo
+         do is = 1,nscl
+            do j = iys,iye
+            do i = 1,nnx
+               t(i,j,is,k) = temp(3+is,i,j)
+            enddo
+            enddo
+         enddo
+!
+      enddo
+!
+! ---- close file
+!
+      call mpi_file_close(nvel, ierr)
+!
+      deallocate(temp)
+!
+      do iz=izs,ize
+!
+         ug(iz) = 0.0
+         vg(iz) = 0.0
+!
+! ---------------- initial guess for pressure
+!
+         do iy=iys,iye
+         do ix=1,nnx
+            p(ix,iy,iz) = 0.0
+         enddo
+         enddo
+      enddo
+!
+      return
+! ---------------------------- process errors
+  100 continue
+      write(6,9000) path_ran, nvel
+      call mpi_finalize(ierr)
+      stop
+!
+ 9992 continue
+      write(6,6100) nvel,iz
+      call mpi_finalize(ierr)
+      stop
+! ---------------------
+ 6001 format(' SR. GET_FIELDS: FILE READ FOR INITIALIZATION = ',a80)
+ 6005 format(' 6005, SR. GET_FIELDS: cannot find restart file = ',a80)
+ 6100 format(' SR. GET_FIELDS: file read error on unit number = ',i2,/, &
+      '               at iz = ',i4)
+ 9000 format(' 9000, SR. GET_FIELDS: cannot open file =',a80,/, &
+      ' to unit number = ',i2)
+      end
+      subroutine set_sav(istart)
+!
+      use mod_io
+      use netcdf_io
+      implicit real(a-h,o-z), integer(i-n)
+!
+      data ionce /0/
+      save ionce
+!
+      if(it .ne. istart) then
+!
+! ------------------- increment time if not first time through
+!
+         time=time+dt
+         viz_t_elapsed = viz_t_elapsed + dt
+      endif
+!
+      it=it+1
+!
+      dt    = dt_new
+      mnout = (mod(it,imean).eq.0).or. (it.eq.1)
+      mtape = (mod(it,itape).eq.0)
+      micut = (mod(it,itcut).eq.0)
+      if(ihst .lt. 0) then
+         mhis = .false.
+      else
+         !mhis = (mod(it,ihst).eq.0 .and. it.ge.it_his .or. it.eq.1)
+	 mhis     = (floor(time/ihst) .ne. &
+      floor((time+dt)/ihst))
+      endif
+
+      if (i_viz .lt. 0) then
+         msave_v = .false.
+      else
+         !msave_v = (mod(it,i_viz).eq.0 .and. it .ge. it_viz)
+	 msave_v = (floor(time/i_viz) .ne. &
+      floor((time+dt)/i_viz))
+      endif
+!
+! ---------- decide whether velocity fields are saved
+!
+      msave = .false.
+      if(mtape) then
+         itn=itn+1
+         msave = .true.
+         call get_output_filenames
+      endif
+!
+! ---------- decide whether viz fields are saved
+!
+      if((i_viz .gt. 0) .and. (it .ge. it_viz_nxt)) then
+        if (iviznetcdf) then
+           !call close_viz_netcdf
+           !call open_viz_netcdf
+        else
+           call viz_output_filename
+        end if
+        it_viz_nxt = it_viz_nxt + itape
+      endif
+!
+! --------- decide whether history files are to be saved
+!
+      if((ihst .gt. 0) .and. (it .ge. it_his_nxt)) then
+         if (inetcdf .eq. 1) then
+            !call open_his_netcdf
+            !call open_histog_netcdf
+         else
+            call open_histograms
+            call open_his
+         end if
+         it_his_nxt = it_his_nxt + itape
+      endif
+!
+      return
+      end
+      subroutine read_input_file
+      implicit none
+
+      character(48) :: label
+      character(180) :: params_dir
+      namelist /step_params/ itmax,imean,ihst,itape, &
+      i_viz,max_time
+
+      namelist /grid_params/ ncpu_s, Uo, Ttop, Tbot, &
+      qstar, tsfcc, ugcont, vgcont, dvdr, hurr_rad, &
+      zi, zl, xl, yl, zw1, dpdx, Swall, &
+      cfl,dt_new,surf_RH,surf_p,surf_rho, &
+      rad_kappa,rad_Fct,rad_Fcb
+
+      namelist /path_names/ path_seed,path_part,path_res, &
+      path_ran
+
+      namelist /flags/ ismlt,ifree,isfc,iradup, &
+      iupwnd,ibuoy,ifilt,itcut,isubs,ibrcl,iocean, &
+      method,idebug,iz_space,ivis0,ifix_dt,new_vis,iDNS, &
+      icouple,iTcouple,iHcouple,ievap,ifields,irestart,ilin, &
+      ineighbor,icoalesce,ipart_method,inewpart,icase, &
+      ipartdiff,isfs,iexner,ilongwave,ihurr, &
+      inetcdf,iviznetcdf,ihumiditycontrol,ireintro, &
+      itrajout, ikernel
+
+
+      namelist /constants/ nuf, Cpa, Pra, Sc, &
+      tnumpart,mult_init,rhow,part_grav,rhos, &
+      Cpp,Mw,Ms,Ru,Gam,Ion,Sal,Rd, &
+      radius_init,radius_std,kappas_init,kappas_std, &
+      grav, t00,fcor,zo,zos, &
+      vp_init,Tp_init,nprime
+
+
+      !params.in contains namelists to read
+      !open(12, file="./params.in", status="old")
+      call get_command_argument(1,params_dir)
+      open(12,file=params_dir,status="old")
+
+      read(12,nml=step_params)
+      if (myid==0) print step_params
+
+      read(12,nml=flags)
+      if (myid==0) print flags
+
+      read(12,nml=grid_params)
+      if (myid==0) print grid_params
+
+      read(12,nml=path_names)
+      if (myid==0) print path_names
+
+      read(12,nml=constants)
+      if (myid==0) print constants
+      CpaCpp = Cpa/Cpp
+
+
+
+      end subroutine read_input_file
 
 end module mod_io
