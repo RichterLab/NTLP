@@ -11,10 +11,9 @@ module mod_io
   use mod_thermo
   use mod_init
   use particles
-  implicit none
   private
   public :: nblnk, blnk, print, xy_stats, tke_budget, Tvar_budget, write_his, write_prof, close_histograms, close_his, save_viz, recv_yz_var, save_v, save_c, save_p, get_units, get_output_filenames, open_histograms, open_his, viz_output_filename, open_viz
-contains
+!ontains
       subroutine nblnk(word)
       implicit real(a-h,o-z), integer(i-n)
       parameter (nmax=304)
@@ -898,6 +897,7 @@ contains
       parameter(nvar_o = 6)
 !
       integer ix_pick(maxnx),  iy_pick(maxny),  iz_pick(maxnz), &
+      implicit real(a-h,o-z), integer(i-n)
               ix_order(maxnx), iy_order(maxny), iz_order(maxnz)
 !
       integer istatus(mpi_status_size), ierr
@@ -1156,7 +1156,6 @@ contains
 #if defined(SWAP)
               call byteswap(temp_x)
 #endif
-      implicit real(a-h,o-z), integer(i-n)
               offset = int((iviz_x + ix_order(i) - 1),k8)*nsize + nsize2
               call mpi_file_write_at(nviz_x,offset,temp_x,n_write, &
                                 mpi_real4,istatus,ierr)
@@ -1265,6 +1264,7 @@ contains
       integer(kind=k8)                 nsize, nsize2
 !
       real, allocatable, dimension(:,:,:) :: temp
+      implicit real(a-h,o-z), integer(i-n)
       allocate(temp(nvar,nnx,iys:iye))
 !
 ! ---- open file
@@ -1306,7 +1306,6 @@ contains
 #if defined(SWAP)
       call byteswap(temp)
 #endif
-      implicit real(a-h,o-z), integer(i-n)
 !
 
          offset = int((k-1),k8)*nsize + nsize2
@@ -1410,6 +1409,7 @@ contains
 !
 ! ---- open file
 !
+      implicit real(a-h,o-z), integer(i-n)
       call mpi_file_open(mpi_comm_world, path_sav_p, &
                          mpi_mode_create+mpi_mode_rdwr, &
                          mpi_info_null, npre, ierr)
@@ -1434,7 +1434,6 @@ contains
 #if defined(SWAP)
       call byteswap(temp)
 #endif
-      implicit real(a-h,o-z), integer(i-n)
          offset = int((k-1),k8)*nsize + nsize2
          call mpi_file_write_at_all(npre,offset,temp,n_write, &
                                     mpi_real8,status,ierr)
@@ -1587,7 +1586,7 @@ contains
 !
       return
 ! ------------------- process errors
-c-------------------
+!-------------------
  4500 continue
       write(6,6303) nrad, path_rad_hist
  6303 format(' 6303, SR. OPEN_RADPDF:',/, &
@@ -1668,7 +1667,7 @@ c-------------------
              '    cannot open history1 file on unit = ',i2,/, &
              '    path = ',a80)
       stop
-c-------------------
+!-------------------
  4000 continue
       write(6,6302) nhisp, path_sav_hp
  6302 format(' 6302, SR. OPEN_HIS:',/, &
@@ -1711,7 +1710,7 @@ c-------------------
 !
 !     if(l_root) then
 !        write(6,8001) path_viz_xy
-c8001    format(' 8001: viz file = ',a80)
+!8001    format(' 8001: viz file = ',a80)
 !        write(6,8001) path_viz_xz
 !        write(6,8001) path_viz_yz
 !        write(6,8001) path_stuf
