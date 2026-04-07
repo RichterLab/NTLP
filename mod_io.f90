@@ -11,9 +11,10 @@ module mod_io
   use mod_thermo
   use mod_init
   use particles
+  implicit none
   private
   public :: nblnk, blnk, print, xy_stats, tke_budget, Tvar_budget, write_his, write_prof, close_histograms, close_his, save_viz, recv_yz_var, save_v, save_c, save_p, get_units, get_output_filenames, open_histograms, open_his, viz_output_filename, open_viz
-!ontains
+contains
       subroutine nblnk(word)
       implicit real(a-h,o-z), integer(i-n)
       parameter (nmax=304)
