@@ -1533,7 +1533,7 @@ contains
       return
       end subroutine get_output_filenames
 
-      subroutine open_histograms(istep)
+      subroutine open_histograms()
       implicit real(a-h,o-z), integer(i-n)
 !
 ! ------------------- open history files by root
@@ -1549,9 +1549,9 @@ contains
       cgrid = '.le.'
 
       call blnk(iblks)
-      write(iblks(1:7),'(i7.7)') istep
+      write(iblks(1:7),'(i7.7)') it
       iblks(8:8) = '_'
-      write(iblks(9:15),'(i7.7)') (istep+itape)
+      write(iblks(9:15),'(i7.7)') (it+itape)
       iblnk = index(path_seed,' ')
       call blnk(path_rad_hist)
       call blnk(path_res_hist)
@@ -1607,7 +1607,7 @@ contains
       stop
       end subroutine open_histograms
 
-      subroutine open_his(istep)
+      subroutine open_his()
       implicit real(a-h,o-z), integer(i-n)
 !
 ! ------------------- open history files by root
@@ -1621,9 +1621,9 @@ contains
 !
       cgrid = '.le.'
       call blnk(iblks)
-      write(iblks(1:7),'(i7.7)') istep
+      write(iblks(1:7),'(i7.7)') it
       iblks(8:8) = '_'
-      write(iblks(9:15),'(i7.7)') (istep + itape)
+      write(iblks(9:15),'(i7.7)') (it + itape)
       iblnk = index(path_seed,' ')
       call blnk(path_sav_h)
       path_sav_h = path_seed(1:iblnk-1)//'/his'// &
@@ -1635,9 +1635,9 @@ contains
       krec = 0
       cgrid = '.le.'
       call blnk(iblks)
-      write(iblks(1:7),'(i7.7)') istep
+      write(iblks(1:7),'(i7.7)') it
       iblks(8:8) = '_'
-      write(iblks(9:15),'(i7.7)') (istep + itape)
+      write(iblks(9:15),'(i7.7)') (it + itape)
       iblnk = index(path_seed,' ')
       call blnk(path_sav_hp)
       path_sav_hp = path_seed(1:iblnk-1)//'/his'// &
@@ -1677,7 +1677,7 @@ contains
 
       end subroutine open_his
 
-      subroutine viz_output_filename(istep)
+      subroutine viz_output_filename()
       implicit real(a-h,o-z), integer(i-n)
 !
 ! ------------------- set visualization files,
@@ -1691,9 +1691,9 @@ contains
 !
       call blnk(iblks)
       iblks(1:1) = '.'
-      write(iblks(2:8),'(i7.7)') istep
+      write(iblks(2:8),'(i7.7)') it
       iblks(9:9) = '_'
-      write(iblks(10:16),'(i7.7)') (istep + itape)
+      write(iblks(10:16),'(i7.7)') (it + itape)
 !
       iloc = index(path_seed,' ')
       path_viz_xy = path_seed(1:iloc-1) &
