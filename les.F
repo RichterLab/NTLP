@@ -677,6 +677,7 @@ c
       use pars
       use fields
       use con_data
+      use mod_io
       use con_stats
       use netcdf_io
 c

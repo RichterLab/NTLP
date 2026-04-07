@@ -9,6 +9,7 @@ module mod_init
   use mod_fft
   use mod_solver
   use mod_thermo
+  use mod_io
   use particles
   implicit none
   private
