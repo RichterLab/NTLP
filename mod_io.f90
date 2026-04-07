@@ -53,9 +53,9 @@ contains
       end subroutine blnk
 
       subroutine print(lu,iz_strt,iz_end)
-!
-!
       implicit real(a-h,o-z), integer(i-n)
+!
+!
       write(lu,4000)
  4000 format(30X,' --- SOLUTION ---')
       write(lu,4100) it,time,dt,zi,tsfcc(1),uwsfc,vwsfc,wtsfc(1), &
@@ -389,6 +389,7 @@ contains
       end subroutine xy_stats
 
       subroutine tke_budget
+      implicit real(a-h,o-z), integer(i-n)
 
 !NOTE::: THIS HAS NOT BEEN UPDATED TO REFLECT HUMIDITY IN THE BUOYANCY
 !EQUATION   DHR 7/5/16
@@ -399,7 +400,6 @@ contains
 !          at istage = 1. 
 !
 !
-      implicit real(a-h,o-z), integer(i-n)
       real :: stat(1:nnz, 5)
       real :: s11s, s22s, s33s, s12s, s13s, s23s, wz, wzp
       real :: s13, s23, s33
@@ -739,12 +739,12 @@ contains
       end subroutine Tvar_budget
 
       subroutine write_his(iloc)
+      implicit real(a-h,o-z), integer(i-n)
 !
 ! ----- write history file with global parameters
 !       write tsfcc specially to preserve digits!
 !
 !
-      implicit real(a-h,o-z), integer(i-n)
       divgmax = 0.0
       do iz=1,nnz
          divgmax = amax1(divgmax, divz(iz))
@@ -800,10 +800,10 @@ contains
       end subroutine write_prof
 
       subroutine close_histograms
+      implicit real(a-h,o-z), integer(i-n)
 !
 ! ---- close history files
 !
-      implicit real(a-h,o-z), integer(i-n)
       logical there
 !
 ! ---- root closes and checks the files
@@ -844,10 +844,10 @@ contains
       end subroutine close_histograms
 
       subroutine close_his
+      implicit real(a-h,o-z), integer(i-n)
 !
 ! ---- close history files
 !
-      implicit real(a-h,o-z), integer(i-n)
       logical there
 !
 ! ---- root closes and checks the files
@@ -894,11 +894,11 @@ contains
 #if defined(SWAP)
       use module_byteswap
 #endif
+      implicit real(a-h,o-z), integer(i-n)
 !
       parameter(nvar_o = 6)
 !
       integer ix_pick(maxnx),  iy_pick(maxny),  iz_pick(maxnz), &
-      implicit real(a-h,o-z), integer(i-n)
               ix_order(maxnx), iy_order(maxny), iz_order(maxnz)
 !
       integer istatus(mpi_status_size), ierr
@@ -1230,8 +1230,8 @@ contains
       end subroutine save_viz
 
       subroutine recv_yz_var(temp_x,nvar,nny,iys,iye,izs,ize,ir)
-!
       implicit real(a-h,o-z), integer(i-n)
+!
       integer istatus(mpi_status_size)
 !
       real buf(nvar,iys:iye,izs:ize)
@@ -1258,6 +1258,7 @@ contains
 #if defined(SWAP)
       use module_byteswap
 #endif
+      implicit real(a-h,o-z), integer(i-n)
       logical there
 !
       integer status(mpi_status_size), ierr
@@ -1265,7 +1266,6 @@ contains
       integer(kind=k8)                 nsize, nsize2
 !
       real, allocatable, dimension(:,:,:) :: temp
-      implicit real(a-h,o-z), integer(i-n)
       allocate(temp(nvar,nnx,iys:iye))
 !
 ! ---- open file
@@ -1355,12 +1355,12 @@ contains
       end subroutine save_v
 
       subroutine save_c
+      implicit real(a-h,o-z), integer(i-n)
 !
 ! --------------- root process writes constant file
 !                 sequential fortan binary
 !
 !
-      implicit real(a-h,o-z), integer(i-n)
       logical there
       character options*8, passwd*1
 !
@@ -1400,6 +1400,7 @@ contains
 #if defined(SWAP)
       use module_byteswap
 #endif
+      implicit real(a-h,o-z), integer(i-n)
       logical there
 !
       integer status(mpi_status_size), ierr
@@ -1410,7 +1411,6 @@ contains
 !
 ! ---- open file
 !
-      implicit real(a-h,o-z), integer(i-n)
       call mpi_file_open(mpi_comm_world, path_sav_p, &
                          mpi_mode_create+mpi_mode_rdwr, &
                          mpi_info_null, npre, ierr)
@@ -1473,11 +1473,11 @@ contains
       end subroutine save_p
 
       subroutine get_units
+      implicit real(a-h,o-z), integer(i-n)
 !
 !
 ! -------------- unit numbers for files
 !
-      implicit real(a-h,o-z), integer(i-n)
       nvel  = 20 
       npre  = 30
       nhis1 = 40
@@ -1535,11 +1535,11 @@ contains
       end subroutine get_output_filenames
 
       subroutine open_histograms(istep)
+      implicit real(a-h,o-z), integer(i-n)
 !
 ! ------------------- open history files by root
 !                     isize determined in sr. fill_cs
 !
-      implicit real(a-h,o-z), integer(i-n)
       character cgrid*4, iblks*16, num*3
       logical there
      
@@ -1609,11 +1609,11 @@ contains
       end subroutine open_histograms
 
       subroutine open_his(istep)
+      implicit real(a-h,o-z), integer(i-n)
 !
 ! ------------------- open history files by root
 !                     isize determined in sr. fill_cs
 !
-      implicit real(a-h,o-z), integer(i-n)
       character cgrid*4, iblks*16, num*3
       logical there
      
@@ -1679,11 +1679,11 @@ contains
       end subroutine open_his
 
       subroutine viz_output_filename(istep)
+      implicit real(a-h,o-z), integer(i-n)
 !
 ! ------------------- set visualization files,
 !                     leaves files in scratch directory 
 !
-      implicit real(a-h,o-z), integer(i-n)
       character iblks*16
 
 !
@@ -1722,11 +1722,11 @@ contains
       end subroutine viz_output_filename
 
       subroutine open_viz
+      implicit real(a-h,o-z), integer(i-n)
 !
 ! ------------------- set visualization files,
 !                     leaves files in scratch directory 
 !
-      implicit real(a-h,o-z), integer(i-n)
       character iblks*16
 !
 ! --------------- build character strings for file names
