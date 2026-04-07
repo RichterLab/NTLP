@@ -202,6 +202,7 @@ contains
        integer :: idum
        real :: gasdev
        integer :: iset
+       real :: fac, gset, rsq, v1, v2
        save iset,gset
        data iset/0/
 
