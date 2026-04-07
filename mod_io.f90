@@ -1885,7 +1885,6 @@ contains
       end
       subroutine set_sav(istart)
 !
-      use mod_io
       use netcdf_io
       implicit real(a-h,o-z), integer(i-n)
 !
