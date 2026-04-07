@@ -308,7 +308,7 @@ subroutine fill_plt_fields(jmin,jmax,kmin,kmax,uplt,vplt,wplt,tplt,qplt,rhplt)
 use pars
 use fields
 use con_stats
-use mod_thermo
+use mod_utils
 implicit none
 include 'mpif.h'
 

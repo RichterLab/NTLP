@@ -109,7 +109,7 @@ SRC = data_structures.f90 \
       measurement.f90 \
       mod_mpi.f90 \
       mod_fft.f90 \
-      mod_thermo.f90 \
+      mod_utils.f90 \
       mod_solver.f90 \
       mod_io.f90 \
       mod_init.f90 \
@@ -146,12 +146,12 @@ clean:
 # so listing foo.o as a prerequisite of bar.o is enough to enforce ordering.
 mod_mpi.o: defs.o
 mod_fft.o: defs.o mod_mpi.o
-mod_thermo.o: defs.o
-mod_solver.o: defs.o mod_mpi.o mod_fft.o mod_thermo.o particles.o
-mod_io.o: defs.o mod_mpi.o mod_fft.o mod_thermo.o mod_solver.o particles.o
-mod_init.o: defs.o mod_mpi.o mod_fft.o mod_thermo.o mod_solver.o mod_io.o particles.o
-les.o: defs.o mod_mpi.o mod_fft.o mod_thermo.o mod_solver.o mod_init.o mod_io.o measurement.o netcdf_io.o particles.o tec_io.o
+mod_utils.o: defs.o
+mod_solver.o: defs.o mod_mpi.o mod_fft.o mod_utils.o particles.o
+mod_io.o: defs.o mod_mpi.o mod_fft.o mod_utils.o mod_solver.o particles.o
+mod_init.o: defs.o mod_mpi.o mod_fft.o mod_utils.o mod_solver.o mod_io.o particles.o
+les.o: defs.o mod_mpi.o mod_fft.o mod_utils.o mod_solver.o mod_init.o mod_io.o measurement.o netcdf_io.o particles.o tec_io.o
 measurement.o: data_structures.o
-particles.o: defs.o mod_mpi.o mod_fft.o mod_thermo.o measurement.o
+particles.o: defs.o mod_mpi.o mod_fft.o mod_utils.o measurement.o
 netcdf_io.o: particles.o
-tec_io.o: particles.o mod_thermo.o
+tec_io.o: particles.o mod_utils.o

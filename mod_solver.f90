@@ -19,7 +19,7 @@ module mod_solver
   use particles
   use mod_mpi
   use mod_fft
-  use mod_thermo
+  use mod_utils
   implicit none
   private
 

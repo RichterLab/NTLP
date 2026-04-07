@@ -1,7 +1,7 @@
 module particles
   use mod_mpi, only: xtoz_trans, ztox_trans
   use mod_fft, only: xderivp, yd_mpi
-  use mod_thermo
+  use mod_utils
   integer :: rproc,trproc,tproc,tlproc,lproc,blproc,bproc,brproc
   integer :: pr_r,pl_r,pt_r,pb_r,ptr_r,ptl_r,pbl_r,pbr_r
   integer :: pr_s,pl_s,pt_s,pb_s,ptr_s,ptl_s,pbl_s,pbr_s

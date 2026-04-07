@@ -1,30 +1,38 @@
 ! ----------------------------------------------------------------------
-! mod_thermo — thermodynamic and surface-layer stability helper functions
+! mod_utils — mathematical utility functions used across the codebase
 !
-! Pure mathematical helpers that are called by both mod_solver and
-! particles.  Keeping them here avoids a circular dependency between
-! those two modules.
+! Combines thermodynamic/stability helpers (formerly mod_thermo) and
+! statistical/random utility functions (formerly in les.F).
 !
-! Public interface
-!   fzol          – stability functions phi/psi for momentum and scalars
+! Thermodynamic / stability:
+!   fzol          – stability functions phi/psi (Businger-Dyer)
 !   mod_magnus    – saturation vapour pressure (Alduchov & Eskridge 1996)
 !   exner         – Exner function T/theta
 !   func_p_base   – dry-adiabatic base-state pressure profile
 !   func_T_base   – dry-adiabatic base-state temperature profile
 !   func_rho_base – dry-adiabatic base-state density profile
+!
+! Random / statistical:
+!   ran2          – Numerical Recipes Park-Miller RNG
+!   gasdev        – Gaussian deviate (uses ran2)
+!   cdf_func_single – CDF lookup, single log-normal distribution
+!   cdf_func        – CDF lookup, two-component log-normal distribution
 ! ----------------------------------------------------------------------
-module mod_thermo
+module mod_utils
   use pars, only: grav, Cpa, Rd
   implicit none
   private
 
+  ! Thermodynamic / stability
   public :: fzol
   public :: mod_magnus, exner
   public :: func_p_base, func_T_base, func_rho_base
+  ! Random / statistical
+  public :: ran2, gasdev, cdf_func_single, cdf_func
 
 contains
 
-  ! ──────────────────────────────────────────────────────────────────
+! ──────────────────────────────────────────────────────────────────
       subroutine fzol(zeta,phim,phis,psim,psis)
       implicit real(a-h,o-z), integer(i-n)
 !        estimate the stability functions for momentum, m
@@ -152,4 +160,83 @@ contains
 
       end function func_rho_base
 
-end module mod_thermo
+  ! ──────────────────────────────────────────────────────────────────
+  ! Random number and statistical functions (formerly in les.F)
+  ! ──────────────────────────────────────────────────────────────────
+
+      function ran2(idum)
+      integer :: idum,IM1,IM2,IMM1,IA1,IA2,IQ1,IQ2,IR1,IR2,NTAB,NDIV
+      real :: ran2, AM, EPS, RNMX
+      PARAMETER (IM1=2147483563,IM2=2147483399,AM=1./IM1,IMM1=IM1-1, &
+      IA1=40014,IA2=40692,IQ1=53668,IQ2=52774,IR1=12211, &
+      IR2=3791,NTAB=32,NDIV=1+IMM1/NTAB,EPS=1.2e-7,RNMX=1.-EPS)
+      INTEGER :: idum2,j,k,iv(NTAB),iy
+      SAVE iv,iy,idum2
+      DATA idum2/123456789/,iv/NTAB*0/,iy/0/
+
+      if (idum .le. 0) then
+          idum=max(-idum,1)
+          idum2 = idum
+          do j = NTAB+8,1,-1
+             k=idum/IQ1
+             idum=IA1*(idum-k*IQ1)-k*IR1
+             if (idum .lt. 0) idum=idum+IM1
+             if (j .le. NTAB) iv(j) = idum
+          end do
+          iy=iv(1)
+      end if
+      k=idum/IQ1
+      idum=IA1*(idum-k*IQ1)-k*IR1
+      if (idum .lt. 0) idum=idum+IM1
+      k=idum2/IQ2
+      idum2=IA2*(idum2-k*IQ2)-k*IR2
+      if (idum2 .lt. 0) idum2=idum2+IM2
+      j = 1+iy/NDIV
+      iy = iv(j) - idum2
+      iv(j) = idum
+      if (iy .lt. 1) iy = iy+IMM1
+      ran2=min(AM*iy,RNMX)
+      return
+      end function ran2
+      function gasdev(idum)
+       integer :: idum
+       real :: gasdev
+       integer :: iset
+       save iset,gset
+       data iset/0/
+
+       if (idum .lt. 0) iset=0
+       if (iset .eq. 0) then
+ 1000    v1 = 2.*ran2(idum)-1.0
+         v2 = 2.*ran2(idum)-1.0
+         rsq = v1**2+v2**2
+         if ( (rsq .ge. 1) .or. (rsq .eq. 0)) goto 1000
+         fac = sqrt(-2.0*log(rsq)/rsq)
+         gset = v1*fac
+         gasdev = v2*fac
+         iset = 1
+       else
+         gasdev = gset
+         iset = 0
+       end if
+       return
+      end function gasdev
+      function cdf_func_single(d,CDF,M,S)
+      implicit none
+      real :: d, CDF, M, S, cdf_func_single
+
+      cdf_func_single = 1.0/2.0* &
+      (1.0 + erf((log(d) - M)/S/sqrt(2.0)))  - CDF
+
+      end function cdf_func_single
+      function cdf_func(d,CDF,factor,Ma,Sa,Mc,Sc)
+      implicit none
+      real :: d, CDF, factor, Ma, Sa, Mc, Sc, cdf_func
+
+      cdf_func = 1.0/(1.0+factor)/2.0* &
+      ( 1.0 + erf((log(d) - Ma)/Sa/sqrt(2.0)) + &
+      factor*(1 + erf((log(d) - Mc)/Sc/sqrt(2.0))) ) - CDF
+
+      end function cdf_func
+
+end module mod_utils
