@@ -566,7 +566,6 @@ CONTAINS
   real :: xkval, xjval, pj, dxvec(2)
   integer :: ijpts(2,6),kuvpts(6),kwpts(6)
   real :: wt(4, 6)
-  real :: ran2
       
   !get the "leftmost" node
   !This is just the minimum (i,j,k) on the volume 
@@ -861,7 +860,6 @@ CONTAINS
   real :: xkval, xjval, pj, dxvec(2)
   integer :: ijpts(2,6),kuvpts(6),kwpts(6),iz_part
   real :: wt(4, 6)
-  real :: ran2
   real :: sigm_sdxp, sigm_sdyp, sigm_sdzp, vis_sp
   !get the "leftmost" node
   !This is just the minimum (i,j,k) on the volume
@@ -2278,7 +2276,7 @@ CONTAINS
   use con_data
   implicit none
 
-  real :: xv, yv, zv, ran2, m_s
+  real :: xv, yv, zv, m_s
   real :: kappas_dinit, radius_dinit
   real :: xp_init(3)
   integer :: idx,procidx
@@ -2460,7 +2458,6 @@ CONTAINS
   include 'mpif.h'
 
   real, intent(inout) :: rad_init,m_s,kappa_s
-  real :: ran2, cdf_func_single
   real :: M, S
   real :: d1, d2, err, dhalf, ftest, CDF
   real :: daerosol
@@ -2534,7 +2531,7 @@ CONTAINS
   include 'mpif.h'
 
   real :: rad_init
-  real :: ran2, cdf_func, prob
+  real :: prob
   real :: M_a, S_a, M_c, S_c, totarea
   real :: daerosol, totdrops
   real :: c1, c2, c3, u14, cdn10, a
@@ -2690,7 +2687,7 @@ CONTAINS
   real :: top, bot
   integer :: idx,procidx,idx_old,procidx_old
 
-  real :: xv, yv, zv, ran2, m_s
+  real :: xv, yv, zv, m_s
   real :: kappas_dinit, radius_dinit
   real :: xp_init(3)
   integer :: ipt,jpt
@@ -3811,7 +3808,7 @@ CONTAINS
       integer :: i,nq,coal_idx,j,ran_idx,tmp_int,gm,gam_til
       integer :: ns,k_idx,j_idx
       integer*8 :: mult_tmp_j,mult_tmp_k,xi_j,xi_k
-      real :: qv(3), dist_tmp, xdist, ydist, zdist, ran2
+      real :: qv(3), dist_tmp, xdist, ydist, zdist
       real :: phi, K, Pjk, veldiff, E, dV, p_alpha, pvol_j, pvol_k, golovin_b
       real :: rad_j_tmp, rad_k_tmp
       real :: kappa_s_j_temp, kappa_s_k_temp, ms_j_temp, ms_k_temp
@@ -4378,7 +4375,7 @@ CONTAINS
   implicit none
   include 'mpif.h'
   real :: sigm_sdxp, sigm_sdyp, sigm_sdzp, vis_sp
-  real :: sigm_su, sigm_sl, us_ran, gasdev, tengz, englez_bar
+  real :: sigm_su, sigm_sl, us_ran, tengz, englez_bar
   real :: engsbz_bar, sigm_w, sigm_ws
   real :: L_flt, epsn, fs, C0, a1, a2, a3, sigm_sprev, fs1
   real :: weit, weit1, weit3, weit4, T_lagr
@@ -4622,7 +4619,7 @@ CONTAINS
 
   real :: sigm_sdxp, sigm_sdyp, sigm_sdzp, vis_sp
   real :: phim, phis, psim, psis, zeta
-  real :: dadz, gasdev
+  real :: dadz
   real :: xp3i
   integer :: ix,iy,iz,izp1,izm1,ind,iz_part,ierr
   integer :: fluxloc,fluxloci
