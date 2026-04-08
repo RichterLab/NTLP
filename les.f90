@@ -193,7 +193,9 @@
       call get_dt
       do
         call start_phase( measurement_id_timestepping_loop)
+        call start_phase(measurement_id_timestep_misc)
         call set_sav(iti)
+        call end_phase(measurement_id_timestep_misc)
         if (myid==0) then
         write(*,*) 'Starting time loop'
         write(*,*) 'it,time = ',it,time
@@ -262,7 +264,7 @@
 !
 ! --------- new eddy viscosity, and bcs
 !
-          call start_phase(measurement_id_eddy_viscosity_and_bcs)
+          call start_phase(measurement_id_timestep_misc)
           if(iss .eq. 0 .and. ifree .eq. 0) then
              if (iDNS .eq. 1) then
                 call lower_dns
@@ -303,7 +305,7 @@
             call extra_flux_terms
             call pbltop(itop)
           endif
-          call end_phase(measurement_id_eddy_viscosity_and_bcs)
+          call end_phase(measurement_id_timestep_misc)
 
 !
 ! ------------ save history files
@@ -507,8 +509,10 @@
 #endif
 
 
+        call start_phase(measurement_id_timestep_misc)
         call get_max
         call get_dt
+        call end_phase(measurement_id_timestep_misc)
 
         call end_phase(measurement_id_timestepping_loop)
 

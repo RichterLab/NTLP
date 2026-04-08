@@ -1000,8 +1000,9 @@ module profiling
          ! Time spent computing flow derivatives.
          measurement_id_derivatives, &
 
-         ! Time spent computing the eddy viscosity and boundary conditions.
-         measurement_id_eddy_viscosity_and_bcs, &
+         ! Time spent on per-timestep miscellaneous work: eddy viscosity/BCs,
+         ! get_max, get_dt, and set_sav.
+         measurement_id_timestep_misc, &
 
          ! Time spent in each of the three steps of the flow solve (comp_1(),
          ! comp_p(), and comp_2(), respectively).
@@ -1069,7 +1070,7 @@ contains
         call initialize_base_measurements()
 
         measurement_id_derivatives                         = create_phase( "calculating derivatives" )
-        measurement_id_eddy_viscosity_and_bcs              = create_phase( "eddy viscosity and BCs" )
+        measurement_id_timestep_misc                        = create_phase( "timestep misc" )
         measurement_id_flow_solve_1                        = create_phase( "flow solve comp1" )
         measurement_id_flow_solve_2                        = create_phase( "flow solve comp2" )
         measurement_id_flow_solve_p                        = create_phase( "flow solve comp_p" )
@@ -1110,7 +1111,7 @@ contains
 
         ! Measured durations.
         real                 :: duration_derivatives, &
-                                duration_eddy_viscosity_and_bcs, &
+                                duration_timestep_misc, &
                                 duration_flow_solve_1, &
                                 duration_flow_solve_2, &
                                 duration_flow_solve_p, &
@@ -1155,7 +1156,7 @@ contains
         ! Get each phase's duration so we can report it and its percentage
         ! relative to the total duration.
         duration_derivatives                         = get_duration( measurement_id_derivatives )
-        duration_eddy_viscosity_and_bcs              = get_duration( measurement_id_eddy_viscosity_and_bcs )
+        duration_timestep_misc                       = get_duration( measurement_id_timestep_misc )
         duration_flow_solve_1                        = get_duration( measurement_id_flow_solve_1 )
         duration_flow_solve_2                        = get_duration( measurement_id_flow_solve_2 )
         duration_flow_solve_p                        = get_duration( measurement_id_flow_solve_p )
@@ -1220,7 +1221,7 @@ contains
              duration_flow_solve_1 + &
              duration_flow_solve_p + &
              duration_flow_solve_2 + &
-             duration_eddy_viscosity_and_bcs + &
+             duration_timestep_misc + &
              duration_humidity &
              )
 
@@ -1248,8 +1249,8 @@ contains
              duration_flow_solve_p, flow_duration )
         call print_duration( file_unit, "          comp2:                         ", &
              duration_flow_solve_2, flow_duration )
-        call print_duration( file_unit, "          Eddy viscosity/BCs:            ", &
-             duration_eddy_viscosity_and_bcs, flow_duration )
+        call print_duration( file_unit, "          Timestep misc:                 ", &
+             duration_timestep_misc, flow_duration )
         call print_duration( file_unit, "          Humidity control:              ", &
              duration_humidity, flow_duration )
 
@@ -1319,7 +1320,7 @@ contains
         ! Clear each of the phase identifiers so they can't accidentally be used
         ! after shutdown.
         measurement_id_derivatives                  = 0
-        measurement_id_eddy_viscosity_and_bcs       = 0
+        measurement_id_timestep_misc                 = 0
         measurement_id_flow_solve_1                 = 0
         measurement_id_flow_solve_2                 = 0
         measurement_id_flow_solve_p                 = 0
