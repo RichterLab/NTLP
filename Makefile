@@ -116,7 +116,7 @@ SRC = data_structures.f90 \
       netcdf_io.f90 \
       particles.f90 \
       tec_io.f90 \
-      les.F
+      les.f90
 
 OBJS = $(addsuffix .o, $(basename $(SRC)))
 
