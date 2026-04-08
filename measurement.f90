@@ -1216,6 +1216,7 @@ contains
              )
 
         flow_duration = ( &
+             duration_derivatives + &
              duration_flow_solve_1 + &
              duration_flow_solve_p + &
              duration_flow_solve_2 + &
