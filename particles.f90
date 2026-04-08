@@ -3025,6 +3025,7 @@ CONTAINS
       call fill_ext
       call end_phase(measurement_id_particle_fill_ext)
 
+      call start_phase(measurement_id_particle_misc)
       pflux = 0.0
       pmassflux = 0.0
       penegflux = 0.0
@@ -3034,6 +3035,7 @@ CONTAINS
       num_destroy = 0
       num100 = 0
       numimpos = 0
+      call end_phase(measurement_id_particle_misc)
 
 
       call start_phase(measurement_id_particle_loop)
@@ -3260,6 +3262,7 @@ CONTAINS
 
 
       !Get particle count:
+      call start_phase(measurement_id_particle_misc)
       numpart = 0
 
       part => first_particle
@@ -3269,8 +3272,8 @@ CONTAINS
       part => part%next
       end do
 
-
       call mpi_allreduce(numpart,tnumpart,1,mpi_integer,mpi_sum,mpi_comm_world,ierr)
+      call end_phase(measurement_id_particle_misc)
 
 
   end subroutine particle_update_BE

@@ -1031,6 +1031,7 @@ module profiling
          measurement_id_particle_loop, &
          measurement_id_particle_bcs, &
          measurement_id_particle_exchange, &
+         measurement_id_particle_misc, &
          measurement_id_particle_coupling, &
          measurement_id_particle_stats, &
          measurement_id_particle_coupling_exchange, &
@@ -1090,6 +1091,7 @@ contains
         measurement_id_particle_loop                       = create_phase( "particle_loop" )
         measurement_id_particle_bcs                        = create_phase( "particle_bcs" )
         measurement_id_particle_exchange                   = create_phase( "particle_exchange" )
+        measurement_id_particle_misc                       = create_phase( "particle_misc" )
         measurement_id_particle_coupling                   = create_phase( "particle_coupling" )
         measurement_id_particle_coupling_exchange          = create_phase( "particle_coupling_exchange" )
         measurement_id_particle_stats                      = create_phase( "particle_stats" )
@@ -1131,6 +1133,7 @@ contains
                                 duration_particle_loop, &
                                 duration_particle_bcs, &
                                 duration_particle_exchange, &
+                                duration_particle_misc, &
                                 duration_particle_coupling, &
                                 duration_particle_coupling_exchange, &
                                 duration_particle_stats, &
@@ -1176,6 +1179,7 @@ contains
         duration_particle_loop                       = get_duration( measurement_id_particle_loop )
         duration_particle_bcs                        = get_duration( measurement_id_particle_bcs )
         duration_particle_exchange                   = get_duration( measurement_id_particle_exchange )
+        duration_particle_misc                       = get_duration( measurement_id_particle_misc )
         duration_particle_coupling                   = get_duration( measurement_id_particle_coupling )
         duration_particle_coupling_exchange          = get_duration( measurement_id_particle_coupling_exchange )
         duration_particle_stats                      = get_duration( measurement_id_particle_stats )
@@ -1210,6 +1214,7 @@ contains
              duration_particle_solver + &
              duration_particle_reintro + &
              duration_particle_stats + &
+             duration_particle_misc + &
              duration_particle_coupling + &
              duration_particle_coupling_exchange + &
              duration_particle_diff + &
@@ -1266,6 +1271,8 @@ contains
              duration_particle_coalesce, particles_duration )
         call print_duration( file_unit, "          particle_stats:                ", &
              duration_particle_stats, particles_duration )
+        call print_duration( file_unit, "          particle_misc:                 ", &
+             duration_particle_misc, particles_duration )
         call print_duration( file_unit, "          particle_coupling:             ", &
              duration_particle_coupling, particles_duration )
         call print_duration( file_unit, "          particle_coupling_exchange:    ", &
@@ -1340,6 +1347,7 @@ contains
         measurement_id_particle_loop                = 0
         measurement_id_particle_bcs                 = 0
         measurement_id_particle_exchange            = 0
+        measurement_id_particle_misc                = 0
         measurement_id_particle_coupling            = 0
         measurement_id_particle_coupling_exchange   = 0
         measurement_id_particle_stats               = 0
