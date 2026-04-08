@@ -1214,7 +1214,6 @@ contains
              duration_particle_solver + &
              duration_particle_reintro + &
              duration_particle_stats + &
-             duration_particle_misc + &
              duration_particle_coupling + &
              duration_particle_coupling_exchange + &
              duration_particle_diff + &
@@ -1271,8 +1270,6 @@ contains
              duration_particle_coalesce, particles_duration )
         call print_duration( file_unit, "          particle_stats:                ", &
              duration_particle_stats, particles_duration )
-        call print_duration( file_unit, "          particle_misc:                 ", &
-             duration_particle_misc, particles_duration )
         call print_duration( file_unit, "          particle_coupling:             ", &
              duration_particle_coupling, particles_duration )
         call print_duration( file_unit, "          particle_coupling_exchange:    ", &
@@ -1287,6 +1284,8 @@ contains
              duration_particle_bcs, duration_particle_solver )
         call print_duration( file_unit, "               particle_exchange:              ", &
              duration_particle_exchange, duration_particle_solver )
+        call print_duration( file_unit, "               particle_misc:                  ", &
+             duration_particle_misc, duration_particle_solver )
 
         write( file_unit, "(A)" ) ""
 
