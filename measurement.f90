@@ -1013,11 +1013,11 @@ module profiling
          measurement_id_humidity, &
 
          ! Time spent writing outputs.
+         measurement_id_io_flow, &
          measurement_id_io_histograms, &
          measurement_id_io_history, &
          measurement_id_io_particles, &
          measurement_id_io_traj, &
-         measurement_id_io_pressure, &
          measurement_id_io_tecio, &
          measurement_id_io_viz, &
 
@@ -1076,9 +1076,9 @@ contains
         measurement_id_humidity                            = create_phase( "humidity" )
         measurement_id_io_histograms                       = create_phase( "I/O - histograms" )
         measurement_id_io_history                          = create_phase( "I/O - history" )
+        measurement_id_io_flow                             = create_phase( "I/O - flow fields" )
         measurement_id_io_particles                        = create_phase( "I/O - particles" )
         measurement_id_io_traj                             = create_phase( "I/O - trajectories" )
-        measurement_id_io_pressure                         = create_phase( "I/O - pressure field" )
         measurement_id_io_tecio                            = create_phase( "I/O - TecIO" )
         measurement_id_io_viz                              = create_phase( "I/O - viz" )
         measurement_id_particle_solver                     = create_phase( "particle_solver" )
@@ -1115,11 +1115,11 @@ contains
                                 duration_flow_solve_2, &
                                 duration_flow_solve_p, &
                                 duration_humidity, &
+                                duration_io_flow, &
                                 duration_io_histograms, &
                                 duration_io_history, &
                                 duration_io_particles, &
                                 duration_io_traj, &
-                                duration_io_pressure, &
                                 duration_io_tecio, &
                                 duration_io_viz, &
                                 duration_particle_solver, &
@@ -1160,11 +1160,11 @@ contains
         duration_flow_solve_2                        = get_duration( measurement_id_flow_solve_2 )
         duration_flow_solve_p                        = get_duration( measurement_id_flow_solve_p )
         duration_humidity                            = get_duration( measurement_id_humidity )
+        duration_io_flow                             = get_duration( measurement_id_io_flow )
         duration_io_histograms                       = get_duration( measurement_id_io_histograms )
         duration_io_history                          = get_duration( measurement_id_io_history )
         duration_io_particles                        = get_duration( measurement_id_io_particles )
         duration_io_traj                             = get_duration( measurement_id_io_traj )
-        duration_io_pressure                         = get_duration( measurement_id_io_pressure )
         duration_io_tecio                            = get_duration( measurement_id_io_tecio )
         duration_io_viz                              = get_duration( measurement_id_io_viz )
         duration_particle_solver                     = get_duration( measurement_id_particle_solver )
@@ -1196,11 +1196,11 @@ contains
         ! Compute the aggregate time spent performing I/O, regardless of the
         ! file type or format.
         io_duration = ( &
+             duration_io_flow + &
              duration_io_histograms + &
              duration_io_history + &
              duration_io_particles + &
              duration_io_traj + &
-             duration_io_pressure + &
              duration_io_tecio + &
              duration_io_viz &
              )
@@ -1284,6 +1284,8 @@ contains
 
         call print_duration( file_unit, "      I/O:                           ", &
              io_duration, duration_solver )
+        call print_duration( file_unit, "          Flow fields:                   ", &
+             duration_io_flow, io_duration )
         call print_duration( file_unit, "          Histograms:                    ", &
              duration_io_histograms, io_duration )
         call print_duration( file_unit, "          History:                       ", &
@@ -1292,8 +1294,6 @@ contains
              duration_io_particles, io_duration )
         call print_duration( file_unit, "          Trajectories:                  ", &
              duration_io_traj, io_duration )
-        call print_duration( file_unit, "          Pressure field:                ", &
-             duration_io_pressure, io_duration )
         call print_duration( file_unit, "          TecIO:                         ", &
              duration_io_tecio, io_duration )
         call print_duration( file_unit, "          Viz:                           ", &
@@ -1324,11 +1324,11 @@ contains
         measurement_id_flow_solve_2                 = 0
         measurement_id_flow_solve_p                 = 0
         measurement_id_humidity                     = 0
+        measurement_id_io_flow                      = 0
         measurement_id_io_histograms                = 0
         measurement_id_io_history                   = 0
         measurement_id_io_particles                 = 0
         measurement_id_io_traj                      = 0
-        measurement_id_io_pressure                  = 0
         measurement_id_io_tecio                     = 0
         measurement_id_io_viz                       = 0
         measurement_id_particle_solver              = 0

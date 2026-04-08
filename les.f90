@@ -356,8 +356,10 @@
 ! ------------ save velocity field
 !
           if(msave .and. istage .eq. 1) then
-             call start_phase(measurement_id_io_particles)
+             call start_phase(measurement_id_io_flow)
              call save_v
+             call end_phase(measurement_id_io_flow)
+             call start_phase(measurement_id_io_particles)
              call save_particles
              call end_phase(measurement_id_io_particles)
           endif
@@ -367,9 +369,9 @@
 ! ------------ save pressure field
 !
           if(msave .and. istage .eq. 1) then
-             call start_phase(measurement_id_io_pressure)
+             call start_phase(measurement_id_io_flow)
              call save_p
-             call end_phase(measurement_id_io_pressure)
+             call end_phase(measurement_id_io_flow)
           endif
 
 
@@ -380,7 +382,11 @@
           call comp1(istage,it)
           call end_phase(measurement_id_flow_solve_1)
           if(istage .eq. 1) then
-             if(msave .and. l_root) call save_c
+             if(msave .and. l_root) then
+                call start_phase(measurement_id_io_flow)
+                call save_c
+                call end_phase(measurement_id_io_flow)
+             endif
           endif
 
 
