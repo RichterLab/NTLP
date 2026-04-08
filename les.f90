@@ -521,7 +521,9 @@
       end do  ! time loop
 
 #ifdef TECIO
+      call start_phase(measurement_id_io_tecio)
       call finalize_tecio
+      call end_phase(measurement_id_io_tecio)
 #endif
 
       call end_phase(measurement_id_solver)
