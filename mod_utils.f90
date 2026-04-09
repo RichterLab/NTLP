@@ -17,6 +17,9 @@
 !   gasdev        – Gaussian deviate (uses ran2)
 !   cdf_func_single – CDF lookup, single log-normal distribution
 !   cdf_func        – CDF lookup, two-component log-normal distribution
+!
+! Grid search:
+!   find_upper    – first index where arr(i) > val (binary search, O(log n))
 ! ----------------------------------------------------------------------
 module mod_utils
   use pars, only: grav, Cpa, Rd
@@ -29,6 +32,8 @@ module mod_utils
   public :: func_p_base, func_T_base, func_rho_base
   ! Random / statistical
   public :: ran2, gasdev, cdf_func_single, cdf_func
+  ! Grid search
+  public :: find_upper
 
 contains
 
@@ -239,5 +244,32 @@ contains
       factor*(1 + erf((log(d) - Mc)/Sc/sqrt(2.0))) ) - CDF
 
       end function cdf_func
+
+  ! ──────────────────────────────────────────────────────────────────
+  ! Grid search
+  ! ──────────────────────────────────────────────────────────────────
+
+  pure function find_upper(arr, val) result(idx)
+    ! Returns the index of the first element of arr strictly greater
+    ! than val.  arr must be sorted in ascending order.
+    ! Equivalent to minloc(arr, 1, mask=(arr .gt. val)) but O(log n).
+    real, intent(in) :: arr(:)
+    real, intent(in) :: val
+    integer          :: idx
+    integer          :: lo, hi, mid
+
+    lo = 1
+    hi = size(arr) + 1
+    do while (lo < hi)
+      mid = lo + (hi - lo) / 2
+      if (arr(mid) <= val) then
+        lo = mid + 1
+      else
+        hi = mid
+      end if
+    end do
+    idx = lo
+
+  end function find_upper
 
 end module mod_utils
