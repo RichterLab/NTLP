@@ -696,7 +696,7 @@ contains
                (w(ix,iy,izp1)*e(ix,iy,izp1) - &
                 w(ix,iy,izm1)*e(ix,iy,izm1))*dzw2_i
 !
-	r5(ix,iy,iz)=0.25*((r5(ix,iy,iz) - u_avg(ix,iy)*ex(ix,iy))*2.0 &
+        r5(ix,iy,iz)=0.25*((r5(ix,iy,iz) - u_avg(ix,iy)*ex(ix,iy))*2.0 &
               - w(ix,iy,iz)*(e(ix,iy,izp1)-e(ix,iy,izm1))*dzw3_i)
       enddo
       enddo
@@ -1513,7 +1513,7 @@ contains
           call mpi_sum_xy(sfc_flx,myid,iss,ise,2)
           uwsfc = sfc_flx(1)*fnxy
           vwsfc = sfc_flx(2)*fnxy
-	  utau = sqrt(uwsfc**2 + vwsfc**2)
+          utau = sqrt(uwsfc**2 + vwsfc**2)
        end if
 !
 ! ----------- x and z horizontal SGS fluxes for u, v, w
@@ -4708,7 +4708,7 @@ contains
             Ttmp = txym(iz,1)* &
             exner(surf_p,func_p_base(surf_p,tsfcc(1),zz(iz)))
             !rhoa = func_rho_base(surf_p,tsfcc(1),zz(iz))
-	    rhoa = func_p_base(surf_p,tsfcc(1),zz(iz))/Rd/txym(iz,1)
+            rhoa = func_p_base(surf_p,tsfcc(1),zz(iz))/Rd/txym(iz,1)
          else
             rhoa = surf_rho
          end if
@@ -4756,7 +4756,7 @@ contains
             Ttmp = txym(iz,1)* &
             exner(surf_p,func_p_base(surf_p,tsfcc(1),zz(iz)))
             !rhoa = func_rho_base(surf_p,tsfcc(1),zz(iz))
-	    rhoa = func_p_base(surf_p,tsfcc(1),zz(iz))/Rd/txym(iz,1)
+            rhoa = func_p_base(surf_p,tsfcc(1),zz(iz))/Rd/txym(iz,1)
          else
             rhoa = surf_rho
          end if

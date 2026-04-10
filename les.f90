@@ -152,7 +152,7 @@
          call dns_vis
          call get_max
 
-	 !Call to populate the particle statistics with ICs
+         !Call to populate the particle statistics with ICs
          call particle_xy_stats
       else
 
@@ -294,7 +294,7 @@
           call get_means(istage)
           if(ivis .eq. 1 .and. iDNS .ne. 1) then
              call iso
-	     call surfvis
+             call surfvis
           endif
           if(istage .eq. 1)then
             call xy_stats
@@ -323,7 +323,7 @@
                   call open_his_netcdf
                   call write_his_netcdf
                   call close_his_netcdf
-	       endif
+               endif
                call end_phase(measurement_id_io_history)
              end if
           endif

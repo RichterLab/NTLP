@@ -1909,7 +1909,7 @@ contains
          mhis = .false.
       else
          !mhis = (mod(it,ihst).eq.0 .and. it.ge.it_his .or. it.eq.1)
-	 mhis     = (floor(time/ihst) .ne. &
+         mhis     = (floor(time/ihst) .ne. &
       floor((time+dt)/ihst))
       endif
 
@@ -1917,7 +1917,7 @@ contains
          msave_v = .false.
       else
          !msave_v = (mod(it,i_viz).eq.0 .and. it .ge. it_viz)
-	 msave_v = (floor(time/i_viz) .ne. &
+         msave_v = (floor(time/i_viz) .ne. &
       floor((time+dt)/i_viz))
       endif
 !

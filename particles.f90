@@ -2745,13 +2745,13 @@ CONTAINS
           !Also record the size of the dead droplet
           call add_histogram(bins_rad,hist_raddeath,histbins+2,part%radius,part%mult)
 
-	  !Store the spatial location of this mass crossing the surface -- surface precipitation
-	  !NOTE: THIS NEGLECTS PARTICLES THAT CHANGE PROCESSORS BEFORE DYING! ASSUMING THIS IS A SMALL CONTRIBUTION
+          !Store the spatial location of this mass crossing the surface -- surface precipitation
+          !NOTE: THIS NEGLECTS PARTICLES THAT CHANGE PROCESSORS BEFORE DYING! ASSUMING THIS IS A SMALL CONTRIBUTION
           ipt = floor(part%xp(1)/dx) + 1
           jpt = floor(part%xp(2)/dy) + 1
-	  if (ipt .ge. mxs .and. ipt .le. mxe .and. jpt .ge. iys .and. jpt .le. iye) then
-	  surf_precip(ipt,jpt) = surf_precip(ipt,jpt) + real(part%mult)*(rhow*2.0/3.0*pi2*part%radius**3)
-	  end if
+          if (ipt .ge. mxs .and. ipt .le. mxe .and. jpt .ge. iys .and. jpt .le. iye) then
+          surf_precip(ipt,jpt) = surf_precip(ipt,jpt) + real(part%mult)*(rhow*2.0/3.0*pi2*part%radius**3)
+          end if
 
 
           if (ireintro.eq.1 .and. inewpart.eq.6) then  !FATIMA can reintroduce particle of the same type
@@ -3043,7 +3043,7 @@ CONTAINS
       part => first_particle
       do while (associated(part))
 
-	 !Store original values for two-way coupling
+         !Store original values for two-way coupling
          part%vp_old(1:3) = part%vp(1:3)
          part%Tp_old = part%Tp
          part%radius_old = part%radius
@@ -3093,7 +3093,7 @@ CONTAINS
         xp3i = part%xp(3)   !Store this to do flux calculation
 
 
-	!Now start updating particle position, velocity, temperature, radius
+        !Now start updating particle position, velocity, temperature, radius
 
         !implicitly calculates next velocity and position
         part%xp(1:3) = part%xp(1:3) + dt*part%vp(1:3)
@@ -3132,7 +3132,7 @@ CONTAINS
                end if
 
                if ((flag == 1)  &
-	          .OR. isnan(rt_zeroes(1)) &
+                  .OR. isnan(rt_zeroes(1)) &
                   .OR. (rt_zeroes(1)*part%radius<0) &
                   .OR. isnan(rt_zeroes(2)) &
                   .OR. (rt_zeroes(2)<0) &
@@ -3197,8 +3197,8 @@ CONTAINS
 
          einf = mod_magnus(part%Tf)
 
-	 !Compute just to have for statistics
-	 part%qstar = (Mw/(Ru*part%Tp*rhoa))*einf*exp(((Lv*Mw/Ru)*((1./part%Tf) - (1./part%Tp))) + ((2.*Mw*Gam)/(Ru*rhow*part%radius*part%Tp)) - ((part%kappa_s*part%m_s*rhow/rhos)/(Volp*rhop-part%m_s)))
+         !Compute just to have for statistics
+         part%qstar = (Mw/(Ru*part%Tp*rhoa))*einf*exp(((Lv*Mw/Ru)*((1./part%Tf) - (1./part%Tp))) + ((2.*Mw*Gam)/(Ru*rhow*part%radius*part%Tp)) - ((part%kappa_s*part%m_s*rhow/rhos)/(Volp*rhop-part%m_s)))
 
 
         part%res = part%res + dt
@@ -3344,12 +3344,12 @@ CONTAINS
       do iy=iys,iye
       do ix=mxs,mxe
 
-	 if (num_array(ix,iy,iz).ne.0) then
-	    radavg_tmp = radius_array(ix,iy,iz)/real(num_array(ix,iy,iz))
-	    Nc_tmp = Nc_array(ix,iy,iz)/(dx*dy*dzw(iz))
+         if (num_array(ix,iy,iz).ne.0) then
+            radavg_tmp = radius_array(ix,iy,iz)/real(num_array(ix,iy,iz))
+            Nc_tmp = Nc_array(ix,iy,iz)/(dx*dy*dzw(iz))
             denom = pi2*(nuf/Sc)*2.0*radavg_tmp*Nc_tmp
 
-	    tauc_min = min(1.0/(denom + 1.0e-10),tauc_min)
+            tauc_min = min(1.0/(denom + 1.0e-10),tauc_min)
 
          end if
 
@@ -3423,43 +3423,43 @@ CONTAINS
       part => first_particle
       do while (associated(part))
          numpart = numpart + 1
-	 
+         
          if (part%radius .gt. part%rc) then
             numdrop = numdrop + 1
          else
             numaerosol = numaerosol + 1
          end if
 
-	 myradavg = myradavg + part%radius
+         myradavg = myradavg + part%radius
          myradmsqr = myradmsqr + part%radius**2
 
-	 myradmax = max(myradmax,part%radius)
-	 myradmin = min(myradmin,part%radius)
-	 mytempmax = max(mytempmax,part%Tp)
-	 mytempmin = min(mytempmin,part%Tp)
-	 myqmax = max(myqmax,part%qinf)
-	 myqmin = min(myqmin,part%qinf)
-	 vp1min = min(vp1min,part%vp(1))
-	 vp1max = max(vp1max,part%vp(1))
-	 vp2min = min(vp2min,part%vp(2))
-	 vp2max = max(vp2max,part%vp(2))
-	 vp3min = min(vp3min,part%vp(3))
-	 vp3max = max(vp3max,part%vp(3))
+         myradmax = max(myradmax,part%radius)
+         myradmin = min(myradmin,part%radius)
+         mytempmax = max(mytempmax,part%Tp)
+         mytempmin = min(mytempmin,part%Tp)
+         myqmax = max(myqmax,part%qinf)
+         myqmin = min(myqmin,part%qinf)
+         vp1min = min(vp1min,part%vp(1))
+         vp1max = max(vp1max,part%vp(1))
+         vp2min = min(vp2min,part%vp(2))
+         vp2max = max(vp2max,part%vp(2))
+         vp3min = min(vp3min,part%vp(3))
+         vp3max = max(vp3max,part%vp(3))
 
 
 
-	 Volp = pi2*2.0/3.0*part%radius**3
+         Volp = pi2*2.0/3.0*part%radius**3
          rhop = (part%m_s+Volp*rhow)/Volp
          diff(1:3) = part%vp - part%uf
          diffnorm = sqrt(diff(1)**2 + diff(2)**2 + diff(3)**2)
          Rep = 2.0*part%radius*diffnorm/nuf
          myRep_avg = myRep_avg + Rep
 
-	 mywmass = mywmass + Volp*rhow
-	 mypmass = mypmass + Volp*rhop
-	 mypvol = mypvol + Volp
+         mywmass = mywmass + Volp*rhow
+         mypmass = mypmass + Volp*rhop
+         mypvol = mypvol + Volp
 
-	 part => part%next
+         part => part%next
       end do
 
       !Compute sums of integer quantities
@@ -3650,29 +3650,29 @@ CONTAINS
 
          statsvec1(iz,1) = partcount(iz)
 
-	 statsvec1(iz,2) = vp1mean(iz)
-	 statsvec1(iz,3) = vp2mean(iz)
-	 statsvec1(iz,4) = vp3mean(iz)
-	 statsvec1(iz,5) = vp1msqr(iz)
-	 statsvec1(iz,6) = vp2msqr(iz)
-	 statsvec1(iz,7) = vp3msqr(iz)
-	 statsvec1(iz,8) = upwpm(iz)
-	 statsvec1(iz,9) = uf1mean(iz)
-	 statsvec1(iz,10) = uf2mean(iz)
-	 statsvec1(iz,11) = uf3mean(iz)
-	 statsvec1(iz,12) = uf1msqr(iz)
-	 statsvec1(iz,13) = uf2msqr(iz)
-	 statsvec1(iz,14) = uf3msqr(iz)
-	 statsvec1(iz,15) = Tpmean(iz)
-	 statsvec1(iz,16) = Tpmsqr(iz)
-	 statsvec1(iz,17) = Tfmean(iz)
-	 statsvec1(iz,18) = radmean(iz)
-	 statsvec1(iz,19) = rad2mean(iz)
-	 statsvec1(iz,20) = qfmean(iz)
-	 statsvec1(iz,21) = wpTpm(iz)
-	 statsvec1(iz,22) = multmean(iz)
-	 statsvec1(iz,23) = mwmean(iz)
-	 statsvec1(iz,24) = qstarm(iz)
+         statsvec1(iz,2) = vp1mean(iz)
+         statsvec1(iz,3) = vp2mean(iz)
+         statsvec1(iz,4) = vp3mean(iz)
+         statsvec1(iz,5) = vp1msqr(iz)
+         statsvec1(iz,6) = vp2msqr(iz)
+         statsvec1(iz,7) = vp3msqr(iz)
+         statsvec1(iz,8) = upwpm(iz)
+         statsvec1(iz,9) = uf1mean(iz)
+         statsvec1(iz,10) = uf2mean(iz)
+         statsvec1(iz,11) = uf3mean(iz)
+         statsvec1(iz,12) = uf1msqr(iz)
+         statsvec1(iz,13) = uf2msqr(iz)
+         statsvec1(iz,14) = uf3msqr(iz)
+         statsvec1(iz,15) = Tpmean(iz)
+         statsvec1(iz,16) = Tpmsqr(iz)
+         statsvec1(iz,17) = Tfmean(iz)
+         statsvec1(iz,18) = radmean(iz)
+         statsvec1(iz,19) = rad2mean(iz)
+         statsvec1(iz,20) = qfmean(iz)
+         statsvec1(iz,21) = wpTpm(iz)
+         statsvec1(iz,22) = multmean(iz)
+         statsvec1(iz,23) = mwmean(iz)
+         statsvec1(iz,24) = qstarm(iz)
 
       end do
 
@@ -3686,20 +3686,20 @@ CONTAINS
         if (iexner .eq. 1) then
             Ttmp = txym(iz,1)*exner(surf_p,func_p_base(surf_p,tsfcc(1),zz(iz)))
             !rhoa = func_rho_base(surf_p,tsfcc(1),zz(iz))
-	    rhoa = func_p_base(surf_p,tsfcc(1),zz(iz))/Rd/Ttmp
+            rhoa = func_p_base(surf_p,tsfcc(1),zz(iz))/Rd/Ttmp
         else
            rhoa = surf_rho
         end if
 
 
-	!First compute some that are based on the sums:
-	zconc(iz) = real(statsvec1(iz,1))/xl/yl/dzw(iz)
-	Nc(iz) = statsvec1(iz,22)/xl/yl/dzw(iz)
-	ql(iz) = statsvec1(iz,23)/xl/yl/dzw(iz)/rhoa
-	radtend(iz) = radsrc(iz)
+        !First compute some that are based on the sums:
+        zconc(iz) = real(statsvec1(iz,1))/xl/yl/dzw(iz)
+        Nc(iz) = statsvec1(iz,22)/xl/yl/dzw(iz)
+        ql(iz) = statsvec1(iz,23)/xl/yl/dzw(iz)/rhoa
+        radtend(iz) = radsrc(iz)
 
-	!Then compute those based on averages:
-	if (int(nint(partcount(iz))).eq.0) then
+        !Then compute those based on averages:
+        if (int(nint(partcount(iz))).eq.0) then
            vp1mean(iz) = 0.0
            vp2mean(iz) = 0.0
            vp3mean(iz) = 0.0
@@ -3723,47 +3723,47 @@ CONTAINS
            uf1msqr(iz) = 0.0
            uf2msqr(iz) = 0.0
            uf3msqr(iz) = 0.0
-	else
+        else
            vp1mean(iz) = statsvec1(iz,2)/partcount(iz)
            vp2mean(iz) = statsvec1(iz,3)/partcount(iz)
            vp3mean(iz) = statsvec1(iz,4)/partcount(iz)
 
-	   vp1msqr(iz) = statsvec1(iz,5)/partcount(iz) - vp1mean(iz)**2
-	   vp2msqr(iz) = statsvec1(iz,6)/partcount(iz) - vp2mean(iz)**2
-	   vp3msqr(iz) = statsvec1(iz,7)/partcount(iz) - vp3mean(iz)**2
+           vp1msqr(iz) = statsvec1(iz,5)/partcount(iz) - vp1mean(iz)**2
+           vp2msqr(iz) = statsvec1(iz,6)/partcount(iz) - vp2mean(iz)**2
+           vp3msqr(iz) = statsvec1(iz,7)/partcount(iz) - vp3mean(iz)**2
 
-	   upwpm(iz) = statsvec1(iz,8)/partcount(iz) - (vp1mean(iz)*vp3mean(iz))
+           upwpm(iz) = statsvec1(iz,8)/partcount(iz) - (vp1mean(iz)*vp3mean(iz))
 
-	   uf1mean(iz) = statsvec1(iz,9)/partcount(iz)
-	   uf2mean(iz) = statsvec1(iz,10)/partcount(iz)
-	   uf3mean(iz) = statsvec1(iz,11)/partcount(iz)
+           uf1mean(iz) = statsvec1(iz,9)/partcount(iz)
+           uf2mean(iz) = statsvec1(iz,10)/partcount(iz)
+           uf3mean(iz) = statsvec1(iz,11)/partcount(iz)
 
-	   uf1msqr(iz) = statsvec1(iz,12)/partcount(iz) - uf1mean(iz)**2
-	   uf2msqr(iz) = statsvec1(iz,13)/partcount(iz) - uf2mean(iz)**2
-	   uf3msqr(iz) = statsvec1(iz,14)/partcount(iz) - uf3mean(iz)**2
-	   
-	   Tpmean(iz) = statsvec1(iz,15)/partcount(iz)
-	   Tpmsqr(iz) = statsvec1(iz,16)/partcount(iz) - Tpmean(iz)**2
-	   Tfmean(iz) = statsvec1(iz,17)/partcount(iz)
+           uf1msqr(iz) = statsvec1(iz,12)/partcount(iz) - uf1mean(iz)**2
+           uf2msqr(iz) = statsvec1(iz,13)/partcount(iz) - uf2mean(iz)**2
+           uf3msqr(iz) = statsvec1(iz,14)/partcount(iz) - uf3mean(iz)**2
+           
+           Tpmean(iz) = statsvec1(iz,15)/partcount(iz)
+           Tpmsqr(iz) = statsvec1(iz,16)/partcount(iz) - Tpmean(iz)**2
+           Tfmean(iz) = statsvec1(iz,17)/partcount(iz)
 
            radmean(iz) = statsvec1(iz,18)/partcount(iz)
-	   rad2mean(iz) = statsvec1(iz,19)/partcount(iz)
+           rad2mean(iz) = statsvec1(iz,19)/partcount(iz)
 
-	   qfmean(iz) = statsvec1(iz,20)/partcount(iz)
+           qfmean(iz) = statsvec1(iz,20)/partcount(iz)
 
-	   wpTpm(iz) = statsvec1(iz,21)/partcount(iz)
+           wpTpm(iz) = statsvec1(iz,21)/partcount(iz)
 
-	   multmean(iz) = statsvec1(iz,22)/partcount(iz)
+           multmean(iz) = statsvec1(iz,22)/partcount(iz)
 
-	   mwmean(iz) = statsvec1(iz,23)/partcount(iz)
+           mwmean(iz) = statsvec1(iz,23)/partcount(iz)
 
-	   qstarm(iz) = statsvec1(iz,24)/partcount(iz)
+           qstarm(iz) = statsvec1(iz,24)/partcount(iz)
 
         end if
 
 
      end do
-	 
+         
 
 
   end subroutine particle_xy_stats
@@ -3978,8 +3978,8 @@ CONTAINS
                rad_data(k_idx) = (gam_til*rad_data(j_idx)**3 + rad_data(k_idx)**3)**(1.0/3.0)
 
                !Update particle k's kappa coefficient
-			      !We can use the mass mixing rule for now (will be updated to volume mixing rule)
-			      kappa_s_data(k_idx) = gam_til*ms_data(j_idx)*kappa_s_data(j_idx)/( gam_til*ms_data(j_idx) + ms_data(k_idx))  +   &
+                              !We can use the mass mixing rule for now (will be updated to volume mixing rule)
+                              kappa_s_data(k_idx) = gam_til*ms_data(j_idx)*kappa_s_data(j_idx)/( gam_til*ms_data(j_idx) + ms_data(k_idx))  +   &
                 ms_data(k_idx)*kappa_s_data(k_idx) / ( gam_til*ms_data(j_idx) + ms_data(k_idx))
  
                !Update particle k's solute mass
@@ -5374,7 +5374,7 @@ CONTAINS
    end function long_effic
 
    ! modified Hall (1980) collection efficiencies (as in Bott 1998)
-	real function hall_effic(r1,r2)
+        real function hall_effic(r1,r2)
       implicit none
       dimension rat(21),r0(15), ecoll(15,21)
       integer :: k, ir, kk, iq
