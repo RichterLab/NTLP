@@ -25,8 +25,6 @@ module particles
   integer :: particletype,pad_diff
   integer :: numpart,tnumpart,max_tnumpart,ngidx
   integer :: parts_capacity,npart_arr
-  type(particle), allocatable :: parts(:)
-  type(particle_ptr), allocatable :: list_ptrs(:)
   integer :: numdrop,tnumdrop
   integer :: numaerosol,tnumaerosol
   integer :: iseed
@@ -96,6 +94,8 @@ module particles
   end type particle_ptr
 
   type(particle), pointer :: part,first_particle
+  type(particle), allocatable :: parts(:)
+  type(particle_ptr), allocatable :: list_ptrs(:)
 
 CONTAINS
 
@@ -2240,6 +2240,7 @@ CONTAINS
   subroutine create_particle(xp,vp,Tp,m_s,kappa_s,mult,rad_init,idx,procidx)
       use pars
       implicit none
+      include 'mpif.h'
 
       real :: xp(3), vp(3), Tp, qinfp, rad_init, pi, m_s, kappa_s
       integer :: idx,procidx,ierr
