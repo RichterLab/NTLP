@@ -59,7 +59,7 @@ program benchmark_particle_loop
   write(*,'(a,f6.2)')     'Speedup AoS ->SoA : ', t_aos  / t_soa
   write(*,*)
 
-  write(*,'(a,3e15.6)')   'Mean radius (list, AoS, SoA): ', chk_list, chk_aos, chk_soa
+  write(*,'(a,3e15.6)')   'Mean Tp (list, AoS, SoA): ', chk_list, chk_aos, chk_soa
   if (abs(chk_list - chk_aos) / abs(chk_list) > 1.0d-4 .or. &
       abs(chk_list - chk_soa) / abs(chk_list) > 1.0d-4) then
     write(*,'(a)') 'WARNING: checksums differ — results may be incorrect.'
@@ -230,7 +230,7 @@ contains
     checksum = 0.0d0
     p => head
     do while (associated(p))
-      checksum = checksum + p%radius
+      checksum = checksum + p%Tp
       p => p%next
     end do
     checksum = checksum / real(npart, 8)
@@ -374,7 +374,7 @@ contains
     call system_clock(t1)
     elapsed  = real(t1 - t0, 8) / real(rate, 8)
     write(*,'(a,e12.4)') '  AoS  dummy (anti-optimization): ', dummy
-    checksum = sum(parts(:)%radius) / real(npart, 8)
+    checksum = sum(parts(:)%Tp) / real(npart, 8)
 
     deallocate(parts)
   end subroutine run_aos
@@ -509,7 +509,7 @@ contains
     call system_clock(t1)
     elapsed  = real(t1 - t0, 8) / real(rate, 8)
     write(*,'(a,e12.4)') '  SoA  dummy (anti-optimization): ', dummy
-    checksum = sum(radius) / real(npart, 8)
+    checksum = sum(Tp) / real(npart, 8)
 
     deallocate(xp, vp, uf, radius, m_s, Tp, Tf)
     deallocate(pidx, procidx, nbr_pidx, nbr_procidx)
