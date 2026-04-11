@@ -24,8 +24,9 @@ module particles
 
   integer :: particletype,pad_diff
   integer :: numpart,tnumpart,max_tnumpart,ngidx
-  integer :: parts_capacity
+  integer :: parts_capacity,npart_arr
   type(particle), allocatable :: parts(:)
+  type(particle_ptr), allocatable :: list_ptrs(:)
   integer :: numdrop,tnumdrop
   integer :: numaerosol,tnumaerosol
   integer :: iseed
@@ -80,6 +81,7 @@ module particles
   !REMEMBER: IF ADDING ANYTHING, MUST UPDATE MPI DATATYPE!
   type :: particle
     integer :: pidx,procidx,nbr_pidx,nbr_procidx
+    integer :: array_idx
     real :: vp(3), xp(3), uf(3), xrhs(3), vrhs(3), Tp, Tprhs_s
     real :: Tprhs_L, Tf, radius, radrhs, qinf, qstar, dist
     real :: res, m_s, kappa_s, rc, actres, numact
@@ -88,6 +90,10 @@ module particles
     integer*8 :: mult
     type(particle), pointer :: prev,next
   end type particle
+
+  type :: particle_ptr
+    type(particle), pointer :: p
+  end type particle_ptr
 
   type(particle), pointer :: part,first_particle
 
@@ -1800,11 +1806,6 @@ CONTAINS
       numpart = numpart + MOD(tnumpart,numprocs)
       endif
 
-      parts_capacity = max_tnumpart/numprocs
-      if (myid == 0) parts_capacity = parts_capacity + MOD(max_tnumpart,numprocs)
-      allocate(parts(parts_capacity))
-
-
       !Initialize ngidx, the particle global index for this processor
       ngidx = 1
 
@@ -1989,6 +1990,12 @@ CONTAINS
 
       call mpi_type_commit(particletype,ierr)
 
+      parts_capacity = max_tnumpart/numprocs
+      if (myid == 0) parts_capacity = parts_capacity + MOD(max_tnumpart,numprocs)
+      allocate(parts(parts_capacity))
+      allocate(list_ptrs(parts_capacity))
+      npart_arr = 0
+
   end subroutine particle_setup
 
   subroutine save_particles
@@ -2143,11 +2150,23 @@ CONTAINS
       ngidx = pidxmax + 1
 
       numpart = myp
-     
+
       call mpi_allreduce(myp,totalp,1,mpi_integer,mpi_sum,mpi_comm_world,ierr)
 
       write(*,*) 'proc',myid,'read in numpart:',myp
       if (myid==0) write(*,*) 'total number of particles read:',totalp
+
+      ! Populate parts array from linked list (restart path bypasses create_particle)
+      npart_arr = 0
+      part => first_particle
+      do while (associated(part))
+         npart_arr = npart_arr + 1
+         parts(npart_arr) = part
+         parts(npart_arr)%array_idx = npart_arr
+         part%array_idx = npart_arr
+         list_ptrs(npart_arr)%p => part
+         part => part%next
+      end do
 
   end subroutine read_part_res
 
@@ -2200,13 +2219,18 @@ CONTAINS
       end if  !Different cases
 
 
-      !Now update the total number of particles
+      ! Update numpart by traversal and verify it matches npart_arr
       numpart = 0
       part => first_particle
       do while (associated(part))
-      numpart = numpart + 1
-      part => part%next
+         numpart = numpart + 1
+         part => part%next
       end do
+      if (npart_arr /= numpart) then
+         write(*,*) 'ERROR: array/list count mismatch on rank', myid, &
+                    ': npart_arr=', npart_arr, ' numpart=', numpart
+         call mpi_abort(mpi_comm_world, 1, ierr)
+      end if
 
       call mpi_allreduce(numpart,tnumpart,1,mpi_integer,mpi_sum,mpi_comm_world,ierr)
 
@@ -2274,12 +2298,18 @@ CONTAINS
 
       !Critical radius, computed based on initial temp
       if (ievap.eq.1) then
-         part%rc = crit_radius(part%m_s,part%kappa_s,part%Tp) 
+         part%rc = crit_radius(part%m_s,part%kappa_s,part%Tp)
       else
          part%rc = 0.0
       end if
 
-      
+      ! Dual-write: mirror this particle into the parts array
+      npart_arr = npart_arr + 1
+      parts(npart_arr) = part
+      parts(npart_arr)%array_idx = npart_arr
+      part%array_idx = npart_arr
+      list_ptrs(npart_arr)%p => part
+
   end subroutine create_particle
 
   subroutine new_particle(idx,procidx)
@@ -3293,6 +3323,15 @@ CONTAINS
       implicit none
 
       type(particle), pointer :: tmp
+      integer :: i_arr
+
+      ! Dual-remove: swap-with-last in parts array
+      i_arr = part%array_idx
+      parts(i_arr) = parts(npart_arr)
+      parts(i_arr)%array_idx = i_arr
+      list_ptrs(i_arr) = list_ptrs(npart_arr)
+      list_ptrs(i_arr)%p%array_idx = i_arr
+      npart_arr = npart_arr - 1
 
       !Is it the first and last in the list?
       if (associated(part,first_particle) .AND. (.NOT. associated(part%next)) ) then
