@@ -5,6 +5,9 @@ program benchmark_particle_loop
   !   3. Struct of Arrays (SoA)
   !
   ! Physics: position/velocity/temperature update (no evaporation, no interpolation)
+  ! Particle structs include all fields from the real particle type to give
+  ! realistic memory pressure.
+  !
   ! Compile: ifx -O2 -o benchmark_particle_loop benchmark_particle_loop.f90
   implicit none
 
@@ -43,8 +46,8 @@ program benchmark_particle_loop
   write(*,'(a,f6.2)')    'Speedup AoS ->SoA : ', t_aos  / t_soa
   write(*,*)
 
-  ! Verify all three produce the same result (sum of all radii after nsteps)
-  write(*,'(a,3e15.6)')  'Checksums (list, AoS, SoA): ', chk_list, chk_aos, chk_soa
+  ! Verify: mean radius at last timestep should agree across all three versions
+  write(*,'(a,3e15.6)')  'Mean radius (list, AoS, SoA): ', chk_list, chk_aos, chk_soa
   if (abs(chk_list - chk_aos) / abs(chk_list) > 1.0e-4 .or. &
       abs(chk_list - chk_soa) / abs(chk_list) > 1.0e-4) then
     write(*,'(a)') 'WARNING: checksums differ — results may be incorrect.'
@@ -55,8 +58,8 @@ program benchmark_particle_loop
 contains
 
   ! -----------------------------------------------------------------------
-  ! Shared: compute one particle update step given its state variables.
-  ! Returns updated xp, vp, Tp (all intent(inout)).
+  ! Shared: one particle physics update.
+  ! Updates xp, vp, Tp in place; returns Volp, rhop, taup_i as diagnostics.
   ! -----------------------------------------------------------------------
   subroutine update_particle(xp, vp, uf, radius, m_s, Tp, Tf, &
                               Volp, rhop, taup_i)
@@ -87,31 +90,79 @@ contains
   end subroutine update_particle
 
   ! -----------------------------------------------------------------------
+  ! Shared: deterministic pseudo-random initialisation for core fields
+  ! -----------------------------------------------------------------------
+  subroutine init_particle_state(i, xp, vp, uf, radius, m_s, Tp, Tf)
+    integer, intent(in)  :: i
+    real,    intent(out) :: xp(3), vp(3), uf(3), radius, m_s, Tp, Tf
+
+    real :: r
+    r     = mod(real(i)*1.6180339887, 1.0)
+
+    xp(1) = r * 1000.0
+    xp(2) = mod(real(i)*2.7182818, 1.0) * 1000.0
+    xp(3) = mod(real(i)*3.1415926, 1.0) * 500.0 + 1.0
+
+    vp(1) = (r - 0.5) * 2.0
+    vp(2) = (mod(real(i)*1.4142135, 1.0) - 0.5) * 2.0
+    vp(3) = (mod(real(i)*1.7320508, 1.0) - 0.5) * 2.0 - 0.1
+
+    uf(1) = (mod(real(i)*2.2360679, 1.0) - 0.5) * 5.0
+    uf(2) = (mod(real(i)*2.6457513, 1.0) - 0.5) * 5.0
+    uf(3) = (mod(real(i)*2.8284271, 1.0) - 0.5) * 2.0
+
+    radius = 5.0e-6 + r * 45.0e-6
+    m_s    = 1.0e-18
+    Tp     = 280.0 + r * 10.0
+    Tf     = 285.0
+  end subroutine init_particle_state
+
+  ! -----------------------------------------------------------------------
   ! 1. Linked list
+  !    Struct matches the real particle type (minus prev pointer for simplicity).
   ! -----------------------------------------------------------------------
   subroutine run_linked_list(elapsed, checksum)
     real(8), intent(out) :: elapsed
     real,    intent(out) :: checksum
 
     type :: particle
+      ! Core fields (actively updated)
       real    :: xp(3), vp(3), uf(3)
       real    :: radius, m_s, Tp, Tf
+      ! Additional fields matching the real particle type
+      integer :: pidx, procidx, nbr_pidx, nbr_procidx
+      real    :: xrhs(3), vrhs(3)
+      real    :: Tprhs_s, Tprhs_L, radrhs
+      real    :: qinf, qstar, nbr_dist
+      real    :: res, kappa_s, rc, actres, numact
+      real    :: u_sub(3), sigm_s
+      real    :: vp_old(3), Tp_old, radius_old
+      integer*8 :: mult
       type(particle), pointer :: next
     end type particle
 
     type(particle), pointer :: head, p, tmp
-    integer :: i, istep
-    real    :: Volp, rhop, taup_i
+    integer   :: i, istep
+    real      :: Volp, rhop, taup_i
     integer(8) :: t0, t1, rate
 
-    ! Build linked list
     nullify(head)
     do i = npart, 1, -1
       allocate(tmp)
       call init_particle_state(i, tmp%xp, tmp%vp, tmp%uf, &
                                tmp%radius, tmp%m_s, tmp%Tp, tmp%Tf)
+      tmp%pidx        = i;   tmp%procidx    = 0
+      tmp%nbr_pidx    = 0;   tmp%nbr_procidx = 0
+      tmp%xrhs        = tmp%vp;  tmp%vrhs   = 0.0
+      tmp%Tprhs_s     = 0.0; tmp%Tprhs_L   = 0.0; tmp%radrhs = 0.0
+      tmp%qinf        = 0.01; tmp%qstar    = 0.01; tmp%nbr_dist = 10.0
+      tmp%res         = 0.0; tmp%kappa_s   = 0.5
+      tmp%rc          = 1.0e-5; tmp%actres  = 0.0; tmp%numact = 0.0
+      tmp%u_sub       = 0.0; tmp%sigm_s    = 0.0
+      tmp%vp_old      = tmp%vp; tmp%Tp_old = tmp%Tp
+      tmp%radius_old  = tmp%radius; tmp%mult = 1
       tmp%next => head
-      head     => tmp
+      head => tmp
     end do
 
     call system_clock(t0, rate)
@@ -128,15 +179,14 @@ contains
     call system_clock(t1)
     elapsed = real(t1 - t0, 8) / real(rate, 8)
 
-    ! Checksum
     checksum = 0.0
     p => head
     do while (associated(p))
       checksum = checksum + p%radius
       p => p%next
     end do
+    checksum = checksum / real(npart)
 
-    ! Cleanup
     do while (associated(head))
       tmp => head%next
       deallocate(head)
@@ -152,8 +202,18 @@ contains
     real,    intent(out) :: checksum
 
     type :: particle_aos
+      ! Core fields (actively updated)
       real :: xp(3), vp(3), uf(3)
       real :: radius, m_s, Tp, Tf
+      ! Additional fields matching the real particle type
+      integer :: pidx, procidx, nbr_pidx, nbr_procidx
+      real :: xrhs(3), vrhs(3)
+      real :: Tprhs_s, Tprhs_L, radrhs
+      real :: qinf, qstar, nbr_dist
+      real :: res, kappa_s, rc, actres, numact
+      real :: u_sub(3), sigm_s
+      real :: vp_old(3), Tp_old, radius_old
+      integer*8 :: mult
     end type particle_aos
 
     type(particle_aos), allocatable :: parts(:)
@@ -166,6 +226,19 @@ contains
       call init_particle_state(i, parts(i)%xp, parts(i)%vp, parts(i)%uf, &
                                parts(i)%radius, parts(i)%m_s, &
                                parts(i)%Tp, parts(i)%Tf)
+      parts(i)%pidx        = i;           parts(i)%procidx     = 0
+      parts(i)%nbr_pidx    = 0;           parts(i)%nbr_procidx = 0
+      parts(i)%xrhs        = parts(i)%vp; parts(i)%vrhs        = 0.0
+      parts(i)%Tprhs_s     = 0.0;         parts(i)%Tprhs_L     = 0.0
+      parts(i)%radrhs      = 0.0
+      parts(i)%qinf        = 0.01;        parts(i)%qstar       = 0.01
+      parts(i)%nbr_dist    = 10.0
+      parts(i)%res         = 0.0;         parts(i)%kappa_s     = 0.5
+      parts(i)%rc          = 1.0e-5;      parts(i)%actres      = 0.0
+      parts(i)%numact      = 0.0
+      parts(i)%u_sub       = 0.0;         parts(i)%sigm_s      = 0.0
+      parts(i)%vp_old      = parts(i)%vp; parts(i)%Tp_old      = parts(i)%Tp
+      parts(i)%radius_old  = parts(i)%radius; parts(i)%mult     = 1
     end do
 
     call system_clock(t0, rate)
@@ -180,7 +253,7 @@ contains
 
     call system_clock(t1)
     elapsed  = real(t1 - t0, 8) / real(rate, 8)
-    checksum = sum(parts(:)%radius)
+    checksum = sum(parts(:)%radius) / real(npart)
 
     deallocate(parts)
   end subroutine run_aos
@@ -192,8 +265,18 @@ contains
     real(8), intent(out) :: elapsed
     real,    intent(out) :: checksum
 
+    ! Core fields (actively updated)
     real, allocatable :: xp(:,:), vp(:,:), uf(:,:)
     real, allocatable :: radius(:), m_s(:), Tp(:), Tf(:)
+    ! Additional fields matching the real particle type
+    integer, allocatable :: pidx(:), procidx(:), nbr_pidx(:), nbr_procidx(:)
+    real, allocatable :: xrhs(:,:), vrhs(:,:)
+    real, allocatable :: Tprhs_s(:), Tprhs_L(:), radrhs(:)
+    real, allocatable :: qinf(:), qstar(:), nbr_dist(:)
+    real, allocatable :: res(:), kappa_s(:), rc(:), actres(:), numact(:)
+    real, allocatable :: u_sub(:,:), sigm_s(:)
+    real, allocatable :: vp_old(:,:), Tp_old(:), radius_old(:)
+    integer(8), allocatable :: mult(:)
 
     integer   :: i, istep
     real      :: xp_i(3), vp_i(3), uf_i(3), radius_i, m_s_i, Tp_i, Tf_i
@@ -202,10 +285,28 @@ contains
 
     allocate(xp(3,npart), vp(3,npart), uf(3,npart))
     allocate(radius(npart), m_s(npart), Tp(npart), Tf(npart))
+    allocate(pidx(npart), procidx(npart), nbr_pidx(npart), nbr_procidx(npart))
+    allocate(xrhs(3,npart), vrhs(3,npart))
+    allocate(Tprhs_s(npart), Tprhs_L(npart), radrhs(npart))
+    allocate(qinf(npart), qstar(npart), nbr_dist(npart))
+    allocate(res(npart), kappa_s(npart), rc(npart), actres(npart), numact(npart))
+    allocate(u_sub(3,npart), sigm_s(npart))
+    allocate(vp_old(3,npart), Tp_old(npart), radius_old(npart))
+    allocate(mult(npart))
 
     do i = 1, npart
       call init_particle_state(i, xp(:,i), vp(:,i), uf(:,i), &
                                radius(i), m_s(i), Tp(i), Tf(i))
+      pidx(i)        = i;          procidx(i)    = 0
+      nbr_pidx(i)    = 0;          nbr_procidx(i) = 0
+      xrhs(:,i)      = vp(:,i);    vrhs(:,i)     = 0.0
+      Tprhs_s(i)     = 0.0;        Tprhs_L(i)    = 0.0;  radrhs(i)  = 0.0
+      qinf(i)        = 0.01;       qstar(i)      = 0.01; nbr_dist(i) = 10.0
+      res(i)         = 0.0;        kappa_s(i)    = 0.5
+      rc(i)          = 1.0e-5;     actres(i)     = 0.0;  numact(i)  = 0.0
+      u_sub(:,i)     = 0.0;        sigm_s(i)     = 0.0
+      vp_old(:,i)    = vp(:,i);    Tp_old(i)     = Tp(i)
+      radius_old(i)  = radius(i);  mult(i)       = 1
     end do
 
     call system_clock(t0, rate)
@@ -222,37 +323,14 @@ contains
 
     call system_clock(t1)
     elapsed  = real(t1 - t0, 8) / real(rate, 8)
-    checksum = sum(radius)
+    checksum = sum(radius) / real(npart)
 
     deallocate(xp, vp, uf, radius, m_s, Tp, Tf)
+    deallocate(pidx, procidx, nbr_pidx, nbr_procidx)
+    deallocate(xrhs, vrhs, Tprhs_s, Tprhs_L, radrhs)
+    deallocate(qinf, qstar, nbr_dist)
+    deallocate(res, kappa_s, rc, actres, numact)
+    deallocate(u_sub, sigm_s, vp_old, Tp_old, radius_old, mult)
   end subroutine run_soa
-
-  ! -----------------------------------------------------------------------
-  ! Shared initializer: deterministic pseudo-random state for particle i
-  ! -----------------------------------------------------------------------
-  subroutine init_particle_state(i, xp, vp, uf, radius, m_s, Tp, Tf)
-    integer, intent(in)  :: i
-    real,    intent(out) :: xp(3), vp(3), uf(3), radius, m_s, Tp, Tf
-
-    real :: r
-    r       = mod(real(i)*1.6180339887, 1.0)   ! quasi-random in [0,1)
-
-    xp(1)   = r * 1000.0
-    xp(2)   = mod(real(i)*2.7182818, 1.0) * 1000.0
-    xp(3)   = mod(real(i)*3.1415926, 1.0) * 500.0 + 1.0
-
-    vp(1)   = (r - 0.5) * 2.0
-    vp(2)   = (mod(real(i)*1.4142135, 1.0) - 0.5) * 2.0
-    vp(3)   = (mod(real(i)*1.7320508, 1.0) - 0.5) * 2.0 - 0.1
-
-    uf(1)   = (mod(real(i)*2.2360679, 1.0) - 0.5) * 5.0
-    uf(2)   = (mod(real(i)*2.6457513, 1.0) - 0.5) * 5.0
-    uf(3)   = (mod(real(i)*2.8284271, 1.0) - 0.5) * 2.0
-
-    radius  = 5.0e-6 + r * 45.0e-6      ! 5–50 µm
-    m_s     = 1.0e-18                    ! fixed solute mass
-    Tp      = 280.0 + r * 10.0          ! 280–290 K
-    Tf      = 285.0
-  end subroutine init_particle_state
 
 end program benchmark_particle_loop
