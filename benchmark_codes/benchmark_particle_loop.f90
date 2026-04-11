@@ -4,9 +4,9 @@ program benchmark_particle_loop
   !   2. Array of Structs (AoS)
   !   3. Struct of Arrays (SoA)
   !
-  ! Physics: position/velocity/temperature update (no evaporation, no interpolation)
-  ! Each version inlines the physics directly against its own data structure so
-  ! that all field accesses go through the actual memory layout being tested.
+  ! Physics: position/velocity/temperature update (backward Euler) plus
+  ! the Tprime/rprime/vprime calculations from ie_vrt_nd, inlined against
+  ! each version's own data structure.
   !
   ! Real fields use real(8) to match production code compiled with -r8.
   ! Resulting particle struct size matches the production 352-byte type.
@@ -17,17 +17,27 @@ program benchmark_particle_loop
   integer, parameter :: npart  = 300000
   integer, parameter :: nsteps = 1000
 
-  ! Physical constants
-  real(8), parameter :: pi2    = 3.14159265358979d0
-  real(8), parameter :: rhow   = 1000.0d0
-  real(8), parameter :: rhoa   = 1.2d0
-  real(8), parameter :: nuf    = 1.5d-5
-  real(8), parameter :: dt     = 0.01d0
-  real(8), parameter :: Pra    = 0.71d0
-  real(8), parameter :: CpaCpp = 1.0d0
-  real(8), parameter :: grav1  = 0.0d0
-  real(8), parameter :: grav2  = 0.0d0
-  real(8), parameter :: grav3  = -9.81d0
+  ! Physical constants — dynamics
+  real(8), parameter :: pi2         = 3.14159265358979d0
+  real(8), parameter :: rhow        = 1000.0d0
+  real(8), parameter :: rhoa        = 1.2d0
+  real(8), parameter :: nuf         = 1.5d-5
+  real(8), parameter :: dt          = 0.01d0
+  real(8), parameter :: Pra         = 0.71d0
+  real(8), parameter :: CpaCpp      = 1.0d0
+  real(8), parameter :: grav1       = 0.0d0
+  real(8), parameter :: grav2       = 0.0d0
+  real(8), parameter :: grav3       = -9.81d0
+
+  ! Physical constants — thermodynamics (from params.in / defs.f90)
+  real(8), parameter :: Mw          = 0.018015d0      ! kg/mol, water molar mass
+  real(8), parameter :: Ru          = 8.3144d0        ! J/mol-K, universal gas constant
+  real(8), parameter :: Lv          = (25.0d0 - 0.02274d0*26.0d0)*1.0d5  ! J/kg
+  real(8), parameter :: Gam         = 7.28d-2         ! N/m, surface tension
+  real(8), parameter :: rhos        = 2000.0d0        ! kg/m^3, salt density
+  real(8), parameter :: Sc          = 0.615d0         ! Schmidt number
+  real(8), parameter :: Cpp         = 4179.0d0        ! J/kg-K, liquid heat capacity
+  real(8), parameter :: radius_init = 25.0d-6         ! m, reference radius
 
   real(8) :: t_list, t_aos, t_soa
   real(8) :: chk_list, chk_aos, chk_soa
@@ -49,7 +59,6 @@ program benchmark_particle_loop
   write(*,'(a,f6.2)')     'Speedup AoS ->SoA : ', t_aos  / t_soa
   write(*,*)
 
-  ! Verify: mean radius at last timestep should agree across all three
   write(*,'(a,3e15.6)')   'Mean radius (list, AoS, SoA): ', chk_list, chk_aos, chk_soa
   if (abs(chk_list - chk_aos) / abs(chk_list) > 1.0d-4 .or. &
       abs(chk_list - chk_soa) / abs(chk_list) > 1.0d-4) then
@@ -89,7 +98,7 @@ contains
   end subroutine init_particle_state
 
   ! -----------------------------------------------------------------------
-  ! 1. Linked list — physics inlined, accesses p%field directly
+  ! 1. Linked list — physics + ie_vrt_nd inlined, accesses p%field directly
   ! -----------------------------------------------------------------------
   subroutine run_linked_list(elapsed, checksum)
     real(8), intent(out) :: elapsed, checksum
@@ -110,8 +119,16 @@ contains
 
     type(particle), pointer :: head, p, tmp
     integer    :: i, istep
+    ! backward Euler locals
     real(8)    :: diff1, diff2, diff3, diffnorm
     real(8)    :: Volp, rhop, taup_i, Rep, Nup, tmp_coeff
+    ! ie_vrt_nd locals
+    real(8)    :: rnext_e, Tnext_e, dnext_e, esa_e, VolP_e, rhop_e
+    real(8)    :: taup0_e, ediff1, ediff2, ediff3, ediffnorm
+    real(8)    :: Rep_e, taup_e, corrfac_e
+    real(8)    :: vprime1_e, vprime2_e, vprime3_e
+    real(8)    :: qstr_e, Shp_e, rprime_e, Nup_e, Tprime_e
+    real(8)    :: dummy
     integer(8) :: t0, t1, rate
 
     nullify(head)
@@ -133,12 +150,14 @@ contains
       head => tmp
     end do
 
+    dummy = 0.0d0
     call system_clock(t0, rate)
 
     do istep = 1, nsteps
       p => head
       do while (associated(p))
 
+        ! --- Backward Euler update ---
         diff1    = p%vp(1) - p%uf(1)
         diff2    = p%vp(2) - p%uf(2)
         diff3    = p%vp(3) - p%uf(3)
@@ -161,12 +180,52 @@ contains
         tmp_coeff = Nup/3.0d0/Pra * CpaCpp * rhop/rhow * taup_i
         p%Tp      = (p%Tp + tmp_coeff*dt*p%Tf) / (1.0d0 + dt*tmp_coeff)
 
+        ! --- ie_vrt_nd: Tprime, rprime, vprime (tempr=1, tempt=1, vnext=vp) ---
+        rnext_e   = p%radius
+        Tnext_e   = p%Tp
+        dnext_e   = 2.0d0 * rnext_e
+        esa_e     = 610.94d0 * exp((17.6257d0*(p%Tf-273.15d0)) / &
+                                   (243.04d0 + (p%Tf-273.15d0)))
+        VolP_e    = (2.0d0/3.0d0) * pi2 * rnext_e**3
+        rhop_e    = (p%m_s + VolP_e*rhow) / VolP_e
+        taup0_e   = ((p%m_s/((2.0d0/3.0d0)*pi2*radius_init**3) + rhow) * &
+                     (radius_init*2.0d0)**2) / (18.0d0*rhoa*nuf)
+
+        ediff1    = p%uf(1) - p%vp(1)
+        ediff2    = p%uf(2) - p%vp(2)
+        ediff3    = p%uf(3) - p%vp(3)
+        ediffnorm = sqrt(ediff1**2 + ediff2**2 + ediff3**2)
+        Rep_e     = dnext_e * ediffnorm / nuf
+        taup_e    = (rhop_e * dnext_e**2) / (18.0d0*rhoa*nuf)
+        corrfac_e = 1.0d0 + 0.15d0 * Rep_e**0.687d0
+
+        vprime1_e = (corrfac_e/taup_e * ediff1         ) * taup0_e**2
+        vprime2_e = (corrfac_e/taup_e * ediff2         ) * taup0_e**2
+        vprime3_e = (corrfac_e/taup_e * ediff3 - grav3 ) * taup0_e**2
+
+        qstr_e    = (Mw/(Ru*Tnext_e*rhoa)) * esa_e * &
+                    exp( (Lv*Mw/Ru)*(1.0d0/p%Tf - 1.0d0/Tnext_e) + &
+                         (2.0d0*Mw*Gam)/(Ru*rhow*rnext_e*Tnext_e) - &
+                         (p%kappa_s*p%m_s*rhow/rhos)/(VolP_e*rhop_e - p%m_s) )
+        Shp_e     = 2.0d0 + 0.6d0*sqrt(Rep_e)*Sc**(1.0d0/3.0d0)
+        rprime_e  = (1.0d0/9.0d0)*(Shp_e/Sc)*(rhop_e/rhow)*(rnext_e/taup_e) * &
+                    (p%qinf - qstr_e) * (taup0_e/p%radius)
+
+        Nup_e     = 2.0d0 + 0.6d0*sqrt(Rep_e)*Pra**(1.0d0/3.0d0)
+        Tprime_e  = ( -(1.0d0/3.0d0)*(Nup_e/Pra)*CpaCpp*(rhop_e/rhow)*(1.0d0/taup_e) * &
+                       (Tnext_e - p%Tf) + &
+                       3.0d0*Lv*(1.0d0/(rnext_e*Cpp))*rprime_e*(p%radius/taup0_e) ) * &
+                    (taup0_e/p%Tp)
+
+        dummy = dummy + rprime_e + Tprime_e + vprime1_e
+
         p => p%next
       end do
     end do
 
     call system_clock(t1)
     elapsed = real(t1 - t0, 8) / real(rate, 8)
+    write(*,'(a,e12.4)') '  list dummy (anti-optimization): ', dummy
 
     checksum = 0.0d0
     p => head
@@ -184,7 +243,7 @@ contains
   end subroutine run_linked_list
 
   ! -----------------------------------------------------------------------
-  ! 2. Array of Structs (AoS) — physics inlined, accesses parts(i)%field
+  ! 2. Array of Structs (AoS) — physics + ie_vrt_nd inlined
   ! -----------------------------------------------------------------------
   subroutine run_aos(elapsed, checksum)
     real(8), intent(out) :: elapsed, checksum
@@ -204,8 +263,16 @@ contains
 
     type(particle_aos), allocatable :: parts(:)
     integer    :: i, istep
+    ! backward Euler locals
     real(8)    :: diff1, diff2, diff3, diffnorm
     real(8)    :: Volp, rhop, taup_i, Rep, Nup, tmp_coeff
+    ! ie_vrt_nd locals
+    real(8)    :: rnext_e, Tnext_e, dnext_e, esa_e, VolP_e, rhop_e
+    real(8)    :: taup0_e, ediff1, ediff2, ediff3, ediffnorm
+    real(8)    :: Rep_e, taup_e, corrfac_e
+    real(8)    :: vprime1_e, vprime2_e, vprime3_e
+    real(8)    :: qstr_e, Shp_e, rprime_e, Nup_e, Tprime_e
+    real(8)    :: dummy
     integer(8) :: t0, t1, rate
 
     allocate(parts(npart))
@@ -228,11 +295,13 @@ contains
       parts(i)%radius_old = parts(i)%radius;  parts(i)%mult = 1
     end do
 
+    dummy = 0.0d0
     call system_clock(t0, rate)
 
     do istep = 1, nsteps
       do i = 1, npart
 
+        ! --- Backward Euler update ---
         diff1    = parts(i)%vp(1) - parts(i)%uf(1)
         diff2    = parts(i)%vp(2) - parts(i)%uf(2)
         diff3    = parts(i)%vp(3) - parts(i)%uf(3)
@@ -259,18 +328,59 @@ contains
         parts(i)%Tp = (parts(i)%Tp + tmp_coeff*dt*parts(i)%Tf) &
                       / (1.0d0 + dt*tmp_coeff)
 
+        ! --- ie_vrt_nd: Tprime, rprime, vprime (tempr=1, tempt=1, vnext=vp) ---
+        rnext_e   = parts(i)%radius
+        Tnext_e   = parts(i)%Tp
+        dnext_e   = 2.0d0 * rnext_e
+        esa_e     = 610.94d0 * exp((17.6257d0*(parts(i)%Tf-273.15d0)) / &
+                                   (243.04d0 + (parts(i)%Tf-273.15d0)))
+        VolP_e    = (2.0d0/3.0d0) * pi2 * rnext_e**3
+        rhop_e    = (parts(i)%m_s + VolP_e*rhow) / VolP_e
+        taup0_e   = ((parts(i)%m_s/((2.0d0/3.0d0)*pi2*radius_init**3) + rhow) * &
+                     (radius_init*2.0d0)**2) / (18.0d0*rhoa*nuf)
+
+        ediff1    = parts(i)%uf(1) - parts(i)%vp(1)
+        ediff2    = parts(i)%uf(2) - parts(i)%vp(2)
+        ediff3    = parts(i)%uf(3) - parts(i)%vp(3)
+        ediffnorm = sqrt(ediff1**2 + ediff2**2 + ediff3**2)
+        Rep_e     = dnext_e * ediffnorm / nuf
+        taup_e    = (rhop_e * dnext_e**2) / (18.0d0*rhoa*nuf)
+        corrfac_e = 1.0d0 + 0.15d0 * Rep_e**0.687d0
+
+        vprime1_e = (corrfac_e/taup_e * ediff1         ) * taup0_e**2
+        vprime2_e = (corrfac_e/taup_e * ediff2         ) * taup0_e**2
+        vprime3_e = (corrfac_e/taup_e * ediff3 - grav3 ) * taup0_e**2
+
+        qstr_e    = (Mw/(Ru*Tnext_e*rhoa)) * esa_e * &
+                    exp( (Lv*Mw/Ru)*(1.0d0/parts(i)%Tf - 1.0d0/Tnext_e) + &
+                         (2.0d0*Mw*Gam)/(Ru*rhow*rnext_e*Tnext_e) - &
+                         (parts(i)%kappa_s*parts(i)%m_s*rhow/rhos) / &
+                         (VolP_e*rhop_e - parts(i)%m_s) )
+        Shp_e     = 2.0d0 + 0.6d0*sqrt(Rep_e)*Sc**(1.0d0/3.0d0)
+        rprime_e  = (1.0d0/9.0d0)*(Shp_e/Sc)*(rhop_e/rhow)*(rnext_e/taup_e) * &
+                    (parts(i)%qinf - qstr_e) * (taup0_e/parts(i)%radius)
+
+        Nup_e     = 2.0d0 + 0.6d0*sqrt(Rep_e)*Pra**(1.0d0/3.0d0)
+        Tprime_e  = ( -(1.0d0/3.0d0)*(Nup_e/Pra)*CpaCpp*(rhop_e/rhow)*(1.0d0/taup_e) * &
+                       (Tnext_e - parts(i)%Tf) + &
+                       3.0d0*Lv*(1.0d0/(rnext_e*Cpp))*rprime_e*(parts(i)%radius/taup0_e) ) * &
+                    (taup0_e/parts(i)%Tp)
+
+        dummy = dummy + rprime_e + Tprime_e + vprime1_e
+
       end do
     end do
 
     call system_clock(t1)
     elapsed  = real(t1 - t0, 8) / real(rate, 8)
+    write(*,'(a,e12.4)') '  AoS  dummy (anti-optimization): ', dummy
     checksum = sum(parts(:)%radius) / real(npart, 8)
 
     deallocate(parts)
   end subroutine run_aos
 
   ! -----------------------------------------------------------------------
-  ! 3. Struct of Arrays (SoA) — physics inlined, accesses field(i) directly
+  ! 3. Struct of Arrays (SoA) — physics + ie_vrt_nd inlined
   ! -----------------------------------------------------------------------
   subroutine run_soa(elapsed, checksum)
     real(8), intent(out) :: elapsed, checksum
@@ -287,8 +397,16 @@ contains
     integer(8), allocatable :: mult(:)
 
     integer    :: i, istep
+    ! backward Euler locals
     real(8)    :: diff1, diff2, diff3, diffnorm
     real(8)    :: Volp, rhop, taup_i, Rep, Nup, tmp_coeff
+    ! ie_vrt_nd locals
+    real(8)    :: rnext_e, Tnext_e, dnext_e, esa_e, VolP_e, rhop_e
+    real(8)    :: taup0_e, ediff1, ediff2, ediff3, ediffnorm
+    real(8)    :: Rep_e, taup_e, corrfac_e
+    real(8)    :: vprime1_e, vprime2_e, vprime3_e
+    real(8)    :: qstr_e, Shp_e, rprime_e, Nup_e, Tprime_e
+    real(8)    :: dummy
     integer(8) :: t0, t1, rate
 
     allocate(xp(3,npart), vp(3,npart), uf(3,npart))
@@ -317,11 +435,13 @@ contains
       radius_old(i) = radius(i);  mult(i)    = 1
     end do
 
+    dummy = 0.0d0
     call system_clock(t0, rate)
 
     do istep = 1, nsteps
       do i = 1, npart
 
+        ! --- Backward Euler update ---
         diff1    = vp(1,i) - uf(1,i)
         diff2    = vp(2,i) - uf(2,i)
         diff3    = vp(3,i) - uf(3,i)
@@ -344,11 +464,51 @@ contains
         tmp_coeff = Nup/3.0d0/Pra * CpaCpp * rhop/rhow * taup_i
         Tp(i)     = (Tp(i) + tmp_coeff*dt*Tf(i)) / (1.0d0 + dt*tmp_coeff)
 
+        ! --- ie_vrt_nd: Tprime, rprime, vprime (tempr=1, tempt=1, vnext=vp) ---
+        rnext_e   = radius(i)
+        Tnext_e   = Tp(i)
+        dnext_e   = 2.0d0 * rnext_e
+        esa_e     = 610.94d0 * exp((17.6257d0*(Tf(i)-273.15d0)) / &
+                                   (243.04d0 + (Tf(i)-273.15d0)))
+        VolP_e    = (2.0d0/3.0d0) * pi2 * rnext_e**3
+        rhop_e    = (m_s(i) + VolP_e*rhow) / VolP_e
+        taup0_e   = ((m_s(i)/((2.0d0/3.0d0)*pi2*radius_init**3) + rhow) * &
+                     (radius_init*2.0d0)**2) / (18.0d0*rhoa*nuf)
+
+        ediff1    = uf(1,i) - vp(1,i)
+        ediff2    = uf(2,i) - vp(2,i)
+        ediff3    = uf(3,i) - vp(3,i)
+        ediffnorm = sqrt(ediff1**2 + ediff2**2 + ediff3**2)
+        Rep_e     = dnext_e * ediffnorm / nuf
+        taup_e    = (rhop_e * dnext_e**2) / (18.0d0*rhoa*nuf)
+        corrfac_e = 1.0d0 + 0.15d0 * Rep_e**0.687d0
+
+        vprime1_e = (corrfac_e/taup_e * ediff1         ) * taup0_e**2
+        vprime2_e = (corrfac_e/taup_e * ediff2         ) * taup0_e**2
+        vprime3_e = (corrfac_e/taup_e * ediff3 - grav3 ) * taup0_e**2
+
+        qstr_e    = (Mw/(Ru*Tnext_e*rhoa)) * esa_e * &
+                    exp( (Lv*Mw/Ru)*(1.0d0/Tf(i) - 1.0d0/Tnext_e) + &
+                         (2.0d0*Mw*Gam)/(Ru*rhow*rnext_e*Tnext_e) - &
+                         (kappa_s(i)*m_s(i)*rhow/rhos)/(VolP_e*rhop_e - m_s(i)) )
+        Shp_e     = 2.0d0 + 0.6d0*sqrt(Rep_e)*Sc**(1.0d0/3.0d0)
+        rprime_e  = (1.0d0/9.0d0)*(Shp_e/Sc)*(rhop_e/rhow)*(rnext_e/taup_e) * &
+                    (qinf(i) - qstr_e) * (taup0_e/radius(i))
+
+        Nup_e     = 2.0d0 + 0.6d0*sqrt(Rep_e)*Pra**(1.0d0/3.0d0)
+        Tprime_e  = ( -(1.0d0/3.0d0)*(Nup_e/Pra)*CpaCpp*(rhop_e/rhow)*(1.0d0/taup_e) * &
+                       (Tnext_e - Tf(i)) + &
+                       3.0d0*Lv*(1.0d0/(rnext_e*Cpp))*rprime_e*(radius(i)/taup0_e) ) * &
+                    (taup0_e/Tp(i))
+
+        dummy = dummy + rprime_e + Tprime_e + vprime1_e
+
       end do
     end do
 
     call system_clock(t1)
     elapsed  = real(t1 - t0, 8) / real(rate, 8)
+    write(*,'(a,e12.4)') '  SoA  dummy (anti-optimization): ', dummy
     checksum = sum(radius) / real(npart, 8)
 
     deallocate(xp, vp, uf, radius, m_s, Tp, Tf)
