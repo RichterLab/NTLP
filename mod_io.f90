@@ -1985,7 +1985,7 @@ contains
 
 
       namelist /constants/ nuf, Cpa, Pra, Sc, &
-      tnumpart,mult_init,rhow,part_grav,rhos, &
+      tnumpart,max_tnumpart,mult_init,rhow,part_grav,rhos, &
       Cpp,Mw,Ms,Ru,Gam,Ion,Sal,Rd, &
       radius_init,radius_std,kappas_init,kappas_std, &
       grav, t00,fcor,zo,zos, &

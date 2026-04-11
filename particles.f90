@@ -23,7 +23,9 @@ module particles
   real, allocatable :: vis_ss(:,:,:),vis_sext(:,:,:)
 
   integer :: particletype,pad_diff
-  integer :: numpart,tnumpart,ngidx
+  integer :: numpart,tnumpart,max_tnumpart,ngidx
+  integer :: parts_capacity
+  type(particle), allocatable :: parts(:)
   integer :: numdrop,tnumdrop
   integer :: numaerosol,tnumaerosol
   integer :: iseed
@@ -1798,6 +1800,10 @@ CONTAINS
       numpart = numpart + MOD(tnumpart,numprocs)
       endif
 
+      parts_capacity = max_tnumpart/numprocs
+      if (myid == 0) parts_capacity = parts_capacity + MOD(max_tnumpart,numprocs)
+      allocate(parts(parts_capacity))
+
 
       !Initialize ngidx, the particle global index for this processor
       ngidx = 1
@@ -2212,8 +2218,13 @@ CONTAINS
       implicit none
 
       real :: xp(3), vp(3), Tp, qinfp, rad_init, pi, m_s, kappa_s
-      integer :: idx,procidx
+      integer :: idx,procidx,ierr
       integer*8 :: mult
+
+      if (numpart >= parts_capacity) then
+         write(*,*) 'ERROR: particle count exceeded max_tnumpart on rank', myid
+         call mpi_abort(mpi_comm_world, 1, ierr)
+      end if
 
       if (.NOT. associated(first_particle)) then
          allocate(first_particle)
