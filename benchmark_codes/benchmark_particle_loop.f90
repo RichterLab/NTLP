@@ -5,6 +5,8 @@ program benchmark_particle_loop
   !   3. Struct of Arrays (SoA)
   !
   ! Physics: position/velocity/temperature update (no evaporation, no interpolation)
+  ! Each version inlines the physics directly against its own data structure so
+  ! that all field accesses go through the actual memory layout being tested.
   !
   ! Real fields use real(8) to match production code compiled with -r8.
   ! Resulting particle struct size matches the production 352-byte type.
@@ -15,7 +17,7 @@ program benchmark_particle_loop
   integer, parameter :: npart  = 300000
   integer, parameter :: nsteps = 1000
 
-  ! Physical constants (real(8) to match -r8 production build)
+  ! Physical constants
   real(8), parameter :: pi2    = 3.14159265358979d0
   real(8), parameter :: rhow   = 1000.0d0
   real(8), parameter :: rhoa   = 1.2d0
@@ -59,38 +61,6 @@ program benchmark_particle_loop
 contains
 
   ! -----------------------------------------------------------------------
-  ! Shared: one particle physics update.
-  ! Updates xp, vp, Tp in place.
-  ! -----------------------------------------------------------------------
-  subroutine update_particle(xp, vp, uf, radius, m_s, Tp, Tf, &
-                              Volp, rhop, taup_i)
-    real(8), intent(inout) :: xp(3), vp(3), Tp
-    real(8), intent(in)    :: uf(3), radius, m_s, Tf
-    real(8), intent(out)   :: Volp, rhop, taup_i
-
-    real(8) :: diff(3), diffnorm, Rep, Nup, tmp_coeff
-
-    diff     = vp - uf
-    diffnorm = sqrt(diff(1)**2 + diff(2)**2 + diff(3)**2)
-
-    Volp   = pi2 * 2.0d0/3.0d0 * radius**3
-    rhop   = (m_s + Volp*rhow) / Volp
-    taup_i = 18.0d0*rhoa*nuf / rhop / (2.0d0*radius)**2
-    Rep    = 2.0d0*radius*diffnorm / nuf
-
-    ! Position and velocity (backward Euler)
-    xp(1:3) = xp(1:3) + dt*vp(1:3)
-    vp(1) = (vp(1) + taup_i*dt*uf(1) + dt*grav1) / (1.0d0 + dt*taup_i)
-    vp(2) = (vp(2) + taup_i*dt*uf(2) + dt*grav2) / (1.0d0 + dt*taup_i)
-    vp(3) = (vp(3) + taup_i*dt*uf(3) + dt*grav3) / (1.0d0 + dt*taup_i)
-
-    ! Temperature (Ranz-Marshall Nusselt, backward Euler)
-    Nup       = 2.0d0 + 0.6d0*sqrt(Rep)*Pra**(1.0d0/3.0d0)
-    tmp_coeff = Nup/3.0d0/Pra * CpaCpp * rhop/rhow * taup_i
-    Tp        = (Tp + tmp_coeff*dt*Tf) / (1.0d0 + dt*tmp_coeff)
-  end subroutine update_particle
-
-  ! -----------------------------------------------------------------------
   ! Shared: deterministic pseudo-random initialisation for core fields
   ! -----------------------------------------------------------------------
   subroutine init_particle_state(i, xp, vp, uf, radius, m_s, Tp, Tf)
@@ -119,16 +89,14 @@ contains
   end subroutine init_particle_state
 
   ! -----------------------------------------------------------------------
-  ! 1. Linked list
+  ! 1. Linked list — physics inlined, accesses p%field directly
   ! -----------------------------------------------------------------------
   subroutine run_linked_list(elapsed, checksum)
     real(8), intent(out) :: elapsed, checksum
 
     type :: particle
-      ! Core fields (actively updated)
       real(8) :: xp(3), vp(3), uf(3)
       real(8) :: radius, m_s, Tp, Tf
-      ! Additional fields — same as real particle type
       integer :: pidx, procidx, nbr_pidx, nbr_procidx
       real(8) :: xrhs(3), vrhs(3)
       real(8) :: Tprhs_s, Tprhs_L, radrhs
@@ -141,8 +109,9 @@ contains
     end type particle
 
     type(particle), pointer :: head, p, tmp
-    integer   :: i, istep
-    real(8)   :: Volp, rhop, taup_i
+    integer    :: i, istep
+    real(8)    :: diff1, diff2, diff3, diffnorm
+    real(8)    :: Volp, rhop, taup_i, Rep, Nup, tmp_coeff
     integer(8) :: t0, t1, rate
 
     nullify(head)
@@ -150,13 +119,13 @@ contains
       allocate(tmp)
       call init_particle_state(i, tmp%xp, tmp%vp, tmp%uf, &
                                tmp%radius, tmp%m_s, tmp%Tp, tmp%Tf)
-      tmp%pidx = i;         tmp%procidx    = 0
+      tmp%pidx = i;         tmp%procidx     = 0
       tmp%nbr_pidx = 0;     tmp%nbr_procidx = 0
       tmp%xrhs = tmp%vp;    tmp%vrhs        = 0.0d0
-      tmp%Tprhs_s = 0.0d0;  tmp%Tprhs_L    = 0.0d0;  tmp%radrhs   = 0.0d0
-      tmp%qinf = 0.01d0;    tmp%qstar       = 0.01d0; tmp%nbr_dist = 10.0d0
+      tmp%Tprhs_s = 0.0d0;  tmp%Tprhs_L     = 0.0d0;  tmp%radrhs   = 0.0d0
+      tmp%qinf = 0.01d0;    tmp%qstar       = 0.01d0;  tmp%nbr_dist = 10.0d0
       tmp%res = 0.0d0;      tmp%kappa_s     = 0.5d0
-      tmp%rc = 1.0d-5;      tmp%actres      = 0.0d0;  tmp%numact   = 0.0d0
+      tmp%rc = 1.0d-5;      tmp%actres      = 0.0d0;   tmp%numact   = 0.0d0
       tmp%u_sub = 0.0d0;    tmp%sigm_s      = 0.0d0
       tmp%vp_old = tmp%vp;  tmp%Tp_old      = tmp%Tp
       tmp%radius_old = tmp%radius;  tmp%mult = 1
@@ -169,8 +138,29 @@ contains
     do istep = 1, nsteps
       p => head
       do while (associated(p))
-        call update_particle(p%xp, p%vp, p%uf, p%radius, p%m_s, &
-                             p%Tp, p%Tf, Volp, rhop, taup_i)
+
+        diff1    = p%vp(1) - p%uf(1)
+        diff2    = p%vp(2) - p%uf(2)
+        diff3    = p%vp(3) - p%uf(3)
+        diffnorm = sqrt(diff1**2 + diff2**2 + diff3**2)
+
+        Volp   = pi2 * 2.0d0/3.0d0 * p%radius**3
+        rhop   = (p%m_s + Volp*rhow) / Volp
+        taup_i = 18.0d0*rhoa*nuf / rhop / (2.0d0*p%radius)**2
+        Rep    = 2.0d0*p%radius*diffnorm / nuf
+
+        p%xp(1) = p%xp(1) + dt*p%vp(1)
+        p%xp(2) = p%xp(2) + dt*p%vp(2)
+        p%xp(3) = p%xp(3) + dt*p%vp(3)
+
+        p%vp(1) = (p%vp(1) + taup_i*dt*p%uf(1) + dt*grav1) / (1.0d0 + dt*taup_i)
+        p%vp(2) = (p%vp(2) + taup_i*dt*p%uf(2) + dt*grav2) / (1.0d0 + dt*taup_i)
+        p%vp(3) = (p%vp(3) + taup_i*dt*p%uf(3) + dt*grav3) / (1.0d0 + dt*taup_i)
+
+        Nup       = 2.0d0 + 0.6d0*sqrt(Rep)*Pra**(1.0d0/3.0d0)
+        tmp_coeff = Nup/3.0d0/Pra * CpaCpp * rhop/rhow * taup_i
+        p%Tp      = (p%Tp + tmp_coeff*dt*p%Tf) / (1.0d0 + dt*tmp_coeff)
+
         p => p%next
       end do
     end do
@@ -194,16 +184,14 @@ contains
   end subroutine run_linked_list
 
   ! -----------------------------------------------------------------------
-  ! 2. Array of Structs (AoS)
+  ! 2. Array of Structs (AoS) — physics inlined, accesses parts(i)%field
   ! -----------------------------------------------------------------------
   subroutine run_aos(elapsed, checksum)
     real(8), intent(out) :: elapsed, checksum
 
     type :: particle_aos
-      ! Core fields (actively updated)
       real(8) :: xp(3), vp(3), uf(3)
       real(8) :: radius, m_s, Tp, Tf
-      ! Additional fields — same as real particle type
       integer :: pidx, procidx, nbr_pidx, nbr_procidx
       real(8) :: xrhs(3), vrhs(3)
       real(8) :: Tprhs_s, Tprhs_L, radrhs
@@ -215,8 +203,9 @@ contains
     end type particle_aos
 
     type(particle_aos), allocatable :: parts(:)
-    integer   :: i, istep
-    real(8)   :: Volp, rhop, taup_i
+    integer    :: i, istep
+    real(8)    :: diff1, diff2, diff3, diffnorm
+    real(8)    :: Volp, rhop, taup_i, Rep, Nup, tmp_coeff
     integer(8) :: t0, t1, rate
 
     allocate(parts(npart))
@@ -243,9 +232,33 @@ contains
 
     do istep = 1, nsteps
       do i = 1, npart
-        call update_particle(parts(i)%xp, parts(i)%vp, parts(i)%uf, &
-                             parts(i)%radius, parts(i)%m_s, &
-                             parts(i)%Tp, parts(i)%Tf, Volp, rhop, taup_i)
+
+        diff1    = parts(i)%vp(1) - parts(i)%uf(1)
+        diff2    = parts(i)%vp(2) - parts(i)%uf(2)
+        diff3    = parts(i)%vp(3) - parts(i)%uf(3)
+        diffnorm = sqrt(diff1**2 + diff2**2 + diff3**2)
+
+        Volp   = pi2 * 2.0d0/3.0d0 * parts(i)%radius**3
+        rhop   = (parts(i)%m_s + Volp*rhow) / Volp
+        taup_i = 18.0d0*rhoa*nuf / rhop / (2.0d0*parts(i)%radius)**2
+        Rep    = 2.0d0*parts(i)%radius*diffnorm / nuf
+
+        parts(i)%xp(1) = parts(i)%xp(1) + dt*parts(i)%vp(1)
+        parts(i)%xp(2) = parts(i)%xp(2) + dt*parts(i)%vp(2)
+        parts(i)%xp(3) = parts(i)%xp(3) + dt*parts(i)%vp(3)
+
+        parts(i)%vp(1) = (parts(i)%vp(1) + taup_i*dt*parts(i)%uf(1) + dt*grav1) &
+                         / (1.0d0 + dt*taup_i)
+        parts(i)%vp(2) = (parts(i)%vp(2) + taup_i*dt*parts(i)%uf(2) + dt*grav2) &
+                         / (1.0d0 + dt*taup_i)
+        parts(i)%vp(3) = (parts(i)%vp(3) + taup_i*dt*parts(i)%uf(3) + dt*grav3) &
+                         / (1.0d0 + dt*taup_i)
+
+        Nup       = 2.0d0 + 0.6d0*sqrt(Rep)*Pra**(1.0d0/3.0d0)
+        tmp_coeff = Nup/3.0d0/Pra * CpaCpp * rhop/rhow * taup_i
+        parts(i)%Tp = (parts(i)%Tp + tmp_coeff*dt*parts(i)%Tf) &
+                      / (1.0d0 + dt*tmp_coeff)
+
       end do
     end do
 
@@ -257,15 +270,13 @@ contains
   end subroutine run_aos
 
   ! -----------------------------------------------------------------------
-  ! 3. Struct of Arrays (SoA)
+  ! 3. Struct of Arrays (SoA) — physics inlined, accesses field(i) directly
   ! -----------------------------------------------------------------------
   subroutine run_soa(elapsed, checksum)
     real(8), intent(out) :: elapsed, checksum
 
-    ! Core fields (actively updated)
     real(8), allocatable :: xp(:,:), vp(:,:), uf(:,:)
     real(8), allocatable :: radius(:), m_s(:), Tp(:), Tf(:)
-    ! Additional fields — same as real particle type
     integer,  allocatable :: pidx(:), procidx(:), nbr_pidx(:), nbr_procidx(:)
     real(8),  allocatable :: xrhs(:,:), vrhs(:,:)
     real(8),  allocatable :: Tprhs_s(:), Tprhs_L(:), radrhs(:)
@@ -275,9 +286,9 @@ contains
     real(8),  allocatable :: vp_old(:,:), Tp_old(:), radius_old(:)
     integer(8), allocatable :: mult(:)
 
-    integer   :: i, istep
-    real(8)   :: xp_i(3), vp_i(3), uf_i(3), radius_i, m_s_i, Tp_i, Tf_i
-    real(8)   :: Volp, rhop, taup_i
+    integer    :: i, istep
+    real(8)    :: diff1, diff2, diff3, diffnorm
+    real(8)    :: Volp, rhop, taup_i, Rep, Nup, tmp_coeff
     integer(8) :: t0, t1, rate
 
     allocate(xp(3,npart), vp(3,npart), uf(3,npart))
@@ -294,27 +305,45 @@ contains
     do i = 1, npart
       call init_particle_state(i, xp(:,i), vp(:,i), uf(:,i), &
                                radius(i), m_s(i), Tp(i), Tf(i))
-      pidx(i) = i;           procidx(i)    = 0
+      pidx(i) = i;           procidx(i)     = 0
       nbr_pidx(i) = 0;       nbr_procidx(i) = 0
-      xrhs(:,i) = vp(:,i);   vrhs(:,i)     = 0.0d0
-      Tprhs_s(i) = 0.0d0;    Tprhs_L(i)    = 0.0d0;  radrhs(i)   = 0.0d0
-      qinf(i) = 0.01d0;      qstar(i)      = 0.01d0; nbr_dist(i) = 10.0d0
-      res(i) = 0.0d0;        kappa_s(i)    = 0.5d0
-      rc(i) = 1.0d-5;        actres(i)     = 0.0d0;  numact(i)   = 0.0d0
-      u_sub(:,i) = 0.0d0;    sigm_s(i)     = 0.0d0
-      vp_old(:,i) = vp(:,i); Tp_old(i)     = Tp(i)
-      radius_old(i) = radius(i);  mult(i)   = 1
+      xrhs(:,i) = vp(:,i);   vrhs(:,i)      = 0.0d0
+      Tprhs_s(i) = 0.0d0;    Tprhs_L(i)     = 0.0d0;  radrhs(i)   = 0.0d0
+      qinf(i) = 0.01d0;      qstar(i)       = 0.01d0; nbr_dist(i) = 10.0d0
+      res(i) = 0.0d0;        kappa_s(i)     = 0.5d0
+      rc(i) = 1.0d-5;        actres(i)      = 0.0d0;  numact(i)   = 0.0d0
+      u_sub(:,i) = 0.0d0;    sigm_s(i)      = 0.0d0
+      vp_old(:,i) = vp(:,i); Tp_old(i)      = Tp(i)
+      radius_old(i) = radius(i);  mult(i)    = 1
     end do
 
     call system_clock(t0, rate)
 
     do istep = 1, nsteps
       do i = 1, npart
-        xp_i = xp(:,i); vp_i = vp(:,i); uf_i = uf(:,i)
-        radius_i = radius(i); m_s_i = m_s(i); Tp_i = Tp(i); Tf_i = Tf(i)
-        call update_particle(xp_i, vp_i, uf_i, radius_i, m_s_i, &
-                             Tp_i, Tf_i, Volp, rhop, taup_i)
-        xp(:,i) = xp_i; vp(:,i) = vp_i; Tp(i) = Tp_i
+
+        diff1    = vp(1,i) - uf(1,i)
+        diff2    = vp(2,i) - uf(2,i)
+        diff3    = vp(3,i) - uf(3,i)
+        diffnorm = sqrt(diff1**2 + diff2**2 + diff3**2)
+
+        Volp   = pi2 * 2.0d0/3.0d0 * radius(i)**3
+        rhop   = (m_s(i) + Volp*rhow) / Volp
+        taup_i = 18.0d0*rhoa*nuf / rhop / (2.0d0*radius(i))**2
+        Rep    = 2.0d0*radius(i)*diffnorm / nuf
+
+        xp(1,i) = xp(1,i) + dt*vp(1,i)
+        xp(2,i) = xp(2,i) + dt*vp(2,i)
+        xp(3,i) = xp(3,i) + dt*vp(3,i)
+
+        vp(1,i) = (vp(1,i) + taup_i*dt*uf(1,i) + dt*grav1) / (1.0d0 + dt*taup_i)
+        vp(2,i) = (vp(2,i) + taup_i*dt*uf(2,i) + dt*grav2) / (1.0d0 + dt*taup_i)
+        vp(3,i) = (vp(3,i) + taup_i*dt*uf(3,i) + dt*grav3) / (1.0d0 + dt*taup_i)
+
+        Nup       = 2.0d0 + 0.6d0*sqrt(Rep)*Pra**(1.0d0/3.0d0)
+        tmp_coeff = Nup/3.0d0/Pra * CpaCpp * rhop/rhow * taup_i
+        Tp(i)     = (Tp(i) + tmp_coeff*dt*Tf(i)) / (1.0d0 + dt*tmp_coeff)
+
       end do
     end do
 
