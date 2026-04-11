@@ -1761,6 +1761,16 @@ CONTAINS
            first_particle => tmp
            nullify(tmp)
         end if
+        ! Dual-write: mirror received particle into parts array
+        if (npart_arr >= parts_capacity) then
+           write(*,*) 'ERROR: particle count exceeded max_tnumpart on rank', myid
+           call mpi_abort(mpi_comm_world, 1, ierr)
+        end if
+        npart_arr = npart_arr + 1
+        parts(npart_arr) = first_particle
+        parts(npart_arr)%array_idx = npart_arr
+        first_particle%array_idx = npart_arr
+        list_ptrs(npart_arr)%p => first_particle
       end do  
       
       deallocate(rbuf_s,trbuf_s,tbuf_s,tlbuf_s)
