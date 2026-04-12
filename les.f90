@@ -454,7 +454,7 @@
                  ' Particle sub-step ', istep_part, ' of ', nsteps_part
 
               call start_phase(measurement_id_particle_solver)
-              call particle_update_BE
+              call particle_update_BE(istep_part)
               call end_phase(measurement_id_particle_solver)
 
               call start_phase(measurement_id_particle_coupling)

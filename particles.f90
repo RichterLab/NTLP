@@ -2996,7 +2996,7 @@ CONTAINS
 
   end subroutine particle_update_rk3
 
-  subroutine particle_update_BE
+  subroutine particle_update_BE(istep_part)
       use pars
       use con_data
       use con_stats
@@ -3004,6 +3004,7 @@ CONTAINS
       implicit none
       include 'mpif.h'
 
+      integer, intent(in) :: istep_part
       integer :: ierr,fluxloc,fluxloci
       real :: denom, dtl, sigma
       integer :: ix,iy,iz,im,flag,mflag
@@ -3020,22 +3021,28 @@ CONTAINS
 
 
 
-      !First fill extended velocity field for interpolation
-      call start_phase(measurement_id_particle_fill_ext)
-      call fill_ext
-      call end_phase(measurement_id_particle_fill_ext)
+      !Fill extended velocity field for interpolation (only needed once per flow step)
+      if (istep_part == 1) then
+         call start_phase(measurement_id_particle_fill_ext)
+         call fill_ext
+         call end_phase(measurement_id_particle_fill_ext)
+      end if
 
-      call start_phase(measurement_id_particle_misc)
-      pflux = 0.0
-      pmassflux = 0.0
-      penegflux = 0.0
+      !Reset flux/stat accumulators on first sub-step only so they accumulate
+      !across all sub-steps and reflect the full flow time step
+      if (istep_part == 1) then
+         call start_phase(measurement_id_particle_misc)
+         pflux = 0.0
+         pmassflux = 0.0
+         penegflux = 0.0
 
-      denum = 0
-      actnum = 0
-      num_destroy = 0
-      num100 = 0
-      numimpos = 0
-      call end_phase(measurement_id_particle_misc)
+         denum = 0
+         actnum = 0
+         num_destroy = 0
+         num100 = 0
+         numimpos = 0
+         call end_phase(measurement_id_particle_misc)
+      end if
 
 
       call start_phase(measurement_id_particle_loop)
