@@ -22,7 +22,7 @@ module particles
   real, allocatable :: sigm_sdzext(:,:,:)
   real, allocatable :: vis_ss(:,:,:),vis_sext(:,:,:)
 
-  integer :: particletype,pad_diff
+  integer :: particletype
   integer :: numpart,tnumpart,max_tnumpart,ngidx
   integer :: parts_capacity,npart_arr
   integer :: numdrop,tnumdrop
@@ -85,17 +85,9 @@ module particles
     real :: u_sub(3), sigm_s
     real :: vp_old(3), Tp_old, radius_old
     integer*8 :: mult
-    type(particle), pointer :: prev,next
-    integer :: array_idx
   end type particle
 
-  type :: particle_ptr
-    type(particle), pointer :: p
-  end type particle_ptr
-
-  type(particle), pointer :: part,first_particle
   type(particle), allocatable :: parts(:)
-  type(particle_ptr), allocatable :: list_ptrs(:)
 
 CONTAINS
 
@@ -1442,7 +1434,6 @@ CONTAINS
       implicit none
       include 'mpif.h'
 
-      type(particle), pointer :: tmp
       integer :: i,idx,psum,csum
       integer :: ir,itr,itop,itl,il,ibl,ib,ibr
       integer :: istatus(mpi_status_size),ierr
@@ -1497,47 +1488,46 @@ CONTAINS
       ir=1;itr=1;itop=1;itl=1;il=1;ibl=1;ib=1;ibr=1
 
       do i = npart_arr, 1, -1
-         part => list_ptrs(i)%p
 
          if (parts(i)%xp(2) .GT. ymax) then
             if (parts(i)%xp(1) .GT. xmax) then !top right
                trbuf_s(itr) = parts(i)
-               call destroy_particle
+               call destroy_particle(i)
                itr = itr + 1
             elseif (parts(i)%xp(1) .LT. xmin) then !bottom right
                brbuf_s(ibr) = parts(i)
-               call destroy_particle
+               call destroy_particle(i)
                ibr = ibr + 1
             else  !right
                rbuf_s(ir) = parts(i)
-               call destroy_particle
+               call destroy_particle(i)
                ir = ir + 1
             end if
          elseif (parts(i)%xp(2) .LT. ymin) then
             if (parts(i)%xp(1) .GT. xmax) then !top left
                tlbuf_s(itl) = parts(i)
-               call destroy_particle
+               call destroy_particle(i)
                itl = itl + 1
             else if (parts(i)%xp(1) .LT. xmin) then !bottom left
                blbuf_s(ibl) = parts(i)
-               call destroy_particle
+               call destroy_particle(i)
                ibl = ibl + 1
             else  !left
                lbuf_s(il) = parts(i)
-               call destroy_particle
+               call destroy_particle(i)
                il = il + 1
             end if
          elseif ( (parts(i)%xp(1) .GT. xmax) .AND. &
                   (parts(i)%xp(2) .LT. ymax) .AND. &
                   (parts(i)%xp(2) .GT. ymin) ) then !top
             tbuf_s(itop) = parts(i)
-            call destroy_particle
+            call destroy_particle(i)
             itop = itop + 1
          elseif ( (parts(i)%xp(1) .LT. xmin) .AND. &
                   (parts(i)%xp(2) .LT. ymax) .AND. &
                   (parts(i)%xp(2) .GT. ymin) ) then !bottom
             bbuf_s(ib) = parts(i)
-            call destroy_particle
+            call destroy_particle(i)
             ib = ib + 1
          end if
 
@@ -1694,7 +1684,7 @@ CONTAINS
       call mpi_waitall(16,req,status_array,ierr)
 
       !Now add incoming particles to linked list:
-      !NOTE: add them to beginning since it's easiest to access (first_particle)
+      !Add received particles to the parts array:
 
       !Form one large buffer to loop through and add:
       psum = pr_r+ptr_r+pt_r+ptl_r+pl_r+pbl_r+pb_r+pbr_r
@@ -1734,29 +1724,12 @@ CONTAINS
       end if
 
       do idx = 1,psum
-        if (.NOT. associated(first_particle)) then
-           allocate(first_particle)
-           first_particle = totalbuf(idx)
-           nullify(first_particle%next,first_particle%prev)
-        else
-           allocate(first_particle%prev)
-           tmp => first_particle%prev
-           tmp = totalbuf(idx)
-           tmp%next => first_particle
-           nullify(tmp%prev)
-           first_particle => tmp
-           nullify(tmp)
-        end if
-        ! Dual-write: mirror received particle into parts array
         if (npart_arr >= parts_capacity) then
            write(*,*) 'ERROR: particle count exceeded max_tnumpart on rank', myid
            call mpi_abort(mpi_comm_world, 1, ierr)
         end if
         npart_arr = npart_arr + 1
-        parts(npart_arr) = first_particle
-        parts(npart_arr)%array_idx = npart_arr
-        first_particle%array_idx = npart_arr
-        list_ptrs(npart_arr)%p => first_particle
+        parts(npart_arr) = totalbuf(idx)
       end do  
       
       deallocate(rbuf_s,trbuf_s,tbuf_s,tlbuf_s)
@@ -1805,10 +1778,6 @@ CONTAINS
       !Initialize ngidx, the particle global index for this processor
       ngidx = 1
 
-      !Initialize the linked list of particles:
-      nullify(part,first_particle)
-      
-
       do idx=1,numpart
 
          ! Call new_particle, which creates a new particle basd on some strategy dictated by inewpart
@@ -1836,11 +1805,13 @@ CONTAINS
       include 'mpif.h'
 
       integer :: blcts(3),types(3)
-      integer :: ierr,particletype_sized
+      integer :: ierr
       real :: pi
       integer(kind=MPI_ADDRESS_KIND) :: extent,lb
-      integer(kind=MPI_ADDRESS_KIND) :: extent2,lb2,displs(3)
+      integer(kind=MPI_ADDRESS_KIND) :: displs(3)
       integer :: num_reals,num_integers,num_longs
+      integer :: dummy_pidx
+      integer*8 :: dummy_mult
       character*4 :: myid_char
       character*80 :: traj_file
 
@@ -1926,9 +1897,6 @@ CONTAINS
       !Zero out the cumulative stats
       surf_precip = 0.0
 
-      !Initialize the linked list of particles:
-      nullify(part,first_particle)
-
       !Set up MPI datatypes for sending particle information
       !MUST UPDATE IF THINGS ARE ADDED/REMOVED FROM PARTICLE STRUCTURE
 
@@ -1951,42 +1919,20 @@ CONTAINS
 
       !Now define the type:
       call mpi_type_create_struct(3,blcts,displs,types,particletype,ierr)
-
-      ! Resize to sizeof(part) so stride is correct when sending arrays.
-      ! array_idx sits after the pointers and is not transmitted, but the
-      ! full struct size must be used as the stride between elements.
-      call mpi_type_get_true_extent(particletype,lb2,extent2,ierr)
-      call mpi_type_create_resized(particletype,lb2,int(sizeof(part),MPI_ADDRESS_KIND),particletype_sized,ierr)
-      call mpi_type_free(particletype,ierr)
-      particletype = particletype_sized
-
-      call mpi_type_get_extent(particletype,lb2,extent,ierr)
-      pad_diff = extent - extent2
-      if (myid==0) then
-         write(*,*) 'mpi_get_extent = ',extent
-         write(*,*) 'mpi_get_true_extent = ',extent2
-         write(*,*) 'sizeof(part) = ',sizeof(part)
-         write(*,*) 'DIFF = ',pad_diff
-      end if
-      if (pad_diff .LT. 0) then
-        write(*,*) 'WARNING: mpi_get_extent - mpi_get_true_extent LT 0!'
-        call mpi_finalize(ierr)
-        stop
-      end if
-      
-      if (myid==0) then
-      write(*,*) 'huge(tnumpart) = ',huge(tnumpart)
-      write(*,*) 'huge(part%pidx) = ',huge(part%pidx)
-      write(*,*) 'huge(part%mult) = ',huge(part%mult)
-      end if
-
-
       call mpi_type_commit(particletype,ierr)
+
+      if (myid==0) then
+        call mpi_type_get_extent(particletype,lb,extent,ierr)
+        write(*,*) 'particletype extent = ',extent
+        write(*,*) 'sizeof(particle) = ',sizeof(parts(1))
+        write(*,*) 'huge(tnumpart) = ',huge(tnumpart)
+        write(*,*) 'huge(pidx) = ',huge(dummy_pidx)
+        write(*,*) 'huge(mult) = ',huge(dummy_mult)
+      end if
 
       parts_capacity = max_tnumpart/numprocs
       if (myid == 0) parts_capacity = parts_capacity + MOD(max_tnumpart,numprocs)
       allocate(parts(parts_capacity))
-      allocate(list_ptrs(parts_capacity))
       npart_arr = 0
 
   end subroutine particle_setup
@@ -2027,9 +1973,9 @@ CONTAINS
       zoffset = zoffset + 4
      
       !Now compute the offset (in bytes!):
-      offset = zoffset 
+      offset = zoffset
       do iproc = 0,myid-1
-         offset = offset + pnum_vec(iproc+1)*(sizeof(tmp)-pad_diff) 
+         offset = offset + pnum_vec(iproc+1)*sizeof(tmp)
       end do
 
       !Now everyone else write, ONLY if numpart > 0
@@ -2080,6 +2026,7 @@ CONTAINS
       !numloop will be 1 if tnumpart < 5 million, increasing from there
       numloop = floor(tnumpart/5e6)+1
 
+      npart_arr = 0
       do partloop = 1,numloop
 
       if (partloop == numloop) then
@@ -2097,64 +2044,35 @@ CONTAINS
         if (readbuf(i)%xp(2) .GT. ymin .AND. &
             readbuf(i)%xp(2) .LT. ymax .AND. &
             readbuf(i)%xp(1) .GT. xmin .AND. &
-            readbuf(i)%xp(1) .LT. xmax) then 
-            if (.NOT. associated(first_particle)) then
-               allocate(first_particle)
-               first_particle = readbuf(i)
-               nullify(first_particle%prev,first_particle%next)
-               part => first_particle
-            else
-               allocate(part%next)
-               part%next = readbuf(i)
-               part%next%prev => part
-               part => part%next
-               nullify(part%next)
-            end if
-
+            readbuf(i)%xp(1) .LT. xmax) then
+           npart_arr = npart_arr + 1
+           parts(npart_arr) = readbuf(i)
         end if
       end do
 
       deallocate(readbuf)
 
-      offset = offset + sizeof(part)*readpart
+      offset = offset + sizeof(parts(1))*readpart
 
       end do
 
       call mpi_file_close(fh,ierr)
-      
-      !Now just check how many each processor obtained:
-      !At the same time, figure out max(pidx) and set ngidx 
-      !to one plus this value:
+
+      !Figure out max(pidx) to set ngidx:
       pidxmax = 0
-      part => first_particle
-      myp = 0
-      do while (associated(part))
-         myp = myp+1
-         if (part%pidx .gt. pidxmax) pidxmax = part%pidx
-         part => part%next
+      do i = 1, npart_arr
+         if (parts(i)%pidx .gt. pidxmax) pidxmax = parts(i)%pidx
       end do
 
       !Set ngidx (the index for creating new particles) to 1+pidmax:
       ngidx = pidxmax + 1
 
-      numpart = myp
+      numpart = npart_arr
 
-      call mpi_allreduce(myp,totalp,1,mpi_integer,mpi_sum,mpi_comm_world,ierr)
+      call mpi_allreduce(npart_arr,totalp,1,mpi_integer,mpi_sum,mpi_comm_world,ierr)
 
-      write(*,*) 'proc',myid,'read in numpart:',myp
+      write(*,*) 'proc',myid,'read in numpart:',npart_arr
       if (myid==0) write(*,*) 'total number of particles read:',totalp
-
-      ! Populate parts array from linked list (restart path bypasses create_particle)
-      npart_arr = 0
-      part => first_particle
-      do while (associated(part))
-         npart_arr = npart_arr + 1
-         parts(npart_arr) = part
-         parts(npart_arr)%array_idx = npart_arr
-         part%array_idx = npart_arr
-         list_ptrs(npart_arr)%p => part
-         part => part%next
-      end do
 
   end subroutine read_part_res
 
@@ -2207,19 +2125,7 @@ CONTAINS
       end if  !Different cases
 
 
-      ! Update numpart by traversal and verify it matches npart_arr
-      numpart = 0
-      part => first_particle
-      do while (associated(part))
-         numpart = numpart + 1
-         part => part%next
-      end do
-      if (npart_arr /= numpart) then
-         write(*,*) 'ERROR: array/list count mismatch on rank', myid, &
-                    ': npart_arr=', npart_arr, ' numpart=', numpart
-         call mpi_abort(mpi_comm_world, 1, ierr)
-      end if
-
+      numpart = npart_arr
       call mpi_allreduce(numpart,tnumpart,1,mpi_integer,mpi_sum,mpi_comm_world,ierr)
 
 
@@ -2230,74 +2136,55 @@ CONTAINS
       implicit none
       include 'mpif.h'
 
-      real :: xp(3), vp(3), Tp, qinfp, rad_init, pi, m_s, kappa_s
+      real :: xp(3), vp(3), Tp, rad_init, pi, m_s, kappa_s
       integer :: idx,procidx,ierr
       integer*8 :: mult
 
-      if (numpart >= parts_capacity) then
+      if (npart_arr >= parts_capacity) then
          write(*,*) 'ERROR: particle count exceeded max_tnumpart on rank', myid
          call mpi_abort(mpi_comm_world, 1, ierr)
       end if
 
-      if (.NOT. associated(first_particle)) then
-         allocate(first_particle)
-         part => first_particle
-         nullify(part%next,part%prev)
-      else
-         !Add to beginning of list since it's more convenient
-         part => first_particle
-         allocate(part%prev)
-         first_particle => part%prev
-         part%prev%next => part
-         part => first_particle
-         nullify(part%prev)
-      end if
+      npart_arr = npart_arr + 1
 
       pi = 4.0*atan(1.0)
-  
-      part%xp(1:3) = xp(1:3)
-      part%vp(1:3) = vp(1:3)
-      part%vp_old = part%vp
-      part%Tp = Tp
-      part%Tp_old = part%Tp
-      part%radius = rad_init
-      part%radius_old = part%radius
-      part%uf(1:3) = vp(1:3)
-      part%qinf = tsfcc(2)
-      part%qstar = 0.008
-      part%dist = 0.0
-      part%Tf = Tp
-      part%xrhs(1:3) = 0.0
-      part%vrhs(1:3) = 0.0 
-      part%Tprhs_s = 0.0
-      part%Tprhs_L = 0.0
-      part%radrhs = 0.0
-      part%pidx = idx 
-      part%procidx = procidx
-      part%nbr_pidx = -1
-      part%nbr_procidx = -1
-      part%mult = mult
-      part%res = 0.0
-      part%actres = 0.0
-      part%m_s = m_s
-      part%kappa_s = kappa_s
-      part%u_sub(1:3) = 0.0
-      part%sigm_s = 0.0
-      part%numact = 0.0
+
+      parts(npart_arr)%xp(1:3) = xp(1:3)
+      parts(npart_arr)%vp(1:3) = vp(1:3)
+      parts(npart_arr)%vp_old = parts(npart_arr)%vp
+      parts(npart_arr)%Tp = Tp
+      parts(npart_arr)%Tp_old = parts(npart_arr)%Tp
+      parts(npart_arr)%radius = rad_init
+      parts(npart_arr)%radius_old = parts(npart_arr)%radius
+      parts(npart_arr)%uf(1:3) = vp(1:3)
+      parts(npart_arr)%qinf = tsfcc(2)
+      parts(npart_arr)%qstar = 0.008
+      parts(npart_arr)%dist = 0.0
+      parts(npart_arr)%Tf = Tp
+      parts(npart_arr)%xrhs(1:3) = 0.0
+      parts(npart_arr)%vrhs(1:3) = 0.0
+      parts(npart_arr)%Tprhs_s = 0.0
+      parts(npart_arr)%Tprhs_L = 0.0
+      parts(npart_arr)%radrhs = 0.0
+      parts(npart_arr)%pidx = idx
+      parts(npart_arr)%procidx = procidx
+      parts(npart_arr)%nbr_pidx = -1
+      parts(npart_arr)%nbr_procidx = -1
+      parts(npart_arr)%mult = mult
+      parts(npart_arr)%res = 0.0
+      parts(npart_arr)%actres = 0.0
+      parts(npart_arr)%m_s = m_s
+      parts(npart_arr)%kappa_s = kappa_s
+      parts(npart_arr)%u_sub(1:3) = 0.0
+      parts(npart_arr)%sigm_s = 0.0
+      parts(npart_arr)%numact = 0.0
 
       !Critical radius, computed based on initial temp
       if (ievap.eq.1) then
-         part%rc = crit_radius(part%m_s,part%kappa_s,part%Tp)
+         parts(npart_arr)%rc = crit_radius(parts(npart_arr)%m_s,parts(npart_arr)%kappa_s,parts(npart_arr)%Tp)
       else
-         part%rc = 0.0
+         parts(npart_arr)%rc = 0.0
       end if
-
-      ! Dual-write: mirror this particle into the parts array
-      npart_arr = npart_arr + 1
-      parts(npart_arr) = part
-      parts(npart_arr)%array_idx = npart_arr
-      part%array_idx = npart_arr
-      list_ptrs(npart_arr)%p => part
 
   end subroutine create_particle
 
@@ -2730,7 +2617,6 @@ CONTAINS
   !Iterate backwards so swap-with-last on destroy doesn't re-process moved particles
 
   do i = npart_arr, 1, -1
-    part => list_ptrs(i)%p
 
     !perfectly elastic collisions on top, bottom walls
     !i.e. location is reflected, w-velocity is negated
@@ -2789,7 +2675,7 @@ CONTAINS
                    S = 0.2997;  M = -0.1930;  kappa_s = 1.2;  mult = mult_c
                end if
 
-               call destroy_particle   ! part => list_ptrs(i)%p set at top of loop
+               call destroy_particle(i)
                num_destroy = num_destroy + 1
 
                call lognormal_dist(rad_init,m_s,kappa_s,M,S)
@@ -2797,7 +2683,7 @@ CONTAINS
 
           else
 
-               call destroy_particle
+               call destroy_particle(i)
                num_destroy = num_destroy + 1
 
           end if
@@ -3240,41 +3126,14 @@ CONTAINS
 
   end subroutine particle_update_BE
 
-  subroutine destroy_particle
+  subroutine destroy_particle(i)
       implicit none
+      integer, intent(in) :: i
 
-      type(particle), pointer :: tmp
-      integer :: i_arr
-
-      ! Dual-remove: swap-with-last in parts array
-      i_arr = part%array_idx
-      parts(i_arr) = parts(npart_arr)
-      parts(i_arr)%array_idx = i_arr
-      list_ptrs(i_arr) = list_ptrs(npart_arr)
-      list_ptrs(i_arr)%p%array_idx = i_arr
+      ! Swap-with-last: overwrite slot i with the last particle, shrink array
+      parts(i) = parts(npart_arr)
       npart_arr = npart_arr - 1
 
-      !Is it the first and last in the list?
-      if (associated(part,first_particle) .AND. (.NOT. associated(part%next)) ) then
-          nullify(first_particle)
-          deallocate(part)
-      else
-        if (associated(part,first_particle)) then !Is it the first particle?
-           first_particle => part%next
-           part => first_particle
-           deallocate(part%prev)
-        elseif (.NOT. associated(part%next)) then !Is it the last particle?
-           nullify(part%prev%next)
-           deallocate(part)
-        else
-           tmp => part
-           part => part%next
-           tmp%prev%next => tmp%next
-           tmp%next%prev => tmp%prev
-           deallocate(tmp)
-        end if
-      end if
-   
   end subroutine destroy_particle
 
   subroutine calc_tauc_min
@@ -3993,8 +3852,7 @@ CONTAINS
       !Finally remove dead particles from coalescence (backward loop for swap-with-last safety)
       do i = npart_arr, 1, -1
          if (mult_data(i) .eq. 0) then
-            part => list_ptrs(i)%p
-            call destroy_particle
+            call destroy_particle(i)
          end if
       end do
       numpart = npart_arr
