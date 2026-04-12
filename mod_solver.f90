@@ -190,23 +190,8 @@ contains
          endif
       endif
 
-      if (icouple.eq.1 .or. &
-          iTcouple.eq.1 .or. &
-          iHcouple.eq.1) then
-
-          call calc_tauc_min
-
-      if (tauc_min .lt. dt_new) then
-            dt_new = tauc_min
-            if (l_root) then
-            write(6,6210) dt_new, dt_cfl, tauc_min
- 6210       format(' 6210 cfl time step too large for droplets',/, &
-            '   tauc time step = ',e15.6, &
-            ' cfl time step = ',e15.6,' tauc = ',e15.6)
-            end if
-      end if
-
-      end if  !Particle coupling
+      ! Particle coupling no longer restricts the flow time step.
+      ! calc_tauc_min is called in les.f90 to determine particle sub-step count.
       
 
       end if  !ifix_dt .eq. 0

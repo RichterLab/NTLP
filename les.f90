@@ -424,28 +424,68 @@
         call humidity_control
         call end_phase(measurement_id_humidity)
 
+        !Do the two-way coupling. Shouldn't include SFS,reintro, or coalescence
+        !since these don't represent transfer between phases.
+        !For BE integration, sub-step particle_update_BE + coupling at dt_part
+        !so that the particle time step is not restricted by tauc_min.
+        !The flow solver runs at the CFL time step; uf is frozen during sub-steps.
+
         if (ipart_method .eq. 2) then
 
-           call start_phase(measurement_id_particle_solver)
-           call particle_update_BE
-           call end_phase(measurement_id_particle_solver)
+           ! Determine number of particle sub-steps from tauc_min
+           if (icouple.eq.1 .or. iTcouple.eq.1 .or. iHcouple.eq.1) then
+              call calc_tauc_min
+              nsteps_part = max(1, ceiling(dt / tauc_min))
+           else
+              nsteps_part = 1
+           end if
+           dt_full = dt
+           dt = dt_full / real(nsteps_part)
+
+           if (l_root .and. nsteps_part .gt. 1) then
+              write(6,'(a,i4,a,e12.5)') &
+                 ' Particle sub-stepping: nsteps=', nsteps_part, &
+                 '  dt_part=', dt
+           end if
+
+           do istep_part = 1, nsteps_part
+
+              call start_phase(measurement_id_particle_solver)
+              call particle_update_BE
+              call end_phase(measurement_id_particle_solver)
+
+              call start_phase(measurement_id_particle_coupling)
+              call particle_coupling_update
+              call end_phase(measurement_id_particle_coupling)
+
+              call start_phase(measurement_id_particle_coupling_exchange)
+              call particle_coupling_exchange
+              call end_phase(measurement_id_particle_coupling_exchange)
+
+              call start_phase(measurement_id_particle_coupling)
+              call apply_particle_coupling
+              call end_phase(measurement_id_particle_coupling)
+
+           end do
+
+           dt = dt_full
+
+        else
+
+           ! RK3 particle method: coupling runs once per flow step at full dt
+           call start_phase(measurement_id_particle_coupling)
+           call particle_coupling_update
+           call end_phase(measurement_id_particle_coupling)
+
+           call start_phase(measurement_id_particle_coupling_exchange)
+           call particle_coupling_exchange
+           call end_phase(measurement_id_particle_coupling_exchange)
+
+           call start_phase(measurement_id_particle_coupling)
+           call apply_particle_coupling
+           call end_phase(measurement_id_particle_coupling)
 
         end if
-
-        !Do the two-way coupling. Shouldn't include SFS,reintro, or coalescence
-        !since these don't represent transfer between phases
-
-        call start_phase(measurement_id_particle_coupling)
-        call particle_coupling_update
-        call end_phase(measurement_id_particle_coupling)
-
-        call start_phase(measurement_id_particle_coupling_exchange)
-        call particle_coupling_exchange
-        call end_phase(measurement_id_particle_coupling_exchange)
-
-        call start_phase(measurement_id_particle_coupling)
-        call apply_particle_coupling
-        call end_phase(measurement_id_particle_coupling)
 
 
         !Call coalescence outside of RK loop since it's not appropriate as
