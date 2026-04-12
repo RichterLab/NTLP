@@ -2935,6 +2935,19 @@ CONTAINS
       end do
   end subroutine sync_parts_to_list
 
+  ! Copy all fields from linked list nodes back into parts(:).
+  ! Called after BCS and exchange routines that modify the list
+  ! (particle_bcs_nonperiodic, particle_exchange, particle_bcs_periodic)
+  ! so the parts array is current at the start of the next physics loop.
+  subroutine sync_list_to_parts
+      implicit none
+      integer :: i
+      do i = 1, npart_arr
+        parts(i) = list_ptrs(i)%p
+        parts(i)%array_idx = i   ! restore (list node has it too, but be explicit)
+      end do
+  end subroutine sync_list_to_parts
+
   subroutine particle_update_rk3(istage)
       !NOTE: THIS SHOULD STILL WORK AT ITS CORE, BUT HAS NOT BEEN UPDATED IN A WHILE
       use pars
@@ -3061,6 +3074,9 @@ CONTAINS
 
       !Now enforce periodic bcs
       call particle_bcs_periodic
+
+      ! Sync list nodes back to parts array so next timestep starts current
+      call sync_list_to_parts
 
       numpart = npart_arr
       call mpi_allreduce(numpart,tnumpart,1,mpi_integer,mpi_sum,mpi_comm_world,ierr)
@@ -3334,6 +3350,8 @@ CONTAINS
       call particle_bcs_periodic
       call end_phase(measurement_id_particle_bcs)
 
+      ! Sync list nodes back to parts array so next timestep starts current
+      call sync_list_to_parts
 
       !Get particle count:
       call start_phase(measurement_id_particle_misc)
