@@ -2892,6 +2892,49 @@ CONTAINS
 
   end subroutine particle_bcs_periodic
 
+  ! Copy all physics fields from parts(:) back to linked list nodes.
+  ! Called after array-based physics loops so that linked-list routines
+  ! (particle_bcs_nonperiodic, particle_exchange, etc.) see current data.
+  ! Structural fields (prev, next, array_idx) are intentionally not copied.
+  subroutine sync_parts_to_list
+      implicit none
+      integer :: i
+      do i = 1, npart_arr
+        associate(p => list_ptrs(i)%p, a => parts(i))
+          p%pidx        = a%pidx
+          p%procidx     = a%procidx
+          p%nbr_pidx    = a%nbr_pidx
+          p%nbr_procidx = a%nbr_procidx
+          p%vp          = a%vp
+          p%xp          = a%xp
+          p%uf          = a%uf
+          p%xrhs        = a%xrhs
+          p%vrhs        = a%vrhs
+          p%Tp          = a%Tp
+          p%Tprhs_s     = a%Tprhs_s
+          p%Tprhs_L     = a%Tprhs_L
+          p%Tf          = a%Tf
+          p%radius      = a%radius
+          p%radrhs      = a%radrhs
+          p%qinf        = a%qinf
+          p%qstar       = a%qstar
+          p%dist        = a%dist
+          p%res         = a%res
+          p%m_s         = a%m_s
+          p%kappa_s     = a%kappa_s
+          p%rc          = a%rc
+          p%actres      = a%actres
+          p%numact      = a%numact
+          p%u_sub       = a%u_sub
+          p%sigm_s      = a%sigm_s
+          p%vp_old      = a%vp_old
+          p%Tp_old      = a%Tp_old
+          p%radius_old  = a%radius_old
+          p%mult        = a%mult
+        end associate
+      end do
+  end subroutine sync_parts_to_list
+
   subroutine particle_update_rk3(istage)
       !NOTE: THIS SHOULD STILL WORK AT ITS CORE, BUT HAS NOT BEEN UPDATED IN A WHILE
       use pars
@@ -2900,7 +2943,7 @@ CONTAINS
       implicit none
       include 'mpif.h'
 
-      integer :: istage,ierr
+      integer :: istage,ierr,i
       real :: pi
       real :: denom, dtl, sigma
       integer :: ix,iy,iz
@@ -2925,103 +2968,90 @@ CONTAINS
       end if
 
 
-      !Loop over the linked list of particles:
-      part => first_particle
-      do while (associated(part))     
+      !Loop over the parts array:
+      do i = 1, npart_arr
 
          if (istage.eq.1) then
-            part%vp_old(1:3) = part%vp(1:3)
-       	    part%Tp_old = part%Tp
-            part%radius_old = part%radius
+            parts(i)%vp_old(1:3) = parts(i)%vp(1:3)
+            parts(i)%Tp_old = parts(i)%Tp
+            parts(i)%radius_old = parts(i)%radius
          end if
 
-         !First, interpolate to get the fluid velocity part%uf(1:3):
+         !First, interpolate to get the fluid velocity parts(i)%uf(1:3):
          if (ilin .eq. 1) then
-            call uf_interp_lin   !Use trilinear interpolation
+            call uf_interp_lin(i)   !Use trilinear interpolation
          else
-            call uf_interp       !Use 6th order Lagrange interpolation
+            call uf_interp(i)       !Use 6th order Lagrange interpolation
          end if
 
          if (iexner .eq. 1) then
-             !Compute using the base-state pressure at the particle height
-             !Neglects any turbulence or other fluctuating pressure sources
-             part%Tf = part%Tf*exner(surf_p,func_p_base(surf_p,tsfcc(1),part%xp(3)))
-             !rhoa = func_rho_base(surf_p,tsfcc(1),part%xp(3))
-             rhoa = func_p_base(surf_p,tsfcc(1),part%xp(3))/Rd/part%Tf
+             parts(i)%Tf = parts(i)%Tf*exner(surf_p,func_p_base(surf_p,tsfcc(1),parts(i)%xp(3)))
+             rhoa = func_p_base(surf_p,tsfcc(1),parts(i)%xp(3))/Rd/parts(i)%Tf
          else
              rhoa = surf_rho
          end if
-           
 
 
-         if (it .LE. 1 ) then 
-            part%vp(1:3) = part%uf
-            part%Tp = part%Tf
+         if (it .LE. 1 ) then
+            parts(i)%vp(1:3) = parts(i)%uf
+            parts(i)%Tp = parts(i)%Tf
          endif
 
          !Now advance the particle and position via RK3 (same as velocity)
-        
+
          !Intermediate Values
-         pi = 4.0*atan(1.0)  
-         diff(1:3) = part%vp - part%uf
+         pi = 4.0*atan(1.0)
+         diff(1:3) = parts(i)%vp - parts(i)%uf
          diffnorm = sqrt(diff(1)**2 + diff(2)**2 + diff(3)**2)
-         Rep = 2.0*part%radius*diffnorm/nuf  
-         Volp = pi2*2.0/3.0*part%radius**3
-         rhop = (part%m_s+Volp*rhow)/Volp
-         taup_i = 18.0*rhoa*nuf/rhop/(2.0*part%radius)**2 
+         Rep = 2.0*parts(i)%radius*diffnorm/nuf
+         Volp = pi2*2.0/3.0*parts(i)%radius**3
+         rhop = (parts(i)%m_s+Volp*rhow)/Volp
+         taup_i = 18.0*rhoa*nuf/rhop/(2.0*parts(i)%radius)**2
 
          corrfac = (1.0 + 0.15*Rep**(0.687))
 
-
          !Compute Nusselt number for particle:
-         !Ranz-Marshall relation
          Nup = 2.0 + 0.6*Rep**(1.0/2.0)*Pra**(1.0/3.0)
          Shp = 2.0 + 0.6*Rep**(1.0/2.0)*Sc**(1.0/3.0)
 
-
          !Mass Transfer calculations
-         einf = mod_magnus(part%Tf)
-         Eff_C = 2.0*Mw*Gam/(Ru*rhow*part%radius*part%Tp)
-         Eff_S = part%kappa_s*part%m_s*rhow/rhos/(Volp*rhop-part%m_s)
-         estar = einf*exp(Mw*Lv/Ru*(1.0/part%Tf-1.0/part%Tp)+Eff_C-Eff_S)
-         part%qstar = Mw/Ru*estar/part%Tp/rhoa
+         einf = mod_magnus(parts(i)%Tf)
+         Eff_C = 2.0*Mw*Gam/(Ru*rhow*parts(i)%radius*parts(i)%Tp)
+         Eff_S = parts(i)%kappa_s*parts(i)%m_s*rhow/rhos/(Volp*rhop-parts(i)%m_s)
+         estar = einf*exp(Mw*Lv/Ru*(1.0/parts(i)%Tf-1.0/parts(i)%Tp)+Eff_C-Eff_S)
+         parts(i)%qstar = Mw/Ru*estar/parts(i)%Tp/rhoa
 
-  
-         xtmp(1:3) = part%xp(1:3) + dt*zetas(istage)*part%xrhs(1:3)
-         vtmp(1:3) = part%vp(1:3) + dt*zetas(istage)*part%vrhs(1:3) 
-         Tptmp = part%Tp + dt*zetas(istage)*part%Tprhs_s
-         Tptmp = Tptmp + dt*zetas(istage)*part%Tprhs_L
-         radiustmp = part%radius + dt*zetas(istage)*part%radrhs
+         xtmp(1:3) = parts(i)%xp(1:3) + dt*zetas(istage)*parts(i)%xrhs(1:3)
+         vtmp(1:3) = parts(i)%vp(1:3) + dt*zetas(istage)*parts(i)%vrhs(1:3)
+         Tptmp = parts(i)%Tp + dt*zetas(istage)*parts(i)%Tprhs_s
+         Tptmp = Tptmp + dt*zetas(istage)*parts(i)%Tprhs_L
+         radiustmp = parts(i)%radius + dt*zetas(istage)*parts(i)%radrhs
 
-         part%xrhs(1:3) = part%vp(1:3)
-         part%vrhs(1:3) = corrfac*taup_i*(part%uf(1:3)-part%vp(1:3)) + part_grav(1:3)
+         parts(i)%xrhs(1:3) = parts(i)%vp(1:3)
+         parts(i)%vrhs(1:3) = corrfac*taup_i*(parts(i)%uf(1:3)-parts(i)%vp(1:3)) + part_grav(1:3)
 
-         if (ievap .EQ. 1) then      
-            part%radrhs = Shp/9.0/Sc*rhop/rhow*part%radius*taup_i*(part%qinf-part%qstar) !assumes qinf=rhov/rhoa rather than rhov/rhom
+         if (ievap .EQ. 1) then
+            parts(i)%radrhs = Shp/9.0/Sc*rhop/rhow*parts(i)%radius*taup_i*(parts(i)%qinf-parts(i)%qstar)
          else
-            part%radrhs = 0.0
+            parts(i)%radrhs = 0.0
          end if
 
+         parts(i)%Tprhs_s = -Nup/3.0/Pra*CpaCpp*rhop/rhow*taup_i*(parts(i)%Tp-parts(i)%Tf)
+         parts(i)%Tprhs_L = 3.0*Lv/Cpp/parts(i)%radius*parts(i)%radrhs
 
-         part%Tprhs_s = -Nup/3.0/Pra*CpaCpp*rhop/rhow*taup_i*(part%Tp-part%Tf)
-         part%Tprhs_L = 3.0*Lv/Cpp/part%radius*part%radrhs
+         parts(i)%xp(1:3) = xtmp(1:3) + dt*gama(istage)*parts(i)%xrhs(1:3)
+         parts(i)%vp(1:3) = vtmp(1:3) + dt*gama(istage)*parts(i)%vrhs(1:3)
+         parts(i)%Tp = Tptmp + dt*gama(istage)*parts(i)%Tprhs_s
+         parts(i)%Tp = parts(i)%Tp + dt*gama(istage)*parts(i)%Tprhs_L
+         parts(i)%radius = radiustmp + dt*gama(istage)*parts(i)%radrhs
 
+         if (istage .eq. 3) parts(i)%res = parts(i)%res + dt
 
-
-  
-         part%xp(1:3) = xtmp(1:3) + dt*gama(istage)*part%xrhs(1:3)
-         part%vp(1:3) = vtmp(1:3) + dt*gama(istage)*part%vrhs(1:3)
-         part%Tp = Tptmp + dt*gama(istage)*part%Tprhs_s
-         part%Tp = part%Tp + dt*gama(istage)*part%Tprhs_L
-         part%radius = radiustmp + dt*gama(istage)*part%radrhs
-
-
-         if (istage .eq. 3) part%res = part%res + dt
-
-
-        part => part%next
       end do
 
+      ! Sync parts array changes back to linked list nodes before
+      ! routines that still traverse the linked list
+      call sync_parts_to_list
 
       call particle_bcs_nonperiodic
 
@@ -3029,19 +3059,10 @@ CONTAINS
       !If they did, remove from one list and add to another
       call particle_exchange
 
-      !Now enforce periodic bcs 
-      !just updates x,y locations if over xl,yl or under 0
+      !Now enforce periodic bcs
       call particle_bcs_periodic
 
-
-      !Get particle count:
-      numpart = 0
-      part => first_particle
-      do while (associated(part))
-      numpart = numpart + 1
-      part => part%next
-      end do
- 
+      numpart = npart_arr
       call mpi_allreduce(numpart,tnumpart,1,mpi_integer,mpi_sum,mpi_comm_world,ierr)
 
 
@@ -3292,6 +3313,9 @@ CONTAINS
       end do
       call end_phase(measurement_id_particle_loop)
 
+      ! Sync parts array changes back to linked list nodes before
+      ! routines that still traverse the linked list
+      call sync_parts_to_list
 
       !Enforce nonperiodic bcs (either elastic or destroying particles)
       call start_phase(measurement_id_particle_bcs)
