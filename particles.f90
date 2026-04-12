@@ -79,7 +79,6 @@ module particles
   !REMEMBER: IF ADDING ANYTHING, MUST UPDATE MPI DATATYPE!
   type :: particle
     integer :: pidx,procidx,nbr_pidx,nbr_procidx
-    integer :: array_idx
     real :: vp(3), xp(3), uf(3), xrhs(3), vrhs(3), Tp, Tprhs_s
     real :: Tprhs_L, Tf, radius, radrhs, qinf, qstar, dist
     real :: res, m_s, kappa_s, rc, actres, numact
@@ -87,6 +86,7 @@ module particles
     real :: vp_old(3), Tp_old, radius_old
     integer*8 :: mult
     type(particle), pointer :: prev,next
+    integer :: array_idx
   end type particle
 
   type :: particle_ptr
@@ -1850,7 +1850,7 @@ CONTAINS
       include 'mpif.h'
 
       integer :: blcts(3),types(3)
-      integer :: ierr
+      integer :: ierr,particletype_sized
       real :: pi
       integer(kind=MPI_ADDRESS_KIND) :: extent,lb
       integer(kind=MPI_ADDRESS_KIND) :: extent2,lb2,displs(3)
@@ -1966,24 +1966,21 @@ CONTAINS
       !Now define the type:
       call mpi_type_create_struct(3,blcts,displs,types,particletype,ierr)
 
-       call mpi_type_get_true_extent(particletype,lb2,extent2,ierr)
-       call mpi_type_get_extent(particletype,lb2,extent,ierr)
-       if (extent .NE. sizeof(part) ) then
-          if (myid==0) then
-          write(*,*) 'WARNING: extent of particletype not equalto sizeof(part):'
-          write(*,*) 'sizeof(part) = ', sizeof(part)
-          write(*,*) 'mpi_type_get_true_extent(particletype) = ',extent2
-          write(*,*) 'mpi_type_get_extent(particletype) = ',extent
-          end if
-       end if
-      
-      !Need to compute any padding which may exist in particle struct:
-      pad_diff = extent-extent2 
+      ! Resize to sizeof(part) so stride is correct when sending arrays.
+      ! array_idx sits after the pointers and is not transmitted, but the
+      ! full struct size must be used as the stride between elements.
+      call mpi_type_get_true_extent(particletype,lb2,extent2,ierr)
+      call mpi_type_create_resized(particletype,lb2,int(sizeof(part),MPI_ADDRESS_KIND),particletype_sized,ierr)
+      call mpi_type_free(particletype,ierr)
+      particletype = particletype_sized
+
+      call mpi_type_get_extent(particletype,lb2,extent,ierr)
+      pad_diff = extent - extent2
       if (myid==0) then
-      write(*,*) 'mpi_get_extent = ',extent
-      write(*,*) 'mpi_get_true_extent = ',extent2
-      write(*,*) 'sizeof(part) = ',sizeof(part)
-      write(*,*) 'DIFF = ',pad_diff
+         write(*,*) 'mpi_get_extent = ',extent
+         write(*,*) 'mpi_get_true_extent = ',extent2
+         write(*,*) 'sizeof(part) = ',sizeof(part)
+         write(*,*) 'DIFF = ',pad_diff
       end if
       if (pad_diff .LT. 0) then
         write(*,*) 'WARNING: mpi_get_extent - mpi_get_true_extent LT 0!'
