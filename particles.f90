@@ -1450,7 +1450,7 @@ CONTAINS
       include 'mpif.h'
 
       type(particle), pointer :: tmp
-      integer :: idx,psum,csum
+      integer :: i,idx,psum,csum
       integer :: ir,itr,itop,itl,il,ibl,ib,ibr
       integer :: istatus(mpi_status_size),ierr
       integer :: status_array(mpi_status_size,16),req(16)
@@ -1467,96 +1467,87 @@ CONTAINS
       !Zero out the counters for how many particles to send each dir.
       pr_s=0;ptr_s=0;pt_s=0;ptl_s=0;pl_s=0;pbl_s=0;pb_s=0;pbr_s=0
       
-      !As soon as the location is updated, must check to see if it left the proc:
-      !May be a better way of doing this, but it seems most reasonable:
-      part => first_particle
-      do while (associated(part))     
-
-         !First get numbers being sent to all sides:
-         if (part%xp(2) .GT. ymax) then 
-            if (part%xp(1) .GT. xmax) then !top right
+      !Count particles leaving each side:
+      do i = 1, npart_arr
+         if (parts(i)%xp(2) .GT. ymax) then
+            if (parts(i)%xp(1) .GT. xmax) then !top right
                ptr_s = ptr_s + 1
-            elseif (part%xp(1) .LT. xmin) then !bottom right
+            elseif (parts(i)%xp(1) .LT. xmin) then !bottom right
                pbr_s = pbr_s + 1
             else  !right
                pr_s = pr_s + 1
             end if
-         elseif (part%xp(2) .LT. ymin) then
-            if (part%xp(1) .GT. xmax) then !top left
+         elseif (parts(i)%xp(2) .LT. ymin) then
+            if (parts(i)%xp(1) .GT. xmax) then !top left
                ptl_s = ptl_s + 1
-            else if (part%xp(1) .LT. xmin) then !bottom left
+            else if (parts(i)%xp(1) .LT. xmin) then !bottom left
                pbl_s = pbl_s + 1
             else  !left
                pl_s = pl_s + 1
             end if
-         elseif ( (part%xp(1) .GT. xmax) .AND. &
-                  (part%xp(2) .LT. ymax) .AND. &
-                  (part%xp(2) .GT. ymin) ) then !top
+         elseif ( (parts(i)%xp(1) .GT. xmax) .AND. &
+                  (parts(i)%xp(2) .LT. ymax) .AND. &
+                  (parts(i)%xp(2) .GT. ymin) ) then !top
             pt_s = pt_s + 1
-         elseif ( (part%xp(1) .LT. xmin) .AND. &
-                  (part%xp(2) .LT. ymax) .AND. &
-                  (part%xp(2) .GT. ymin) ) then !bottom
+         elseif ( (parts(i)%xp(1) .LT. xmin) .AND. &
+                  (parts(i)%xp(2) .LT. ymax) .AND. &
+                  (parts(i)%xp(2) .GT. ymin) ) then !bottom
             pb_s = pb_s + 1
          end if
-         
-         part => part%next
       end do
       
       !Now allocate the send buffers based on these counts:
       allocate(rbuf_s(pr_s),trbuf_s(ptr_s),tbuf_s(pt_s),tlbuf_s(ptl_s))
       allocate(lbuf_s(pl_s),blbuf_s(pbl_s),bbuf_s(pb_s),brbuf_s(pbr_s))
 
-      !Now loop back through the particles and fill the buffers:
-      !NOTE: If it finds one, add it to buffer and REMOVE from list
+      !Fill buffers and remove departing particles (backward so swap-with-last is safe):
       ir=1;itr=1;itop=1;itl=1;il=1;ibl=1;ib=1;ibr=1
 
-      part => first_particle
-      do while (associated(part))
-         
-         if (part%xp(2) .GT. ymax) then 
-            if (part%xp(1) .GT. xmax) then !top right
-               trbuf_s(itr) = part
+      do i = npart_arr, 1, -1
+         part => list_ptrs(i)%p
+
+         if (parts(i)%xp(2) .GT. ymax) then
+            if (parts(i)%xp(1) .GT. xmax) then !top right
+               trbuf_s(itr) = parts(i)
                call destroy_particle
-               itr = itr + 1 
-            elseif (part%xp(1) .LT. xmin) then !bottom right
-               brbuf_s(ibr) = part
+               itr = itr + 1
+            elseif (parts(i)%xp(1) .LT. xmin) then !bottom right
+               brbuf_s(ibr) = parts(i)
                call destroy_particle
                ibr = ibr + 1
-            else   !right
-               rbuf_s(ir) = part
+            else  !right
+               rbuf_s(ir) = parts(i)
                call destroy_particle
                ir = ir + 1
             end if
-         elseif (part%xp(2) .LT. ymin) then
-            if (part%xp(1) .GT. xmax) then !top left
-               tlbuf_s(itl) = part
+         elseif (parts(i)%xp(2) .LT. ymin) then
+            if (parts(i)%xp(1) .GT. xmax) then !top left
+               tlbuf_s(itl) = parts(i)
                call destroy_particle
                itl = itl + 1
-            else if (part%xp(1) .LT. xmin) then !bottom left
-               blbuf_s(ibl) = part
+            else if (parts(i)%xp(1) .LT. xmin) then !bottom left
+               blbuf_s(ibl) = parts(i)
                call destroy_particle
                ibl = ibl + 1
             else  !left
-               lbuf_s(il) = part
+               lbuf_s(il) = parts(i)
                call destroy_particle
                il = il + 1
             end if
-         elseif ( (part%xp(1) .GT. xmax) .AND. &
-                  (part%xp(2) .LT. ymax) .AND. &
-                  (part%xp(2) .GT. ymin) ) then !top
-            tbuf_s(itop) = part
+         elseif ( (parts(i)%xp(1) .GT. xmax) .AND. &
+                  (parts(i)%xp(2) .LT. ymax) .AND. &
+                  (parts(i)%xp(2) .GT. ymin) ) then !top
+            tbuf_s(itop) = parts(i)
             call destroy_particle
             itop = itop + 1
-         elseif ( (part%xp(1) .LT. xmin) .AND. &
-                  (part%xp(2) .LT. ymax) .AND. &
-                  (part%xp(2) .GT. ymin) ) then !bottom
-            bbuf_s(ib) = part
+         elseif ( (parts(i)%xp(1) .LT. xmin) .AND. &
+                  (parts(i)%xp(2) .LT. ymax) .AND. &
+                  (parts(i)%xp(2) .GT. ymin) ) then !bottom
+            bbuf_s(ib) = parts(i)
             call destroy_particle
-            ib = ib + 1 
-         else
-         part => part%next
-         end if 
-         
+            ib = ib + 1
+         end if
+
       end do
 
       !Now everyone exchanges the counts with all neighbors:
@@ -2736,107 +2727,84 @@ CONTAINS
   use pars
   implicit none
   real :: top, bot
-  integer :: idx,procidx,idx_old,procidx_old
+  integer :: i,idx,procidx,idx_old,procidx_old
 
   real :: xv, yv, zv, m_s
   real :: kappas_dinit, radius_dinit
   real :: xp_init(3)
   integer :: ipt,jpt
 
-  !C-FOG and FATIMA parameters: lognormal of accumulation + lognormal of coarse, with extra "resolution" on the coarse mode
+  !C-FOG and FATIMA parameters
   real :: S, M, kappa_s, rad_init
   integer*8 :: mult
 
-
   !Assumes domain goes from [0,xl),[0,yl),[0,zl]
-  !Also maintain the number of particles on each proc
+  !Iterate backwards so swap-with-last on destroy doesn't re-process moved particles
 
-  part => first_particle
-  do while (associated(part))
+  do i = npart_arr, 1, -1
+    part => list_ptrs(i)%p
 
     !perfectly elastic collisions on top, bottom walls
     !i.e. location is reflected, w-velocity is negated
 
-    if (icase.eq.4) then  !Spray case needs to have them bounce off earlier due to numerical issues
-        top = z(nnz-1)-part%radius
+    if (icase.eq.4) then
+        top = z(nnz-1) - parts(i)%radius
     else
-        top = z(nnz)-part%radius
+        top = z(nnz) - parts(i)%radius
     end if
 
-    bot = 0.0 + part%radius
+    bot = 0.0 + parts(i)%radius
 
-    if (part%xp(3) .GT. top) then
-       part%xp(3) = top - (part%xp(3)-top)
-       part%vp(3) = -part%vp(3)
-       part => part%next
-    elseif (part%xp(3) .LT. bot) then
+    if (parts(i)%xp(3) .GT. top) then
+       parts(i)%xp(3) = top - (parts(i)%xp(3) - top)
+       parts(i)%vp(3) = -parts(i)%vp(3)
+
+    elseif (parts(i)%xp(3) .LT. bot) then
 
        if (icase.eq.0) then  !Reflect
 
-          part%xp(3) = bot + (bot-part%xp(3))
-          part%vp(3) = -part%vp(3)
-          part => part%next
+          parts(i)%xp(3) = bot + (bot - parts(i)%xp(3))
+          parts(i)%vp(3) = -parts(i)%vp(3)
 
        else  !All cases other than icase=0 kill particle
 
-          idx_old = part%pidx
-          procidx_old = part%procidx
+          idx_old = parts(i)%pidx
+          procidx_old = parts(i)%procidx
 
-          !Before destroying it, put its residence time in histogram
-          call add_histogram(bins_res,hist_res,histbins+2,part%res,part%mult)
+          call add_histogram(bins_res,hist_res,histbins+2,parts(i)%res,parts(i)%mult)
 
-          !Also record this in the "activation till death" residence time
-          if (part%radius .gt. part%rc) then
-            call add_histogram(bins_acttodeath,hist_acttodeath,histbins+2,part%actres,part%mult)
+          if (parts(i)%radius .gt. parts(i)%rc) then
+            call add_histogram(bins_acttodeath,hist_acttodeath,histbins+2,parts(i)%actres,parts(i)%mult)
           end if
 
-          !Also record the number of activations
-          call add_histogram_integer(bins_numact,hist_numact,histbins+2,part%numact)
+          call add_histogram_integer(bins_numact,hist_numact,histbins+2,parts(i)%numact)
 
-          !Also record the size of the dead droplet
-          call add_histogram(bins_rad,hist_raddeath,histbins+2,part%radius,part%mult)
+          call add_histogram(bins_rad,hist_raddeath,histbins+2,parts(i)%radius,parts(i)%mult)
 
-          !Store the spatial location of this mass crossing the surface -- surface precipitation
-          !NOTE: THIS NEGLECTS PARTICLES THAT CHANGE PROCESSORS BEFORE DYING! ASSUMING THIS IS A SMALL CONTRIBUTION
-          ipt = floor(part%xp(1)/dx) + 1
-          jpt = floor(part%xp(2)/dy) + 1
+          ipt = floor(parts(i)%xp(1)/dx) + 1
+          jpt = floor(parts(i)%xp(2)/dy) + 1
           if (ipt .ge. mxs .and. ipt .le. mxe .and. jpt .ge. iys .and. jpt .le. iye) then
-          surf_precip(ipt,jpt) = surf_precip(ipt,jpt) + real(part%mult)*(rhow*2.0/3.0*pi2*part%radius**3)
+             surf_precip(ipt,jpt) = surf_precip(ipt,jpt) + &
+                  real(parts(i)%mult)*(rhow*2.0/3.0*pi2*parts(i)%radius**3)
           end if
 
-
-          if (ireintro.eq.1 .and. inewpart.eq.6) then  !FATIMA can reintroduce particle of the same type
+          if (ireintro.eq.1 .and. inewpart.eq.6) then
 
                xv = ran2(iseed)*(xmax-xmin) + xmin
                yv = ran2(iseed)*(ymax-ymin) + ymin
                zv = ran2(iseed)*(zi-zw1) + zw1
                xp_init = (/xv,yv,zv/)
 
-               ! acummulation mode
-               if (part%mult .eq. mult_a) then
-   
-                   S = 0.2403
-                   M = -1.7570
-                   kappa_s = 0.6
-                   mult = mult_a
-
-               ! coarse mode
-               elseif (part%mult .eq. mult_c) then
-
-                   S = 0.2997
-                   M = -0.1930
-                   kappa_s = 1.2
-                   mult = mult_c
-
+               if (parts(i)%mult .eq. mult_a) then
+                   S = 0.2403;  M = -1.7570;  kappa_s = 0.6;  mult = mult_a
+               elseif (parts(i)%mult .eq. mult_c) then
+                   S = 0.2997;  M = -0.1930;  kappa_s = 1.2;  mult = mult_c
                end if
 
-               ! destroy old particle before creating new one
-               call destroy_particle
+               call destroy_particle   ! part => list_ptrs(i)%p set at top of loop
                num_destroy = num_destroy + 1
-   
-               !With these parameters, get m_s and rad_init from distribution
-               call lognormal_dist(rad_init,m_s,kappa_s,M,S)
 
+               call lognormal_dist(rad_init,m_s,kappa_s,M,S)
                call create_particle(xp_init,vp_init,Tp_init,m_s,kappa_s,mult,rad_init,idx_old,procidx_old)
 
           else
@@ -2845,17 +2813,14 @@ CONTAINS
                num_destroy = num_destroy + 1
 
           end if
-       
+
           if (icase.eq.5 .or. icase.eq.3) then
              call new_particle(idx_old,procidx_old)
           end if
 
-       end if ! icase to decide whether to reflect
+       end if
 
-    else
-       part => part%next
     end if
-
 
   end do
 
@@ -2863,90 +2828,28 @@ CONTAINS
 
   subroutine particle_bcs_periodic
       use pars
-      implicit none 
+      implicit none
+      integer :: i
 
-      !Assumes domain goes from [0,xl),[0,yl),[0,zl] 
-      !Also maintain the number of particles on each proc
-      
-      part => first_particle
-      do while (associated(part))
+      !Assumes domain goes from [0,xl),[0,yl),[0,zl]
 
-      !x,y periodic
-   
-      if (part%xp(1) .GT. xl) then
-         part%xp(1) = part%xp(1)-xl
-      elseif (part%xp(1) .LT. 0) then
-         part%xp(1) = xl + part%xp(1)
-      end if
+      do i = 1, npart_arr
 
-      if (part%xp(2) .GT. yl) then
-         part%xp(2) = part%xp(2)-yl
-      elseif (part%xp(2) .LT. 0) then
-         part%xp(2) = yl + part%xp(2)
-      end if
+        if (parts(i)%xp(1) .GT. xl) then
+           parts(i)%xp(1) = parts(i)%xp(1) - xl
+        elseif (parts(i)%xp(1) .LT. 0) then
+           parts(i)%xp(1) = xl + parts(i)%xp(1)
+        end if
 
-      part => part%next
+        if (parts(i)%xp(2) .GT. yl) then
+           parts(i)%xp(2) = parts(i)%xp(2) - yl
+        elseif (parts(i)%xp(2) .LT. 0) then
+           parts(i)%xp(2) = yl + parts(i)%xp(2)
+        end if
 
       end do
-
 
   end subroutine particle_bcs_periodic
-
-  ! Copy all physics fields from parts(:) back to linked list nodes.
-  ! Called after array-based physics loops so that linked-list routines
-  ! (particle_bcs_nonperiodic, particle_exchange, etc.) see current data.
-  ! Structural fields (prev, next, array_idx) are intentionally not copied.
-  subroutine sync_parts_to_list
-      implicit none
-      integer :: i
-      do i = 1, npart_arr
-        associate(p => list_ptrs(i)%p, a => parts(i))
-          p%pidx        = a%pidx
-          p%procidx     = a%procidx
-          p%nbr_pidx    = a%nbr_pidx
-          p%nbr_procidx = a%nbr_procidx
-          p%vp          = a%vp
-          p%xp          = a%xp
-          p%uf          = a%uf
-          p%xrhs        = a%xrhs
-          p%vrhs        = a%vrhs
-          p%Tp          = a%Tp
-          p%Tprhs_s     = a%Tprhs_s
-          p%Tprhs_L     = a%Tprhs_L
-          p%Tf          = a%Tf
-          p%radius      = a%radius
-          p%radrhs      = a%radrhs
-          p%qinf        = a%qinf
-          p%qstar       = a%qstar
-          p%dist        = a%dist
-          p%res         = a%res
-          p%m_s         = a%m_s
-          p%kappa_s     = a%kappa_s
-          p%rc          = a%rc
-          p%actres      = a%actres
-          p%numact      = a%numact
-          p%u_sub       = a%u_sub
-          p%sigm_s      = a%sigm_s
-          p%vp_old      = a%vp_old
-          p%Tp_old      = a%Tp_old
-          p%radius_old  = a%radius_old
-          p%mult        = a%mult
-        end associate
-      end do
-  end subroutine sync_parts_to_list
-
-  ! Copy all fields from linked list nodes back into parts(:).
-  ! Called after BCS and exchange routines that modify the list
-  ! (particle_bcs_nonperiodic, particle_exchange, particle_bcs_periodic)
-  ! so the parts array is current at the start of the next physics loop.
-  subroutine sync_list_to_parts
-      implicit none
-      integer :: i
-      do i = 1, npart_arr
-        parts(i) = list_ptrs(i)%p
-        parts(i)%array_idx = i   ! restore (list node has it too, but be explicit)
-      end do
-  end subroutine sync_list_to_parts
 
   subroutine particle_update_rk3(istage)
       !NOTE: THIS SHOULD STILL WORK AT ITS CORE, BUT HAS NOT BEEN UPDATED IN A WHILE
@@ -3062,10 +2965,6 @@ CONTAINS
 
       end do
 
-      ! Sync parts array changes back to linked list nodes before
-      ! routines that still traverse the linked list
-      call sync_parts_to_list
-
       call particle_bcs_nonperiodic
 
       !Check to see if particles left processor
@@ -3074,9 +2973,6 @@ CONTAINS
 
       !Now enforce periodic bcs
       call particle_bcs_periodic
-
-      ! Sync list nodes back to parts array so next timestep starts current
-      call sync_list_to_parts
 
       numpart = npart_arr
       call mpi_allreduce(numpart,tnumpart,1,mpi_integer,mpi_sum,mpi_comm_world,ierr)
@@ -3329,10 +3225,6 @@ CONTAINS
       end do
       call end_phase(measurement_id_particle_loop)
 
-      ! Sync parts array changes back to linked list nodes before
-      ! routines that still traverse the linked list
-      call sync_parts_to_list
-
       !Enforce nonperiodic bcs (either elastic or destroying particles)
       call start_phase(measurement_id_particle_bcs)
       call particle_bcs_nonperiodic
@@ -3349,9 +3241,6 @@ CONTAINS
       call start_phase(measurement_id_particle_bcs)
       call particle_bcs_periodic
       call end_phase(measurement_id_particle_bcs)
-
-      ! Sync list nodes back to parts array so next timestep starts current
-      call sync_list_to_parts
 
       !Get particle count:
       call start_phase(measurement_id_particle_misc)
