@@ -3600,6 +3600,18 @@ CONTAINS
       jpt = floor(part%xp(2)/dy) + 1
       kpt = find_upper(z, part%xp(3)) - 1
 
+      ! Skip particles whose grid indices are out of bounds to avoid
+      ! out-of-bounds array writes. Print a diagnostic on the first occurrence.
+      if (ipt .lt. mxs .or. ipt .gt. mxe+1 .or. &
+          jpt .lt. iys .or. jpt .gt. iye+1 .or. &
+          kpt .lt. 1   .or. kpt .gt. nnz) then
+         write(*,'(a,3i6,9e12.4)') 'particle_xy_stats: skipping OOB particle '// &
+            'ipt,jpt,kpt=', ipt, jpt, kpt, &
+            part%xp(1:3), part%vp(1:3), part%uf(1:3)
+         part => part%next
+         cycle
+      end if
+
       pi   = 4.0*atan(1.0)
       rhop = (part%m_s+4.0/3.0*pi*part%radius**3*rhow)/(4.0/3.0*pi*part%radius**3)
 
@@ -3639,11 +3651,6 @@ CONTAINS
       mwmean(kpt) = mwmean(kpt) + real(part%mult)*(rhow*4.0/3.0*pi*part%radius**3)
 
       qstarm(kpt) = qstarm(kpt) + part%qstar
-
-     if (ipt .gt. mxe+1) write(*,'(a10,3i,18e15.6)') 'LWP1:',myid,ipt,mxe+1,part%xp(1:3),xmin,xmax,ymin,ymax,part%vp(1:3),part%vp_old(1:3),part%radius,part%Tp,part%u_sub(1:3)
-     if (ipt .lt. mxs) write(*,'(a10,3i,18e15.6)') 'LWP2:',myid,ipt,mxs,part%xp(1:3),xmin,xmax,ymin,ymax,part%vp(1:3),part%vp_old(1:3),part%radius,part%Tp,part%u_sub(1:3)
-     if (jpt .gt. iye+1) write(*,'(a10,3i,18e15.6)') 'LWP3:',myid,jpt,iye+1,part%xp(1:3),xmin,xmax,ymin,ymax,part%vp(1:3),part%vp_old(1:3),part%radius,part%Tp,part%u_sub(1:3)
-     if (jpt .lt. iys) write(*,'(a10,3i,18e15.6)') 'LWP4:',myid,jpt,iys,part%xp(1:3),xmin,xmax,ymin,ymax,part%vp(1:3),part%vp_old(1:3),part%radius,part%Tp,part%u_sub(1:3)
 
       !While we're at it, compute LWP
       LWP(ipt,jpt) = LWP(ipt,jpt) + real(part%mult)*(rhow*4.0/3.0*pi*part%radius**3)
