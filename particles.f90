@@ -562,13 +562,14 @@ CONTAINS
 
   end subroutine fill_extSFS
 
-  subroutine uf_interp
+  subroutine uf_interp(ip)
   use pars
   use fields
   use con_stats
   use con_data
   implicit none
-       
+
+  integer, intent(in) :: ip
   integer :: ix,iy,izuv,izw,iz,i,k,j
   integer :: first,last
   real :: xkval, xjval, pj, dxvec(2)
@@ -578,9 +579,9 @@ CONTAINS
   !get the "leftmost" node
   !This is just the minimum (i,j,k) on the volume 
 
-  ijpts(1,3) = floor(part%xp(1)/dx) + 1 
-  ijpts(2,3) = floor(part%xp(2)/dy) + 1
- 
+  ijpts(1,3) = floor(parts(ip)%xp(1)/dx) + 1
+  ijpts(2,3) = floor(parts(ip)%xp(2)/dy) + 1
+
   !Fill in the neighbors:
   ijpts(1,2) = ijpts(1,3)-1
   ijpts(1,1) = ijpts(1,2)-1
@@ -593,13 +594,13 @@ CONTAINS
   ijpts(2,4) = ijpts(2,3)+1
   ijpts(2,5) = ijpts(2,4)+1
   ijpts(2,6) = ijpts(2,5)+1
- 
+
   !Finding the k-lhnode is different since grid may be stretched
   !AND since (u,v) and w stored differently
   !Will get a k-index for (u,v) and one for w
-  
+
   !Do (u,v) loop first:
-  kuvpts(3) = find_upper(zz, part%xp(3)) - 2
+  kuvpts(3) = find_upper(zz, parts(ip)%xp(3)) - 2
   !Then fill in the rest:
   kuvpts(4) = kuvpts(3)+1
   kuvpts(5) = kuvpts(4)+1
@@ -608,7 +609,7 @@ CONTAINS
   kuvpts(1) = kuvpts(2)-1
 
 
-  kwpts(3) = find_upper(z, part%xp(3)) - 2
+  kwpts(3) = find_upper(z, parts(ip)%xp(3)) - 2
   !Then fill in the rest:
   kwpts(4) = kwpts(3)+1
   kwpts(5) = kwpts(4)+1
@@ -628,7 +629,7 @@ CONTAINS
      do k = 1,6
         xkval = dxvec(iz)*(ijpts(iz,k)-1)
         if (j .NE. k) then
-              pj = pj*(part%xp(iz)-xkval)/(xjval-xkval)
+              pj = pj*(parts(ip)%xp(iz)-xkval)/(xjval-xkval)
         end if
      end do
      wt(iz,j) = pj
@@ -693,7 +694,7 @@ CONTAINS
        do k = first,last
           xkval = zz(kuvpts(k))
           if (j .NE. k) then
-             pj = pj*(part%xp(3)-xkval)/(xjval-xkval)
+             pj = pj*(parts(ip)%xp(3)-xkval)/(xjval-xkval)
           end if
        end do
        wt(3,j) = pj
@@ -745,16 +746,16 @@ CONTAINS
        do k = first,last
           xkval = z(kwpts(k))
           if (j .NE. k) then
-             pj = pj*(part%xp(3)-xkval)/(xjval-xkval)
+             pj = pj*(parts(ip)%xp(3)-xkval)/(xjval-xkval)
           end if
        end do
        wt(4,j) = pj
   end do
 
   !Now we have the weights - compute the velocity at xp:
-    part%uf(1:3) = 0.0
-    part%Tf = 0.0
-    part%qinf = 0.0
+    parts(ip)%uf(1:3) = 0.0
+    parts(ip)%Tf = 0.0
+    parts(ip)%qinf = 0.0
     do k = 1,6
     do j = 1,6
     do i = 1,6
@@ -763,39 +764,40 @@ CONTAINS
         izuv = kuvpts(k)
         izw = kwpts(k)
 
-        part%uf(1) = part%uf(1)+uext(izuv,iy,ix)*wt(1,i)*wt(2,j)*wt(3,k) 
-        part%uf(2) = part%uf(2)+vext(izuv,iy,ix)*wt(1,i)*wt(2,j)*wt(3,k) 
-        part%uf(3) = part%uf(3)+wext(izw,iy,ix)*wt(1,i)*wt(2,j)*wt(4,k) 
-        part%Tf = part%Tf+Text(izuv,iy,ix)*wt(1,i)*wt(2,j)*wt(3,k)
-        part%qinf = part%qinf+T2ext(izuv,iy,ix)*wt(1,i)*wt(2,j)*wt(3,k) 
+        parts(ip)%uf(1) = parts(ip)%uf(1)+uext(izuv,iy,ix)*wt(1,i)*wt(2,j)*wt(3,k)
+        parts(ip)%uf(2) = parts(ip)%uf(2)+vext(izuv,iy,ix)*wt(1,i)*wt(2,j)*wt(3,k)
+        parts(ip)%uf(3) = parts(ip)%uf(3)+wext(izw,iy,ix)*wt(1,i)*wt(2,j)*wt(4,k)
+        parts(ip)%Tf = parts(ip)%Tf+Text(izuv,iy,ix)*wt(1,i)*wt(2,j)*wt(3,k)
+        parts(ip)%qinf = parts(ip)%qinf+T2ext(izuv,iy,ix)*wt(1,i)*wt(2,j)*wt(3,k)
      end do
-     end do 
+     end do
      end do
 
   end subroutine uf_interp 
 
-  subroutine uf_interp_lin
+  subroutine uf_interp_lin(ip)
   use pars
   use fields
   use con_stats
   use con_data
   implicit none
-   
+
+  integer, intent(in) :: ip
   integer :: ix,iy,izuv,izw,iz,i,k,j
   integer :: ipt,jpt,kpt,kwpt
   real :: wtx, wty, wtz, wtzw, wtt
   real :: xv, yv, zv, zwv
   
 
-  ipt = floor(part%xp(1)/dx) + 1 
-  jpt = floor(part%xp(2)/dy) + 1
- 
+  ipt = floor(parts(ip)%xp(1)/dx) + 1
+  jpt = floor(parts(ip)%xp(2)/dy) + 1
+
   !Finding the k-lhnode is different since grid may be stretched
   !AND since (u,v) and w stored differently
   !Will get a k-index for (u,v) and one for w
-  
-  kpt = find_upper(zz, part%xp(3)) - 2
-  kwpt = find_upper(z, part%xp(3)) - 2
+
+  kpt = find_upper(zz, parts(ip)%xp(3)) - 2
+  kwpt = find_upper(z, parts(ip)%xp(3)) - 2
 
   wtx=0.0
   wty=0.0
@@ -803,9 +805,9 @@ CONTAINS
   wtzw=0.0
   wtt=0.0
 
-  part%uf = 0.0
-  part%Tf = 0.0
-  part%qinf = 0.0
+  parts(ip)%uf = 0.0
+  parts(ip)%Tf = 0.0
+  parts(ip)%qinf = 0.0
   do i=0,1
   do j=0,1
   do k=0,1
@@ -815,10 +817,10 @@ CONTAINS
      zv = zz(k+kpt)
      zwv = z(k+kwpt)
 
-     wtx = (1.0 - abs(part%xp(1)-xv)/dx)
-     wty = (1.0 - abs(part%xp(2)-yv)/dy)
-     wtz = (1.0 - abs(part%xp(3)-zv)/dzu(kpt+1))
-     wtzw = (1.0 - abs(part%xp(3)-zwv)/dzw(kwpt+1))
+     wtx = (1.0 - abs(parts(ip)%xp(1)-xv)/dx)
+     wty = (1.0 - abs(parts(ip)%xp(2)-yv)/dy)
+     wtz = (1.0 - abs(parts(ip)%xp(3)-zv)/dzu(kpt+1))
+     wtzw = (1.0 - abs(parts(ip)%xp(3)-zwv)/dzw(kwpt+1))
 
      ix = ipt+i
      iy = jpt+j
@@ -826,12 +828,12 @@ CONTAINS
      izw = kwpt+k
 
 
-     part%uf(1) = part%uf(1) + uext(izuv,iy,ix)*wtx*wty*wtz
-     part%uf(2) = part%uf(2) + vext(izuv,iy,ix)*wtx*wty*wtz
-     part%uf(3) = part%uf(3) + wext(izw,iy,ix)*wtx*wty*wtzw
+     parts(ip)%uf(1) = parts(ip)%uf(1) + uext(izuv,iy,ix)*wtx*wty*wtz
+     parts(ip)%uf(2) = parts(ip)%uf(2) + vext(izuv,iy,ix)*wtx*wty*wtz
+     parts(ip)%uf(3) = parts(ip)%uf(3) + wext(izw,iy,ix)*wtx*wty*wtzw
 
-     part%Tf = part%Tf + Text(izuv,iy,ix)*wtx*wty*wtz
-     part%qinf = part%qinf + T2ext(izuv,iy,ix)*wtx*wty*wtz
+     parts(ip)%Tf = parts(ip)%Tf + Text(izuv,iy,ix)*wtx*wty*wtz
+     parts(ip)%qinf = parts(ip)%qinf + T2ext(izuv,iy,ix)*wtx*wty*wtz
 
   end do
 
@@ -839,16 +841,16 @@ CONTAINS
   !fix is to use 0th order interpolation if between last (uv) point
   !and wall
   if (kpt .eq. nnz) then
-     part%uf(1) = uext(kpt,iy,ix)
-     part%uf(2) = vext(kpt,iy,ix)
-     part%Tf = Text(kpt,iy,ix)
-     part%qinf = T2ext(kpt,iy,ix)
+     parts(ip)%uf(1) = uext(kpt,iy,ix)
+     parts(ip)%uf(2) = vext(kpt,iy,ix)
+     parts(ip)%Tf = Text(kpt,iy,ix)
+     parts(ip)%qinf = T2ext(kpt,iy,ix)
   end if
   if (kpt .eq. 0) then
-     part%uf(1) = uext(1,iy,ix)
-     part%uf(2) = vext(1,iy,ix)
-     part%Tf = Text(1,iy,ix)
-     part%qinf = T2ext(1,iy,ix)
+     parts(ip)%uf(1) = uext(1,iy,ix)
+     parts(ip)%uf(2) = vext(1,iy,ix)
+     parts(ip)%Tf = Text(1,iy,ix)
+     parts(ip)%qinf = T2ext(1,iy,ix)
   end if
   end do
   end do
@@ -3089,143 +3091,142 @@ CONTAINS
 
 
       call start_phase(measurement_id_particle_loop)
-      !loop over the parts array; set part pointer for subroutine calls
+      !loop over the parts array
       do i = 1, npart_arr
-         part => list_ptrs(i)%p
 
          !Store original values for two-way coupling
-         part%vp_old(1:3) = part%vp(1:3)
-         part%Tp_old = part%Tp
-         part%radius_old = part%radius
+         parts(i)%vp_old(1:3) = parts(i)%vp(1:3)
+         parts(i)%Tp_old = parts(i)%Tp
+         parts(i)%radius_old = parts(i)%radius
 
 
-        !First, interpolate to get the fluid velocity part%uf(1:3):
+        !First, interpolate to get the fluid velocity parts(i)%uf(1:3):
         if (ilin .eq. 1) then
-           call uf_interp_lin   !Use trilinear interpolation
+           call uf_interp_lin(i)   !Use trilinear interpolation
         else
-           call uf_interp       !Use 6th order Lagrange interpolation
+           call uf_interp(i)       !Use 6th order Lagrange interpolation
         end if
 
 
         if (it .LE. 1) then
-           part%vp(1:3) = part%uf
+           parts(i)%vp(1:3) = parts(i)%uf
         end if
 
         if (iexner .eq. 1) then
            !Compute using the base-state pressure at the particle height
            !Neglects any turbulence or other fluctuating pressure sources
-           part%Tf = part%Tf*exner(surf_p,func_p_base(surf_p,tsfcc(1),part%xp(3)))
-           !rhoa = func_rho_base(surf_p,tsfcc(1),part%xp(3))
-           rhoa = func_p_base(surf_p,tsfcc(1),part%xp(3))/Rd/part%Tf
+           parts(i)%Tf = parts(i)%Tf*exner(surf_p,func_p_base(surf_p,tsfcc(1),parts(i)%xp(3)))
+           !rhoa = func_rho_base(surf_p,tsfcc(1),parts(i)%xp(3))
+           rhoa = func_p_base(surf_p,tsfcc(1),parts(i)%xp(3))/Rd/parts(i)%Tf
         else
            rhoa = surf_rho
         end if
 
-        if (part%qinf .lt. 0.0) then
+        if (parts(i)%qinf .lt. 0.0) then
           write(*,'(a30,2i,16e15.6)') 'WARNING: NEG QINF',  &
-          part%pidx,part%procidx, &
-          part%radius,part%qinf,part%Tp,part%Tf,part%xp(3), &
-          part%kappa_s,part%m_s,part%vp(1),part%vp(2),part%vp(3), &
-          part%res,part%sigm_s,part%xp(1),xmax,xmin,part%xp(2),ymax,ymin
+          parts(i)%pidx,parts(i)%procidx, &
+          parts(i)%radius,parts(i)%qinf,parts(i)%Tp,parts(i)%Tf,parts(i)%xp(3), &
+          parts(i)%kappa_s,parts(i)%m_s,parts(i)%vp(1),parts(i)%vp(2),parts(i)%vp(3), &
+          parts(i)%res,parts(i)%sigm_s,parts(i)%xp(1),xmax,xmin,parts(i)%xp(2),ymax,ymin
         end if
 
 
-        diff(1:3) = part%vp - part%uf
+        diff(1:3) = parts(i)%vp - parts(i)%uf
         diffnorm = sqrt(diff(1)**2 + diff(2)**2 + diff(3)**2)
-        Volp = pi2*2.0/3.0*part%radius**3
-        rhop = (part%m_s+Volp*rhow)/Volp
-        taup_i = 18.0*rhoa*nuf/rhop/(2.0*part%radius)**2
-        Rep = 2.0*part%radius*diffnorm/nuf
+        Volp = pi2*2.0/3.0*parts(i)%radius**3
+        rhop = (parts(i)%m_s+Volp*rhow)/Volp
+        taup_i = 18.0*rhoa*nuf/rhop/(2.0*parts(i)%radius)**2
+        Rep = 2.0*parts(i)%radius*diffnorm/nuf
         corrfac = (1.0 + 0.15*Rep**(0.687))
 
         corrfac = 1.0
 
-        xp3i = part%xp(3)   !Store this to do flux calculation
+        xp3i = parts(i)%xp(3)   !Store this to do flux calculation
 
 
         !Now start updating particle position, velocity, temperature, radius
 
         !implicitly calculates next velocity and position
-        part%xp(1:3) = part%xp(1:3) + dt*part%vp(1:3)
-        part%vp(1:3) = (part%vp(1:3)+taup_i*dt*corrfac*part%uf(1:3)+dt*part_grav(1:3))/(1+dt*corrfac*taup_i)
+        parts(i)%xp(1:3) = parts(i)%xp(1:3) + dt*parts(i)%vp(1:3)
+        parts(i)%vp(1:3) = (parts(i)%vp(1:3)+taup_i*dt*corrfac*parts(i)%uf(1:3)+dt*part_grav(1:3))/(1+dt*corrfac*taup_i)
 
 
         ! non-dimensionalizes particle radius and temperature before
         ! iteratively solving for next radius and temperature
 
-        taup0 = (((part%m_s)/((2./3.)*pi2*radius_init**3) + rhow)*(radius_init*2)**2)/(18*rhoa*nuf)
+        taup0 = (((parts(i)%m_s)/((2./3.)*pi2*radius_init**3) + rhow)*(radius_init*2)**2)/(18*rhoa*nuf)
 
         dt_taup0 = dt/taup0
 
-        if (ievap .EQ. 1 .and. part%qinf .gt. 0.0) then
+        if (ievap .EQ. 1 .and. parts(i)%qinf .gt. 0.0) then
 
                !Gives initial guess into nonlinear solver
                !mflag = 0, has equilibrium radius; mflag = 1, no
                !equilibrium (uses itself as initial guess)
-               call rad_solver2(guess,rhoa,mflag)
+               call rad_solver2(guess,rhoa,mflag,i)
 
                if (mflag == 0) then
-                rt_start(1) = guess/part%radius
-                rt_start(2) = part%Tf/part%Tp
+                rt_start(1) = guess/parts(i)%radius
+                rt_start(2) = parts(i)%Tf/parts(i)%Tp
                else
                 rt_start(1) = 1.0
                 rt_start(2) = 1.0
                end if
 
-               call gauss_newton_2d(part%vp,dt_taup0,rhoa,rt_start, rt_zeroes,flag)
+               call gauss_newton_2d(parts(i)%vp,dt_taup0,rhoa,rt_start, rt_zeroes,flag,i)
 
                if (flag==1) then
                num100 = num100+1
 
-               call LV_solver(part%vp,dt_taup0,rhoa,rt_start, rt_zeroes,flag)
+               call LV_solver(parts(i)%vp,dt_taup0,rhoa,rt_start, rt_zeroes,flag,i)
 
                end if
 
                if ((flag == 1)  &
                   .OR. isnan(rt_zeroes(1)) &
-                  .OR. (rt_zeroes(1)*part%radius<0) &
+                  .OR. (rt_zeroes(1)*parts(i)%radius<0) &
                   .OR. isnan(rt_zeroes(2)) &
                   .OR. (rt_zeroes(2)<0) &
-                  .OR. (rt_zeroes(1)*part%radius>1.0e-2)) & 
+                  .OR. (rt_zeroes(1)*parts(i)%radius>1.0e-2)) &
                then
 
                ! write(*,'(a30,14e15.6)') 'WARNING: CONVERGENCE',  &
-               !part%radius,part%qinf,part%Tp,part%Tf,part%xp(3), &
-               !part%kappa_s,part%m_s,part%vp(1),part%vp(2),part%vp(3), &
-               !part%res,part%sigm_s,rt_zeroes(1),rt_zeroes(2)
+               !parts(i)%radius,parts(i)%qinf,parts(i)%Tp,parts(i)%Tf,parts(i)%xp(3), &
+               !parts(i)%kappa_s,parts(i)%m_s,parts(i)%vp(1),parts(i)%vp(2),parts(i)%vp(3), &
+               !parts(i)%res,parts(i)%sigm_s,rt_zeroes(1),rt_zeroes(2)
 
                 numimpos = numimpos + 1  !How many have failed?
                 !If they failed (should be very small number), radius,
                 !temp remain unchanged
                 rt_zeroes(1) = 1.0
-                rt_zeroes(2) = part%Tf/part%Tp
+                rt_zeroes(2) = parts(i)%Tf/parts(i)%Tp
 
 
                end if
 
                !Get the critical radius based on old temp
-               !part%rc = crit_radius(part%m_s,part%kappa_s,part%Tp) 
+               !parts(i)%rc = crit_radius(parts(i)%m_s,parts(i)%kappa_s,parts(i)%Tp)
 
                !Count if activated/deactivated
-               if (part%radius > part%rc .AND. part%radius*rt_zeroes(1) < part%rc) then
+               if (parts(i)%radius > parts(i)%rc .AND. parts(i)%radius*rt_zeroes(1) < parts(i)%rc) then
                    denum = denum + 1
 
                    !Also add activated lifetime to histogram
-               call add_histogram(bins_actres,hist_actres,histbins+2,part%actres,part%mult)
-                   
+               call add_histogram(bins_actres,hist_actres,histbins+2,parts(i)%actres,parts(i)%mult)
 
-               elseif (part%radius < part%rc .AND. part%radius*rt_zeroes(1) > part%rc) then
+
+               elseif (parts(i)%radius < parts(i)%rc .AND. parts(i)%radius*rt_zeroes(1) > parts(i)%rc) then
                    actnum = actnum + 1
-                   part%numact = part%numact + 1.0
+                   parts(i)%numact = parts(i)%numact + 1.0
 
                    !Reset the activation lifetime
-                   part%actres = 0.0
+                   parts(i)%actres = 0.0
 
                endif
 
                !Redimensionalize
-               part%radius = rt_zeroes(1)*part%radius
-               part%Tp = rt_zeroes(2)*part%Tp
+               parts(i)%radius = rt_zeroes(1)*parts(i)%radius
+               parts(i)%Tp = rt_zeroes(2)*parts(i)%Tp
 
        else !! Evaporation is turned off
 
@@ -3236,53 +3237,53 @@ CONTAINS
 
             !Update the temperature directly using BE:
             tmp_coeff = Nup/3.0/Pra*CpaCpp*rhop/rhow*taup_i
-            part%Tp = (part%Tp + tmp_coeff*dt*part%Tf)/(1+dt*tmp_coeff)
+            parts(i)%Tp = (parts(i)%Tp + tmp_coeff*dt*parts(i)%Tf)/(1+dt*tmp_coeff)
 
-       end if 
+       end if
 
 
          !New volume and particle density
-         Volp = pi2*2.0/3.0*part%radius**3
-         rhop = (part%m_s+Volp*rhow)/Volp
+         Volp = pi2*2.0/3.0*parts(i)%radius**3
+         rhop = (parts(i)%m_s+Volp*rhow)/Volp
 
-         einf = mod_magnus(part%Tf)
+         einf = mod_magnus(parts(i)%Tf)
 
          !Compute just to have for statistics
-         part%qstar = (Mw/(Ru*part%Tp*rhoa))*einf*exp(((Lv*Mw/Ru)*((1./part%Tf) - (1./part%Tp))) + ((2.*Mw*Gam)/(Ru*rhow*part%radius*part%Tp)) - ((part%kappa_s*part%m_s*rhow/rhos)/(Volp*rhop-part%m_s)))
+         parts(i)%qstar = (Mw/(Ru*parts(i)%Tp*rhoa))*einf*exp(((Lv*Mw/Ru)*((1./parts(i)%Tf) - (1./parts(i)%Tp))) + ((2.*Mw*Gam)/(Ru*rhow*parts(i)%radius*parts(i)%Tp)) - ((parts(i)%kappa_s*parts(i)%m_s*rhow/rhos)/(Volp*rhop-parts(i)%m_s)))
 
 
-        part%res = part%res + dt
-        part%actres = part%actres + dt
+        parts(i)%res = parts(i)%res + dt
+        parts(i)%actres = parts(i)%actres + dt
 
 
         !Store the particle flux now that everything has been updated
-        if (part%xp(3) .gt. zl) then   !This will get treated in particle_bcs_nonperiodic, but record here
+        if (parts(i)%xp(3) .gt. zl) then   !This will get treated in particle_bcs_nonperiodic, but record here
            fluxloc = nnz+1
            fluxloci = find_upper(z, xp3i) - 1
-        elseif (part%xp(3) .lt. 0.0) then !This will get treated in particle_bcs_nonperiodic, but record here
+        elseif (parts(i)%xp(3) .lt. 0.0) then !This will get treated in particle_bcs_nonperiodic, but record here
            fluxloci = find_upper(z, xp3i) - 1
            fluxloc = 0
         else
 
-        fluxloc = find_upper(z, part%xp(3)) - 1
+        fluxloc = find_upper(z, parts(i)%xp(3)) - 1
         fluxloci = find_upper(z, xp3i) - 1
 
         end if  !Only apply flux calc to particles in domain
 
-        if (xp3i .lt. part%xp(3)) then !Particle moved up
+        if (xp3i .lt. parts(i)%xp(3)) then !Particle moved up
 
         do iz=fluxloci,fluxloc-1
-           pflux(iz) = pflux(iz) + part%mult
-           pmassflux(iz) = pmassflux(iz) + rhop*Volp*part%mult
-           penegflux(iz) = penegflux(iz) + rhop*Volp*Cpp*part%Tp*part%mult
+           pflux(iz) = pflux(iz) + parts(i)%mult
+           pmassflux(iz) = pmassflux(iz) + rhop*Volp*parts(i)%mult
+           penegflux(iz) = penegflux(iz) + rhop*Volp*Cpp*parts(i)%Tp*parts(i)%mult
         end do
 
-        elseif (xp3i .gt. part%xp(3)) then !Particle moved down
+        elseif (xp3i .gt. parts(i)%xp(3)) then !Particle moved down
 
         do iz=fluxloc,fluxloci-1
-           pflux(iz) = pflux(iz) - part%mult
-           pmassflux(iz) = pmassflux(iz) - rhop*Volp*part%mult
-           penegflux(iz) = penegflux(iz) - rhop*Volp*Cpp*part%Tp*part%mult
+           pflux(iz) = pflux(iz) - parts(i)%mult
+           pmassflux(iz) = pmassflux(iz) - rhop*Volp*parts(i)%mult
+           penegflux(iz) = penegflux(iz) - rhop*Volp*Cpp*parts(i)%Tp*parts(i)%mult
         end do
 
         end if  !Up/down conditional statement
@@ -4118,9 +4119,10 @@ CONTAINS
 
   end subroutine particle_coalesce
 
-  subroutine gauss_newton_2d(vnext,h,rhoa,vec1,vec2,flag)
+  subroutine gauss_newton_2d(vnext,h,rhoa,vec1,vec2,flag,ip)
         implicit none
 
+        integer, intent(in) :: ip
         real, intent(in) :: vnext(3), h,rhoa,vec1(2)
         real, intent(out) :: vec2(2)
         integer, intent(out) :: flag
@@ -4143,8 +4145,8 @@ CONTAINS
 
                 iterations = iterations + 1
 
-                call ie_vrt_nd(rhoa,vnext,v1(1),v1(2),v_output,fv1,h)
-                call jacob_approx_2d(rhoa,vnext,v1(1),v1(2),h,J)
+                call ie_vrt_nd(rhoa,vnext,v1(1),v1(2),v_output,fv1,h,ip)
+                call jacob_approx_2d(rhoa,vnext,v1(1),v1(2),h,J,ip)
 
                 fancy = matmul(transpose(J),J)
 
@@ -4190,9 +4192,10 @@ CONTAINS
       if (isnan(vec2(1)) .OR. vec2(1)<0 .OR. isnan(vec2(2)) .OR. vec2(2)<0) flag = 1
 
   end subroutine gauss_newton_2d
-  subroutine LV_solver(vnext,h,rhoa,vec1,vec2,flag)
+  subroutine LV_solver(vnext,h,rhoa,vec1,vec2,flag,ip)
         implicit none
 
+        integer, intent(in) :: ip
         real, intent(in) :: vnext(3),h,rhoa,vec1(2)
         real, intent(out) :: vec2(2)
         integer, intent(out) :: flag
@@ -4219,8 +4222,8 @@ CONTAINS
 
         iterations = iterations + 1
 
-        call jacob_approx_2d(rhoa,vnext, v1(1), v1(2), h,J)
-        call ie_vrt_nd(rhoa,vnext, v1(1), v1(2),v_output,fv1,h)
+        call jacob_approx_2d(rhoa,vnext, v1(1), v1(2), h,J,ip)
+        call ie_vrt_nd(rhoa,vnext, v1(1), v1(2),v_output,fv1,h,ip)
 
         g = matmul(transpose(J),J)+lambda*I
         gradC = matmul(transpose(J),fv1)
@@ -4248,7 +4251,7 @@ CONTAINS
            EXIT
         end if
 
-        call ie_vrt_nd(rhoa,vnext, vec2(1), vec2(2),v_output,fv2,h)
+        call ie_vrt_nd(rhoa,vnext, vec2(1), vec2(2),v_output,fv2,h,ip)
         newC = 0.5*fv2*fv2
 
 
@@ -4271,9 +4274,10 @@ CONTAINS
 
 
   end subroutine LV_solver
-  subroutine jacob_approx_2d(rhoa,vnext, rnext, tnext, h, J)
+  subroutine jacob_approx_2d(rhoa,vnext, rnext, tnext, h, J, ip)
         implicit none
         integer :: n
+        integer, intent(in) :: ip
 
         real, intent(in) :: rhoa,vnext(3), rnext, tnext, h
         real, intent(out), dimension(1:2, 1:2) :: J
@@ -4284,7 +4288,7 @@ CONTAINS
         ynext(1) = rnext
         ynext(2) = tnext
 
-        call ie_vrt_nd(rhoa,vnext, rnext, tnext, v_output, rt_output, h)
+        call ie_vrt_nd(rhoa,vnext, rnext, tnext, v_output, rt_output, h, ip)
 
         xper = ynext
         xper2 = ynext
@@ -4292,8 +4296,8 @@ CONTAINS
         do n=1, 2
                 xper(n) = xper(n) + diff
                 xper2(n) = xper2(n) - diff
-                call ie_vrt_nd(rhoa,vnext, xper(1), xper(2),v_output,fxper,h)
-                call ie_vrt_nd(rhoa,vnext, xper2(1), xper2(2),v_output,fxper2,h)
+                call ie_vrt_nd(rhoa,vnext, xper(1), xper(2),v_output,fxper,h,ip)
+                call ie_vrt_nd(rhoa,vnext, xper2(1), xper2(2),v_output,fxper2,h,ip)
                 J(:, n) = (fxper-rt_output)/diff
                 xper(n) = ynext(n)
                 xper2(n) = ynext(n)
@@ -4310,13 +4314,14 @@ CONTAINS
         invC = (1./det)*invC
 
   end subroutine inverse_finder_2d
-  subroutine ie_vrt_nd(rhoa,vnext, tempr, tempt, v_output,rt_output, h)
+  subroutine ie_vrt_nd(rhoa,vnext, tempr, tempt, v_output,rt_output, h, ip)
       use pars
       use con_data
       use con_stats
       implicit none
       include 'mpif.h'
 
+      integer, intent(in) :: ip
       real, intent(in) :: rhoa,vnext(3), tempr, tempt, h
       real, intent(out) :: v_output(3), rT_output(2)
 
@@ -4325,24 +4330,24 @@ CONTAINS
       real :: taup0, g(3)
 
 
-        taup0 = (((part%m_s)/((2./3.)*pi2*radius_init**3) + rhow)*(radius_init*2)**2)/(18*rhoa*nuf)
+        taup0 = (((parts(ip)%m_s)/((2./3.)*pi2*radius_init**3) + rhow)*(radius_init*2)**2)/(18*rhoa*nuf)
         g(1:3) = part_grav(1:3)
 
         ! quantities come in already non-dimensionalized, so must be
         ! converted back;
         ! velocity is not non-dimensionalized so no need to change
-        rnext = tempr * part%radius
-        Tnext = tempt * part%Tp
+        rnext = tempr * parts(ip)%radius
+        Tnext = tempt * parts(ip)%Tp
         dnext = rnext * 2.
 
-        esa = mod_magnus(part%Tf)
+        esa = mod_magnus(parts(ip)%Tf)
         VolP = (2./3.)*pi2*rnext**3
-        rhop = (part%m_s + VolP*rhow) / VolP
+        rhop = (parts(ip)%m_s + VolP*rhow) / VolP
 
         !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
         !!! Velocity !!!
-        diff(1:3) = part%uf - vnext
+        diff(1:3) = parts(ip)%uf - vnext
         diffnorm = sqrt(diff(1)**2 + diff(2)**2 + diff(3)**2)
         Rep = dnext * diffnorm/nuf
         taup = (rhop * dnext**2)/(18.0*rhoa*nuf)
@@ -4351,46 +4356,47 @@ CONTAINS
         !!!!!!!!!!!!!!!!
 
         !!! Humidity !!!
-        qstr = (Mw/(Ru*Tnext*rhoa)) * esa * exp(((Lv*Mw/Ru)*((1./part%Tf) - (1./Tnext))) + ((2.*Mw*Gam)/(Ru*rhow*rnext*Tnext)) - ((part%kappa_s*part%m_s*rhow/rhos)/(Volp*rhop-part%m_s)))
+        qstr = (Mw/(Ru*Tnext*rhoa)) * esa * exp(((Lv*Mw/Ru)*((1./parts(ip)%Tf) - (1./Tnext))) + ((2.*Mw*Gam)/(Ru*rhow*rnext*Tnext)) - ((parts(ip)%kappa_s*parts(ip)%m_s*rhow/rhos)/(Volp*rhop-parts(ip)%m_s)))
         !!!!!!!!!!!!!!!!!!
 
         !!! Radius !!!
         Shp = 2. + 0.6 * Rep**(1./2.) * Sc**(1./3.)
-        rprime = (1./9.) * (Shp/Sc) * (rhop/rhow) * (rnext/taup) * (part%qinf - qstr)
-        rprime = rprime * (taup0/part%radius)
+        rprime = (1./9.) * (Shp/Sc) * (rhop/rhow) * (rnext/taup) * (parts(ip)%qinf - qstr)
+        rprime = rprime * (taup0/parts(ip)%radius)
         !!!!!!!!!!!!!!!!!
 
         !!! Temperature !!!
         Nup = 2. + 0.6*Rep**(1./2.)*Pra**(1./3.);
 
-        Tprime = -(1./3.)*(Nup/Pra)*CpaCpp*(rhop/rhow)*(1./taup)*(Tnext-part%Tf) + 3.*Lv*(1./(rnext*Cpp))*rprime*(part%radius/taup0)
-        Tprime = Tprime * (taup0/part%Tp)
+        Tprime = -(1./3.)*(Nup/Pra)*CpaCpp*(rhop/rhow)*(1./taup)*(Tnext-parts(ip)%Tf) + 3.*Lv*(1./(rnext*Cpp))*rprime*(parts(ip)%radius/taup0)
+        Tprime = Tprime * (taup0/parts(ip)%Tp)
         !!!!!!!!!!!!!!!!!
 
         ! velocity is not non-dimensionalized so it does not need to be
         ! changed back
-        v_output(1:3) = vnext(1:3) - part%vp(1:3) - h * vprime(1:3)
-        rT_output(1) = rnext/part%radius - 1.0  - h*rprime
-        rT_output(2) = Tnext/part%Tp - 1.0  - h*Tprime
+        v_output(1:3) = vnext(1:3) - parts(ip)%vp(1:3) - h * vprime(1:3)
+        rT_output(1) = rnext/parts(ip)%radius - 1.0  - h*rprime
+        rT_output(2) = Tnext/parts(ip)%Tp - 1.0  - h*Tprime
 
   end subroutine ie_vrt_nd
-  subroutine rad_solver2(guess,rhoa,mflag)
+  subroutine rad_solver2(guess,rhoa,mflag,ip)
       use pars
       use con_data
       use con_stats
       implicit none
       include 'mpif.h'
 
+      integer, intent(in) :: ip
       real, intent(OUT) :: guess
       integer, intent(OUT) :: mflag
       real, intent(in) :: rhoa
       real :: a, c, esa, Q, R, M, val, theta, S, T
 
       mflag = 0
-      esa = mod_magnus(part%Tf)
+      esa = mod_magnus(parts(ip)%Tf)
 
-      a = -(2*Mw*Gam)/(Ru*rhow*part%Tf)/LOG((Ru*part%Tf*rhoa*part%qinf)/(Mw*esa))
-      c = (part%kappa_s*part%m_s)/((2.0/3.0)*pi2*rhos)/LOG((Ru*part%Tf*rhoa*part%qinf)/(Mw*esa))
+      a = -(2*Mw*Gam)/(Ru*rhow*parts(ip)%Tf)/LOG((Ru*parts(ip)%Tf*rhoa*parts(ip)%qinf)/(Mw*esa))
+      c = (parts(ip)%kappa_s*parts(ip)%m_s)/((2.0/3.0)*pi2*rhos)/LOG((Ru*parts(ip)%Tf*rhoa*parts(ip)%qinf)/(Mw*esa))
 
       Q = (a**2.0)/9.0
       R = (2.0*a**3.0+27.0*c)/54.0
@@ -4411,7 +4417,7 @@ CONTAINS
         guess = S + T - a/3.0
 
         if (guess < 0) then
-                guess = part%radius
+                guess = parts(ip)%radius
                 mflag = 1
         end if
       end if
