@@ -469,13 +469,23 @@
               call apply_particle_coupling
               call end_phase(measurement_id_particle_coupling)
 
+              if (ipartdiff) then
+                 call start_phase(measurement_id_particle_diff)
+                 if (isfs == 2) then
+                    call SFS_velocity
+                 elseif(isfs == 1) then
+                    call SFS_position
+                 end if
+                 call end_phase(measurement_id_particle_diff)
+              end if
+
            end do
 
            dt = dt_full
 
         else
 
-           ! RK3 particle method: coupling runs once per flow step at full dt
+           ! RK3 particle method: coupling and SFS run once per flow step at full dt
            call start_phase(measurement_id_particle_coupling)
            call particle_coupling_update
            call end_phase(measurement_id_particle_coupling)
@@ -488,6 +498,16 @@
            call apply_particle_coupling
            call end_phase(measurement_id_particle_coupling)
 
+           if (ipartdiff) then
+              call start_phase(measurement_id_particle_diff)
+              if (isfs == 2) then
+                 call SFS_velocity
+              elseif(isfs == 1) then
+                 call SFS_position
+              end if
+              call end_phase(measurement_id_particle_diff)
+           end if
+
         end if
 
 
@@ -498,20 +518,6 @@
            call start_phase(measurement_id_particle_coalesce)
            call particle_coalesce
            call end_phase(measurement_id_particle_coalesce)
-
-        end if
-
-        if (ipartdiff) then
-
-          call start_phase(measurement_id_particle_diff)
-          if (isfs == 2) then
-             !Call Weil et al. (2004) Lagrangian stochastic model
-             call SFS_velocity
-          elseif(isfs == 1) then
-             !Call stochastic model for the position based on vis_s
-             call SFS_position
-          end if
-          call end_phase(measurement_id_particle_diff)
 
         end if
 
