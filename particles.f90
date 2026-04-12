@@ -4381,7 +4381,7 @@ CONTAINS
 
   end subroutine rad_solver2
 
-  subroutine SFS_velocity
+  subroutine SFS_velocity(istep_part)
   !This subroutine calculate the SFS velocity for particles
   !Uses Weil et al. (2004) formulation
   use pars
@@ -4391,6 +4391,7 @@ CONTAINS
   use con_stats
   implicit none
   include 'mpif.h'
+  integer, intent(in) :: istep_part
   real :: sigm_sdxp, sigm_sdyp, sigm_sdzp, vis_sp
   real :: sigm_su, sigm_sl, us_ran, tengz, englez_bar
   real :: engsbz_bar, sigm_w, sigm_ws
@@ -4420,7 +4421,7 @@ CONTAINS
   us = 0.0
   sigm_ws = 0.0
   sigm_w = 0.0
-  pfluxdiff = 0.0
+  if (istep_part == 1) pfluxdiff = 0.0
 
 !       ------------------
 !       compute sigma squre (sigm_s) based on subgrid energy field
@@ -4622,7 +4623,7 @@ CONTAINS
 
   end subroutine SFS_velocity
 
-  subroutine SFS_position
+  subroutine SFS_position(istep_part)
   !Use a more simplistic SFS treatment: Stochastic particle position rather than velocity
   !Designed to be consistent with LES subgrid eddy diffusivity
   !Does not use Weil et al. 2004 formulation at all
@@ -4633,6 +4634,7 @@ CONTAINS
   use con_stats
   implicit none
   include 'mpif.h'
+  integer, intent(in) :: istep_part
 
   real :: sigm_sdxp, sigm_sdyp, sigm_sdzp, vis_sp
   real :: phim, phis, psim, psis, zeta
@@ -4642,7 +4644,7 @@ CONTAINS
   integer :: fluxloc,fluxloci
 
     sigm_s = 0.0
-    pfluxdiff = 0.0
+    if (istep_part == 1) pfluxdiff = 0.0
 
 !       ------------------
 !       compute sigma squre (sigm_s) based on subgrid energy field

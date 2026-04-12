@@ -472,9 +472,9 @@
               if (ipartdiff) then
                  call start_phase(measurement_id_particle_diff)
                  if (isfs == 2) then
-                    call SFS_velocity
+                    call SFS_velocity(istep_part)
                  elseif(isfs == 1) then
-                    call SFS_position
+                    call SFS_position(istep_part)
                  end if
                  call end_phase(measurement_id_particle_diff)
               end if
@@ -501,9 +501,9 @@
            if (ipartdiff) then
               call start_phase(measurement_id_particle_diff)
               if (isfs == 2) then
-                 call SFS_velocity
+                 call SFS_velocity(1)
               elseif(isfs == 1) then
-                 call SFS_position
+                 call SFS_position(1)
               end if
               call end_phase(measurement_id_particle_diff)
            end if
