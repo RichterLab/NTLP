@@ -469,23 +469,13 @@
               call apply_particle_coupling
               call end_phase(measurement_id_particle_coupling)
 
-              if (ipartdiff) then
-                 call start_phase(measurement_id_particle_diff)
-                 if (isfs == 2) then
-                    call SFS_velocity(istep_part)
-                 elseif(isfs == 1) then
-                    call SFS_position(istep_part)
-                 end if
-                 call end_phase(measurement_id_particle_diff)
-              end if
-
            end do
 
            dt = dt_full
 
         else
 
-           ! RK3 particle method: coupling and SFS run once per flow step at full dt
+           ! RK3 particle method: coupling runs once per flow step at full dt
            call start_phase(measurement_id_particle_coupling)
            call particle_coupling_update
            call end_phase(measurement_id_particle_coupling)
@@ -498,16 +488,6 @@
            call apply_particle_coupling
            call end_phase(measurement_id_particle_coupling)
 
-           if (ipartdiff) then
-              call start_phase(measurement_id_particle_diff)
-              if (isfs == 2) then
-                 call SFS_velocity(1)
-              elseif(isfs == 1) then
-                 call SFS_position(1)
-              end if
-              call end_phase(measurement_id_particle_diff)
-           end if
-
         end if
 
 
@@ -519,6 +499,17 @@
            call particle_coalesce
            call end_phase(measurement_id_particle_coalesce)
 
+        end if
+
+        !SFS routines sub-step themselves at their own stability time scale
+        if (ipartdiff) then
+           call start_phase(measurement_id_particle_diff)
+           if (isfs == 2) then
+              call SFS_velocity
+           elseif(isfs == 1) then
+              call SFS_position
+           end if
+           call end_phase(measurement_id_particle_diff)
         end if
 
         if (ireintro) then

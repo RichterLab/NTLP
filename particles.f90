@@ -4381,7 +4381,7 @@ CONTAINS
 
   end subroutine rad_solver2
 
-  subroutine SFS_velocity(istep_part)
+  subroutine SFS_velocity
   !This subroutine calculate the SFS velocity for particles
   !Uses Weil et al. (2004) formulation
   use pars
@@ -4391,8 +4391,9 @@ CONTAINS
   use con_stats
   implicit none
   include 'mpif.h'
-  integer, intent(in) :: istep_part
   real :: sigm_sdxp, sigm_sdyp, sigm_sdzp, vis_sp
+  real :: sigm_s_max_sfs, l_flt_min_sfs, epsn_max_sfs, T_lagr_min_sfs, dt_sfs_full
+  integer :: nsteps_sfs, isub_sfs
   real :: sigm_su, sigm_sl, us_ran, tengz, englez_bar
   real :: engsbz_bar, sigm_w, sigm_ws
   real :: L_flt, epsn, fs, C0, a1, a2, a3, sigm_sprev, fs1
@@ -4421,7 +4422,7 @@ CONTAINS
   us = 0.0
   sigm_ws = 0.0
   sigm_w = 0.0
-  if (istep_part == 1) pfluxdiff = 0.0
+  pfluxdiff = 0.0
 
 !       ------------------
 !       compute sigma squre (sigm_s) based on subgrid energy field
@@ -4466,6 +4467,26 @@ CONTAINS
 !     ---------------
 
   call fill_extSFS
+
+  ! Determine sub-step count from the minimum Lagrangian time scale
+  ! T_lagr = 2*sigm_s / (C0*epsn), minimised where sigm_s is largest.
+  ! Use the field maximum so no extra particle pass is needed.
+  sigm_s_max_sfs = max(maxval(sigm_s(1:nnx, iys:iye, izs:ize)), 1.0e-10)
+  call mpi_allreduce(mpi_in_place, sigm_s_max_sfs, 1, mpi_real, &
+                     mpi_max, mpi_comm_world, ierr)
+  l_flt_min_sfs  = (2.25*dx*dy*minval(dzw(izs:ize+1)))**(1.0/3.0)
+  epsn_max_sfs   = (0.93/l_flt_min_sfs)*(1.5*sigm_s_max_sfs)**1.5
+  T_lagr_min_sfs = 2.0*sigm_s_max_sfs / (6.0*epsn_max_sfs)   ! C0=6.0
+  nsteps_sfs     = max(1, ceiling(dt / T_lagr_min_sfs))
+  dt_sfs_full    = dt
+  dt             = dt_sfs_full / real(nsteps_sfs)
+
+  if (l_root .and. nsteps_sfs .gt. 1) &
+     write(6,'(a,i4,a,e12.5)') &
+        ' SFS_velocity sub-stepping: nsteps=', nsteps_sfs, &
+        '  dt_sfs=', dt
+
+  do isub_sfs = 1, nsteps_sfs
 
   !Loop over the linked list of particles:
   part => first_particle
@@ -4611,6 +4632,10 @@ CONTAINS
   call particle_exchange
   call particle_bcs_periodic
 
+  end do  ! isub_sfs
+
+  dt = dt_sfs_full
+
   numpart = 0
   part => first_particle
   do while (associated(part))
@@ -4623,7 +4648,7 @@ CONTAINS
 
   end subroutine SFS_velocity
 
-  subroutine SFS_position(istep_part)
+  subroutine SFS_position
   !Use a more simplistic SFS treatment: Stochastic particle position rather than velocity
   !Designed to be consistent with LES subgrid eddy diffusivity
   !Does not use Weil et al. 2004 formulation at all
@@ -4634,9 +4659,10 @@ CONTAINS
   use con_stats
   implicit none
   include 'mpif.h'
-  integer, intent(in) :: istep_part
 
   real :: sigm_sdxp, sigm_sdyp, sigm_sdzp, vis_sp
+  real :: vis_s_max_sfs, dz_min_sfs, T_diff_min_sfs, dt_sfs_full
+  integer :: nsteps_sfs, isub_sfs
   real :: phim, phis, psim, psis, zeta
   real :: dadz
   real :: xp3i
@@ -4644,7 +4670,7 @@ CONTAINS
   integer :: fluxloc,fluxloci
 
     sigm_s = 0.0
-    if (istep_part == 1) pfluxdiff = 0.0
+    pfluxdiff = 0.0
 
 !       ------------------
 !       compute sigma squre (sigm_s) based on subgrid energy field
@@ -4661,6 +4687,23 @@ CONTAINS
     end do
 
     call fill_extSFS
+
+  ! Determine sub-step count from diffusion stability: dt < dz_min^2/(2*vis_s_max)
+  vis_s_max_sfs = max(maxval(vis_ss(1:nnx, iys:iye, izs:ize)), 1.0e-10)
+  call mpi_allreduce(mpi_in_place, vis_s_max_sfs, 1, mpi_real, &
+                     mpi_max, mpi_comm_world, ierr)
+  dz_min_sfs    = minval(dzw(izs:ize+1))
+  T_diff_min_sfs = dz_min_sfs**2 / (2.0*vis_s_max_sfs)
+  nsteps_sfs    = max(1, ceiling(dt / T_diff_min_sfs))
+  dt_sfs_full   = dt
+  dt            = dt_sfs_full / real(nsteps_sfs)
+
+  if (l_root .and. nsteps_sfs .gt. 1) &
+     write(6,'(a,i4,a,e12.5)') &
+        ' SFS_position sub-stepping: nsteps=', nsteps_sfs, &
+        '  dt_sfs=', dt
+
+  do isub_sfs = 1, nsteps_sfs
 
     !Loop over the linked list of particles:
     part => first_particle
@@ -4725,6 +4768,10 @@ CONTAINS
   call particle_bcs_nonperiodic
   call particle_exchange
   call particle_bcs_periodic
+
+  end do  ! isub_sfs
+
+  dt = dt_sfs_full
 
   numpart = 0
   part => first_particle
