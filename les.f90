@@ -450,6 +450,9 @@
 
            do istep_part = 1, nsteps_part
 
+              if (l_root) write(6,'(a,i4,a,i4)') &
+                 ' Particle sub-step ', istep_part, ' of ', nsteps_part
+
               call start_phase(measurement_id_particle_solver)
               call particle_update_BE
               call end_phase(measurement_id_particle_solver)
