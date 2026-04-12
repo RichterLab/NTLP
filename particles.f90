@@ -858,7 +858,7 @@ CONTAINS
 
   end subroutine uf_interp_lin
 
-  subroutine sigm_interp(sigm_sdxp,sigm_sdyp,sigm_sdzp,vis_sp,iz_part)
+  subroutine sigm_interp(sigm_sdxp,sigm_sdyp,sigm_sdzp,vis_sp,iz_part,ip)
   use pars
   use fields
   use con_stats
@@ -871,11 +871,12 @@ CONTAINS
   integer :: ijpts(2,6),kuvpts(6),kwpts(6),iz_part
   real :: wt(4, 6)
   real :: sigm_sdxp, sigm_sdyp, sigm_sdzp, vis_sp
+  integer, intent(in) :: ip
   !get the "leftmost" node
   !This is just the minimum (i,j,k) on the volume
 
-  ijpts(1,3) = floor(part%xp(1)/dx) + 1
-  ijpts(2,3) = floor(part%xp(2)/dy) + 1
+  ijpts(1,3) = floor(parts(ip)%xp(1)/dx) + 1
+  ijpts(2,3) = floor(parts(ip)%xp(2)/dy) + 1
 
   !Fill in the neighbors:
   ijpts(1,2) = ijpts(1,3)-1
@@ -895,7 +896,7 @@ CONTAINS
   !Will get a k-index for (u,v) and one for w
 
   !Do (u,v) first
-  kuvpts(3) = find_upper(zz, part%xp(3)) - 2
+  kuvpts(3) = find_upper(zz, parts(ip)%xp(3)) - 2
   !Then fill in the rest:
   kuvpts(4) = kuvpts(3)+1
   kuvpts(5) = kuvpts(4)+1
@@ -903,7 +904,7 @@ CONTAINS
   kuvpts(2) = kuvpts(3)-1
   kuvpts(1) = kuvpts(2)-1
 
-  kwpts(3) = find_upper(z, part%xp(3)) - 2
+  kwpts(3) = find_upper(z, parts(ip)%xp(3)) - 2
   iz_part = kwpts(3)
   !Then fill in the rest:
   kwpts(4) = kwpts(3)+1
@@ -924,7 +925,7 @@ CONTAINS
      do k = 1,6
         xkval = dxvec(iz)*(ijpts(iz,k)-1)
         if (j .NE. k) then
-              pj = pj*(part%xp(iz)-xkval)/(xjval-xkval)
+              pj = pj*(parts(ip)%xp(iz)-xkval)/(xjval-xkval)
         end if
      end do
      wt(iz,j) = pj
@@ -987,7 +988,7 @@ CONTAINS
        do k = first,last
           xkval = zz(kuvpts(k))
           if (j .NE. k) then
-             pj = pj*(part%xp(3)-xkval)/(xjval-xkval)
+             pj = pj*(parts(ip)%xp(3)-xkval)/(xjval-xkval)
           end if
        end do
        wt(3,j) = pj
@@ -1036,14 +1037,14 @@ CONTAINS
        do k = first,last
           xkval = z(kwpts(k))
           if (j .NE. k) then
-             pj = pj*(part%xp(3)-xkval)/(xjval-xkval)
+             pj = pj*(parts(ip)%xp(3)-xkval)/(xjval-xkval)
           end if
        end do
        wt(4,j) = pj
   end do
 
   !Now we have the weights - compute the sigma_s and derivatives at xp:
-  part%sigm_s = 0.0
+  parts(ip)%sigm_s = 0.0
   sigm_sdxp = 0.0
   sigm_sdyp = 0.0
   sigm_sdzp = 0.0
@@ -1055,7 +1056,7 @@ CONTAINS
       iy = ijpts(2,j)
       izuv = kuvpts(k)
       izw = kwpts(k)
-      part%sigm_s = part%sigm_s+sigm_sext(izw,iy,ix)*wt(1,i)*wt(2,j)*wt(4,k)
+      parts(ip)%sigm_s = parts(ip)%sigm_s+sigm_sext(izw,iy,ix)*wt(1,i)*wt(2,j)*wt(4,k)
       sigm_sdxp = sigm_sdxp+ sigm_sdxext(izw,iy,ix)*wt(1,i)*wt(2,j)*wt(4,k)
       sigm_sdyp = sigm_sdyp+sigm_sdyext(izw,iy,ix)*wt(1,i)*wt(2,j)*wt(4,k)
       sigm_sdzp = sigm_sdzp+sigm_sdzext(izuv,iy,ix)*wt(1,i)*wt(2,j)*wt(3,k)
@@ -1063,7 +1064,7 @@ CONTAINS
       vis_sp =vis_sp +vis_sext(izw,iy,ix)*wt(1,i)*wt(2,j)*wt(4,k)
 
   if (isnan(vis_sp)) then
-        write(*,*) 'WARNING:',vis_sext(izw,iy,ix),wt(1,i),wt(2,j),wt(4,k),part%xp(3),i,j,k,kwpts(3)
+        write(*,*) 'WARNING:',vis_sext(izw,iy,ix),wt(1,i),wt(2,j),wt(4,k),parts(ip)%xp(3),i,j,k,kwpts(3)
   end if
 
 
@@ -1171,7 +1172,7 @@ CONTAINS
   real :: xv, yv, zv
   real :: ctbuf_s(nnz+2, 1:iye-iys+2, 6), cbbuf_r(nnz+2, 1:iye-iys+2, 6)
   real :: crbuf_s(nnz+2, 1:mxe-mxs+1, 6), clbuf_r(nnz+2, 1:mxe-mxs+1, 6)
-  integer :: i,j,k,ncount,ipt,jpt,kpt,kwpt
+  integer :: ip,j,k,ncount,ipt,jpt,kpt,kwpt
   integer :: istatus(mpi_status_size),ierr
   integer :: ix,iy,iz
 
@@ -1181,24 +1182,23 @@ CONTAINS
   partTEsrc_t = 0.0
 
 
-  part => first_particle
-  do while (associated(part))
+  do ip = 1, npart_arr
 
   !First, as done in uf_interp, must find the "leftmost" node
   !of volume where particle belongs:
   !(must repeat since now particle locations have been updated)
- 
-  ipt = floor(part%xp(1)/dx) + 1
-  jpt = floor(part%xp(2)/dy) + 1
-  kpt = find_upper(zz, part%xp(3)) - 2
-  kwpt = find_upper(z, part%xp(3)) - 1
+
+  ipt = floor(parts(ip)%xp(1)/dx) + 1
+  jpt = floor(parts(ip)%xp(2)/dy) + 1
+  kpt = find_upper(zz, parts(ip)%xp(3)) - 2
+  kwpt = find_upper(z, parts(ip)%xp(3)) - 1
 
 
   !Calculate locally based on new minus old
-  vrhs(1:3) = (part%vp(1:3)-part%vp_old(1:3))/dt 
-  radrhs = (part%radius-part%radius_old)/dt
-  Tprhs_L = 3.0*Lv/Cpp/part%radius*radrhs
-  Tprhs_s = (part%Tp-part%Tp_old)/dt - Tprhs_L
+  vrhs(1:3) = (parts(ip)%vp(1:3)-parts(ip)%vp_old(1:3))/dt
+  radrhs = (parts(ip)%radius-parts(ip)%radius_old)/dt
+  Tprhs_L = 3.0*Lv/Cpp/parts(ip)%radius*radrhs
+  Tprhs_s = (parts(ip)%Tp-parts(ip)%Tp_old)/dt - Tprhs_L
 
 
   !Add contribution to each of the 8 surrounding nodes:
@@ -1212,38 +1212,32 @@ CONTAINS
 
      dV = dx*dy*dzu(kpt+1)
 
-     wtx = (1.0 - abs(part%xp(1)-xv)/dx)
-     wty = (1.0 - abs(part%xp(2)-yv)/dy)
-     wtz = (1.0 - abs(part%xp(3)-zv)/dzu(kpt+1))
+     wtx = (1.0 - abs(parts(ip)%xp(1)-xv)/dx)
+     wty = (1.0 - abs(parts(ip)%xp(2)-yv)/dy)
+     wtz = (1.0 - abs(parts(ip)%xp(3)-zv)/dzu(kpt+1))
      wtt = wtx*wty*wtz
 
      if (iexner.eq.1) then
-        !rhoa = func_rho_base(surf_p,tsfcc(1),part%xp(3))
-        rhoa = func_p_base(surf_p,tsfcc(1),part%xp(3))/Rd/part%Tf  !part%Tf has already been converted to temp from pot. temp
+        rhoa = func_p_base(surf_p,tsfcc(1),parts(ip)%xp(3))/Rd/parts(ip)%Tf
      else
         rhoa = surf_rho
      end if
-     rhop = (part%m_s+pi2*2.0/3.0*part%radius**3*rhow)/(pi2*2.0/3.0*part%radius**3)
-     partmass = rhop*2.0/3.0*pi2*(part%radius)**3
-     taup_i = 18.0*rhoa*nuf/rhop/(2.0*part%radius)**2 
+     rhop = (parts(ip)%m_s+pi2*2.0/3.0*parts(ip)%radius**3*rhow)/(pi2*2.0/3.0*parts(ip)%radius**3)
+     partmass = rhop*2.0/3.0*pi2*(parts(ip)%radius)**3
+     taup_i = 18.0*rhoa*nuf/rhop/(2.0*parts(ip)%radius)**2
 
      ix = ipt+i
      iy = jpt+j
      iz = kpt+k
 
-     !if (ix .gt. mxe+1) write(*,*) 'proc',myid,'has ix = ',ix
-     !if (ix .lt. mxs) write(*,*) 'proc',myid,'has ix = ',ix
-     !if (iy .gt. iye+1) write(*,*) 'proc',myid,'has iy = ',iy
-     !if (iy .lt. iys) write(*,*) 'proc',myid,'has iy = ',iy
-
-     if (ix .gt. mxe+1) write(*,'(a10,3i,15e15.6)') 'ERROR1:',myid,ix,mxe+1,part%xp(1:3),xmin,xmax,ymin,ymax,part%vp(1:3),part%vp_old(1:3),part%radius,part%Tp
-     if (ix .lt. mxs) write(*,'(a10,3i,15e15.6)') 'ERROR2:',myid,ix,mxs,part%xp(1:3),xmin,xmax,ymin,ymax,part%vp(1:3),part%vp_old(1:3),part%radius,part%Tp
-     if (iy .gt. iye+1) write(*,'(a10,3i,15e15.6)') 'ERROR3:',myid,iy,iye+1,part%xp(1:3),xmin,xmax,ymin,ymax,part%vp(1:3),part%vp_old(1:3),part%radius,part%Tp
-     if (iy .lt. iys) write(*,'(a10,3i,15e15.6)') 'ERROR4:',myid,iy,iys,part%xp(1:3),xmin,xmax,ymin,ymax,part%vp(1:3),part%vp_old(1:3),part%radius,part%Tp
+     if (ix .gt. mxe+1) write(*,'(a10,3i,15e15.6)') 'ERROR1:',myid,ix,mxe+1,parts(ip)%xp(1:3),xmin,xmax,ymin,ymax,parts(ip)%vp(1:3),parts(ip)%vp_old(1:3),parts(ip)%radius,parts(ip)%Tp
+     if (ix .lt. mxs) write(*,'(a10,3i,15e15.6)') 'ERROR2:',myid,ix,mxs,parts(ip)%xp(1:3),xmin,xmax,ymin,ymax,parts(ip)%vp(1:3),parts(ip)%vp_old(1:3),parts(ip)%radius,parts(ip)%Tp
+     if (iy .gt. iye+1) write(*,'(a10,3i,15e15.6)') 'ERROR3:',myid,iy,iye+1,parts(ip)%xp(1:3),xmin,xmax,ymin,ymax,parts(ip)%vp(1:3),parts(ip)%vp_old(1:3),parts(ip)%radius,parts(ip)%Tp
+     if (iy .lt. iys) write(*,'(a10,3i,15e15.6)') 'ERROR4:',myid,iy,iys,parts(ip)%xp(1:3),xmin,xmax,ymin,ymax,parts(ip)%vp(1:3),parts(ip)%vp_old(1:3),parts(ip)%radius,parts(ip)%Tp
 
      if (iz .gt. nnz+1) write(*,*) 'proc',myid,'has iz = ',iz
      if (iz .lt. 0) then
-         write(*,*) 'proc',myid,'has iz = ',iz,part%radius,part%xp(3),part%mult,part%vp(3)
+         write(*,*) 'proc',myid,'has iz = ',iz,parts(ip)%radius,parts(ip)%xp(3),parts(ip)%mult,parts(ip)%vp(3)
      end if
 
      !Recall to subtract g since momentum is extracted form
@@ -1253,26 +1247,26 @@ CONTAINS
 
       !drag momentum coupling
       partsrc_t(iz,iy,ix,1:3) = &
-          partsrc_t(iz,iy,ix,1:3) - partmass/rhoa*(vrhs(1:3)-part_grav(1:3))*wtt/dV*real(part%mult)
+          partsrc_t(iz,iy,ix,1:3) - partmass/rhoa*(vrhs(1:3)-part_grav(1:3))*wtt/dV*real(parts(ip)%mult)
 
       !vapor momentum coupling
       partsrc_t(iz,iy,ix,1:3) = &
-          partsrc_t(iz,iy,ix,1:3) - rhow/rhoa*pi2*2*part%radius**2*radrhs*part%vp(1:3)*wtt/dV*real(part%mult)
+          partsrc_t(iz,iy,ix,1:3) - rhow/rhoa*pi2*2*parts(ip)%radius**2*radrhs*parts(ip)%vp(1:3)*wtt/dV*real(parts(ip)%mult)
      endif
 
      if (iTcouple == 1) then
       partTsrc_t(iz,iy,ix) = &
-          partTsrc_t(iz,iy,ix) - (Tprhs_s*6.0*rhow/rhop/CpaCpp/taup_i*(pi2/2.0)*part%radius*nuf)*wtt/dV*real(part%mult)
+          partTsrc_t(iz,iy,ix) - (Tprhs_s*6.0*rhow/rhop/CpaCpp/taup_i*(pi2/2.0)*parts(ip)%radius*nuf)*wtt/dV*real(parts(ip)%mult)
      endif
 
      if (iHcouple == 1) then
       partHsrc_t(iz,iy,ix) = &
-          partHsrc_t(iz,iy,ix) - rhow/rhoa*pi2*2*part%radius**2*radrhs*wtt/dV*real(part%mult)
+          partHsrc_t(iz,iy,ix) - rhow/rhoa*pi2*2*parts(ip)%radius**2*radrhs*wtt/dV*real(parts(ip)%mult)
 
 
       partTEsrc_t(iz,iy,ix) = &
-          partTEsrc_t(iz,iy,ix) - rhow/rhoa*pi2*2*part%radius**2*radrhs*Cpv/Cpa*part%Tp*wtt/dV*real(part%mult) + &
-              rhow/rhoa*pi2*2*part%radius**2*radrhs*Cpv/Cpa*part%Tf*wtt/dV*real(part%mult)
+          partTEsrc_t(iz,iy,ix) - rhow/rhoa*pi2*2*parts(ip)%radius**2*radrhs*Cpv/Cpa*parts(ip)%Tp*wtt/dV*real(parts(ip)%mult) + &
+              rhow/rhoa*pi2*2*parts(ip)%radius**2*radrhs*Cpv/Cpa*parts(ip)%Tf*wtt/dV*real(parts(ip)%mult)
 
      endif
 
@@ -1281,7 +1275,6 @@ CONTAINS
      end do
      end do
 
-     part => part%next
   end do
 
   end subroutine particle_coupling_update
@@ -2014,13 +2007,8 @@ CONTAINS
       call mpi_allgather(numpart,1,mpi_integer,pnum_vec,1,mpi_integer,mpi_comm_world,ierr)
 
       !Package all the particles into writebuf:
-      i = 1
-      part => first_particle
-      do while (associated(part))
-      writebuf(i) = part
-      !write(*,'a5,3e15.6') 'xp:',part%xp(1:3)
-      part => part%next
-      i = i + 1
+      do i = 1, npart_arr
+        writebuf(i) = parts(i)
       end do
 
       !Now only write to the file if you actually have particles
@@ -3296,7 +3284,7 @@ CONTAINS
       implicit none
       include 'mpif.h'
 
-      integer :: ipt,jpt,kpt,ierr
+      integer :: ipt,jpt,kpt,ierr,ip
       integer :: ix,iy,iz
       real :: radavg_tmp, denom, Nc_tmp
       real :: radius_array(mxs:mxe, iys:iye, 1:nnz)
@@ -3308,18 +3296,16 @@ CONTAINS
       num_array = 0
       tauc_min = 1.0e10
 
-      part => first_particle
-      do while (associated(part))     
+      do ip = 1, npart_arr
 
-      ipt = floor(part%xp(1)/dx) + 1
-      jpt = floor(part%xp(2)/dy) + 1
-      kpt = find_upper(z, part%xp(3)) - 1
+      ipt = floor(parts(ip)%xp(1)/dx) + 1
+      jpt = floor(parts(ip)%xp(2)/dy) + 1
+      kpt = find_upper(z, parts(ip)%xp(3)) - 1
 
-      radius_array(ipt,jpt,kpt) = radius_array(ipt,jpt,kpt) + part%radius
+      radius_array(ipt,jpt,kpt) = radius_array(ipt,jpt,kpt) + parts(ip)%radius
       num_array(ipt,jpt,kpt) = num_array(ipt,jpt,kpt) + 1
-      Nc_array(ipt,jpt,kpt) = Nc_array(ipt,jpt,kpt) + part%mult
+      Nc_array(ipt,jpt,kpt) = Nc_array(ipt,jpt,kpt) + parts(ip)%mult
 
-      part => part%next
       end do
 
       !Now loop over all grid points
@@ -3356,7 +3342,7 @@ CONTAINS
       implicit none
       include 'mpif.h'
 
-      integer :: iz,ipt,jpt,kpt
+      integer :: iz,ipt,jpt,kpt,ip
       integer :: ierr
       real :: rhop, pi, rhoa
       
@@ -3403,46 +3389,42 @@ CONTAINS
       mypmass = 0.0
       mypvol = 0.0
 
-      part => first_particle
-      do while (associated(part))
+      do ip = 1, npart_arr
          numpart = numpart + 1
-         
-         if (part%radius .gt. part%rc) then
+
+         if (parts(ip)%radius .gt. parts(ip)%rc) then
             numdrop = numdrop + 1
          else
             numaerosol = numaerosol + 1
          end if
 
-         myradavg = myradavg + part%radius
-         myradmsqr = myradmsqr + part%radius**2
+         myradavg = myradavg + parts(ip)%radius
+         myradmsqr = myradmsqr + parts(ip)%radius**2
 
-         myradmax = max(myradmax,part%radius)
-         myradmin = min(myradmin,part%radius)
-         mytempmax = max(mytempmax,part%Tp)
-         mytempmin = min(mytempmin,part%Tp)
-         myqmax = max(myqmax,part%qinf)
-         myqmin = min(myqmin,part%qinf)
-         vp1min = min(vp1min,part%vp(1))
-         vp1max = max(vp1max,part%vp(1))
-         vp2min = min(vp2min,part%vp(2))
-         vp2max = max(vp2max,part%vp(2))
-         vp3min = min(vp3min,part%vp(3))
-         vp3max = max(vp3max,part%vp(3))
+         myradmax = max(myradmax,parts(ip)%radius)
+         myradmin = min(myradmin,parts(ip)%radius)
+         mytempmax = max(mytempmax,parts(ip)%Tp)
+         mytempmin = min(mytempmin,parts(ip)%Tp)
+         myqmax = max(myqmax,parts(ip)%qinf)
+         myqmin = min(myqmin,parts(ip)%qinf)
+         vp1min = min(vp1min,parts(ip)%vp(1))
+         vp1max = max(vp1max,parts(ip)%vp(1))
+         vp2min = min(vp2min,parts(ip)%vp(2))
+         vp2max = max(vp2max,parts(ip)%vp(2))
+         vp3min = min(vp3min,parts(ip)%vp(3))
+         vp3max = max(vp3max,parts(ip)%vp(3))
 
-
-
-         Volp = pi2*2.0/3.0*part%radius**3
-         rhop = (part%m_s+Volp*rhow)/Volp
-         diff(1:3) = part%vp - part%uf
+         Volp = pi2*2.0/3.0*parts(ip)%radius**3
+         rhop = (parts(ip)%m_s+Volp*rhow)/Volp
+         diff(1:3) = parts(ip)%vp - parts(ip)%uf
          diffnorm = sqrt(diff(1)**2 + diff(2)**2 + diff(3)**2)
-         Rep = 2.0*part%radius*diffnorm/nuf
+         Rep = 2.0*parts(ip)%radius*diffnorm/nuf
          myRep_avg = myRep_avg + Rep
 
          mywmass = mywmass + Volp*rhow
          mypmass = mypmass + Volp*rhop
          mypvol = mypvol + Volp
 
-         part => part%next
       end do
 
       !Compute sums of integer quantities
@@ -3568,63 +3550,60 @@ CONTAINS
 
 
       !For each particle, add its attribute to a running sum of the stats of interest at the correct z-location
-      part => first_particle
-      do while (associated(part))     
+      do ip = 1, npart_arr
 
-      
-      ipt = floor(part%xp(1)/dx) + 1
-      jpt = floor(part%xp(2)/dy) + 1
-      kpt = find_upper(z, part%xp(3)) - 1
+      ipt = floor(parts(ip)%xp(1)/dx) + 1
+      jpt = floor(parts(ip)%xp(2)/dy) + 1
+      kpt = find_upper(z, parts(ip)%xp(3)) - 1
 
       pi   = 4.0*atan(1.0)
-      rhop = (part%m_s+4.0/3.0*pi*part%radius**3*rhow)/(4.0/3.0*pi*part%radius**3)
+      rhop = (parts(ip)%m_s+4.0/3.0*pi*parts(ip)%radius**3*rhow)/(4.0/3.0*pi*parts(ip)%radius**3)
 
       partcount(kpt) = partcount(kpt) + 1.0
 
-      vp1mean(kpt) = vp1mean(kpt) + part%vp(1)
-      vp2mean(kpt) = vp2mean(kpt) + part%vp(2)
-      vp3mean(kpt) = vp3mean(kpt) + part%vp(3)
+      vp1mean(kpt) = vp1mean(kpt) + parts(ip)%vp(1)
+      vp2mean(kpt) = vp2mean(kpt) + parts(ip)%vp(2)
+      vp3mean(kpt) = vp3mean(kpt) + parts(ip)%vp(3)
 
-      vp1msqr(kpt) = vp1msqr(kpt) + part%vp(1)**2
-      vp2msqr(kpt) = vp2msqr(kpt) + part%vp(2)**2
-      vp3msqr(kpt) = vp3msqr(kpt) + part%vp(3)**2
+      vp1msqr(kpt) = vp1msqr(kpt) + parts(ip)%vp(1)**2
+      vp2msqr(kpt) = vp2msqr(kpt) + parts(ip)%vp(2)**2
+      vp3msqr(kpt) = vp3msqr(kpt) + parts(ip)%vp(3)**2
 
-      upwpm(kpt) = upwpm(kpt) + part%vp(1)*part%vp(3)
+      upwpm(kpt) = upwpm(kpt) + parts(ip)%vp(1)*parts(ip)%vp(3)
 
-      uf1mean(kpt) = uf1mean(kpt) + part%uf(1)
-      uf2mean(kpt) = uf2mean(kpt) + part%uf(2)
-      uf3mean(kpt) = uf3mean(kpt) + part%uf(3)
+      uf1mean(kpt) = uf1mean(kpt) + parts(ip)%uf(1)
+      uf2mean(kpt) = uf2mean(kpt) + parts(ip)%uf(2)
+      uf3mean(kpt) = uf3mean(kpt) + parts(ip)%uf(3)
 
-      uf1msqr(kpt) = uf1msqr(kpt) + part%uf(1)**2
-      uf2msqr(kpt) = uf2msqr(kpt) + part%uf(2)**2
-      uf3msqr(kpt) = uf3msqr(kpt) + part%uf(3)**2
+      uf1msqr(kpt) = uf1msqr(kpt) + parts(ip)%uf(1)**2
+      uf2msqr(kpt) = uf2msqr(kpt) + parts(ip)%uf(2)**2
+      uf3msqr(kpt) = uf3msqr(kpt) + parts(ip)%uf(3)**2
 
-      Tpmean(kpt) = Tpmean(kpt) + part%Tp
-      Tpmsqr(kpt) = Tpmsqr(kpt) + part%Tp**2
-      Tfmean(kpt) = Tfmean(kpt) + part%Tf
+      Tpmean(kpt) = Tpmean(kpt) + parts(ip)%Tp
+      Tpmsqr(kpt) = Tpmsqr(kpt) + parts(ip)%Tp**2
+      Tfmean(kpt) = Tfmean(kpt) + parts(ip)%Tf
 
-      radmean(kpt) = radmean(kpt) + part%radius
-      rad2mean(kpt) = rad2mean(kpt) + part%radius**2
+      radmean(kpt) = radmean(kpt) + parts(ip)%radius
+      rad2mean(kpt) = rad2mean(kpt) + parts(ip)%radius**2
 
-      qfmean(kpt) = qfmean(kpt) + part%qinf
+      qfmean(kpt) = qfmean(kpt) + parts(ip)%qinf
 
-      wpTpm(kpt) = wpTpm(kpt) + part%Tp*part%vp(3)
+      wpTpm(kpt) = wpTpm(kpt) + parts(ip)%Tp*parts(ip)%vp(3)
 
-      multmean(kpt) = multmean(kpt) + real(part%mult)
+      multmean(kpt) = multmean(kpt) + real(parts(ip)%mult)
 
-      mwmean(kpt) = mwmean(kpt) + real(part%mult)*(rhow*4.0/3.0*pi*part%radius**3)
+      mwmean(kpt) = mwmean(kpt) + real(parts(ip)%mult)*(rhow*4.0/3.0*pi*parts(ip)%radius**3)
 
-      qstarm(kpt) = qstarm(kpt) + part%qstar
+      qstarm(kpt) = qstarm(kpt) + parts(ip)%qstar
 
-     if (ipt .gt. mxe+1) write(*,'(a10,3i,18e15.6)') 'LWP1:',myid,ipt,mxe+1,part%xp(1:3),xmin,xmax,ymin,ymax,part%vp(1:3),part%vp_old(1:3),part%radius,part%Tp,part%u_sub(1:3)
-     if (ipt .lt. mxs) write(*,'(a10,3i,18e15.6)') 'LWP2:',myid,ipt,mxs,part%xp(1:3),xmin,xmax,ymin,ymax,part%vp(1:3),part%vp_old(1:3),part%radius,part%Tp,part%u_sub(1:3)
-     if (jpt .gt. iye+1) write(*,'(a10,3i,18e15.6)') 'LWP3:',myid,jpt,iye+1,part%xp(1:3),xmin,xmax,ymin,ymax,part%vp(1:3),part%vp_old(1:3),part%radius,part%Tp,part%u_sub(1:3)
-     if (jpt .lt. iys) write(*,'(a10,3i,18e15.6)') 'LWP4:',myid,jpt,iys,part%xp(1:3),xmin,xmax,ymin,ymax,part%vp(1:3),part%vp_old(1:3),part%radius,part%Tp,part%u_sub(1:3)
+     if (ipt .gt. mxe+1) write(*,'(a10,3i,18e15.6)') 'LWP1:',myid,ipt,mxe+1,parts(ip)%xp(1:3),xmin,xmax,ymin,ymax,parts(ip)%vp(1:3),parts(ip)%vp_old(1:3),parts(ip)%radius,parts(ip)%Tp,parts(ip)%u_sub(1:3)
+     if (ipt .lt. mxs) write(*,'(a10,3i,18e15.6)') 'LWP2:',myid,ipt,mxs,parts(ip)%xp(1:3),xmin,xmax,ymin,ymax,parts(ip)%vp(1:3),parts(ip)%vp_old(1:3),parts(ip)%radius,parts(ip)%Tp,parts(ip)%u_sub(1:3)
+     if (jpt .gt. iye+1) write(*,'(a10,3i,18e15.6)') 'LWP3:',myid,jpt,iye+1,parts(ip)%xp(1:3),xmin,xmax,ymin,ymax,parts(ip)%vp(1:3),parts(ip)%vp_old(1:3),parts(ip)%radius,parts(ip)%Tp,parts(ip)%u_sub(1:3)
+     if (jpt .lt. iys) write(*,'(a10,3i,18e15.6)') 'LWP4:',myid,jpt,iys,parts(ip)%xp(1:3),xmin,xmax,ymin,ymax,parts(ip)%vp(1:3),parts(ip)%vp_old(1:3),parts(ip)%radius,parts(ip)%Tp,parts(ip)%u_sub(1:3)
 
       !While we're at it, compute LWP
-      LWP(ipt,jpt) = LWP(ipt,jpt) + real(part%mult)*(rhow*4.0/3.0*pi*part%radius**3)
+      LWP(ipt,jpt) = LWP(ipt,jpt) + real(parts(ip)%mult)*(rhow*4.0/3.0*pi*parts(ip)%radius**3)
 
-      part => part%next
       end do
 
 
@@ -3756,15 +3735,12 @@ CONTAINS
    use pars
    implicit none
 
-   
-   part => first_particle
-   do while (associated(part))
-      
-      if (mod(part%pidx,4000) .eq. 0) then
-          write(ntraj,'(2i,14e15.6)') part%pidx,part%procidx,time,part%xp(1),part%xp(2),part%xp(3),part%vp(1),part%vp(2),part%vp(3),part%radius,part%Tp,part%Tf,part%qinf,part%qstar,part%rc,part%numact
-      end if
+   integer :: ip
 
-   part => part%next
+   do ip = 1, npart_arr
+      if (mod(parts(ip)%pidx,4000) .eq. 0) then
+          write(ntraj,'(2i,14e15.6)') parts(ip)%pidx,parts(ip)%procidx,time,parts(ip)%xp(1),parts(ip)%xp(2),parts(ip)%xp(3),parts(ip)%vp(1),parts(ip)%vp(2),parts(ip)%vp(3),parts(ip)%radius,parts(ip)%Tp,parts(ip)%Tf,parts(ip)%qinf,parts(ip)%qstar,parts(ip)%rc,parts(ip)%numact
+      end if
    end do
 
    if (it .ge. itmax) then
@@ -3778,9 +3754,8 @@ CONTAINS
       use kd_tree
       use pars
       use con_data
-      implicit none 
+      implicit none
 
-      type(particle), pointer :: part_tmp
       type(tree_master_record), pointer :: tree
 
       real, allocatable :: xp_data(:,:),distances(:),rad_data(:)
@@ -3803,41 +3778,36 @@ CONTAINS
       !and you should do nq+1 if you actually want nq
       nq = 11
 
-      allocate(xp_data(numpart,3),index_data(numpart,2))
-      allocate(vel_data(numpart,3))
+      allocate(xp_data(npart_arr,3),index_data(npart_arr,2))
+      allocate(vel_data(npart_arr,3))
       allocate(distances(nq),indexes(nq),ran_nq(2:nq-1))
-      allocate(rad_data(numpart),mult_data(numpart),coal_data(numpart))
-      allocate(destroy_data(numpart))
-      allocate(kappa_s_data(numpart), ms_data(numpart))
+      allocate(rad_data(npart_arr),mult_data(npart_arr),coal_data(npart_arr))
+      allocate(destroy_data(npart_arr))
+      allocate(kappa_s_data(npart_arr), ms_data(npart_arr))
 
       !Loop over particles and fill arrays
-      i = 1
-      part_tmp => first_particle
-      do while (associated(part_tmp))
+      do i = 1, npart_arr
 
-         xp_data(i,1:3) = part_tmp%xp(1:3) 
-         index_data(i,1) = part_tmp%pidx
-         index_data(i,2) = part_tmp%procidx
+         xp_data(i,1:3) = parts(i)%xp(1:3)
+         index_data(i,1) = parts(i)%pidx
+         index_data(i,2) = parts(i)%procidx
 
-         rad_data(i) = part_tmp%radius
-         mult_data(i) = part_tmp%mult
+         rad_data(i) = parts(i)%radius
+         mult_data(i) = parts(i)%mult
          coal_data(i) = 0
 
-         kappa_s_data(i) = part_tmp%kappa_s
-         ms_data(i) = part_tmp%m_s
+         kappa_s_data(i) = parts(i)%kappa_s
+         ms_data(i) = parts(i)%m_s
 
-         vel_data(i,1:3) = part_tmp%vp(1:3)
+         vel_data(i,1:3) = parts(i)%vp(1:3)
 
-      i = i+1   
-      part_tmp => part_tmp%next
       end do
 
       !Build the kd-tree
-      tree => create_tree(xp_data) 
+      tree => create_tree(xp_data)
 
       !Do the search for each of the particles
-      part_tmp => first_particle
-      do i=1,numpart
+      do i=1,npart_arr
 
          qv(1:3) = xp_data(i,1:3)
          call n_nearest_to(tree,qv,nq,indexes,distances)
@@ -3846,9 +3816,9 @@ CONTAINS
          !Go back through and assign the shortest distance and index
          !NOTE: Must use 2nd one since it finds itself as nearest neighbor
          !Keep this turned on despite "ineighbor" flag -- consider it a bonus
-         part_tmp%dist = sqrt(distances(2))
-         part_tmp%nbr_pidx = index_data(indexes(2),1)
-         part_tmp%nbr_procidx = index_data(indexes(2),2)
+         parts(i)%dist = sqrt(distances(2))
+         parts(i)%nbr_pidx = index_data(indexes(2),1)
+         parts(i)%nbr_procidx = index_data(indexes(2),2)
 
          !Okay, now the particle knows who the nearest nq particles are
          !--> pick one at random and apply coalescence rules
@@ -4006,41 +3976,28 @@ CONTAINS
        coal_data(coal_idx) = 1
        coal_data(i) = 1
       end if  !coal_idx .gt. 1
- 
-      part_tmp => part_tmp%next
+
       end do
 
-      !Now finally update the particle linked list
-      i = 1
-      part_tmp => first_particle
-      do while (associated(part_tmp))
-
+      !Now write updated values back to parts array
+      do i = 1, npart_arr
          !Only things which should change are radius and multiplicity
-         part_tmp%radius = rad_data(i)
-         part_tmp%mult = mult_data(i)
+         parts(i)%radius = rad_data(i)
+         parts(i)%mult = mult_data(i)
 
          !Now we also change solute mass and kappa coefficient
-         part_tmp%kappa_s = kappa_s_data(i)
-         part_tmp%m_s = ms_data(i)
-
-      i = i+1   
-      part_tmp => part_tmp%next
+         parts(i)%kappa_s = kappa_s_data(i)
+         parts(i)%m_s = ms_data(i)
       end do
 
-      !Finally remove dead particles from coalescence
-      i = 1
-      numpart = 0
-      part => first_particle
-      do while (associated(part))
+      !Finally remove dead particles from coalescence (backward loop for swap-with-last safety)
+      do i = npart_arr, 1, -1
          if (mult_data(i) .eq. 0) then
+            part => list_ptrs(i)%p
             call destroy_particle
-         else
-            numpart = numpart + 1
-            part => part%next
          end if
-
-      i = i+1
       end do
+      numpart = npart_arr
 
       call destroy_tree(tree)
       deallocate(xp_data,index_data)
@@ -4372,7 +4329,7 @@ CONTAINS
   real :: weit, weit1, weit3, weit4, T_lagr
   real :: us(3)
   real :: xp3i, Volp, rhop
-  integer :: ix,iy,iz,izp1,izm1,ind,iz_part,ierr
+  integer :: ix,iy,iz,izp1,izm1,ind,iz_part,ierr,ip
   integer :: fluxloc,fluxloci
 
 !       ---initialize -------
@@ -4440,25 +4397,22 @@ CONTAINS
 
   call fill_extSFS
 
-  !Loop over the linked list of particles:
-  part => first_particle
-  do while (associated(part))
+  !Loop over particles:
+  do ip = 1, npart_arr
 
     ! interpolate sigm_s and its derivative at particle location
-    sigm_sprev = part%sigm_s
-    call sigm_interp(sigm_sdxp,sigm_sdyp,sigm_sdzp,vis_sp,iz_part)
+    sigm_sprev = parts(ip)%sigm_s
+    call sigm_interp(sigm_sdxp,sigm_sdyp,sigm_sdzp,vis_sp,iz_part,ip)
 
-    part%sigm_s = abs(part%sigm_s)  !Interpolation near surface can give small negative numbers
-    part%sigm_s = max(part%sigm_s,1.0e-4) !Prevent it from getting too small, makes time derivative term singular
+    parts(ip)%sigm_s = abs(parts(ip)%sigm_s)  !Interpolation near surface can give small negative numbers
+    parts(ip)%sigm_s = max(parts(ip)%sigm_s,1.0e-4) !Prevent it from getting too small, makes time derivative term singular
 
 !     -----------------
 !     calculate the subgrid velocity Weil et al ,2004-isotropic turb.
 !     ----------------
      l_flt = (2.25*dx*dy*dzw(iz_part+1))**(1.0/3.0)! filtered with
-     epsn = (0.93/l_flt)*(3.0*part%sigm_s/2.0)**(1.5) ! tur. dis.rt
+     epsn = (0.93/l_flt)*(3.0*parts(ip)%sigm_s/2.0)**(1.5) ! tur. dis.rt
      ! TKE : resolved + Subgrid at grid center
-      !---------------------------------
-!      tot_eng = (engsbz(iz_part+1) + engz(iz_part+1))
      if (iz_part.eq.0) then
         englez_bar = 0.5*englez(iz_part+1)
      elseif (iz_part.eq.nnz) then
@@ -4468,7 +4422,6 @@ CONTAINS
      endif
      engsbz_bar = 0.5*(engsbz(iz_part)+engsbz(iz_part+1))
      tengz = englez_bar + engsbz_bar
-    !---------------------------------
     ! Calculate fs basd on w-componet of velocity
      if (iz_part.eq.0) then
         sigm_w = 0.5*(wps(iz_part+1))
@@ -4480,103 +4433,89 @@ CONTAINS
 
      sigm_ws = 0.5*(engsbz(iz_part)+engsbz(iz_part+1))/3.0
 
-!     ---------write for single droplet ---------
-!       write(*,*)'sigm_w:', sigm_w,sigm_ws
-!     ------------------------------------------
     if(tengz.gt.0.0)then
-!      fs = engsbz(iz_part+1)/(engsbz(iz_part+1) + engz(iz_part+1))
-!      fs = engsbz_bar/tengz
        fs = sigm_ws/(sigm_w + sigm_ws)
     else
        fs =0.0
     end if
     C0 = 6.0  ! Changed to 6.0 from 3.0 Indrjith 11-20-17
 
-!     ---------Check for single-part----------
-       T_lagr = 2*part%sigm_s/(C0*epsn)   ! Lagrangian time scale
-!       write(*,*) 'L_time:',part%xp(3),T_lagr
-!     -----------------------------------
+       T_lagr = 2*parts(ip)%sigm_s/(C0*epsn)   ! Lagrangian time scale
 !    ------------------
 !      Calculate subgrid velocity components
 !     -----------------
-     us(1:3) = part%u_sub(1:3)
+     us(1:3) = parts(ip)%u_sub(1:3)
 !    -----x component ----------------
      a1 = 0.0
      a2 =0.0
      a3 = 0.0
-     a1 =(-0.5)*fs*C0*epsn*part%u_sub(1)/part%sigm_s
-     a2 =0.5*(fs/part%sigm_s)*part%u_sub(1)*(part%sigm_s - sigm_sprev)/dt
+     a1 =(-0.5)*fs*C0*epsn*parts(ip)%u_sub(1)/parts(ip)%sigm_s
+     a2 =0.5*(fs/parts(ip)%sigm_s)*parts(ip)%u_sub(1)*(parts(ip)%sigm_s - sigm_sprev)/dt
      a3 = 0.5*fs*sigm_sdxp
      us_ran = sqrt(fs*C0*epsn*dt)*gasdev(iseed)
-     part%u_sub(1) = (a1+a2+a3)*dt + us_ran
+     parts(ip)%u_sub(1) = (a1+a2+a3)*dt + us_ran
 
-!     ----------------------------------
 !     -----y component ----------------
     a1 = 0.0
     a2 =0.0
     a3 = 0.0
-    a1 =(-0.5)*fs*C0*epsn*part%u_sub(2)/part%sigm_s
-    a2 =0.5*(fs/part%sigm_s)*part%u_sub(2)*(part%sigm_s - sigm_sprev)/dt
+    a1 =(-0.5)*fs*C0*epsn*parts(ip)%u_sub(2)/parts(ip)%sigm_s
+    a2 =0.5*(fs/parts(ip)%sigm_s)*parts(ip)%u_sub(2)*(parts(ip)%sigm_s - sigm_sprev)/dt
     a3 = 0.5*fs*sigm_sdyp
     us_ran = sqrt(fs*C0*epsn*dt)*gasdev(iseed)
-    part%u_sub(2) = (a1+a2+a3)*dt + us_ran
+    parts(ip)%u_sub(2) = (a1+a2+a3)*dt + us_ran
 
-!     ----------------------------------
 !     -----z component ----------------
     a1 = 0.0
     a2 =0.0
     a3 = 0.0
-    a1 =(-0.5)*fs*C0*epsn*part%u_sub(3)/part%sigm_s
-    a2 =0.5*(fs/part%sigm_s)*part%u_sub(3)*(part%sigm_s - sigm_sprev)/dt
+    a1 =(-0.5)*fs*C0*epsn*parts(ip)%u_sub(3)/parts(ip)%sigm_s
+    a2 =0.5*(fs/parts(ip)%sigm_s)*parts(ip)%u_sub(3)*(parts(ip)%sigm_s - sigm_sprev)/dt
     a3 = 0.5*fs*sigm_sdzp
     us_ran = sqrt(fs*C0*epsn*dt)*gasdev(iseed)
-    part%u_sub(3) = (a1+a2+a3)*dt + us_ran
+    parts(ip)%u_sub(3) = (a1+a2+a3)*dt + us_ran
 
 !     -------------------
 !     Update particle location and velocity
 !     ------------------
-    xp3i = part%xp(3)
+    xp3i = parts(ip)%xp(3)
     do ind = 1,3
-      part%xp(ind) = part%xp(ind) + part%u_sub(ind)*dt
+      parts(ip)%xp(ind) = parts(ip)%xp(ind) + parts(ip)%u_sub(ind)*dt
     end do
 
-!     ---------------------------------        
-
-    Volp = pi2*2.0/3.0*part%radius**3
-    rhop = (part%m_s+Volp*rhow)/Volp
+    Volp = pi2*2.0/3.0*parts(ip)%radius**3
+    rhop = (parts(ip)%m_s+Volp*rhow)/Volp
 
     !Store the particle flux now that we have the new position
-    if (part%xp(3) .gt. zl) then   !This will get treated in particle_bcs_nonperiodic, but record here
+    if (parts(ip)%xp(3) .gt. zl) then
        fluxloc = nnz+1
        fluxloci = find_upper(z, xp3i) - 1
-    elseif (part%xp(3) .lt. 0.0) then !This will get treated in particle_bcs_nonperiodic, but record here
+    elseif (parts(ip)%xp(3) .lt. 0.0) then
        fluxloci = find_upper(z, xp3i) - 1
        fluxloc = 0
     else
-       fluxloc = find_upper(z, part%xp(3)) - 1
+       fluxloc = find_upper(z, parts(ip)%xp(3)) - 1
        fluxloci = find_upper(z, xp3i) - 1
-    end if  !Only apply flux calc to particles in domain
+    end if
 
-    if (xp3i .lt. part%xp(3)) then !Particle moved up
+    if (xp3i .lt. parts(ip)%xp(3)) then !Particle moved up
 
       do iz=fluxloci,fluxloc-1
-         pfluxdiff(iz) = pfluxdiff(iz) + part%mult
-         pmassflux(iz) = pmassflux(iz) + rhop*Volp*part%mult
-         penegflux(iz) = penegflux(iz) + rhop*Volp*Cpp*part%Tp*part%mult
+         pfluxdiff(iz) = pfluxdiff(iz) + parts(ip)%mult
+         pmassflux(iz) = pmassflux(iz) + rhop*Volp*parts(ip)%mult
+         penegflux(iz) = penegflux(iz) + rhop*Volp*Cpp*parts(ip)%Tp*parts(ip)%mult
       end do
 
-    elseif (xp3i .gt. part%xp(3)) then !Particle moved down
+    elseif (xp3i .gt. parts(ip)%xp(3)) then !Particle moved down
 
       do iz=fluxloc,fluxloci-1
-         pfluxdiff(iz) = pfluxdiff(iz) - part%mult
-         pmassflux(iz) = pmassflux(iz) - rhop*Volp*part%mult
-         penegflux(iz) = penegflux(iz) - rhop*Volp*Cpp*part%Tp*part%mult
+         pfluxdiff(iz) = pfluxdiff(iz) - parts(ip)%mult
+         pmassflux(iz) = pmassflux(iz) - rhop*Volp*parts(ip)%mult
+         penegflux(iz) = penegflux(iz) - rhop*Volp*Cpp*parts(ip)%Tp*parts(ip)%mult
       end do
 
     end if  !Up/down conditional statement
 
-
-    part => part%next
   end do
 
 
@@ -4584,13 +4523,7 @@ CONTAINS
   call particle_exchange
   call particle_bcs_periodic
 
-  numpart = 0
-  part => first_particle
-  do while (associated(part))
-    numpart = numpart + 1
-    part => part%next
-  end do
-
+  numpart = npart_arr
   !Compute total number of particles
   call mpi_allreduce(numpart,tnumpart,1,mpi_integer,mpi_sum,mpi_comm_world,ierr)
 
@@ -4612,7 +4545,7 @@ CONTAINS
   real :: phim, phis, psim, psis, zeta
   real :: dadz
   real :: xp3i
-  integer :: ix,iy,iz,izp1,izm1,ind,iz_part,ierr
+  integer :: ix,iy,iz,izp1,izm1,ind,iz_part,ierr,ip
   integer :: fluxloc,fluxloci
 
     sigm_s = 0.0
@@ -4634,19 +4567,18 @@ CONTAINS
 
     call fill_extSFS
 
-    !Loop over the linked list of particles:
-    part => first_particle
-    do while (associated(part))
+    !Loop over particles:
+    do ip = 1, npart_arr
 
       ! interpolate sigm_s and its derivative at particle location
-      call sigm_interp(sigm_sdxp,sigm_sdyp,sigm_sdzp,vis_sp,iz_part)
+      call sigm_interp(sigm_sdxp,sigm_sdyp,sigm_sdzp,vis_sp,iz_part,ip)
 
       !Need vertical derivative of average vis_s:
       !Crude approximation: 0th order interpolation -- simply take
       !d(alphaC)/dz of the w-points surrounding the particle location
-      if (part%xp(3) .lt. zw1) then
+      if (parts(ip)%xp(3) .lt. zw1) then
          !Beneath 1st zw point, use MO to approximate dadz:
-         zeta = part%xp(3)/amonin
+         zeta = parts(ip)%xp(3)/amonin
          call fzol(zeta,phim,phis,psim,psis)
          dadz = utau*vk/phis
       else
@@ -4654,57 +4586,47 @@ CONTAINS
          dadz = (alphaC(iz_part+1,1)-alphaC(iz_part,1))*dzw_i(iz)
       end if
 
-      xp3i = part%xp(3)
+      xp3i = parts(ip)%xp(3)
 
       !Now simply solve Langevin equation:
-      part%xp(1) = part%xp(1) + gasdev(iseed)*sqrt(2.0*abs(vis_sp)*dt)
-      part%xp(2) = part%xp(2) + gasdev(iseed)*sqrt(2.0*abs(vis_sp)*dt)
-      part%xp(3) = part%xp(3) + gasdev(iseed)*sqrt(2.0*abs(vis_sp)*dt) + dadz*dt
+      parts(ip)%xp(1) = parts(ip)%xp(1) + gasdev(iseed)*sqrt(2.0*abs(vis_sp)*dt)
+      parts(ip)%xp(2) = parts(ip)%xp(2) + gasdev(iseed)*sqrt(2.0*abs(vis_sp)*dt)
+      parts(ip)%xp(3) = parts(ip)%xp(3) + gasdev(iseed)*sqrt(2.0*abs(vis_sp)*dt) + dadz*dt
 
 
       !Store the particle flux now that we have the new position
-      if (part%xp(3) .gt. zl) then   !This will get treated in particle_bcs_nonperiodic, but record here
+      if (parts(ip)%xp(3) .gt. zl) then
          fluxloc = nnz+1
          fluxloci = find_upper(z, xp3i) - 1
-      elseif (part%xp(3) .lt. 0.0) then !This will get treated in particle_bcs_nonperiodic, but record here
+      elseif (parts(ip)%xp(3) .lt. 0.0) then
          fluxloci = find_upper(z, xp3i) - 1
          fluxloc = 0
       else
+        fluxloc = find_upper(z, parts(ip)%xp(3)) - 1
+        fluxloci = find_upper(z, xp3i) - 1
+      end if
 
-      fluxloc = find_upper(z, part%xp(3)) - 1
-      fluxloci = find_upper(z, xp3i) - 1
+      if (xp3i .lt. parts(ip)%xp(3)) then !Particle moved up
 
-      end if  !Only apply flux calc to particles in domain
+        do iz=fluxloci,fluxloc-1
+           pfluxdiff(iz) = pfluxdiff(iz) + parts(ip)%mult
+        end do
 
-      if (xp3i .lt. part%xp(3)) then !Particle moved up
+      elseif (xp3i .gt. parts(ip)%xp(3)) then !Particle moved down
 
-      do iz=fluxloci,fluxloc-1
-         pfluxdiff(iz) = pfluxdiff(iz) + part%mult
-      end do
-
-      elseif (xp3i .gt. part%xp(3)) then !Particle moved down
-
-      do iz=fluxloc,fluxloci-1
-         pfluxdiff(iz) = pfluxdiff(iz) - part%mult
-      end do
+        do iz=fluxloc,fluxloci-1
+           pfluxdiff(iz) = pfluxdiff(iz) - parts(ip)%mult
+        end do
 
       end if  !Up/down conditional statement
 
-
-  part => part%next
-  end do
+    end do
 
   call particle_bcs_nonperiodic
   call particle_exchange
   call particle_bcs_periodic
 
-  numpart = 0
-  part => first_particle
-  do while (associated(part))
-     numpart = numpart + 1
-    part => part%next
-  end do
-
+  numpart = npart_arr
   !Compute total number of particles
   call mpi_allreduce(numpart,tnumpart,1,mpi_integer,mpi_sum,mpi_comm_world,ierr)
 
@@ -4714,9 +4636,8 @@ CONTAINS
   subroutine particle_neighbor_search_kd
   use pars
   use kd_tree
-  implicit none 
+  implicit none
 
-  type(particle), pointer :: part_tmp
   type(tree_master_record), pointer :: tree
 
   real, allocatable :: xp_data(:,:),distances(:)
@@ -4729,73 +4650,59 @@ CONTAINS
   !nq = 2. nq = 3 fixes it
   nq = 3
 
-  allocate(xp_data(numpart,3),index_data(numpart,2))
+  allocate(xp_data(npart_arr,3),index_data(npart_arr,2))
   allocate(distances(nq),indexes(nq))
 
   !Loop over particles and fill arrays
-  i = 1
-  part_tmp => first_particle
-  do while (associated(part_tmp))
-
-     xp_data(i,1:3) = part_tmp%xp(1:3) 
-     index_data(i,1) = part_tmp%pidx
-     index_data(i,2) = part_tmp%procidx
-
-     i = i+1   
-     part_tmp => part_tmp%next
+  do i = 1, npart_arr
+     xp_data(i,1:3) = parts(i)%xp(1:3)
+     index_data(i,1) = parts(i)%pidx
+     index_data(i,2) = parts(i)%procidx
   end do
 
   !Build the kd-tree
-  tree => create_tree(xp_data) 
+  tree => create_tree(xp_data)
 
   !Do the search for each of the particles
-  part_tmp => first_particle
-  do i=1,numpart
+  do i = 1, npart_arr
 
      qv(1:3) = xp_data(i,1:3)
      call n_nearest_to(tree,qv,nq,indexes,distances)
-     !call n_nearest_to_brute_force(tree,qv,nq,indexes,distances)
 
      !Go back through and assign the shortest distance and index
      !NOTE: Must use 2nd one since it finds itself as nearest neighbor
-     part_tmp%dist = sqrt(distances(2))
-     part_tmp%nbr_pidx = index_data(indexes(2),1)
-     part_tmp%nbr_procidx = index_data(indexes(2),2)
+     parts(i)%dist = sqrt(distances(2))
+     parts(i)%nbr_pidx = index_data(indexes(2),1)
+     parts(i)%nbr_procidx = index_data(indexes(2),2)
 
-     !if (myid==0) write(*,*) 'dist = ',part_tmp%dist
-     !if (myid==0) write(*,*) 'index = ',part_tmp%pidx
-
-     part_tmp => part_tmp%next
   end do
 
 
   !Do a check on the first particle in the array that a brute force
   !search finds the same particle and distance
   dist_check = 1.0e6
-  part_tmp => first_particle%next
-  do while (associated(part_tmp))
+  do i = 2, npart_arr
 
-        xdist = first_particle%xp(1) - part_tmp%xp(1)
-        ydist = first_particle%xp(2) - part_tmp%xp(2)
-        zdist = first_particle%xp(3) - part_tmp%xp(3)
+        xdist = parts(1)%xp(1) - parts(i)%xp(1)
+        ydist = parts(1)%xp(2) - parts(i)%xp(2)
+        zdist = parts(1)%xp(3) - parts(i)%xp(3)
 
         dist_tmp = sqrt(xdist**2 + ydist**2 + zdist**2)
 
      if (dist_tmp .lt. dist_check) then
         dist_check = dist_tmp
-        idx_check = part_tmp%pidx
+        idx_check = parts(i)%pidx
       end if
 
-     part_tmp => part_tmp%next
   end do
 
-  idx_diff = idx_check-first_particle%nbr_pidx
-  dist_diff = abs(dist_check - first_particle%dist)
+  idx_diff = idx_check-parts(1)%nbr_pidx
+  dist_diff = abs(dist_check - parts(1)%dist)
   if (idx_diff .ne. 0) then
-     write(*,'(a30,3i)') 'WARNING in neighbor,idx:',idx_check,first_particle%nbr_pidx,myid
+     write(*,'(a30,3i)') 'WARNING in neighbor,idx:',idx_check,parts(1)%nbr_pidx,myid
   end if
   if (dist_diff .gt. 1.0e-8) then
-     write(*,'(a30,2e15.6,i)') 'WARNING in neighbor,dist:',dist_check,first_particle%dist,myid
+     write(*,'(a30,2e15.6,i)') 'WARNING in neighbor,dist:',dist_check,parts(1)%dist,myid
   end if
 
   deallocate(xp_data,index_data)
@@ -4805,48 +4712,37 @@ CONTAINS
 
   subroutine particle_neighbor_search_brute
   use pars
-  implicit none 
+  implicit none
 
-  type(particle), pointer :: part_ref,part_query
   real :: dist_tmp, xdist, ydist, zdist, distance
-  integer :: nbr_pidx,nbr_procidx,ip
+  integer :: nbr_pidx,nbr_procidx,iq,ir
 
-  
   !Loop over the points that need to perform search
-  part_query => first_particle
-  do while (associated(part_query))
-
+  do iq = 1, npart_arr
 
      distance = 1.0e6
-     ip = 1
      !Loop over points to be searched
-     part_ref => first_particle
-     do while (associated(part_ref))
+     do ir = 1, npart_arr
 
-        xdist = part_query%xp(1) - part_ref%xp(1)
-        ydist = part_query%xp(2) - part_ref%xp(2)
-        zdist = part_query%xp(3) - part_ref%xp(3)
+        xdist = parts(iq)%xp(1) - parts(ir)%xp(1)
+        ydist = parts(iq)%xp(2) - parts(ir)%xp(2)
+        zdist = parts(iq)%xp(3) - parts(ir)%xp(3)
 
         dist_tmp = sqrt(xdist**2 + ydist**2 + zdist**2)
 
-
         !Record distance and ID of nearest particle
-        if (dist_tmp .lt. part_query%dist) then
+        if (dist_tmp .lt. parts(iq)%dist) then
            distance = dist_tmp
-           nbr_pidx = part_ref%pidx
-           nbr_procidx = part_ref%procidx
+           nbr_pidx = parts(ir)%pidx
+           nbr_procidx = parts(ir)%procidx
         end if
 
-     ip = ip + 1
-     part_ref => part_ref%next
      end do
 
-     part_query%dist = distance
-     part_query%nbr_pidx = nbr_pidx
-     part_query%nbr_procidx = nbr_procidx
-     
+     parts(iq)%dist = distance
+     parts(iq)%nbr_pidx = nbr_pidx
+     parts(iq)%nbr_procidx = nbr_procidx
 
-     part_query => part_query%next
   end do
 
 
@@ -4996,11 +4892,11 @@ CONTAINS
   subroutine radius_histogram
   implicit none
 
+  integer :: ip
+
   hist_rad = 0.0
-  part => first_particle
-  do while (associated(part))
-     call add_histogram(bins_rad,hist_rad,histbins+2,part%radius,part%mult)
-     part => part%next
+  do ip = 1, npart_arr
+     call add_histogram(bins_rad,hist_rad,histbins+2,parts(ip)%radius,parts(ip)%mult)
   end do
 
   end subroutine radius_histogram
