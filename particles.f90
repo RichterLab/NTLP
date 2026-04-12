@@ -3054,6 +3054,7 @@ CONTAINS
       include 'mpif.h'
 
       integer :: ierr,fluxloc,fluxloci
+      integer :: i
       real :: denom, dtl, sigma
       integer :: ix,iy,iz,im,flag,mflag
       real :: Rep, diff(3), diffnorm, corrfac
@@ -3088,9 +3089,9 @@ CONTAINS
 
 
       call start_phase(measurement_id_particle_loop)
-      !loop over the linked list of particles
-      part => first_particle
-      do while (associated(part))
+      !loop over the parts array; set part pointer for subroutine calls
+      do i = 1, npart_arr
+         part => list_ptrs(i)%p
 
          !Store original values for two-way coupling
          part%vp_old(1:3) = part%vp(1:3)
@@ -3287,7 +3288,6 @@ CONTAINS
         end if  !Up/down conditional statement
 
 
-      part => part%next
       end do
       call end_phase(measurement_id_particle_loop)
 
@@ -3312,14 +3312,7 @@ CONTAINS
 
       !Get particle count:
       call start_phase(measurement_id_particle_misc)
-      numpart = 0
-
-      part => first_particle
-      do while (associated(part))
-      numpart = numpart + 1
-
-      part => part%next
-      end do
+      numpart = npart_arr
 
       call mpi_allreduce(numpart,tnumpart,1,mpi_integer,mpi_sum,mpi_comm_world,ierr)
       call end_phase(measurement_id_particle_misc)
