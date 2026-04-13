@@ -3079,11 +3079,12 @@ CONTAINS
         end if
 
         if (part%qinf .lt. 0.0) then
-          write(*,'(a30,2i12,18e15.6)') 'WARNING: NEG QINF',  &
+          write(*,'(a30,2i12,21e15.6)') 'WARNING: NEG QINF',  &
           part%pidx,part%procidx, &
           part%radius,part%qinf,part%Tp,part%Tf,part%xp(3), &
           part%kappa_s,part%m_s,part%vp(1),part%vp(2),part%vp(3), &
-          part%res,part%sigm_s,part%xp(1),xmax,xmin,part%xp(2),ymax,ymin
+          part%res,part%sigm_s,part%xp(1),xmax,xmin,part%xp(2),ymax,ymin, &
+          part%u_sub(1),part%u_sub(2),part%u_sub(3)
         end if
 
 
