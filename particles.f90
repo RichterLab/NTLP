@@ -2717,7 +2717,7 @@ CONTAINS
     !perfectly elastic collisions on top, bottom walls
     !i.e. location is reflected, w-velocity is negated
 
-    if (icase.eq.4) then  !Spray case needs to have them bounce off earlier due to numerical issues
+    if (icase.eq.4 .or. icase.eq.6) then  !Bounce off earlier to avoid interpolation issues near top BC
         top = z(nnz-1)-part%radius
     else
         top = z(nnz)-part%radius
