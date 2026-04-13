@@ -764,18 +764,7 @@ CONTAINS
      end do 
      end do
 
-  ! Diagnostic: catch garbage Tf or qinf from interpolation
-  if (part%Tf .gt. 500.0 .or. part%Tf .lt. 50.0 .or. part%qinf .lt. -1.0e-3) then
-     write(*,'(a,2e14.5,e14.5,i6)') 'uf_interp DIAG: Tf,qinf,xp3,kuvpts3=', &
-        part%Tf, part%qinf, part%xp(3), kuvpts(3)
-     do k = 1,6
-        iz = max(0, min(nnz+1, kuvpts(k)))  ! clamp to valid range before printing
-        write(*,'(a,2i4,3e14.5)') '  k,kuvpts(k),zz,Text,wt3:', &
-           k, kuvpts(k), zz(iz), Text(iz,ijpts(2,3),ijpts(1,3)), wt(3,k)
-     end do
-  end if
-
-  end subroutine uf_interp
+  end subroutine uf_interp 
 
   subroutine uf_interp_lin
   use pars
@@ -856,17 +845,6 @@ CONTAINS
   end do
   end do
 
-
-  ! Diagnostic: catch garbage Tf or qinf from linear interpolation
-  if (part%Tf .gt. 500.0 .or. part%Tf .lt. 50.0 .or. part%qinf .lt. -1.0e-3) then
-     write(*,'(a,2e14.5,e14.5,i6)') 'uf_interp_lin DIAG: Tf,qinf,xp3,kpt=', &
-        part%Tf, part%qinf, part%xp(3), kpt
-     write(*,'(a,4e14.5)') '  Text(kpt,jpt,ipt),Text(kpt+1,jpt,ipt),T2ext(kpt),T2ext(kpt+1)=', &
-        Text(max(0,min(nnz+1,kpt)),jpt,ipt), &
-        Text(max(0,min(nnz+1,kpt+1)),jpt,ipt), &
-        T2ext(max(0,min(nnz+1,kpt)),jpt,ipt), &
-        T2ext(max(0,min(nnz+1,kpt+1)),jpt,ipt)
-  end if
 
   end subroutine uf_interp_lin
 
@@ -3104,14 +3082,7 @@ CONTAINS
         if (iexner .eq. 1) then
            !Compute using the base-state pressure at the particle height
            !Neglects any turbulence or other fluctuating pressure sources
-           if (part%Tf .gt. 500.0 .or. part%Tf .lt. 50.0) &
-              write(*,'(a,3e14.5)') 'DIAG pre-exner: Tf_pot,qinf,xp3=', &
-                 part%Tf, part%qinf, part%xp(3)
            part%Tf = part%Tf*exner(surf_p,func_p_base(surf_p,tsfcc(1),part%xp(3)))
-           if (part%Tf .gt. 500.0 .or. part%Tf .lt. 50.0) &
-              write(*,'(a,4e14.5)') 'DIAG post-exner: Tf,exner,surf_p,p_base=', &
-                 part%Tf, exner(surf_p,func_p_base(surf_p,tsfcc(1),part%xp(3))), &
-                 surf_p, func_p_base(surf_p,tsfcc(1),part%xp(3))
            !rhoa = func_rho_base(surf_p,tsfcc(1),part%xp(3))
            rhoa = func_p_base(surf_p,tsfcc(1),part%xp(3))/Rd/part%Tf
         else
