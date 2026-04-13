@@ -648,7 +648,7 @@ CONTAINS
       kuvpts(2) = 1
       kuvpts(3) = 1
    elseif (kuvpts(3) .LT. 0) then 
-      first = 0
+      first = 1
       last = 0
    elseif (kuvpts(3) == 2) then 
       first = 2
@@ -661,7 +661,7 @@ CONTAINS
       kuvpts(5) = nnz
       kuvpts(6) = nnz
    elseif (kuvpts(3) .GT. nnz) then
-      first = 0
+      first = 1
       last = 0
    !Between 2nd to last and last cell center at top
    elseif (kuvpts(3) == nnz-1) then
@@ -699,7 +699,7 @@ CONTAINS
       kwpts(1) = 1
       kwpts(2) = 1
    elseif (kwpts(3) .LT. 0) then 
-      first = 0
+      first = 1
       last = 0
       kwpts(1) = 1
       kwpts(2) = 1
@@ -714,7 +714,7 @@ CONTAINS
       kwpts(5) = nnz
       kwpts(6) = nnz
    elseif (kwpts(3) .GE. nnz) then
-      first = 0
+      first = 1
       last = 0
       kwpts(3) = nnz
       kwpts(4) = nnz
@@ -936,7 +936,7 @@ CONTAINS
       kuvpts(2) = 1
       kuvpts(3) = 1
    elseif (kuvpts(3) .LT. 0) then
-      first = 0
+      first = 1
       last = 0
    elseif (kuvpts(3) == 2) then
       first = 2
@@ -951,7 +951,7 @@ CONTAINS
       kuvpts(5) = nnz
       kuvpts(6) = nnz
    elseif (kuvpts(3) .GT. nnz) then
-      first = 0
+      first = 1
       last = 0
    !Between 2nd to last and last cell center at top
    elseif (kuvpts(3) == nnz-1) then
@@ -990,7 +990,7 @@ CONTAINS
       kwpts(1) = 1
       kwpts(2) = 1
    elseif (kwpts(3) .LT. 0) then
-      first = 0
+      first = 1
       last = 0
       kwpts(1) = 1
       kwpts(2) = 1
@@ -1005,7 +1005,7 @@ CONTAINS
       kwpts(5) = nnz
       kwpts(6) = nnz
    elseif (kwpts(3) .GE. nnz) then
-      first = 0
+      first = 1
       last = 0
       kwpts(3) = nnz
       kwpts(4) = nnz
@@ -1226,14 +1226,25 @@ CONTAINS
      !if (iy .gt. iye+1) write(*,*) 'proc',myid,'has iy = ',iy
      !if (iy .lt. iys) write(*,*) 'proc',myid,'has iy = ',iy
 
-     if (ix .gt. mxe+1) write(*,'(a10,3i,15e15.6)') 'ERROR1:',myid,ix,mxe+1,part%xp(1:3),xmin,xmax,ymin,ymax,part%vp(1:3),part%vp_old(1:3),part%radius,part%Tp
-     if (ix .lt. mxs) write(*,'(a10,3i,15e15.6)') 'ERROR2:',myid,ix,mxs,part%xp(1:3),xmin,xmax,ymin,ymax,part%vp(1:3),part%vp_old(1:3),part%radius,part%Tp
-     if (iy .gt. iye+1) write(*,'(a10,3i,15e15.6)') 'ERROR3:',myid,iy,iye+1,part%xp(1:3),xmin,xmax,ymin,ymax,part%vp(1:3),part%vp_old(1:3),part%radius,part%Tp
-     if (iy .lt. iys) write(*,'(a10,3i,15e15.6)') 'ERROR4:',myid,iy,iys,part%xp(1:3),xmin,xmax,ymin,ymax,part%vp(1:3),part%vp_old(1:3),part%radius,part%Tp
-
-     if (iz .gt. nnz+1) write(*,*) 'proc',myid,'has iz = ',iz
-     if (iz .lt. 0) then
-         write(*,*) 'proc',myid,'has iz = ',iz,part%radius,part%xp(3),part%mult,part%vp(3)
+     if (ix .gt. mxe+1) then
+        write(*,'(a10,3i,15e15.6)') 'ERROR1:',myid,ix,mxe+1,part%xp(1:3),xmin,xmax,ymin,ymax,part%vp(1:3),part%vp_old(1:3),part%radius,part%Tp
+        cycle
+     end if
+     if (ix .lt. mxs) then
+        write(*,'(a10,3i,15e15.6)') 'ERROR2:',myid,ix,mxs,part%xp(1:3),xmin,xmax,ymin,ymax,part%vp(1:3),part%vp_old(1:3),part%radius,part%Tp
+        cycle
+     end if
+     if (iy .gt. iye+1) then
+        write(*,'(a10,3i,15e15.6)') 'ERROR3:',myid,iy,iye+1,part%xp(1:3),xmin,xmax,ymin,ymax,part%vp(1:3),part%vp_old(1:3),part%radius,part%Tp
+        cycle
+     end if
+     if (iy .lt. iys) then
+        write(*,'(a10,3i,15e15.6)') 'ERROR4:',myid,iy,iys,part%xp(1:3),xmin,xmax,ymin,ymax,part%vp(1:3),part%vp_old(1:3),part%radius,part%Tp
+        cycle
+     end if
+     if (iz .gt. nnz+1 .or. iz .lt. 0) then
+        write(*,*) 'proc',myid,'has iz = ',iz,part%radius,part%xp(3),part%mult,part%vp(3)
+        cycle
      end if
 
      !Recall to subtract g since momentum is extracted form
