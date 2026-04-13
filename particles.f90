@@ -4514,31 +4514,38 @@ CONTAINS
 !     -----------------
 !     calculate the subgrid velocity Weil et al ,2004-isotropic turb.
 !     ----------------
-     l_flt = (2.25*dx*dy*dzw(iz_part+1))**(1.0/3.0)! filtered with
+     if (iz_part .eq. nnz) then
+        l_flt = (2.25*dx*dy*dzw(iz_part))**(1.0/3.0)
+     else
+        l_flt = (2.25*dx*dy*dzw(iz_part+1))**(1.0/3.0)
+     end if
      epsn = (0.93/l_flt)*(3.0*part%sigm_s/2.0)**(1.5) ! tur. dis.rt
      ! TKE : resolved + Subgrid at grid center
       !---------------------------------
 !      tot_eng = (engsbz(iz_part+1) + engz(iz_part+1))
      if (iz_part.eq.0) then
         englez_bar = 0.5*englez(iz_part+1)
+        engsbz_bar = 0.5*engsbz(iz_part+1)
      elseif (iz_part.eq.nnz) then
         englez_bar = 0.5*englez(iz_part)
+        engsbz_bar = 0.5*engsbz(iz_part)
      else
         englez_bar = 0.5*(englez(iz_part)+englez(iz_part+1))
+        engsbz_bar = 0.5*(engsbz(iz_part)+engsbz(iz_part+1))
      endif
-     engsbz_bar = 0.5*(engsbz(iz_part)+engsbz(iz_part+1))
      tengz = englez_bar + engsbz_bar
     !---------------------------------
     ! Calculate fs basd on w-componet of velocity
      if (iz_part.eq.0) then
-        sigm_w = 0.5*(wps(iz_part+1))
+        sigm_w  = 0.5*(wps(iz_part+1))
+        sigm_ws = 0.5*engsbz(iz_part+1)/3.0
      elseif (iz_part.eq.nnz) then
-        sigm_w = 0.5*(wps(iz_part))
+        sigm_w  = 0.5*(wps(iz_part))
+        sigm_ws = 0.5*engsbz(iz_part)/3.0
      else
-        sigm_w = 0.5*(wps(iz_part)+wps(iz_part+1))
+        sigm_w  = 0.5*(wps(iz_part)+wps(iz_part+1))
+        sigm_ws = 0.5*(engsbz(iz_part)+engsbz(iz_part+1))/3.0
      endif
-
-     sigm_ws = 0.5*(engsbz(iz_part)+engsbz(iz_part+1))/3.0
 
 !     ---------write for single droplet ---------
 !       write(*,*)'sigm_w:', sigm_w,sigm_ws
