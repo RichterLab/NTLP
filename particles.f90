@@ -2934,7 +2934,11 @@ CONTAINS
   do while (associated(part))
 
     ! Perfectly elastic collisions on top and bottom walls, i.e. location is reflected, w-velocity is negated
-    top = z(nnz) - part%radius
+    if (icase.eq.4 .or. icase.eq.6) then  !Bounce off earlier to avoid interpolation issues near top BC
+        top = z(nnz-1)-part%radius
+    else
+        top = z(nnz) - part%radius
+    end if
     bot = 0.0 + part%radius
 
     if (part%xp(3) .GT. top) then
@@ -3254,7 +3258,7 @@ CONTAINS
   end subroutine particle_update_rk3
 
 
-  subroutine particle_update_BE
+  subroutine particle_update_BE(istep_part)
       use pars
       use con_data
       use con_stats
@@ -3262,6 +3266,7 @@ CONTAINS
       implicit none
       include 'mpif.h'
 
+      integer, intent(in) :: istep_part
       integer :: ierr,fluxloc,fluxloci
       real :: denom,dtl,sigma
       integer :: ix,iy,iz,im,flag,mflag
@@ -3278,16 +3283,23 @@ CONTAINS
       real :: mod_magnus,exner,func_p_base
 
       !First fill extended velocity field for interpolation
-      call start_phase(measurement_id_particle_fill_ext)
-      call fill_ext
-      call end_phase(measurement_id_particle_fill_ext)
+      if (istep_part == 1) then
+         call start_phase(measurement_id_particle_fill_ext)
+         call fill_ext
+         call end_phase(measurement_id_particle_fill_ext)
+      end if
 
-      pflux = 0.0
-      pmassflux = 0.0
-      penegflux = 0.0
+      if (istep_part == 1) then
+         pflux = 0.0
+         pmassflux = 0.0
+         penegflux = 0.0
 
-      num100 = 0
-      numimpos = 0
+         denum = 0
+         actnum = 0
+         num_destroy = 0
+         num100 = 0
+         numimpos = 0
+      end if
 
       call start_phase(measurement_id_particle_loop)
       !loop over the linked list of particles
@@ -3328,11 +3340,12 @@ CONTAINS
         end if
 
         if (part%qinf .lt. 0.0) then
-          write(*,'(a30,2i,12e15.6)') 'WARNING: NEG QINF',  &
+          write(*,'(a30,2i12,21e15.6)') 'WARNING: NEG QINF',  &
           part%pidx,part%procidx, &
           part%radius,part%qinf,part%Tp,part%Tf,part%xp(3), &
           part%kappa_s,part%m_s,part%vp(1),part%vp(2),part%vp(3), &
-          part%res,part%sigm_s
+          part%res,part%sigm_s,part%xp(1),xmax,xmin,part%xp(2),ymax,ymin, &
+          part%u_sub(1),part%u_sub(2),part%u_sub(3)
         end if
 
         diff(1:3) = part%vp - part%uf
@@ -3883,6 +3896,19 @@ CONTAINS
         ipt = floor(part%xp(1)/dx) + 1
         jpt = floor(part%xp(2)/dy) + 1
         kpt = minloc(z,1,mask=(z.gt.part%xp(3))) - 1
+
+        ! Skip particles whose grid indices are out of bounds to avoid
+        ! out-of-bounds array writes.
+        if (ipt .lt. mxs .or. ipt .gt. mxe+1 .or. &
+            jpt .lt. iys .or. jpt .gt. iye+1 .or. &
+            kpt .lt. 1   .or. kpt .gt. nnz) then
+           write(*,'(a,3i6,9e12.4)') &
+              'particle_xy_stats: skipping OOB particle ipt,jpt,kpt=', &
+              ipt, jpt, kpt, &
+              part%xp(1:3), part%vp(1:3), part%uf(1:3)
+           part => part%next
+           cycle
+        end if
 
         pi   = 4.0*atan(1.0)
         rhop = (part%m_s+4.0/3.0*pi*part%radius**3*rhow)/(4.0/3.0*pi*part%radius**3)
@@ -4766,6 +4792,8 @@ CONTAINS
   implicit none
   include 'mpif.h'
   real :: sigm_sdxp,sigm_sdyp,sigm_sdzp,vis_sp
+  real :: sigm_s_max_sfs, l_flt_min_sfs, epsn_max_sfs, T_lagr_min_sfs, dt_sfs_full
+  integer :: nsteps_sfs, isub_sfs
   real :: sigm_su,sigm_sl,us_ran,gasdev,tengz,englez_bar
   real :: engsbz_bar,sigm_w, sigm_ws
   real :: L_flt,epsn,fs,C0,a1,a2,a3,sigm_sprev,fs1
@@ -4840,6 +4868,26 @@ CONTAINS
 
   call fill_extSFS
 
+  ! Determine sub-step count from the minimum Lagrangian time scale
+  ! T_lagr = 2*sigm_s / (C0*epsn), minimised where sigm_s is largest.
+  ! Use the field maximum so no extra particle pass is needed.
+  sigm_s_max_sfs = max(maxval(sigm_s(1:nnx, iys:iye, izs:ize)), 1.0e-10)
+  call mpi_allreduce(mpi_in_place, sigm_s_max_sfs, 1, mpi_real, &
+                     mpi_max, mpi_comm_world, ierr)
+  l_flt_min_sfs  = (2.25*dx*dy*minval(dzw(izs:ize+1)))**(1.0/3.0)
+  epsn_max_sfs   = (0.93/l_flt_min_sfs)*(1.5*sigm_s_max_sfs)**1.5
+  T_lagr_min_sfs = 2.0*sigm_s_max_sfs / (6.0*epsn_max_sfs)   ! C0=6.0
+  nsteps_sfs     = max(1, ceiling(dt / T_lagr_min_sfs))
+  dt_sfs_full    = dt
+  dt             = dt_sfs_full / real(nsteps_sfs)
+
+  if (l_root .and. nsteps_sfs .gt. 1) &
+     write(6,'(a,i4,a,e12.5)') &
+        ' SFS_velocity sub-stepping: nsteps=', nsteps_sfs, &
+        '  dt_sfs=', dt
+
+  do isub_sfs = 1, nsteps_sfs
+
   !Loop over the linked list of particles:
   part => first_particle
   do while (associated(part))
@@ -4854,31 +4902,38 @@ CONTAINS
 !     -----------------
 !     calculate the subgrid velocity Weil et al ,2004-isotropic turb.
 !     ----------------
-     l_flt = (2.25*dx*dy*dzw(iz_part+1))**(1.0/3.0)! filtered with
+     if (iz_part .eq. nnz) then
+        l_flt = (2.25*dx*dy*dzw(iz_part))**(1.0/3.0)
+     else
+        l_flt = (2.25*dx*dy*dzw(iz_part+1))**(1.0/3.0)! filtered with
+     end if
      epsn = (0.93/l_flt)*(3.0*part%sigm_s/2.0)**(1.5) ! tur. dis.rt
      ! TKE : resolved + Subgrid at grid center
       !---------------------------------
 !      tot_eng = (engsbz(iz_part+1) + engz(iz_part+1))
      if (iz_part.eq.0) then
         englez_bar = 0.5*englez(iz_part+1)
+        engsbz_bar = 0.5*engsbz(iz_part+1)
      elseif (iz_part.eq.nnz) then
         englez_bar = 0.5*englez(iz_part)
+        engsbz_bar = 0.5*engsbz(iz_part)
      else
         englez_bar = 0.5*(englez(iz_part)+englez(iz_part+1))
+        engsbz_bar = 0.5*(engsbz(iz_part)+engsbz(iz_part+1))
      endif
-     engsbz_bar = 0.5*(engsbz(iz_part)+engsbz(iz_part+1))
      tengz = englez_bar + engsbz_bar
     !---------------------------------
     ! Calculate fs basd on w-componet of velocity
      if (iz_part.eq.0) then
-        sigm_w = 0.5*(wps(iz_part+1))
+        sigm_w  = 0.5*(wps(iz_part+1))
+        sigm_ws = 0.5*engsbz(iz_part+1)/3.0
      elseif (iz_part.eq.nnz) then
-        sigm_w = 0.5*(wps(iz_part))
+        sigm_w  = 0.5*(wps(iz_part))
+        sigm_ws = 0.5*engsbz(iz_part)/3.0
      else
-        sigm_w = 0.5*(wps(iz_part)+wps(iz_part+1))
+        sigm_w  = 0.5*(wps(iz_part)+wps(iz_part+1))
+        sigm_ws = 0.5*(engsbz(iz_part)+engsbz(iz_part+1))/3.0
      endif
-
-     sigm_ws = 0.5*(engsbz(iz_part)+engsbz(iz_part+1))/3.0
 
 !     ---------write for single droplet ---------
 !       write(*,*)'sigm_w:', sigm_w,sigm_ws
@@ -4983,6 +5038,10 @@ CONTAINS
   call particle_exchange
   call particle_bcs_periodic
 
+  end do  ! isub_sfs
+
+  dt = dt_sfs_full
+
   numpart = 0
   part => first_particle
   do while (associated(part))
@@ -5008,6 +5067,8 @@ CONTAINS
   include 'mpif.h'
 
   real :: sigm_sdxp,sigm_sdyp,sigm_sdzp,vis_sp
+  real :: vis_s_max_sfs, dz_min_sfs, T_diff_min_sfs, dt_sfs_full
+  integer :: nsteps_sfs, isub_sfs
   real :: phim,phis,psim,psis,zeta
   real :: dadz,gasdev
   real :: xp3i
@@ -5032,6 +5093,23 @@ CONTAINS
     end do
 
     call fill_extSFS
+
+  ! Determine sub-step count from diffusion stability: dt < dz_min^2/(2*vis_s_max)
+  vis_s_max_sfs = max(maxval(vis_ss(1:nnx, iys:iye, izs:ize)), 1.0e-10)
+  call mpi_allreduce(mpi_in_place, vis_s_max_sfs, 1, mpi_real, &
+                     mpi_max, mpi_comm_world, ierr)
+  dz_min_sfs    = minval(dzw(izs:ize+1))
+  T_diff_min_sfs = dz_min_sfs**2 / (2.0*vis_s_max_sfs)
+  nsteps_sfs    = max(1, ceiling(dt / T_diff_min_sfs))
+  dt_sfs_full   = dt
+  dt            = dt_sfs_full / real(nsteps_sfs)
+
+  if (l_root .and. nsteps_sfs .gt. 1) &
+     write(6,'(a,i4,a,e12.5)') &
+        ' SFS_position sub-stepping: nsteps=', nsteps_sfs, &
+        '  dt_sfs=', dt
+
+  do isub_sfs = 1, nsteps_sfs
 
     !Loop over the linked list of particles:
     part => first_particle
@@ -5096,6 +5174,10 @@ CONTAINS
   call particle_bcs_nonperiodic
   call particle_exchange
   call particle_bcs_periodic
+
+  end do  ! isub_sfs
+
+  dt = dt_sfs_full
 
   numpart = 0
   part => first_particle
