@@ -107,7 +107,7 @@ c
 c
 c -------------- scratch run
 c
-      irestart = 1
+      irestart = 0
       if (irestart.eq.0)  then
          igrdr = 2
          itn = 0
@@ -255,7 +255,7 @@ c
 c
 c --------- new eddy viscosity, and bcs
 c
-      call start_phase(measurement_id_eddy_viscosity_and_bcs)
+      call start_phase(measurement_id_timestep_misc)
       if(iss .eq. 0 .and. ifree .eq. 0) then
          if (iDNS .eq. 1) then
             call lower_dns
@@ -296,7 +296,7 @@ c
         call extra_flux_terms
         call pbltop(itop)
       endif
-      call end_phase(measurement_id_eddy_viscosity_and_bcs)
+      call end_phase(measurement_id_timestep_misc)
 
 c
 c ------------ save history files
@@ -378,9 +378,9 @@ c
 c ------------ save pressure field
 c
       if(msave .and. istage .eq. 1) then
-         call start_phase(measurement_id_io_pressure)
+         call start_phase(measurement_id_io_flow)
          call save_p
-         call end_phase(measurement_id_io_pressure)
+         call end_phase(measurement_id_io_flow)
       endif
 
 
@@ -10831,7 +10831,7 @@ c
       namelist /flags/ ismlt,ifree,isfc,iradup,
      +         iupwnd,ibuoy,ifilt,itcut,isubs,ibrcl,iocean,
      +         method,idebug,iz_space,ivis0,ifix_dt,new_vis,iDNS,
-     +         icouple,iTcouple,iHcouple,ievap,ifields,irestart,ilin,
+     +         icouple,iTcouple,iHcouple,ievap,ifields,ilin,
      +         ineighbor,icoalesce,ipart_method,inewpart,icase,
      +         ipartdiff,isfs,iexner,ilongwave,ihurr,
      +         inetcdf,iviznetcdf,ihumiditycontrol,ireintro,

@@ -3290,6 +3290,7 @@ CONTAINS
       end if
 
       if (istep_part == 1) then
+         call start_phase(measurement_id_particle_misc)
          pflux = 0.0
          pmassflux = 0.0
          penegflux = 0.0
@@ -3299,6 +3300,7 @@ CONTAINS
          num_destroy = 0
          num100 = 0
          numimpos = 0
+         call end_phase(measurement_id_particle_misc)
       end if
 
       call start_phase(measurement_id_particle_loop)

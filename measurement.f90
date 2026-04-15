@@ -1000,8 +1000,9 @@ module profiling
          ! Time spent computing flow derivatives.
          measurement_id_derivatives, &
 
-         ! Time spent computing the eddy viscosity and boundary conditions.
-         measurement_id_eddy_viscosity_and_bcs, &
+         ! Time spent on per-timestep miscellaneous work: eddy viscosity/BCs,
+         ! get_max, get_dt, and set_sav.
+         measurement_id_timestep_misc, &
 
          ! Time spent in each of the three steps of the flow solve (comp_1(),
          ! comp_p(), and comp_2(), respectively).
@@ -1013,11 +1014,11 @@ module profiling
          measurement_id_humidity, &
 
          ! Time spent writing outputs.
+         measurement_id_io_flow, &
          measurement_id_io_histograms, &
          measurement_id_io_history, &
          measurement_id_io_particles, &
          measurement_id_io_traj, &
-         measurement_id_io_pressure, &
          measurement_id_io_tecio, &
          measurement_id_io_viz, &
 
@@ -1030,6 +1031,7 @@ module profiling
          measurement_id_particle_loop, &
          measurement_id_particle_bcs, &
          measurement_id_particle_exchange, &
+         measurement_id_particle_misc, &
          measurement_id_particle_coupling, &
          measurement_id_particle_stats, &
          measurement_id_particle_coupling_exchange, &
@@ -1069,16 +1071,16 @@ contains
         call initialize_base_measurements()
 
         measurement_id_derivatives                         = create_phase( "calculating derivatives" )
-        measurement_id_eddy_viscosity_and_bcs              = create_phase( "eddy viscosity and BCs" )
+        measurement_id_timestep_misc                        = create_phase( "timestep misc" )
         measurement_id_flow_solve_1                        = create_phase( "flow solve comp1" )
         measurement_id_flow_solve_2                        = create_phase( "flow solve comp2" )
         measurement_id_flow_solve_p                        = create_phase( "flow solve comp_p" )
         measurement_id_humidity                            = create_phase( "humidity" )
+        measurement_id_io_flow                             = create_phase( "I/O - flow fields" )
         measurement_id_io_histograms                       = create_phase( "I/O - histograms" )
         measurement_id_io_history                          = create_phase( "I/O - history" )
         measurement_id_io_particles                        = create_phase( "I/O - particles" )
         measurement_id_io_traj                             = create_phase( "I/O - trajectories" )
-        measurement_id_io_pressure                         = create_phase( "I/O - pressure field" )
         measurement_id_io_tecio                            = create_phase( "I/O - TecIO" )
         measurement_id_io_viz                              = create_phase( "I/O - viz" )
         measurement_id_particle_solver                     = create_phase( "particle_solver" )
@@ -1089,6 +1091,7 @@ contains
         measurement_id_particle_loop                       = create_phase( "particle_loop" )
         measurement_id_particle_bcs                        = create_phase( "particle_bcs" )
         measurement_id_particle_exchange                   = create_phase( "particle_exchange" )
+        measurement_id_particle_misc                       = create_phase( "particle_misc" )
         measurement_id_particle_coupling                   = create_phase( "particle_coupling" )
         measurement_id_particle_coupling_exchange          = create_phase( "particle_coupling_exchange" )
         measurement_id_particle_stats                      = create_phase( "particle_stats" )
@@ -1110,16 +1113,16 @@ contains
 
         ! Measured durations.
         real                 :: duration_derivatives, &
-                                duration_eddy_viscosity_and_bcs, &
+                                duration_timestep_misc, &
                                 duration_flow_solve_1, &
                                 duration_flow_solve_2, &
                                 duration_flow_solve_p, &
                                 duration_humidity, &
+                                duration_io_flow, &
                                 duration_io_histograms, &
                                 duration_io_history, &
                                 duration_io_particles, &
                                 duration_io_traj, &
-                                duration_io_pressure, &
                                 duration_io_tecio, &
                                 duration_io_viz, &
                                 duration_particle_solver, &
@@ -1130,6 +1133,7 @@ contains
                                 duration_particle_loop, &
                                 duration_particle_bcs, &
                                 duration_particle_exchange, &
+                                duration_particle_misc, &
                                 duration_particle_coupling, &
                                 duration_particle_coupling_exchange, &
                                 duration_particle_stats, &
@@ -1155,16 +1159,16 @@ contains
         ! Get each phase's duration so we can report it and its percentage
         ! relative to the total duration.
         duration_derivatives                         = get_duration( measurement_id_derivatives )
-        duration_eddy_viscosity_and_bcs              = get_duration( measurement_id_eddy_viscosity_and_bcs )
+        duration_timestep_misc                       = get_duration( measurement_id_timestep_misc )
         duration_flow_solve_1                        = get_duration( measurement_id_flow_solve_1 )
         duration_flow_solve_2                        = get_duration( measurement_id_flow_solve_2 )
         duration_flow_solve_p                        = get_duration( measurement_id_flow_solve_p )
         duration_humidity                            = get_duration( measurement_id_humidity )
+        duration_io_flow                             = get_duration( measurement_id_io_flow )
         duration_io_histograms                       = get_duration( measurement_id_io_histograms )
         duration_io_history                          = get_duration( measurement_id_io_history )
         duration_io_particles                        = get_duration( measurement_id_io_particles )
         duration_io_traj                             = get_duration( measurement_id_io_traj )
-        duration_io_pressure                         = get_duration( measurement_id_io_pressure )
         duration_io_tecio                            = get_duration( measurement_id_io_tecio )
         duration_io_viz                              = get_duration( measurement_id_io_viz )
         duration_particle_solver                     = get_duration( measurement_id_particle_solver )
@@ -1175,6 +1179,7 @@ contains
         duration_particle_loop                       = get_duration( measurement_id_particle_loop )
         duration_particle_bcs                        = get_duration( measurement_id_particle_bcs )
         duration_particle_exchange                   = get_duration( measurement_id_particle_exchange )
+        duration_particle_misc                       = get_duration( measurement_id_particle_misc )
         duration_particle_coupling                   = get_duration( measurement_id_particle_coupling )
         duration_particle_coupling_exchange          = get_duration( measurement_id_particle_coupling_exchange )
         duration_particle_stats                      = get_duration( measurement_id_particle_stats )
@@ -1196,11 +1201,11 @@ contains
         ! Compute the aggregate time spent performing I/O, regardless of the
         ! file type or format.
         io_duration = ( &
+             duration_io_flow + &
              duration_io_histograms + &
              duration_io_history + &
              duration_io_particles + &
              duration_io_traj + &
-             duration_io_pressure + &
              duration_io_tecio + &
              duration_io_viz &
              )
@@ -1208,15 +1213,19 @@ contains
         particles_duration = ( &
              duration_particle_solver + &
              duration_particle_reintro + &
+             duration_particle_stats + &
+             duration_particle_coupling + &
+             duration_particle_coupling_exchange + &
              duration_particle_diff + &
              duration_particle_coalesce &
              )
 
         flow_duration = ( &
+             duration_derivatives + &
              duration_flow_solve_1 + &
              duration_flow_solve_p + &
              duration_flow_solve_2 + &
-             duration_eddy_viscosity_and_bcs + &
+             duration_timestep_misc + &
              duration_humidity &
              )
 
@@ -1244,8 +1253,8 @@ contains
              duration_flow_solve_p, flow_duration )
         call print_duration( file_unit, "          comp2:                         ", &
              duration_flow_solve_2, flow_duration )
-        call print_duration( file_unit, "          Eddy viscosity/BCs:            ", &
-             duration_eddy_viscosity_and_bcs, flow_duration )
+        call print_duration( file_unit, "          Timestep misc:                 ", &
+             duration_timestep_misc, flow_duration )
         call print_duration( file_unit, "          Humidity control:              ", &
              duration_humidity, flow_duration )
 
@@ -1259,6 +1268,12 @@ contains
              duration_particle_diff, particles_duration )
         call print_duration( file_unit, "          particle_coalesce:             ", &
              duration_particle_coalesce, particles_duration )
+        call print_duration( file_unit, "          particle_stats:                ", &
+             duration_particle_stats, particles_duration )
+        call print_duration( file_unit, "          particle_coupling:             ", &
+             duration_particle_coupling, particles_duration )
+        call print_duration( file_unit, "          particle_coupling_exchange:    ", &
+             duration_particle_coupling_exchange, particles_duration )
         call print_duration( file_unit, "          particle_solver:               ", &
              duration_particle_solver, particles_duration )
         call print_duration( file_unit, "               particle_fill_ext:              ", &
@@ -1269,17 +1284,15 @@ contains
              duration_particle_bcs, duration_particle_solver )
         call print_duration( file_unit, "               particle_exchange:              ", &
              duration_particle_exchange, duration_particle_solver )
-        call print_duration( file_unit, "               particle_coupling:              ", &
-             duration_particle_coupling, duration_particle_solver )
-        call print_duration( file_unit, "               particle_coupling_exchange:     ", &
-             duration_particle_coupling_exchange, duration_particle_solver )
-        call print_duration( file_unit, "               particle_stats:                 ", &
-             duration_particle_stats, duration_particle_solver )
+        call print_duration( file_unit, "               particle_misc:                  ", &
+             duration_particle_misc, duration_particle_solver )
 
         write( file_unit, "(A)" ) ""
 
         call print_duration( file_unit, "      I/O:                           ", &
              io_duration, duration_solver )
+        call print_duration( file_unit, "          Flow fields:                   ", &
+             duration_io_flow, io_duration )
         call print_duration( file_unit, "          Histograms:                    ", &
              duration_io_histograms, io_duration )
         call print_duration( file_unit, "          History:                       ", &
@@ -1288,8 +1301,6 @@ contains
              duration_io_particles, io_duration )
         call print_duration( file_unit, "          Trajectories:                  ", &
              duration_io_traj, io_duration )
-        call print_duration( file_unit, "          Pressure field:                ", &
-             duration_io_pressure, io_duration )
         call print_duration( file_unit, "          TecIO:                         ", &
              duration_io_tecio, io_duration )
         call print_duration( file_unit, "          Viz:                           ", &
@@ -1315,16 +1326,16 @@ contains
         ! Clear each of the phase identifiers so they can't accidentally be used
         ! after shutdown.
         measurement_id_derivatives                  = 0
-        measurement_id_eddy_viscosity_and_bcs       = 0
+        measurement_id_timestep_misc                 = 0
         measurement_id_flow_solve_1                 = 0
         measurement_id_flow_solve_2                 = 0
         measurement_id_flow_solve_p                 = 0
         measurement_id_humidity                     = 0
+        measurement_id_io_flow                      = 0
         measurement_id_io_histograms                = 0
         measurement_id_io_history                   = 0
         measurement_id_io_particles                 = 0
         measurement_id_io_traj                      = 0
-        measurement_id_io_pressure                  = 0
         measurement_id_io_tecio                     = 0
         measurement_id_io_viz                       = 0
         measurement_id_particle_solver              = 0
@@ -1335,6 +1346,7 @@ contains
         measurement_id_particle_loop                = 0
         measurement_id_particle_bcs                 = 0
         measurement_id_particle_exchange            = 0
+        measurement_id_particle_misc                = 0
         measurement_id_particle_coupling            = 0
         measurement_id_particle_coupling_exchange   = 0
         measurement_id_particle_stats               = 0
