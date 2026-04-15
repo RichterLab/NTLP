@@ -107,7 +107,7 @@ c
 c
 c -------------- scratch run
 c
-      irestart = 1
+      irestart = 0
       if (irestart.eq.0)  then
          igrdr = 2
          itn = 0
@@ -10807,7 +10807,7 @@ c
       namelist /flags/ ismlt,ifree,isfc,iradup,
      +         iupwnd,ibuoy,ifilt,itcut,isubs,ibrcl,iocean,
      +         method,idebug,iz_space,ivis0,ifix_dt,new_vis,iDNS,
-     +         icouple,iTcouple,iHcouple,ievap,ifields,irestart,ilin,
+     +         icouple,iTcouple,iHcouple,ievap,ifields,ilin,
      +         ineighbor,icoalesce,ipart_method,inewpart,icase,
      +         ipartdiff,isfs,iexner,ilongwave,ihurr,
      +         inetcdf,iviznetcdf,ihumiditycontrol,ireintro,
