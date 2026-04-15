@@ -107,6 +107,7 @@ c
 c
 c -------------- scratch run
 c
+      irestart = 1
       if (irestart.eq.0)  then
          igrdr = 2
          itn = 0
@@ -10579,7 +10580,7 @@ c
             Ttmp = txym(iz,1)*
      +      exner(surf_p,func_p_base(surf_p,tsfcc(1),zz(iz)))
             !rhoa = func_rho_base(surf_p,tsfcc(1),zz(iz))
-	    rhoa = func_p_base(surf_p,tsfcc(1),zz(iz))/Rd/txym(iz,1)
+	    rhoa = func_p_base(surf_p,tsfcc(1),zz(iz))/Rd/Ttmp
          else
             rhoa = surf_rho
          end if
@@ -10627,7 +10628,7 @@ c
             Ttmp = txym(iz,1)*
      +      exner(surf_p,func_p_base(surf_p,tsfcc(1),zz(iz)))
             !rhoa = func_rho_base(surf_p,tsfcc(1),zz(iz))
-	    rhoa = func_p_base(surf_p,tsfcc(1),zz(iz))/Rd/txym(iz,1)
+	    rhoa = func_p_base(surf_p,tsfcc(1),zz(iz))/Rd/Ttmp
          else
             rhoa = surf_rho
          end if

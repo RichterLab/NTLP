@@ -2781,11 +2781,13 @@ CONTAINS
   implicit none
   include 'mpif.h'
 
+  integer, parameter :: nbin = 100
   real :: rmin, rmax, rmin10, rmax10, dh
-  real :: binsdata(100), binsdata10(100)
-  real :: B(100), dFdr_1(100), dFdr_2(100), dFdr_3(100)
-  real :: dFdr(100), dFdr_sum(101), totAerosols
-  real :: a, rad_init, r_interval
+  real :: binsdata(nbin), binsdata10(nbin)
+  real :: binsdata_edge(nbin+1),binsdata10_edge(nbin+1)
+  real :: B(nbin), dFdr_1(nbin), dFdr_2(nbin), dFdr_3(nbin)
+  real :: dFdr(nbin), dFdr_sum(nbin+1), totAerosols
+  real :: a, rad_init, r_interval, rdry_init
   real :: xv, yv, zv, xp_init(3)
   real :: rand, ran2, m_s
   integer :: i, np, iter, it_delay, tot_reintro
@@ -2793,52 +2795,64 @@ CONTAINS
   integer*8 :: mult_SSGF
 
     ! Setting up two lognormals
-    rmin10 = log10(0.3e-6 / 2)   ! converting from r80 to r_dry, see O'Dowd and de Leeuw (2007)
-    rmax10 = log10(20.0e-6 / 2)
-    dh = (rmax10 - rmin10) / 100.0
+    rmin10 = log10(0.3e-6) 
+    rmax10 = log10(20.0e-6)
+    dh = (rmax10 - rmin10) / (dble(nbin-1))
 
     binsdata10(1) = rmin10
     binsdata(1) = 1.0e6 * (10 ** binsdata10(1))
 
-    do i = 1, 99
+    binsdata10_edge(1) = rmin10 - dh/2.0
+    binsdata_edge(1) = 1.0e6 * (10 ** binsdata10_edge(1))
+
+    do i = 1, nbin-1
 
       binsdata10(i + 1) = dh + binsdata10(i)
-      binsdata(i + 1) = 1.0e6 * (10 ** binsdata10(i))
+      binsdata(i + 1) = 1.0e6 * (10 ** binsdata10(i+1))
+
+      binsdata10_edge(i+1) = dh + binsdata10_edge(i)
+      binsdata_edge(i+1) = 1.0e6 * (10 ** binsdata10_edge(i+1))
 
     end do
+
+    binsdata10_edge(nbin+1) = rmax10 + dh/2.0
+    binsdata_edge(nbin+1) =  1.0e6 * (10 ** binsdata10_edge(nbin+1))
 
     ! Now introduce aerosol source function
     dFdr_sum(1) = 0
 
-    do i = 1, 100
+    do i = 1, nbin
 
-      ! Introduce source function from Monahan et al. (1986)
-      B(i) = (0.38 - log10(binsdata(i))) / 0.65
+      ! Introduce source function from Monahan et al. (1986) B(i) = (0.38 - log10(binsdata(i))) / 0.65
       dFdr_1(i) = 1.373 * (u10 ** 3.41) * (binsdata(i) ** -3)
       dFdr_2(i) = 1 + (0.057 * (binsdata(i) ** 1.05))
       dFdr_3(i) = 10 ** (1.19 * exp(-B(i) ** 2))
       dFdr(i) = dFdr_1(i) * dFdr_2(i) * dFdr_3(i)
 
+      !Multiply by the log10 bin width because Monahan is given as dF/dlog(r)
       if (i == 1) then
-        dFdr_sum(i + 1) = dFdr(i)
+        dFdr_sum(i + 1) = dFdr(i)*(binsdata10_edge(i+1)-binsdata10_edge(i))
       else if (i > 1) then
-        dFdr_sum(i + 1) = dFdr_sum(i) + dFdr(i)
+        dFdr_sum(i + 1) = dFdr_sum(i) + dFdr(i)*(binsdata10_edge(i+1)-binsdata10_edge(i))
       end if
 
     end do
 
-    totAerosols = dFdr_sum(101)
+    totAerosols = dFdr_sum(nbin+1)
+
+    if (myid==0) write(*,*) 'DHR1:',time,totAerosols
 
     !t_reintro = 1800.0   ! Time to start injecting
     !t_stop_coarse = 12600.0   ! Time to stop injecting
     !t_stop_coarse = 1260000.0   ! Time to stop injecting
     it_delay = 100   ! Number of time steps between injection events (make sure it is larger than numprocs)
 
-    mult_SSGF = 1e8   !1e8(ori) !5e8/5e7(sensitivity studies) ! Multiplicity of injected coarse mode aerosols
+    mult_SSGF = 3e6   !1e8(ori) !5e8/5e7(sensitivity studies) ! Multiplicity of injected coarse mode aerosols
 
     if (time > t_reintro .and. time <= t_stop_coarse) then
 
       my_reintro = (xl * yl * dt * real(it_delay) * totAerosols) / (numprocs * mult_SSGF)
+      if (myid==0) write(*,*) 'DHR2:',my_reintro,xl,yl,dt,totAerosols
       tot_reintro = 0
 
     else
@@ -2861,7 +2875,7 @@ CONTAINS
         rand = ran2(iseed)
         a = totAerosols * rand
 
-        do i = 1, 100
+        do i = 1, nbin
 
           if ((a > dFdr_sum(i)) .and. (a <= dFdr_sum(i + 1))) then
 
@@ -2874,6 +2888,9 @@ CONTAINS
 
         rad_init = rad_init * 1.0e-6
 
+        !This is now r80 in units of meters  
+        ! (Monahan 1986 is a bit ambiguous, but it seems to be r80)
+
         Tp_init = tsfcc(1)
 
         xv = (ran2(iseed) * (xmax - xmin)) + xmin
@@ -2882,7 +2899,8 @@ CONTAINS
 
         xp_init = (/xv, yv, zv/)
 
-        m_s = 2.0 / 3.0 * pi2 * rad_init ** 3 * rhos   ! Assume sphere salt aerosol where 'rhos' being specified in params.in, and 'pi2' is 2*pi
+        rdry_init = 0.5*rad_init !Approximation
+        m_s = 2.0 / 3.0 * pi2 * rdry_init ** 3 * rhos   ! Assume sphere salt aerosol where 'rhos' being specified in params.in, and 'pi2' is 2*pi
 
         call create_particle(xp_init, vp_init, Tp_init, m_s, kappas_init, mult_SSGF, rad_init, ngidx, myid)
         ngidx = ngidx + 1   ! Update this processor's global ID for each one created
