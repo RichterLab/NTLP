@@ -622,7 +622,7 @@ CONTAINS
   !Will get a k-index for (u,v) and one for w
   
   !Do (u,v) loop first:
-  kuvpts(3) = minloc(zz,1,mask=(zz.gt.part%xp(3))) - 2
+  kuvpts(3) = find_upper(zz, part%xp(3)) - 2
   !Then fill in the rest:
   kuvpts(4) = kuvpts(3)+1
   kuvpts(5) = kuvpts(4)+1
@@ -631,7 +631,7 @@ CONTAINS
   kuvpts(1) = kuvpts(2)-1
 
 
-  kwpts(3) = minloc(z,1,mask=(z.gt.part%xp(3))) - 2
+  kwpts(3) = find_upper(z, part%xp(3)) - 2
   !Then fill in the rest:
   kwpts(4) = kwpts(3)+1
   kwpts(5) = kwpts(4)+1
@@ -817,8 +817,8 @@ CONTAINS
   !AND since (u,v) and w stored differently
   !Will get a k-index for (u,v) and one for w
   
-  kpt = minloc(zz,1,mask=(zz.gt.part%xp(3))) - 2
-  kwpt = minloc(z,1,mask=(z.gt.part%xp(3))) - 2
+  kpt = find_upper(zz, part%xp(3)) - 2
+  kwpt = find_upper(z, part%xp(3)) - 2
 
   wtx=0.0
   wty=0.0
@@ -917,7 +917,7 @@ CONTAINS
   !Will get a k-index for (u,v) and one for w
 
   !Do (u,v) first
-  kuvpts(3) = minloc(zz,1,mask=(zz.gt.part%xp(3))) - 2
+  kuvpts(3) = find_upper(zz, part%xp(3)) - 2
   !Then fill in the rest:
   kuvpts(4) = kuvpts(3)+1
   kuvpts(5) = kuvpts(4)+1
@@ -925,7 +925,7 @@ CONTAINS
   kuvpts(2) = kuvpts(3)-1
   kuvpts(1) = kuvpts(2)-1
 
-  kwpts(3) = minloc(z,1,mask=(z.gt.part%xp(3))) - 2
+  kwpts(3) = find_upper(z, part%xp(3)) - 2
   iz_part = kwpts(3)
   !Then fill in the rest:
   kwpts(4) = kwpts(3)+1
@@ -1212,8 +1212,8 @@ CONTAINS
  
   ipt = floor(part%xp(1)/dx) + 1
   jpt = floor(part%xp(2)/dy) + 1
-  kpt = minloc(zz,1,mask=(zz.gt.part%xp(3))) - 2
-  kwpt = minloc(z,1,mask=(z.gt.part%xp(3))) - 1
+  kpt = find_upper(zz, part%xp(3)) - 2
+  kwpt = find_upper(z, part%xp(3)) - 1
 
 
   !Calculate locally based on new minus old
@@ -3487,14 +3487,14 @@ CONTAINS
         !Store the particle flux now that everything has been updated
         if (part%xp(3) .gt. zl) then   !This will get treated in particle_bcs_nonperiodic, but record here
            fluxloc = nnz+1
-           fluxloci = minloc(z,1,mask=(z.gt.xp3i))-1
+           fluxloci = find_upper(z, xp3i) - 1
         elseif (part%xp(3) .lt. 0.0) then !This will get treated in particle_bcs_nonperiodic, but record here
-           fluxloci = minloc(z,1,mask=(z.gt.xp3i))-1
+           fluxloci = find_upper(z, xp3i) - 1
            fluxloc = 0
         else
 
-        fluxloc = minloc(z,1,mask=(z.gt.part%xp(3)))-1
-        fluxloci = minloc(z,1,mask=(z.gt.xp3i))-1
+        fluxloc = find_upper(z, part%xp(3)) - 1
+        fluxloci = find_upper(z, xp3i) - 1
 
         end if  !Only apply flux calc to particles in domain
 
@@ -3606,7 +3606,7 @@ CONTAINS
 
       ipt = floor(part%xp(1)/dx) + 1
       jpt = floor(part%xp(2)/dy) + 1
-      kpt = minloc(z,1,mask=(z.gt.part%xp(3))) - 1
+      kpt = find_upper(z, part%xp(3)) - 1
 
       radius_array(ipt,jpt,kpt) = radius_array(ipt,jpt,kpt) + part%radius
       num_array(ipt,jpt,kpt) = num_array(ipt,jpt,kpt) + 1
@@ -3897,7 +3897,7 @@ CONTAINS
 
         ipt = floor(part%xp(1)/dx) + 1
         jpt = floor(part%xp(2)/dy) + 1
-        kpt = minloc(z,1,mask=(z.gt.part%xp(3))) - 1
+        kpt = find_upper(z, part%xp(3)) - 1
 
         ! Skip particles whose grid indices are out of bounds to avoid
         ! out-of-bounds array writes.
@@ -5004,13 +5004,13 @@ CONTAINS
     !Store the particle flux now that we have the new position
     if (part%xp(3) .gt. zl) then   !This will get treated in particle_bcs_nonperiodic, but record here
        fluxloc = nnz+1
-       fluxloci = minloc(z,1,mask=(z.gt.xp3i))-1
+       fluxloci = find_upper(z, xp3i) - 1
     elseif (part%xp(3) .lt. 0.0) then !This will get treated in particle_bcs_nonperiodic, but record here
-       fluxloci = minloc(z,1,mask=(z.gt.xp3i))-1
+       fluxloci = find_upper(z, xp3i) - 1
        fluxloc = 0
     else
-       fluxloc = minloc(z,1,mask=(z.gt.part%xp(3)))-1
-       fluxloci = minloc(z,1,mask=(z.gt.xp3i))-1
+       fluxloc = find_upper(z, part%xp(3)) - 1
+       fluxloci = find_upper(z, xp3i) - 1
     end if  !Only apply flux calc to particles in domain
 
     if (xp3i .lt. part%xp(3)) then !Particle moved up
@@ -5144,14 +5144,14 @@ CONTAINS
       !Store the particle flux now that we have the new position
       if (part%xp(3) .gt. zl) then   !This will get treated in particle_bcs_nonperiodic, but record here
          fluxloc = nnz+1
-         fluxloci = minloc(z,1,mask=(z.gt.xp3i))-1
+         fluxloci = find_upper(z, xp3i) - 1
       elseif (part%xp(3) .lt. 0.0) then !This will get treated in particle_bcs_nonperiodic, but record here
-         fluxloci = minloc(z,1,mask=(z.gt.xp3i))-1
+         fluxloci = find_upper(z, xp3i) - 1
          fluxloc = 0
       else
 
-      fluxloc = minloc(z,1,mask=(z.gt.part%xp(3)))-1
-      fluxloci = minloc(z,1,mask=(z.gt.xp3i))-1
+      fluxloc = find_upper(z, part%xp(3)) - 1
+      fluxloci = find_upper(z, xp3i) - 1
 
       end if  !Only apply flux calc to particles in domain
 
@@ -6081,5 +6081,28 @@ CONTAINS
       hall_effic = ec
 
    end function hall_effic
+
+  ! Binary search: returns index of first element of arr strictly greater
+  ! than val.  arr must be sorted ascending.  Equivalent to
+  ! minloc(arr,1,mask=(arr.gt.val)) but O(log n) instead of O(n).
+  pure function find_upper(arr, val) result(idx)
+    real, intent(in) :: arr(:)
+    real, intent(in) :: val
+    integer          :: idx
+    integer          :: lo, hi, mid
+
+    lo = 1
+    hi = size(arr) + 1
+    do while (lo < hi)
+      mid = lo + (hi - lo) / 2
+      if (arr(mid) <= val) then
+        lo = mid + 1
+      else
+        hi = mid
+      end if
+    end do
+    idx = lo
+
+  end function find_upper
 
 end module particles
