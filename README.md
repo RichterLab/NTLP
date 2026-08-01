@@ -21,27 +21,15 @@ Make sure all paths in params.in and les.run point to the proper locations
 
 ## For Droplet Approximation
 
-The standard data generation and model training scripts are in droplet_approximation/bin. They are:
- * `generate_training_data.py` - Generates model training data. constants at the top `NUMBER_DROPLETS` and `NUMBER_SAMPLES` control this training process.
- * `parallel_generate_training_data.sh` - Runs an instance of generate_training_data.py for every core on the machine.
- * `train_network.py` - Usage: `python3 train_network.py <training_data_path> <model_save_path> <droplet_model_save_path>`. Trains a model for `number_epochs` epochs wiht data at `training_data_path`. Weights are recorded at `model_save_path` and the corresponding Fortran code is saved at `droplet_model_save_path`.
- * `train.sh` - Concatonates data from training data generation and runs `train_network.py` on said data.
- * `batch_queue.sh` - Usage: `./batch_queue <job_count>`. Queues `job_count` copies of `parallel_generate_training_data.sh` to the CRC cluster. Also queues an instance of `train.sh` to run after data generation is complete. Essentially automates a runthrough of data generation/model training on the CRC.
+All code for data generation, model training, and serialization can be found in in `ML/model_training`, including a checkpoint for our paper's model `models/flippant-gusto.pt`. `Model Training.ipynb` contains a full pipeline from data generation to model training that can be used to reproduce the model from our paper. The training/validation data used for this paper is present in `ML/model_training/data`. To reproduce the paper's model, be sure to train for the full `17,800` epochs rather than the default `100` used for testing.
 
-To generate data and train a model on the CRC:
-1. Set desired parameter ranges in `droplet_approximation/python/droplet_approximation/physics.py`.
-2. Set desired `NUMBER_SAMPLES` and `NUMBER_DROPLETS` in `approximation/generate_training_data.py`. Note that the overall amount of data generated will be `job_count X core_count X number_samples X number_droplets`. If you're not on the CRC presumably `job_count=1.`
-3. Set desired output paths in `parallel_generate_training_data.sh` and `train.sh`.
-4. If you're on the CRC, run `./batch_queue <job_count>`. It's worth playing a bit with how many jobs the queue will take at once. Often, it will do as many as 12. This makes data generation much faster.
+Code for producing many of the figures used in the paper can be found at `ML/data_analysis/ten_history_post_process_comparison.ipynb`. This notebook requires that one download the paper data folder from the DOI and store it at `ML/data_analysis/paper_data`. 
 
-Otherwise, train with `droplet_approximation/notebooks/Approximation Droplet Parameters.ipynb`. If desired, one can generate data on the CRC and export it for use with the notebook. 
-
-Running on NTLP:
+Running the model on NTLP:
 1. Copy the `droplet_model.f90` corresponding to your preferred network into the root directory.
 2. Follow steps for compiling NTLP (quick note: run `make ARCH=avx2` when making): [link here](https://richterlab.miraheze.org/wiki/Setup_and_Running_NTLP)
 3. Navitage to `test_cases/pi_chamber` and set `ipart_method=3` for neural network
-4. If you want to dump the data from the standard NTLP simulation to generate training/testing data, keep `ipart_method=2` and set `iwritebe=1`. (BETA! Not yet working properly)
+4. If you want to dump the data from the standard NTLP simulation to generate training/testing data, keep `ipart_method=2` and set `iwritebe=1`. Control the fraction of data written with `iwritebe_proportion` as the traces can get very large very quickly.
 5. Run `qsub pi_chamber.run`
 
-For visualizing results, use the matlab scripts provided with the results, namely `history_postprocessing.` To compare MLP output with standard backwards Euler, a reference history file `postprocessing/reference_history.nc` is provided with a script to compare the reference .nc file with the newly generated results: `postprocessing/compare_history_postprocessing`.
-
+For comparing BE/MLP results, you can use `ten_history_post_process_comparison.ipynb` by reducing `history_file_count` and pointing the notebook at the relavent BE/MLP history files.

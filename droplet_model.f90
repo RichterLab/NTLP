@@ -1,5 +1,5 @@
 !
-! NOTE: This module was generated from box-narrow uniform high res-mlp 4layer-b=1024-lr=1e-3 halvingschedule-l2reg=1e-6 checkpoint on 2025/07/24 at 10:01:52.
+! NOTE: This module was generated from flippant-gusto on 2026/07/30 at 15:20:58.
 !       Do not modify this directly!  Update the module generator's template and
 !       regenerate this file!
 !
@@ -30,7 +30,7 @@ module droplet_model
     !
     !     do particle_index = 1, number_particles
     !
-    !         input_parameters = [radius, temperature, salt_mass, air_temperature, rh, rhoa, t_final]
+    !         input_parameters = [radius, temperature, salt_solute, air_temperature, rh, rhoa, t_final]
     !         call estimate( input_parameters, output_parameters )
     !
     !         new_radius      = output_parameters(RADIUS_INDEX)
@@ -69,15 +69,15 @@ module droplet_model
     !      ability to understand the structure and internal components of the
     !      MLP while requiring a single subroutine call at startup.
     !
-    !   3. This is a naive implementation of a 4-layer MLP (it was written in 15
-    !      minutes!)  and does not implement all potential optimizations.  In
-    !      particular, each intermediate layer has its own array and no attempt
-    !      to reuse arrays or work out of one large array has been made, so as
-    !      to minimize the MLP's run-time footprint.  As initially developed the
-    !      MLP is very small (O(2500) parameters) and uses O(10 KiB) storage,
-    !      though should this ever be used for much larger MLPs, or with larger
-    !      batch sizes (see above) then some of the omitted optimizations should
-    !      be revisited.
+    !   3. This is a naive implementation of a N-layer MLP (it was originally
+    !      written in 15 minutes!)  and does not implement all potential
+    !      optimizations.  In particular, each intermediate layer has its own
+    !      array and no attempt to reuse arrays or work out of one large array
+    !      has been made, so as to minimize the MLP's run-time footprint.  As
+    !      initially developed the MLP was very small (O(2500) parameters) and
+    !      used O(10 KiB) storage, though should this ever be used for much
+    !      larger MLPs, or with larger batch sizes (see above) then some of the
+    !      omitted optimizations should be revisited.
     !
     !   4. While the MLP was trained on the product space of the input
     !      parameters and has poor performance on certain (likely) physically
@@ -105,11 +105,21 @@ module droplet_model
     !       code!  Do not modify this unless you really know what you're doing!
     !
 
+    ! Model metadata to help with debugging.
+    !
+    ! NOTE: This is restricted to 128 characters to avoid running afoul of modern
+    !       Fortran's 132 character limit.  We start the actual string literal on
+    !       its own line to avoid generating a compiler warning when we have a
+    !       long string.
+    !
+    character(len=128), parameter :: model_metadata = &
+ "flippant-gusto (2026/07/30 at 15:20:58)"
+
     ! Indices into the input and output vectors.  The input vector uses all of
     ! the indices while the output vector only uses the first two.
     integer, parameter :: RADIUS_INDEX          = 1
     integer, parameter :: TEMPERATURE_INDEX     = 2
-    integer, parameter :: SALT_MASS_INDEX       = 3
+    integer, parameter :: SALT_SOLUTE_INDEX     = 3
     integer, parameter :: AIR_TEMPERATURE_INDEX = 4
     integer, parameter :: RH_INDEX              = 5
     integer, parameter :: RHOA_INDEX            = 6
@@ -129,16 +139,16 @@ module droplet_model
     ! NOTE: These *must* match the training data!  Do not change these without
     !       retraining the model!
     !
-    real*4, parameter :: RADIUS_LOG_RANGE(2)      = [-6.75, -3.0]
-    real*4, parameter :: TEMPERATURE_RANGE(2)     = [284.0, 300.0]
-    real*4, parameter :: SALT_MASS_LOG_RANGE(2)   = [-17.66, -17.65]
-    real*4, parameter :: AIR_TEMPERATURE_RANGE(2) = [284.0, 300.0]
-    real*4, parameter :: RH_RANGE(2)              = [0.98, 1.11]
-    real*4, parameter :: RHOA_RANGE(2)            = [0.99, 1.01]
+    real*4, parameter :: RADIUS_LOG_RANGE(2)      = [-6.750, -4.500]
+    real*4, parameter :: TEMPERATURE_RANGE(2)     = [282.00, 298.00]
+    real*4, parameter :: SALT_SOLUTE_LOG_RANGE(2) = [-17.89, -17.87]
+    real*4, parameter :: AIR_TEMPERATURE_RANGE(2) = [282.000, 298.000]
+    real*4, parameter :: RH_RANGE(2)              = [0.98, 1.07]
+    real*4, parameter :: RHOA_RANGE(2)            = [0.990, 1.010]
 
     real*4, parameter :: RADIUS_LOG_MEAN      = SUM( RADIUS_LOG_RANGE ) / 2
     real*4, parameter :: TEMPERATURE_MEAN     = SUM( TEMPERATURE_RANGE ) / 2
-    real*4, parameter :: SALT_MASS_LOG_MEAN   = SUM( SALT_MASS_LOG_RANGE ) / 2
+    real*4, parameter :: SALT_SOLUTE_LOG_MEAN = SUM( SALT_SOLUTE_LOG_RANGE ) / 2
     real*4, parameter :: AIR_TEMPERATURE_MEAN = SUM( AIR_TEMPERATURE_RANGE ) / 2
     real*4, parameter :: RH_MEAN              = SUM( RH_RANGE ) / 2
     real*4, parameter :: RHOA_MEAN            = SUM( RHOA_RANGE ) / 2
@@ -149,22 +159,22 @@ module droplet_model
     !
     real*4, parameter :: RADIUS_LOG_WIDTH      = (RADIUS_LOG_RANGE(2)-RADIUS_LOG_RANGE(1))/2
     real*4, parameter :: TEMPERATURE_WIDTH     = (TEMPERATURE_RANGE(2)-TEMPERATURE_RANGE(1))/2
-    real*4, parameter :: SALT_MASS_LOG_WIDTH   = (SALT_MASS_LOG_RANGE(2)-SALT_MASS_LOG_RANGE(1))/2
+    real*4, parameter :: SALT_SOLUTE_LOG_WIDTH = (SALT_SOLUTE_LOG_RANGE(2)-SALT_SOLUTE_LOG_RANGE(1))/2
     real*4, parameter :: AIR_TEMPERATURE_WIDTH = (AIR_TEMPERATURE_RANGE(2)-AIR_TEMPERATURE_RANGE(1))/2
     real*4, parameter :: RH_WIDTH              = (RH_RANGE(2)-RH_RANGE(1))/2
     real*4, parameter :: RHOA_WIDTH            = (RHOA_RANGE(2)-RHOA_RANGE(1))/2
 
     ! Weights for each of the layers.
     real*4, dimension(NUMBER_INPUTS, NUMBER_HIDDEN_LAYER1_NEURONS)                :: layer1_weights
-    real*4, dimension(NUMBER_HIDDEN_LAYER1_NEURONS, NUMBER_HIDDEN_LAYER2_NEURONS) :: layer2_weights
-    real*4, dimension(NUMBER_HIDDEN_LAYER2_NEURONS, NUMBER_HIDDEN_LAYER3_NEURONS) :: layer3_weights
-    real*4, dimension(NUMBER_HIDDEN_LAYER3_NEURONS, NUMBER_OUTPUTS)               :: output_weights
+    real*4, dimension(NUMBER_HIDDEN_LAYER1_NEURONS, NUMBER_HIDDEN_LAYER2_NEURONS)                :: layer2_weights
+    real*4, dimension(NUMBER_HIDDEN_LAYER2_NEURONS, NUMBER_HIDDEN_LAYER3_NEURONS)                :: layer3_weights
+    real*4, dimension(NUMBER_HIDDEN_LAYER3_NEURONS, NUMBER_OUTPUTS)                :: output_weights
 
     ! Biases for each of the layers.
     real*4, dimension(NUMBER_HIDDEN_LAYER1_NEURONS) :: layer1_biases
     real*4, dimension(NUMBER_HIDDEN_LAYER2_NEURONS) :: layer2_biases
     real*4, dimension(NUMBER_HIDDEN_LAYER3_NEURONS) :: layer3_biases
-    real*4, dimension(NUMBER_OUTPUTS)               :: output_biases
+    real*4, dimension(NUMBER_OUTPUTS) :: output_biases
 
     ! Arrays to hold the intermediate results between layers.
     !
@@ -175,2451 +185,609 @@ module droplet_model
     real*4, dimension(NUMBER_HIDDEN_LAYER2_NEURONS) :: layer2_intermediate
     real*4, dimension(NUMBER_HIDDEN_LAYER3_NEURONS) :: layer3_intermediate
 
+    ! Biases for each of the layernorms.
+    real*4, dimension(NUMBER_HIDDEN_LAYER1_NEURONS) :: layernorm1_weights, layernorm1_biases
+    real*4, dimension(NUMBER_HIDDEN_LAYER2_NEURONS) :: layernorm2_weights, layernorm2_biases
+    real*4, dimension(NUMBER_HIDDEN_LAYER3_NEURONS) :: layernorm3_weights, layernorm3_biases
+
     contains
 
         subroutine initialize_model()
 
+            use pars, only:    myid
+
             implicit none
 
-            layer1_weights = reshape( [ 0.8628398180, &
-                                       -0.0227205772, &
-                                       -0.0004094718, &
-                                       -0.0034272012, &
-                                       -0.0012655199, &
-                                        0.0001453801, &
-                                       -0.2708946764, &
-                                       -0.0390791818, &
-                                        0.0005355958, &
-                                       -0.0000408511, &
-                                        0.0007885374, &
-                                       -0.0018368700, &
-                                        0.0000497244, &
-                                       -1.1282559633, &
-                                        0.3774769008, &
-                                       -0.0002979773, &
-                                       -0.0003267598, &
-                                       -0.0005866442, &
-                                       -0.0940826684, &
-                                       -0.0000361993, &
-                                       -0.0674050674, &
-                                        1.5301496983, &
-                                       -0.0010620723, &
-                                        0.0000077974, &
-                                       -0.0538999252, &
-                                       -0.0055007874, &
-                                       -0.0004658877, &
-                                       -1.9445834160, &
-                                       -0.0033802565, &
-                                        0.0002683087, &
-                                       -0.0001023801, &
-                                        0.1046167389, &
-                                       -0.1889354587, &
-                                       -0.0016397681, &
-                                        0.0134590976, &
-                                       -0.6174735427, &
-                                        0.0001791590, &
-                                        0.0000891556, &
-                                        0.0112323500, &
-                                        0.0212854091, &
-                                        0.0004671394, &
-                                        0.5719525814, &
-                                       -0.3018030822, &
-                                       -0.0015319537, &
-                                        0.0000983586, &
-                                        0.0055242251, &
-                                       -0.9021342397, &
-                                       -0.0000407606, &
-                                        0.1825158894, &
-                                       -0.7884740233, &
-                                       -0.0000872416, &
-                                        0.0001215009, &
-                                        0.0147925848, &
-                                        0.1084980592, &
-                                        0.0005459455, &
-                                        0.6459213495, &
-                                        0.0006059094, &
-                                        0.0008966671, &
-                                       -0.0000149819, &
-                                        0.0872686431, &
-                                        0.1661175489, &
-                                       -0.0012544836, &
-                                        0.0184644349, &
-                                       -0.0007992972, &
-                                        0.0022076473, &
-                                        0.0000391708, &
-                                        0.1143457443, &
-                                        0.2459776998, &
-                                       -0.0016146062, &
-                                        0.0100127496, &
-                                       -0.0162771735, &
-                                        0.0043126764, &
-                                       -0.0000346823, &
-                                       -0.1292641014, &
-                                       -0.2535357475, &
-                                        0.0020814347, &
-                                        0.0195257384, &
-                                       -0.7392468452, &
-                                        0.0008831323, &
-                                        0.0000242648, &
-                                        0.0115267113, &
-                                        0.0590893850, &
-                                        0.0006390026, &
-                                        0.6292094588, &
-                                        0.1296721995, &
-                                       -0.5388371944, &
-                                       -0.0000583196, &
-                                        0.5473501682, &
-                                        0.0586787015, &
-                                       -0.0001849206, &
-                                       -0.1183952391, &
-                                        0.0052314228, &
-                                       -0.0005932275, &
-                                       -0.0000001379, &
-                                        0.1119768769, &
-                                       -0.2438997626, &
-                                       -0.0018371850, &
-                                       -0.0146451928, &
-                                       -0.2291877270, &
-                                        0.6646566391, &
-                                       -0.0005211784, &
-                                       -0.6666189432, &
-                                       -0.0606848635, &
-                                        0.0009188589, &
-                                        0.6754379272, &
-                                        0.4134218693, &
-                                        0.9994509220, &
-                                        0.0000957014, &
-                                       -1.0210011005, &
-                                       -0.1555817723, &
-                                       -0.0002351994, &
-                                       -0.5273704529, &
-                                        0.5841631889, &
-                                       -0.4390412569, &
-                                        0.0000290297, &
-                                        0.4240265489, &
-                                        0.0402372815, &
-                                       -0.0003010214, &
-                                       -0.7130315900, &
-                                       -0.1436998099, &
-                                       -0.0016331961, &
-                                       -0.0000767723, &
-                                       -0.0039807647, &
-                                       -0.2492805570, &
-                                        0.0003982136, &
-                                        0.1889178604, &
-                                        0.4017362893, &
-                                       -0.4012971818, &
-                                       -0.0000389709, &
-                                        0.3923052549, &
-                                        0.0379298851, &
-                                       -0.0001022471, &
-                                       -0.4408490956, &
-                                       -0.4194622338, &
-                                        0.0013158321, &
-                                       -0.0001631312, &
-                                       -0.0025660750, &
-                                       -0.6519351602, &
-                                        0.0006155258, &
-                                        0.5941073895, &
-                                        0.0009483587, &
-                                       -0.0014130686, &
-                                        0.0000229022, &
-                                       -0.1215003356, &
-                                        0.2416531891, &
-                                        0.0022770863, &
-                                       -0.0065834569, &
-                                       -0.3656375706, &
-                                       -0.8845721483, &
-                                       -0.0000802033, &
-                                        0.9037376642, &
-                                        0.1377302706, &
-                                        0.0001987800, &
-                                        0.4663634300, &
-                                        0.0318997167, &
-                                       -0.3141105771, &
-                                       -0.0003815410, &
-                                        0.3197161853, &
-                                       -0.0048864726, &
-                                        0.0002719125, &
-                                        0.3477245271, &
-                                       -0.2760352492, &
-                                        0.5301254988, &
-                                        0.0000964162, &
-                                       -0.5276671648, &
-                                       -0.0517140664, &
-                                        0.0001290446, &
-                                        0.2327211499, &
-                                        0.1888936907, &
-                                        0.4248747528, &
-                                       -0.0001638956, &
-                                       -0.4335330129, &
-                                        0.0236852877, &
-                                        0.0001972507, &
-                                       -0.1779901534, &
-                                       -0.5932469368, &
-                                        0.0005830541, &
-                                        0.0004853315, &
-                                        0.0030950352, &
-                                        0.1618094444, &
-                                        0.0000714629, &
-                                        0.1369747072, &
-                                       -0.0013598192, &
-                                       -0.0029790206, &
-                                       -0.0001446767, &
-                                        0.0038441129, &
-                                        0.0024730470, &
-                                        0.0001676306, &
-                                       -2.0020542145, &
-                                        0.0017790218, &
-                                       -0.0008363278, &
-                                       -0.0000163133, &
-                                       -0.1057374924, &
-                                        0.1921649128, &
-                                        0.0018088127, &
-                                       -0.0086668683, &
-                                       -0.1638118774, &
-                                       -0.2810662389, &
-                                        0.0000609845, &
-                                        0.2884123325, &
-                                       -0.0122430790, &
-                                        0.0000375080, &
-                                        0.1987418681, &
-                                       -0.0636312291, &
-                                        0.7671900988, &
-                                        0.0003279769, &
-                                       -0.7719769478, &
-                                       -0.0201219916, &
-                                       -0.0002485150, &
-                                       -0.1917082816, &
-                                        0.0189432465, &
-                                       -0.0012936273, &
-                                       -0.0000499475, &
-                                        0.0011687416, &
-                                        0.0006714195, &
-                                        0.0000444749, &
-                                        1.4835782051, &
-                                        0.7047420144, &
-                                       -0.4168272614, &
-                                       -0.0000019998, &
-                                        0.3950233161, &
-                                        0.0473940820, &
-                                       -0.0002331608, &
-                                       -0.8167118430], &
-                                       [7, 32] )
-            layer2_weights = reshape( [-0.1628312171, &
-                                       -0.3704567254, &
-                                        0.0037973751, &
-                                       -0.7737828493, &
-                                        0.0433401689, &
-                                       -0.0589519404, &
-                                       -0.2751405537, &
-                                       -0.0212825108, &
-                                       -0.0278771184, &
-                                       -0.0188781135, &
-                                        0.0105408495, &
-                                       -0.0410555005, &
-                                        0.1958364844, &
-                                        0.0129111689, &
-                                        0.3025784492, &
-                                        0.3024915755, &
-                                        0.0000000000, &
-                                       -0.0617466718, &
-                                       -0.0000000000, &
-                                        0.0328392498, &
-                                       -0.0003170987, &
-                                        0.0798249245, &
-                                        0.1379978061, &
-                                        0.1924227774, &
-                                        0.2103010416, &
-                                       -0.1159867942, &
-                                       -0.3928494453, &
-                                        0.0048130839, &
-                                        0.2083942443, &
-                                        0.2075213641, &
-                                       -0.4715336561, &
-                                        0.0709384829, &
-                                       -0.0000000000, &
-                                       -0.0006372129, &
-                                       -0.0180267543, &
-                                        0.0000000000, &
-                                        0.0148500316, &
-                                        0.0874157399, &
-                                        0.2107696980, &
-                                       -0.1186648607, &
-                                       -0.0337229930, &
-                                       -0.0159788616, &
-                                       -0.0232140794, &
-                                        0.4022813141, &
-                                       -0.0000000000, &
-                                       -0.0288559161, &
-                                       -0.0719916597, &
-                                       -0.0073005520, &
-                                        0.0000000000, &
-                                        0.1945494860, &
-                                       -0.0000000000, &
-                                        0.3445177078, &
-                                       -0.0226739906, &
-                                        0.0153952399, &
-                                       -0.0792335123, &
-                                        0.2580551207, &
-                                        0.0068023824, &
-                                        0.2066907734, &
-                                       -0.1392967552, &
-                                       -0.0342752375, &
-                                        0.2674385905, &
-                                       -0.0335698053, &
-                                       -0.0719037503, &
-                                        0.0000000000, &
-                                       -0.2746801674, &
-                                        0.0235151164, &
-                                        0.0810686648, &
-                                       -0.9051212072, &
-                                       -0.0404019915, &
-                                       -0.2083606422, &
-                                       -0.1203033924, &
-                                       -0.0951405689, &
-                                        0.0652022436, &
-                                        0.0120795248, &
-                                       -0.0135131627, &
-                                       -0.0372788496, &
-                                        0.1540686488, &
-                                        0.0137145678, &
-                                       -0.2536849380, &
-                                       -0.2262706310, &
-                                       -0.3494895101, &
-                                       -0.0340989642, &
-                                       -0.3348749578, &
-                                        0.0667106360, &
-                                       -0.0387442671, &
-                                        0.5074374676, &
-                                        0.3307613432, &
-                                        0.0151642216, &
-                                        0.0232036207, &
-                                        0.0501280427, &
-                                       -0.5393128395, &
-                                        0.0034001099, &
-                                        0.2005203813, &
-                                       -0.1085905433, &
-                                       -0.3985531032, &
-                                        0.1070022881, &
-                                       -0.0000000000, &
-                                       -0.0182762556, &
-                                       -0.0696134269, &
-                                       -0.0000000000, &
-                                       -0.0169533025, &
-                                       -0.1333388835, &
-                                       -0.2845154405, &
-                                       -0.4783062041, &
-                                       -0.0136434594, &
-                                       -0.0105232531, &
-                                       -0.0112188831, &
-                                       -0.0095824078, &
-                                        0.0007252148, &
-                                       -0.0131988414, &
-                                        0.1922920793, &
-                                       -0.2309332341, &
-                                        0.0000000000, &
-                                       -0.0888004303, &
-                                        0.0000000000, &
-                                       -0.0434399806, &
-                                       -0.0109886909, &
-                                        0.2611278594, &
-                                       -0.1206472367, &
-                                        0.0448359400, &
-                                       -0.0394962654, &
-                                        0.0804738253, &
-                                       -0.0746908262, &
-                                       -0.0143948914, &
-                                        0.1064734310, &
-                                        0.0936731026, &
-                                       -0.0322368480, &
-                                        0.0041257683, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                        0.0000000000, &
-                                        0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                        0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                        0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                        0.0000000000, &
-                                        0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0932373181, &
-                                       -0.2916995287, &
-                                       -0.0000000000, &
-                                       -0.1149825528, &
-                                        0.3202162683, &
-                                        0.2792169750, &
-                                        0.3470091522, &
-                                        0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.1633972228, &
-                                       -0.3988453150, &
-                                        0.0000000000, &
-                                        0.0556438342, &
-                                        0.2365278751, &
-                                       -0.0315403491, &
-                                       -0.0000000000, &
-                                        0.1202849150, &
-                                       -0.0000000000, &
-                                        0.6162591577, &
-                                        0.0000000000, &
-                                        0.0434762128, &
-                                        0.0135059962, &
-                                        0.0065767043, &
-                                        0.0000000000, &
-                                       -0.6947767735, &
-                                       -0.2414624840, &
-                                        0.0000000000, &
-                                        0.1142907217, &
-                                       -0.1107538864, &
-                                       -0.2490845323, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0329516344, &
-                                       -0.2852627933, &
-                                        0.0000000000, &
-                                       -0.0253244340, &
-                                        0.5533400774, &
-                                        0.2275346220, &
-                                        0.1633054316, &
-                                       -0.0961344093, &
-                                       -0.0000000000, &
-                                       -0.0764242485, &
-                                       -0.4607530534, &
-                                        0.0000000000, &
-                                        0.0027517159, &
-                                        0.2865115702, &
-                                       -0.0507544577, &
-                                       -0.0000000000, &
-                                       -0.1403440684, &
-                                        0.0000000000, &
-                                        0.6143159866, &
-                                        0.0000000000, &
-                                        0.0055644554, &
-                                       -0.0610853955, &
-                                        0.0282254517, &
-                                       -0.0000000000, &
-                                       -0.4859777689, &
-                                       -0.1552896947, &
-                                        0.0000000000, &
-                                        0.2188232243, &
-                                       -0.2053130865, &
-                                       -0.2045412213, &
-                                        0.0000000000, &
-                                       -0.2176753581, &
-                                       -0.2658709586, &
-                                       -0.0159276817, &
-                                       -0.7685394883, &
-                                       -0.0205122568, &
-                                       -0.1976849884, &
-                                       -0.0969538912, &
-                                       -0.0680096596, &
-                                        0.0174298119, &
-                                        0.0412760563, &
-                                        0.0350869708, &
-                                        0.0925192386, &
-                                       -0.0043150922, &
-                                        0.0441892333, &
-                                        0.0292742867, &
-                                       -0.2240691036, &
-                                       -0.1408941746, &
-                                       -0.0117392745, &
-                                       -0.1559052616, &
-                                        0.0006442521, &
-                                        0.0085262889, &
-                                        0.3636817336, &
-                                        0.0798029825, &
-                                        0.0591759533, &
-                                       -0.0075905928, &
-                                       -0.0074824668, &
-                                       -0.3238564432, &
-                                       -0.0650510266, &
-                                        0.1271981299, &
-                                       -0.2244951129, &
-                                       -0.3977424800, &
-                                        0.2616050243, &
-                                       -0.3274606764, &
-                                       -0.1740740240, &
-                                        0.1581480503, &
-                                       -1.4058511257, &
-                                        0.0356947929, &
-                                       -0.2027497441, &
-                                        0.0856171995, &
-                                       -0.1746911108, &
-                                       -0.0481862128, &
-                                       -0.0248651579, &
-                                       -0.0349020548, &
-                                        0.0824567303, &
-                                        0.3168559670, &
-                                        0.0621478446, &
-                                        0.5166588426, &
-                                        0.3288705647, &
-                                        0.0000000000, &
-                                       -0.0161092915, &
-                                        0.0000000000, &
-                                       -0.0002118105, &
-                                        0.0416167937, &
-                                       -0.1474465132, &
-                                        0.0791421086, &
-                                        0.4586482048, &
-                                        0.0935316458, &
-                                        0.0707693323, &
-                                       -0.7276064754, &
-                                        0.0587121397, &
-                                        0.1542078257, &
-                                        0.4861068130, &
-                                       -0.6146190763, &
-                                        0.4107590914, &
-                                       -0.0478256382, &
-                                       -0.1633516699, &
-                                       -0.1811226755, &
-                                        0.0257829521, &
-                                        0.0048106820, &
-                                        0.1740308404, &
-                                       -0.0714125931, &
-                                       -0.4627016783, &
-                                        0.0068093953, &
-                                        0.0155682750, &
-                                       -0.0275978949, &
-                                       -0.0348589644, &
-                                       -0.0219449941, &
-                                       -0.0027695727, &
-                                       -0.0147104543, &
-                                       -0.0656444207, &
-                                       -0.0026508570, &
-                                       -0.0729026422, &
-                                       -0.0000274460, &
-                                        0.2482504249, &
-                                        0.0219539609, &
-                                        0.0727809444, &
-                                       -0.0421820879, &
-                                       -0.1247889996, &
-                                        0.0237073433, &
-                                       -0.3361823559, &
-                                        0.0143790608, &
-                                        0.0102947811, &
-                                       -0.1071367487, &
-                                        0.1259557009, &
-                                        0.0385475904, &
-                                        0.0564568825, &
-                                       -0.0728110448, &
-                                       -0.0486994050, &
-                                        0.0043658395, &
-                                       -0.4919171333, &
-                                        0.0114738885, &
-                                       -0.0177365802, &
-                                       -0.0751279518, &
-                                       -0.0714424551, &
-                                       -0.0622909702, &
-                                       -0.0634563491, &
-                                       -0.0813802704, &
-                                        0.0597058050, &
-                                        0.0000000000, &
-                                        0.0560919531, &
-                                        0.2343373448, &
-                                        0.1992727667, &
-                                        0.0000000000, &
-                                        0.1130437553, &
-                                       -0.0000000000, &
-                                        0.0118964966, &
-                                        0.0824024156, &
-                                        0.1409732699, &
-                                       -0.0106967147, &
-                                        0.1525778919, &
-                                        0.1342251897, &
-                                       -0.1374604404, &
-                                       -0.1970114410, &
-                                        0.0942828655, &
-                                        0.0916953906, &
-                                        0.2524321377, &
-                                       -0.2751818895, &
-                                        0.0018694431, &
-                                       -0.0000000000, &
-                                        0.4170538187, &
-                                       -0.3951789439, &
-                                       -0.0000000000, &
-                                       -0.1952501833, &
-                                        0.2719909251, &
-                                        0.2574203610, &
-                                        0.3167869151, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0898137316, &
-                                       -0.8177677989, &
-                                       -0.0000000000, &
-                                        0.1456037462, &
-                                       -0.4944111705, &
-                                       -0.0423004776, &
-                                        0.0000000000, &
-                                        0.0718244910, &
-                                       -0.0000000000, &
-                                        0.4585121572, &
-                                       -0.0000000000, &
-                                        0.0671737865, &
-                                       -0.3503795564, &
-                                        0.1788823754, &
-                                       -0.0000000000, &
-                                        0.1417229325, &
-                                       -0.1236597598, &
-                                       -0.0000000000, &
-                                       -0.0864416882, &
-                                        0.2074374110, &
-                                       -0.3170164227, &
-                                       -0.0000000000, &
-                                       -0.0314590782, &
-                                        0.0033089744, &
-                                       -0.0124817146, &
-                                       -0.2187238485, &
-                                       -0.0269729793, &
-                                        0.1522764117, &
-                                       -0.0184322372, &
-                                        0.1672393084, &
-                                        0.0273138601, &
-                                       -0.0036321734, &
-                                        0.0182851925, &
-                                       -0.0091105355, &
-                                       -0.0914340168, &
-                                       -0.0006841170, &
-                                       -0.0437001549, &
-                                       -0.1654919088, &
-                                       -0.0374792255, &
-                                       -0.0264993999, &
-                                       -0.2622404695, &
-                                       -0.2331401706, &
-                                       -0.0242947992, &
-                                        0.1906241924, &
-                                        0.0203978643, &
-                                       -0.0019438835, &
-                                       -0.0497456044, &
-                                        0.0101721659, &
-                                       -0.1541457623, &
-                                       -0.0201512966, &
-                                        0.0817781836, &
-                                       -0.1526407897, &
-                                       -0.1191020161, &
-                                        0.0383976363, &
-                                       -0.0853373334, &
-                                       -0.0960758775, &
-                                        0.0719608441, &
-                                       -0.2846920490, &
-                                        0.0192389693, &
-                                       -0.0218838919, &
-                                        0.1034748107, &
-                                        0.1298732162, &
-                                       -0.0255214367, &
-                                        0.0207016375, &
-                                       -0.0398725234, &
-                                       -0.0214375351, &
-                                       -0.0000000000, &
-                                        0.0308514014, &
-                                       -0.0736602917, &
-                                        0.2979059517, &
-                                       -0.0000000000, &
-                                        0.3940536380, &
-                                       -0.0000000000, &
-                                       -0.0318092518, &
-                                       -0.0093223406, &
-                                        0.0481357723, &
-                                        0.1129887179, &
-                                       -0.0278546326, &
-                                        0.4414444268, &
-                                       -0.1404373050, &
-                                        0.0420066267, &
-                                        0.0112269251, &
-                                        0.0061386479, &
-                                        0.1884475052, &
-                                       -0.0787161514, &
-                                       -0.2664825320, &
-                                       -0.0440414585, &
-                                        0.5163315535, &
-                                        0.1703456342, &
-                                        0.2338865995, &
-                                       -0.0316062085, &
-                                       -0.0000000000, &
-                                       -0.0018877159, &
-                                       -0.0000000000, &
-                                       -0.0092397798, &
-                                        0.0070430017, &
-                                       -0.0395950712, &
-                                        0.0000000000, &
-                                        0.0391700417, &
-                                        0.0166277718, &
-                                       -0.0122742401, &
-                                        0.1681594849, &
-                                       -0.3930343986, &
-                                        0.0259898789, &
-                                       -0.0902281776, &
-                                       -0.0077637434, &
-                                       -0.0140679125, &
-                                       -0.0359013155, &
-                                       -0.0828503296, &
-                                        0.1309660226, &
-                                        0.1923742592, &
-                                       -0.0000000000, &
-                                        0.1298420727, &
-                                        0.0338901207, &
-                                       -0.1062821895, &
-                                        0.0184001401, &
-                                        0.2414584309, &
-                                        0.5729079247, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.5018576384, &
-                                        0.3066971898, &
-                                        0.0343541689, &
-                                        0.2192321122, &
-                                        0.0271416139, &
-                                        0.1068939343, &
-                                        0.0373121537, &
-                                       -0.2945051789, &
-                                       -0.0010861348, &
-                                       -0.0029099279, &
-                                        0.0086950697, &
-                                        0.0031494608, &
-                                        0.0072352514, &
-                                       -0.0184532665, &
-                                       -0.1295682937, &
-                                       -0.0018837092, &
-                                        0.1022988632, &
-                                       -0.0113626299, &
-                                       -0.2237022072, &
-                                       -0.0405711159, &
-                                        0.0011042419, &
-                                        0.0411544740, &
-                                        0.0539270192, &
-                                        0.1625182480, &
-                                       -0.0114393700, &
-                                        0.2169986814, &
-                                        0.8034715652, &
-                                       -0.0059446506, &
-                                        0.0334957205, &
-                                        0.0859112442, &
-                                        0.0000000000, &
-                                        0.0626010522, &
-                                       -0.1866803765, &
-                                       -0.2524132133, &
-                                        0.0853877366, &
-                                       -0.8308816552, &
-                                        0.0274383128, &
-                                       -0.1063498259, &
-                                       -0.0487857126, &
-                                       -0.0115342848, &
-                                        0.0016706259, &
-                                        0.0204472262, &
-                                        0.0539724939, &
-                                       -0.2244675159, &
-                                       -0.0035720610, &
-                                       -0.1377865076, &
-                                       -0.1250811219, &
-                                       -0.2985262275, &
-                                       -0.2106699198, &
-                                        0.0278867204, &
-                                       -0.1933792830, &
-                                        0.0055862409, &
-                                       -0.0244392455, &
-                                        0.4326354861, &
-                                        0.1146400645, &
-                                        0.0539830364, &
-                                        0.0778046921, &
-                                        0.1064346731, &
-                                       -0.4062613845, &
-                                       -0.0437559150, &
-                                        0.0790120736, &
-                                       -0.0753529742, &
-                                       -0.3668829203, &
-                                        0.2599768341, &
-                                       -0.0490513369, &
-                                       -0.1401176453, &
-                                        0.0107361162, &
-                                       -0.2519836724, &
-                                       -0.0370406583, &
-                                        0.1736158133, &
-                                        0.2692952454, &
-                                       -0.0545029938, &
-                                        0.0225074608, &
-                                        0.0170839820, &
-                                       -0.0208156332, &
-                                        0.1331045479, &
-                                        0.1982834041, &
-                                       -0.0324925259, &
-                                       -0.1641297042, &
-                                        0.0020984767, &
-                                        0.2490965426, &
-                                        0.0683277398, &
-                                       -0.2698844373, &
-                                        0.0588125400, &
-                                       -0.0090279961, &
-                                        0.1913143843, &
-                                        0.0408687703, &
-                                        0.0011856781, &
-                                        0.1710328907, &
-                                       -0.1494942605, &
-                                       -0.0134652099, &
-                                       -0.0076236576, &
-                                       -0.0011622177, &
-                                       -0.2621706128, &
-                                       -0.0543962233, &
-                                        0.2472363710, &
-                                       -0.1419277489, &
-                                       -0.1631177813, &
-                                        0.1651294827, &
-                                       -0.5711153746, &
-                                       -0.0760749727, &
-                                        0.0206216536, &
-                                        0.0866916776, &
-                                       -0.0885073096, &
-                                        0.0268450174, &
-                                        0.0244652387, &
-                                        0.0407791026, &
-                                        0.1727566272, &
-                                       -0.2265842408, &
-                                        0.0111393789, &
-                                       -0.1397601068, &
-                                       -0.2914959490, &
-                                       -0.1902224422, &
-                                       -0.0316096358, &
-                                       -0.3438737094, &
-                                       -0.1313157231, &
-                                       -0.0353620499, &
-                                        0.4827938378, &
-                                        0.0572643206, &
-                                       -0.0066549005, &
-                                        0.1335022300, &
-                                       -0.0846400931, &
-                                       -0.2730730474, &
-                                       -0.0156229688, &
-                                        0.0481915586, &
-                                       -0.2451409847, &
-                                       -0.2969850600, &
-                                        0.1039557904, &
-                                       -0.1431413591, &
-                                       -0.0775729194, &
-                                        0.1868448853, &
-                                       -0.2927514315, &
-                                       -0.0044575231, &
-                                       -0.2752173543, &
-                                        0.5250253677, &
-                                        0.0693979263, &
-                                       -0.0097942986, &
-                                        0.0003131905, &
-                                        0.0242276713, &
-                                        0.2577196062, &
-                                        0.0786147788, &
-                                        0.0705017820, &
-                                       -0.1148364991, &
-                                        0.1355906278, &
-                                       -0.0000000000, &
-                                       -0.1333848536, &
-                                        0.0000000000, &
-                                        0.2169805765, &
-                                        0.0197478998, &
-                                       -0.1707614362, &
-                                        0.0244220868, &
-                                       -0.2631042600, &
-                                       -0.0289138276, &
-                                       -0.0523641855, &
-                                        0.1229529306, &
-                                        0.0018783718, &
-                                        0.1567782313, &
-                                        0.1521394700, &
-                                        0.0539777763, &
-                                        0.0776464269, &
-                                       -0.0000000000, &
-                                       -0.2109096795, &
-                                       -0.4677197337, &
-                                        0.0000000000, &
-                                       -0.0081473012, &
-                                        0.3154594302, &
-                                       -0.0431801043, &
-                                        0.5751816630, &
-                                       -0.0084677376, &
-                                       -0.0206732135, &
-                                       -0.0062288069, &
-                                        0.4407685399, &
-                                       -0.0010366071, &
-                                       -0.1158769131, &
-                                        0.4226834178, &
-                                       -0.2427472025, &
-                                       -0.0000000000, &
-                                       -0.1755054891, &
-                                       -0.0000000000, &
-                                       -0.2270996571, &
-                                       -0.0009398967, &
-                                        0.2851627469, &
-                                        0.0282223206, &
-                                        0.1641167998, &
-                                       -0.0284739062, &
-                                        0.2349775285, &
-                                       -0.0622708015, &
-                                       -0.0404282771, &
-                                        0.2692689300, &
-                                       -0.0398367867, &
-                                       -0.1528958231, &
-                                       -0.0000000000, &
-                                       -0.2009121180, &
-                                       -0.0618633069, &
-                                        0.1218395308, &
-                                       -0.5553692579, &
-                                        0.0163845066, &
-                                       -0.0096242307, &
-                                        0.0046863859, &
-                                       -0.0299895480, &
-                                       -0.0332190990, &
-                                       -0.0266148746, &
-                                       -0.0458278321, &
-                                       -0.0101990756, &
-                                       -0.0580900237, &
-                                        0.0414976925, &
-                                        0.4215085804, &
-                                        0.2598073781, &
-                                        0.6431982517, &
-                                        0.0132968817, &
-                                        0.0000001634, &
-                                       -0.1067856252, &
-                                        0.0266343020, &
-                                       -0.1764014959, &
-                                        0.1469093710, &
-                                        0.1386210620, &
-                                        0.0336604007, &
-                                       -0.0523985736, &
-                                       -0.2688423991, &
-                                        0.0553716458, &
-                                        0.0837890357, &
-                                        0.4515017867, &
-                                       -0.2381588221, &
-                                        0.3441305459, &
-                                       -0.2524926960, &
-                                       -0.0739719570, &
-                                        0.0419192463, &
-                                       -0.2649151385, &
-                                       -0.0907436088, &
-                                       -0.0862341225, &
-                                       -0.0071456670, &
-                                       -0.0909481496, &
-                                        0.0479883216, &
-                                        0.0220046677, &
-                                        0.0582205132, &
-                                       -0.0140091395, &
-                                        0.2097816616, &
-                                       -0.0542508923, &
-                                       -0.1366365999, &
-                                       -0.0000000000, &
-                                       -0.0517693907, &
-                                        0.0150808869, &
-                                       -0.0834200978, &
-                                       -0.0008326052, &
-                                        0.0011056471, &
-                                        0.2405307591, &
-                                        0.1186682433, &
-                                        0.0548450612, &
-                                        0.0000000000, &
-                                       -0.0884074196, &
-                                       -0.1831295341, &
-                                       -0.0180815514, &
-                                        0.1090922579, &
-                                       -0.2051248848, &
-                                       -0.1569962949, &
-                                        0.0991533399, &
-                                       -0.1538163573, &
-                                       -0.0509750135, &
-                                        0.1137167886, &
-                                        0.0208572373, &
-                                       -0.0603491813, &
-                                        0.0202584341, &
-                                        0.0000000000, &
-                                        0.0259674769, &
-                                        0.0359504856, &
-                                       -0.0013165108, &
-                                       -0.0432963967, &
-                                       -0.0002125586, &
-                                        0.4338334203, &
-                                       -0.0395010337, &
-                                       -0.1577822864, &
-                                        0.0112926029, &
-                                       -0.0185798984, &
-                                        0.0907588005, &
-                                       -0.1962568313, &
-                                        0.0064508808, &
-                                       -0.0212436188, &
-                                        0.1962233335, &
-                                        0.0383750349, &
-                                       -0.0987347290, &
-                                        0.2267731428, &
-                                        0.0029860574, &
-                                        0.0723774880, &
-                                        0.0105466070, &
-                                       -0.1641249210, &
-                                       -0.2228164524, &
-                                        0.0553043261, &
-                                        0.3155898750, &
-                                       -0.1746707559, &
-                                        0.0202016030, &
-                                        0.0559255928, &
-                                       -0.3183449209, &
-                                        0.0232621171, &
-                                        0.0004298347, &
-                                       -0.0024352244, &
-                                       -0.0550147332, &
-                                       -0.0276289880, &
-                                        0.0635095835, &
-                                        0.2575102448, &
-                                       -0.0875545070, &
-                                        0.1276502907, &
-                                        0.0813307390, &
-                                       -0.0824153498, &
-                                       -0.0444840677, &
-                                       -0.2751057744, &
-                                       -0.2153253406, &
-                                       -0.0999580324, &
-                                        0.0717325360, &
-                                        0.0146600064, &
-                                        0.0469711758, &
-                                       -0.0066776522, &
-                                        0.2161853313, &
-                                        0.0897160619, &
-                                       -0.1275835037, &
-                                       -0.0260985699, &
-                                        0.0052168509, &
-                                       -0.1998396963, &
-                                       -0.1046165004, &
-                                       -0.0043869489, &
-                                        0.4106312096, &
-                                       -0.0478456393, &
-                                       -0.1396020055, &
-                                        0.1076144502, &
-                                       -0.4646617472, &
-                                       -0.0583173186, &
-                                       -0.0468426459, &
-                                       -0.0092557222, &
-                                       -0.0097056227, &
-                                        0.0493826084, &
-                                        0.0020581516, &
-                                        0.0036012279, &
-                                        0.0240163673, &
-                                       -0.0291160028, &
-                                       -0.0327575095, &
-                                       -0.1030472592, &
-                                        0.0000000000, &
-                                       -0.0304655060, &
-                                       -0.0002582292, &
-                                       -0.0431874245, &
-                                       -0.0079752617, &
-                                       -0.0415027738, &
-                                        0.1298588514, &
-                                        0.0995107517, &
-                                       -0.2294550091, &
-                                        0.0007536652, &
-                                        0.0309573412, &
-                                       -0.0629442334, &
-                                       -0.0091647608, &
-                                       -0.1161864549, &
-                                       -0.1202819869, &
-                                       -0.2657611966, &
-                                        0.1444871575, &
-                                        0.0000000000, &
-                                       -0.2771959901, &
-                                       -0.3613617420, &
-                                       -0.0000000000, &
-                                       -0.0449551269, &
-                                        0.2577272654, &
-                                       -0.6492606997, &
-                                        0.3158131540, &
-                                        0.0075072353, &
-                                       -0.0248972569, &
-                                       -0.0296341907, &
-                                       -0.0819015354, &
-                                       -0.0002367459, &
-                                        0.0096460255, &
-                                        0.2765987217, &
-                                       -0.1185543388, &
-                                        0.0000000000, &
-                                       -0.1587632895, &
-                                        0.0000000000, &
-                                       -0.1411832124, &
-                                       -0.0186712965, &
-                                        0.2675991356, &
-                                        0.0469344594, &
-                                        0.1374726892, &
-                                        0.0216431469, &
-                                        0.0194050334, &
-                                       -0.2625313699, &
-                                        0.0014763440, &
-                                        0.0308284461, &
-                                        0.0043580914, &
-                                       -0.0956267789, &
-                                       -0.0000000000, &
-                                       -0.1355964094, &
-                                       -0.0656919703, &
-                                       -0.0345510654, &
-                                       -0.5940717459, &
-                                        0.0385630727, &
-                                       -0.2028249204, &
-                                       -0.6581123471, &
-                                       -0.0014931981, &
-                                        0.0222073402, &
-                                        0.0100875972, &
-                                        0.0096411509, &
-                                        0.4227593243, &
-                                       -0.0045763846, &
-                                       -0.0377977565, &
-                                       -0.0898855329, &
-                                       -0.0578656234, &
-                                       -0.0051863878, &
-                                        0.0126033900, &
-                                        0.2115510404, &
-                                        0.1403198242, &
-                                        0.0109901996, &
-                                       -0.1789668947, &
-                                        0.0193672348, &
-                                       -0.2384841293, &
-                                       -0.0384248458, &
-                                       -0.2463373989, &
-                                       -0.2817107439, &
-                                       -0.0098547824, &
-                                       -0.3669799268, &
-                                       -0.0928018689, &
-                                       -0.1615345627, &
-                                        0.4185182154, &
-                                       -0.1174811870, &
-                                        0.0242220573, &
-                                        0.2259375602, &
-                                       -0.2192222774, &
-                                       -0.0309666134, &
-                                        0.2502936423, &
-                                        0.1960532516, &
-                                       -0.1458533555, &
-                                       -0.0127651161, &
-                                       -0.0539650321, &
-                                        0.0297582354, &
-                                       -0.0409761593, &
-                                       -0.0587419793, &
-                                        0.0127311032, &
-                                       -0.0761391893, &
-                                        0.1733366847, &
-                                       -0.0002455277, &
-                                       -0.0778358057, &
-                                        0.0000000079, &
-                                       -0.3934276402, &
-                                       -0.0032371045, &
-                                       -0.1968456954, &
-                                        0.1937676519, &
-                                        0.2123486698, &
-                                       -0.0817117691, &
-                                       -0.0341993980, &
-                                        0.0687826276, &
-                                       -0.0025690820, &
-                                        0.3957127631, &
-                                       -0.0826090351, &
-                                       -0.0323523730, &
-                                       -0.0372074768, &
-                                       -0.0000000000, &
-                                       -0.2964350879, &
-                                       -0.3459618688, &
-                                       -0.0000000000, &
-                                       -0.0670268983, &
-                                        0.5421302319, &
-                                        0.6431689858, &
-                                        0.8076624274, &
-                                       -0.0448619314, &
-                                       -0.0612914450, &
-                                       -0.0181335807, &
-                                        0.3543858230, &
-                                       -0.0000000000, &
-                                       -0.0172421318, &
-                                        0.2502944469, &
-                                       -0.1801907122, &
-                                        0.0000000000, &
-                                       -0.1815143526, &
-                                        0.0000000000, &
-                                       -0.1427523047, &
-                                       -0.0648369268, &
-                                        0.2395747006, &
-                                       -0.0301107634, &
-                                        0.1316639334, &
-                                        0.0011634080, &
-                                        0.0884280950, &
-                                       -0.3544947207, &
-                                       -0.0567857735, &
-                                        0.1677602679, &
-                                        0.0186524428, &
-                                       -0.1572819352, &
-                                        0.0000000000, &
-                                        0.0390098318, &
-                                        0.2271747440, &
-                                       -0.0193813536, &
-                                        0.1780753732, &
-                                        0.0035333480, &
-                                       -0.0000000000, &
-                                        0.0000000000, &
-                                       -0.0000000000, &
-                                        0.0063072396, &
-                                       -0.0239081886, &
-                                       -0.0322220698, &
-                                        0.0000000000, &
-                                       -0.0000000000, &
-                                        0.0238214210, &
-                                        0.0901230201, &
-                                        0.1058297530, &
-                                       -0.4660843313, &
-                                        0.0332480036, &
-                                       -0.0000000000, &
-                                       -0.0657809451, &
-                                        0.0354323089, &
-                                        0.0000000000, &
-                                        0.0630771667, &
-                                        0.0798584446, &
-                                        0.0019086325, &
-                                        0.0000000000, &
-                                        0.0187535882, &
-                                        0.0572862066, &
-                                        0.0000000000, &
-                                        0.1578558087, &
-                                        0.0030497618, &
-                                       -0.2725144625], &
-                                       [32, 32] )
-            layer3_weights = reshape( [-0.0224470906, &
-                                        0.0683359206, &
-                                        0.0064597609, &
-                                        0.0314951763, &
-                                       -0.0000000000, &
-                                        0.0607235357, &
-                                       -0.0500771776, &
-                                        0.0611512884, &
-                                        0.0652501434, &
-                                        0.4292055666, &
-                                        0.0056223427, &
-                                       -0.0504249372, &
-                                       -0.1456239074, &
-                                       -0.0199032687, &
-                                       -0.1352320760, &
-                                        0.0000000000, &
-                                       -0.1108434796, &
-                                       -0.0356131829, &
-                                        0.0705445185, &
-                                       -0.0247072596, &
-                                       -0.0707016736, &
-                                        0.0623662211, &
-                                       -0.1002598256, &
-                                        0.0034010988, &
-                                       -0.0516380630, &
-                                       -0.0086971056, &
-                                       -0.0053157141, &
-                                       -0.0012258268, &
-                                        0.0145296026, &
-                                        0.1008190811, &
-                                       -0.1233333200, &
-                                        0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                        0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                        0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                        0.0000000000, &
-                                        0.1450286210, &
-                                        0.1085310206, &
-                                        0.0340131186, &
-                                        0.0000000000, &
-                                       -0.0000000000, &
-                                        0.4163784385, &
-                                        0.2454307079, &
-                                       -0.1183666587, &
-                                       -0.0205397680, &
-                                       -0.3465643823, &
-                                       -0.0464106984, &
-                                        0.1695466936, &
-                                        0.0314593799, &
-                                       -0.0914998353, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                        0.0549337231, &
-                                        0.3984628618, &
-                                       -0.2290075421, &
-                                       -0.2048785239, &
-                                       -0.1587416828, &
-                                        0.0918769538, &
-                                       -0.0920604244, &
-                                       -0.0042699534, &
-                                        0.0000000000, &
-                                        0.0995847657, &
-                                       -0.0003247853, &
-                                       -0.0397736058, &
-                                        0.0716129318, &
-                                        0.0000000000, &
-                                        0.0083279666, &
-                                       -0.0000000000, &
-                                       -0.0006190146, &
-                                       -0.0000000000, &
-                                        0.0220743213, &
-                                       -0.0000559281, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0661118031, &
-                                       -0.4192965329, &
-                                        0.0655620098, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0632476881, &
-                                       -0.0190488026, &
-                                       -0.2004422992, &
-                                        0.0000000000, &
-                                        0.2035712302, &
-                                        0.0520622805, &
-                                        0.0456059054, &
-                                        0.0834280029, &
-                                        0.1262511909, &
-                                       -0.0029517002, &
-                                        0.3191724718, &
-                                        0.1016785204, &
-                                       -0.0731942877, &
-                                        0.1100025773, &
-                                       -0.2853503525, &
-                                       -0.0012487818, &
-                                       -0.0251366142, &
-                                       -0.0434290282, &
-                                       -0.0010120366, &
-                                       -0.0766280219, &
-                                        0.2168457210, &
-                                        0.0702343583, &
-                                       -0.0030234500, &
-                                        0.0654285476, &
-                                        0.0000000000, &
-                                        0.3149410486, &
-                                        0.4883357584, &
-                                        0.0222280715, &
-                                        0.0031522319, &
-                                       -0.0174696818, &
-                                       -0.0039193141, &
-                                       -0.2298380882, &
-                                        0.1270588487, &
-                                       -0.3677686751, &
-                                        0.0000000000, &
-                                        0.0000000000, &
-                                       -0.0832636356, &
-                                        0.0393747091, &
-                                       -0.0144209880, &
-                                        0.0636780858, &
-                                        0.0159884859, &
-                                       -0.1766569316, &
-                                        0.0612605400, &
-                                       -0.0012899457, &
-                                       -0.0000000000, &
-                                       -0.1125808656, &
-                                        0.0037552912, &
-                                       -0.0873779878, &
-                                       -0.3287287951, &
-                                       -0.0000000000, &
-                                        0.0815435871, &
-                                        0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                        0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                        0.0000000000, &
-                                       -0.0000000000, &
-                                        0.0000000000, &
-                                        0.0000000000, &
-                                       -0.0000000000, &
-                                        0.0000000000, &
-                                       -0.0000000000, &
-                                        0.0000000000, &
-                                       -0.0000000000, &
-                                        0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                        0.0000000000, &
-                                        0.0000000000, &
-                                       -0.0000000000, &
-                                        0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.1774010956, &
-                                        0.3905340731, &
-                                       -0.1878328472, &
-                                        0.0000000000, &
-                                       -0.0000000000, &
-                                        0.3387782872, &
-                                       -0.1790618598, &
-                                       -0.1337854117, &
-                                        0.1285760105, &
-                                        0.0420464128, &
-                                       -0.0127702961, &
-                                        0.4836777449, &
-                                        0.2714341879, &
-                                       -0.1697407365, &
-                                       -0.0141573418, &
-                                       -0.0000000000, &
-                                       -0.2335503697, &
-                                       -0.0075636115, &
-                                        0.2256057709, &
-                                        0.2090678513, &
-                                       -0.0369114690, &
-                                        0.0619162098, &
-                                        0.0665393025, &
-                                        0.0018285685, &
-                                       -0.0399283022, &
-                                       -0.1431528926, &
-                                        0.0026385186, &
-                                       -0.1354611814, &
-                                        0.1289952695, &
-                                       -0.0195847098, &
-                                        0.1004728153, &
-                                       -0.0000000000, &
-                                       -0.0535863675, &
-                                        0.1282317191, &
-                                        0.4679269791, &
-                                        0.0313811786, &
-                                       -0.0000000000, &
-                                        0.1688106954, &
-                                        0.0686592460, &
-                                        0.3575767875, &
-                                       -0.3108666241, &
-                                        0.0427033268, &
-                                        0.4804238975, &
-                                        0.1228806973, &
-                                        0.2657171786, &
-                                        0.3480663300, &
-                                       -0.0656500459, &
-                                        0.0000000000, &
-                                       -0.3274807334, &
-                                        0.2052806169, &
-                                        0.2198287249, &
-                                        0.2519913912, &
-                                       -0.0736494139, &
-                                        0.0283413231, &
-                                       -0.1959036738, &
-                                        0.3789476156, &
-                                       -0.1669431180, &
-                                        0.3722087145, &
-                                        0.3418322206, &
-                                        0.0718087181, &
-                                        0.2773253024, &
-                                       -0.0041523138, &
-                                       -0.0134123145, &
-                                        0.0169707891, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                        0.0000000000, &
-                                        0.0000000000, &
-                                        0.0000000000, &
-                                       -0.0000000000, &
-                                        0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                        0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                        0.0000000000, &
-                                        0.0000000000, &
-                                        0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                        0.0000000000, &
-                                       -0.0000000000, &
-                                        0.0000000000, &
-                                        0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0517909974, &
-                                        0.2135773003, &
-                                        0.0912562385, &
-                                        0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.2198390514, &
-                                        0.0386598594, &
-                                        0.0430311374, &
-                                        0.0486877859, &
-                                       -0.0564176291, &
-                                        0.0316595025, &
-                                       -0.3535071909, &
-                                        0.0782209486, &
-                                       -0.0404261462, &
-                                        0.0000000000, &
-                                       -0.0000000000, &
-                                        0.0759487599, &
-                                       -0.1089949086, &
-                                       -0.0451957583, &
-                                        0.0431115478, &
-                                        0.1337808371, &
-                                        0.0665786788, &
-                                        0.0412881225, &
-                                        0.0027057433, &
-                                       -0.0010544823, &
-                                        0.0939241573, &
-                                       -0.0242055748, &
-                                       -0.0119906394, &
-                                       -0.1433905214, &
-                                        0.1262858063, &
-                                       -0.0911414251, &
-                                       -0.0000000000, &
-                                        0.0417138934, &
-                                       -0.1964412481, &
-                                       -0.0348463692, &
-                                        0.4664562941, &
-                                        0.0000000000, &
-                                       -0.2856019437, &
-                                        0.1939383745, &
-                                       -0.0389294252, &
-                                       -0.0098251086, &
-                                        0.1165246814, &
-                                        0.0038401189, &
-                                        0.0741216019, &
-                                        0.2083082050, &
-                                       -0.0756302625, &
-                                       -0.0160390977, &
-                                       -0.0000000000, &
-                                        0.0189382695, &
-                                        0.0293326229, &
-                                       -0.0331011601, &
-                                        0.0146110328, &
-                                        0.1504229754, &
-                                       -0.0098594120, &
-                                        0.0382872783, &
-                                        0.0012151707, &
-                                        0.0121179689, &
-                                        0.0499346256, &
-                                       -0.0046613361, &
-                                       -0.1070834175, &
-                                       -0.1003829092, &
-                                       -0.0952540189, &
-                                       -0.4186788797, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                        0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                        0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                        0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                        0.0000000000, &
-                                        0.0000000000, &
-                                       -0.0000000000, &
-                                        0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                        0.1216548756, &
-                                        0.2563623190, &
-                                       -0.1461931467, &
-                                       -0.2442656457, &
-                                       -0.0000000000, &
-                                        0.1274637878, &
-                                       -0.1889032423, &
-                                        0.0389410108, &
-                                       -0.0582288802, &
-                                       -0.1440155208, &
-                                        0.0082595488, &
-                                        0.1375685334, &
-                                       -0.0557738617, &
-                                       -0.4543681741, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.3988320529, &
-                                        0.0224677473, &
-                                        0.2227000594, &
-                                        0.1196500510, &
-                                        0.6017152667, &
-                                        0.4825574458, &
-                                        0.1382155567, &
-                                       -0.0005538926, &
-                                       -0.0192739498, &
-                                       -0.1861848831, &
-                                       -0.0034897930, &
-                                       -0.0794872195, &
-                                       -0.0595433749, &
-                                       -0.3415518701, &
-                                        0.3409571052, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                        0.0000000000, &
-                                        0.0000000000, &
-                                        0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                        0.0000000000, &
-                                        0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                        0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                        0.0000000000, &
-                                        0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                        0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                        0.0000000000, &
-                                       -0.0000000000, &
-                                        0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                        0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                        0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                        0.0286370926, &
-                                       -0.0000000000, &
-                                       -0.5521243811, &
-                                        0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0724072531, &
-                                       -0.0369833037, &
-                                       -0.0583556555, &
-                                       -0.1576239914, &
-                                        0.0000000000, &
-                                       -0.2885539830, &
-                                        0.0676172525, &
-                                        0.1396968961, &
-                                        0.0000000000, &
-                                        0.0715314597, &
-                                       -0.0383014604, &
-                                       -0.1082733274, &
-                                        0.5661036968, &
-                                        0.0901052952, &
-                                       -0.0000000000, &
-                                        0.0685495958, &
-                                       -0.0000000000, &
-                                        0.0769296587, &
-                                       -0.0157069266, &
-                                        0.0000000000, &
-                                       -0.0000000000, &
-                                        0.3043087125, &
-                                       -0.0153929731, &
-                                       -0.0000000000, &
-                                        0.1126367375, &
-                                        0.0000000000, &
-                                       -0.0000000000, &
-                                        0.0000000000, &
-                                        0.0000000000, &
-                                        0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                        0.0000000000, &
-                                        0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                        0.0000000000, &
-                                       -0.0000000000, &
-                                        0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                        0.0000000000, &
-                                        0.0000000000, &
-                                        0.0000000000, &
-                                       -0.0000000000, &
-                                        0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                        0.0000000000, &
-                                       -0.0000000000, &
-                                        0.0000000000, &
-                                        0.0000000000, &
-                                        0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                        0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                        0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                        0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0052863336, &
-                                       -0.2775994241, &
-                                       -0.0239134580, &
-                                        0.0705673844, &
-                                        0.0000000000, &
-                                        0.1924362034, &
-                                       -0.2672941387, &
-                                        0.0511227846, &
-                                        0.0841154009, &
-                                        0.3868427575, &
-                                       -0.0045566163, &
-                                        0.2061470747, &
-                                        0.2104285955, &
-                                       -0.3792500198, &
-                                       -0.0000000000, &
-                                        0.0000000000, &
-                                       -0.3602472544, &
-                                        0.1179236099, &
-                                       -0.0684539750, &
-                                        0.0152507238, &
-                                        0.2329504937, &
-                                        0.5359743237, &
-                                        0.0468405336, &
-                                       -0.0014521868, &
-                                        0.0017121157, &
-                                       -0.0452588946, &
-                                        0.0040515889, &
-                                        0.6406419873, &
-                                       -0.4777383208, &
-                                       -0.3808661699, &
-                                        0.5108952522, &
-                                       -0.0000000000, &
-                                        0.3940069973, &
-                                        0.1313944906, &
-                                       -0.1139819100, &
-                                       -0.0383506007, &
-                                        0.0000000000, &
-                                       -0.1911831349, &
-                                        0.0855648890, &
-                                        0.1215989366, &
-                                        0.5505652428, &
-                                        0.0577373430, &
-                                        0.7566202283, &
-                                       -0.1482254565, &
-                                        0.0343703814, &
-                                        0.3860657811, &
-                                       -0.0922722965, &
-                                       -0.0000000000, &
-                                       -0.5462842584, &
-                                        0.0364675410, &
-                                        0.0978238583, &
-                                       -0.1706293970, &
-                                        0.0765863881, &
-                                        0.0044276952, &
-                                        0.2917272151, &
-                                        0.5538582802, &
-                                       -0.6517446041, &
-                                        0.1951344758, &
-                                        0.5658857822, &
-                                        0.0283670966, &
-                                        0.1810782552, &
-                                       -0.0177200157, &
-                                       -0.0616658442, &
-                                       -0.2601302862, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                        0.0000000000, &
-                                       -0.0000000000, &
-                                        0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                        0.0000000000, &
-                                        0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                        0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                        0.0000000000, &
-                                        0.0000000000, &
-                                        0.0000000000, &
-                                       -0.0000000000, &
-                                        0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                        0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                        0.0000000000, &
-                                        0.0000000000, &
-                                       -0.0116925631, &
-                                       -0.2148667425, &
-                                        0.0221873503, &
-                                       -0.0027882280, &
-                                       -0.0000000000, &
-                                        0.1081216261, &
-                                        0.1485394090, &
-                                       -0.0090536075, &
-                                       -0.1249904111, &
-                                        0.1319126636, &
-                                        0.1211233586, &
-                                       -0.0003162056, &
-                                       -0.0716233104, &
-                                        0.0126605835, &
-                                       -0.0906589478, &
-                                        0.0000000000, &
-                                       -0.2284337431, &
-                                        0.0035341056, &
-                                       -0.0855935514, &
-                                        0.0959699303, &
-                                        0.1004358083, &
-                                       -0.0576520003, &
-                                        0.1464376301, &
-                                       -0.0136211962, &
-                                        0.0000575079, &
-                                        0.0517384037, &
-                                       -0.0281998608, &
-                                       -0.0054100892, &
-                                       -0.1864996254, &
-                                        0.0055916151, &
-                                       -0.6637265086, &
-                                       -0.0614189319, &
-                                        0.0731437057, &
-                                        0.4420498312, &
-                                        0.0836223513, &
-                                        0.0484876484, &
-                                        0.0000000000, &
-                                        0.2458569407, &
-                                        0.3522137105, &
-                                        0.0562997386, &
-                                        0.0122643411, &
-                                       -0.2558211088, &
-                                        0.0005011644, &
-                                       -0.1265675426, &
-                                       -0.1103823856, &
-                                       -0.1763994247, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.1916269660, &
-                                       -0.1633377075, &
-                                        0.0125379181, &
-                                        0.0586248711, &
-                                       -0.1927811205, &
-                                       -0.0654822215, &
-                                       -0.0160781797, &
-                                        0.0002431220, &
-                                       -0.0000000000, &
-                                       -0.0303806216, &
-                                        0.0009669248, &
-                                       -0.1436213404, &
-                                       -0.0380256101, &
-                                        0.0866091922, &
-                                       -0.1091826260, &
-                                        0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                        0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                        0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                        0.0000000000, &
-                                        0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                        0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                        0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                        0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                        0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                        0.1044114083, &
-                                        0.1162032038, &
-                                       -0.0874031410, &
-                                       -0.0000000000, &
-                                        0.0000000000, &
-                                        0.3922821283, &
-                                        0.3992380202, &
-                                        0.0248787738, &
-                                       -0.0505586676, &
-                                       -0.0161903501, &
-                                        0.0173729192, &
-                                       -0.2526047528, &
-                                        0.0575408787, &
-                                       -0.0151371378, &
-                                       -0.0000000000, &
-                                        0.0000000000, &
-                                       -0.0079517746, &
-                                        0.0807164162, &
-                                       -0.0233540609, &
-                                       -0.0187177118, &
-                                       -0.1037500724, &
-                                       -0.1005961448, &
-                                       -0.0095577687, &
-                                        0.0007752153, &
-                                       -0.0000000000, &
-                                       -0.1382720470, &
-                                       -0.0030239634, &
-                                       -0.0000000000, &
-                                       -0.3468130231, &
-                                       -0.0000000000, &
-                                       -0.8168741465, &
-                                        0.0000000000, &
-                                        0.0789077133, &
-                                        0.1624279767, &
-                                       -0.0382222086, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                        0.6810701489, &
-                                        0.6583945751, &
-                                        0.0444364324, &
-                                       -0.0304552671, &
-                                       -0.0294606388, &
-                                        0.0143596325, &
-                                       -0.3674609959, &
-                                        0.1298982501, &
-                                       -0.2047200054, &
-                                       -0.0000000000, &
-                                        0.0000000000, &
-                                       -0.1438781917, &
-                                        0.0334249698, &
-                                        0.0056565711, &
-                                       -0.0381158106, &
-                                       -0.1027553529, &
-                                       -0.0660412982, &
-                                        0.0394951738, &
-                                       -0.0008870666, &
-                                       -0.0000000000, &
-                                       -0.0705048293, &
-                                        0.0033658678, &
-                                        0.0866839290, &
-                                       -0.4158711433, &
-                                       -0.0000000000, &
-                                       -0.1303454787, &
-                                        0.0000000000, &
-                                        0.1254732013, &
-                                        0.0171624627, &
-                                        0.2691356540, &
-                                       -0.0602707714, &
-                                       -0.0000000000, &
-                                        0.1154750809, &
-                                       -0.0424121395, &
-                                        0.1957200021, &
-                                       -0.0011578604, &
-                                       -0.0103039686, &
-                                        0.3792952895, &
-                                        0.0684395880, &
-                                       -0.1061842218, &
-                                        0.0185474735, &
-                                       -0.7683953047, &
-                                        0.0000000000, &
-                                       -0.3522522449, &
-                                        0.3949597180, &
-                                        0.2081210464, &
-                                        0.3088178933, &
-                                        0.1781341583, &
-                                       -0.0179045107, &
-                                       -0.1681050211, &
-                                        0.2432415038, &
-                                       -0.0714075342, &
-                                        0.2647177577, &
-                                        0.3336461484, &
-                                       -0.0321404822, &
-                                       -0.1366496533, &
-                                        0.0018636914, &
-                                       -0.0371396318, &
-                                       -0.0000000000, &
-                                        0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                        0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                        0.0000000000, &
-                                       -0.0000000000, &
-                                        0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                        0.0000000000, &
-                                        0.0000000000, &
-                                        0.0000000000, &
-                                        0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                        0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                        0.0000000000, &
-                                        0.0000000000, &
-                                        0.0000000000, &
-                                        0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                        0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                        0.0000000000, &
-                                       -0.0000000000, &
-                                        0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                        0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                        0.0000000000, &
-                                        0.0000000000, &
-                                       -0.0000000000, &
-                                        0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                        0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                        0.0000000000, &
-                                       -0.0000000000, &
-                                        0.0000000000, &
-                                        0.0000000000, &
-                                        0.0000000000, &
-                                       -0.0000000000], &
-                                       [32, 32] )
-            output_weights = reshape( [-0.2796037197, &
-                                       -0.0000000000, &
-                                        0.5758032799, &
-                                       -0.0002498327, &
-                                       -0.4251849055, &
-                                       -0.0000000000, &
-                                        0.3065201938, &
-                                        0.0002471448, &
-                                       -0.0000000000, &
-                                        0.6113708615, &
-                                        0.2577570081, &
-                                        0.0000000000, &
-                                        0.2604292929, &
-                                       -0.0000000000, &
-                                        0.0000000000, &
-                                        0.0000000000, &
-                                        0.0001616327, &
-                                       -0.0000000000, &
-                                        0.0000000000, &
-                                        0.2716367543, &
-                                       -0.0001660962, &
-                                        0.0000000000, &
-                                        0.0000000000, &
-                                       -0.0002372644, &
-                                       -0.3237285912, &
-                                        0.0000000000, &
-                                       -0.0000000000, &
-                                       -1.1628286839, &
-                                       -0.6132991314, &
-                                        0.0002859296, &
-                                       -0.0000000000, &
-                                        0.0000000000, &
-                                       -0.0267281421, &
-                                        0.0000000000, &
-                                       -0.1664311439, &
-                                       -0.3588343859, &
-                                        0.0070867576, &
-                                       -0.0000000000, &
-                                       -0.0053556650, &
-                                        0.3080652952, &
-                                       -0.0000000000, &
-                                        0.0160414781, &
-                                       -0.0025617455, &
-                                        0.0000000000, &
-                                       -0.0037688769, &
-                                        0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0000000000, &
-                                        0.2123487592, &
-                                        0.0000000000, &
-                                       -0.0000000000, &
-                                       -0.0094082523, &
-                                       -0.3110158443, &
-                                        0.0000000000, &
-                                        0.0000000000, &
-                                       -0.3027872145, &
-                                        0.0258278027, &
-                                        0.0000000000, &
-                                       -0.0000000000, &
-                                        0.2679031193, &
-                                        0.0218125116, &
-                                        0.2226033360, &
-                                        0.0000000000, &
-                                       -0.0000000000], &
-                                       [32, 2] )
+            layer1_weights(1:7, 1) = [ &
+-0.2190006226,  0.0540952198, -0.0077096513, -0.1371713579,  0.1492639780,  0.0194573663,  0.6844549179 &
+]
+            layer1_weights(1:7, 2) = [ &
+ 0.7418168187,  0.2434242815, -0.0131811164, -0.3199434280,  0.0517424159,  0.0256698225, -0.3393041790 &
+]
+            layer1_weights(1:7, 3) = [ &
+-0.5764626265, -0.0954914764, -0.0115794102, -0.0019200951,  0.0167885553,  0.0286743194,  0.7605594993 &
+]
+            layer1_weights(1:7, 4) = [ &
+ 0.0979476348, -0.3041258156, -0.0120130656,  0.2507718503, -0.0748898908,  0.0265254416,  0.7817803621 &
+]
+            layer1_weights(1:7, 5) = [ &
+-0.0364765264,  0.0411068760, -0.0128713697, -0.0792911649,  0.2669259608,  0.0293429084,  1.4329564571 &
+]
+            layer1_weights(1:7, 6) = [ &
+ 0.1192039624,  0.0418985002, -0.0169131421,  0.0078686373, -0.0734369084,  0.0295616984, -0.4100538790 &
+]
+            layer1_weights(1:7, 7) = [ &
+-0.0029293715, -0.1118388176, -0.0136934919, -0.1620555073,  0.0125599038,  0.0284955576,  0.2519263327 &
+]
+            layer1_weights(1:7, 8) = [ &
+ 0.2576072812, -0.0230538305, -0.0126037365, -0.0302207582,  0.1907971799,  0.0286820494, -0.6960783005 &
+]
+            layer1_weights(1:7, 9) = [ &
+-0.2623896301, -0.0473150201, -0.0128465602, -0.0369358286, -0.3790431321,  0.0284494124,  0.2109522223 &
+]
+            layer1_weights(1:7, 10) = [ &
+-0.1530908495,  0.1801574230, -0.0130083961, -0.1180739030, -0.0730663911,  0.0308629014, -0.4833481610 &
+]
+            layer1_weights(1:7, 11) = [ &
+ 0.0589571670, -0.0431771539, -0.0123761576, -0.0368771441, -0.4166151881,  0.0279046521, -0.1202317700 &
+]
+            layer1_weights(1:7, 12) = [ &
+ 0.0666980296, -0.0829348937, -0.0119606741, -0.0135063184,  0.0255107712,  0.0260446053, -1.1879286766 &
+]
+            layer1_weights(1:7, 13) = [ &
+-0.0984534994, -0.0877233446, -0.0136832343, -0.2766579986, -0.0469223708,  0.0265985113, -0.3729643524 &
+]
+            layer1_weights(1:7, 14) = [ &
+ 0.4467141330, -0.2815084159, -0.0129896831,  0.2070183754, -0.2290771902,  0.0267791394, -0.3404680192 &
+]
+            layer1_weights(1:7, 15) = [ &
+-0.0179488137,  0.1768128723, -0.0132324481, -0.1581421345, -0.1139043272,  0.0281866360,  1.0712780952 &
+]
+            layer1_weights(1:7, 16) = [ &
+ 0.3258139193,  0.2635339797, -0.0110114245, -0.3152385652, -0.1072574332,  0.0268064737,  0.1036241874 &
+]
+            layer1_weights(1:7, 17) = [ &
+-0.0051023602, -0.0991913751, -0.0104906959, -0.0163558181, -0.1636088639,  0.0258081742,  0.6276371479 &
+]
+            layer1_weights(1:7, 18) = [ &
+ 0.3749835789, -0.5055969954, -0.0130659807,  0.4486735463,  0.1565513909,  0.0271818433,  0.3315708041 &
+]
+            layer1_weights(1:7, 19) = [ &
+-0.1902047396, -0.1343291402, -0.0133263245,  0.0440727770,  0.0238867495,  0.0303703267,  0.8034021854 &
+]
+            layer1_weights(1:7, 20) = [ &
+ 0.1350260824,  0.2277165055, -0.0131116584, -0.3787987530,  0.2956981361,  0.0275527723, -0.6372644305 &
+]
+            layer1_weights(1:7, 21) = [ &
+-0.1800322533, -0.1311945170, -0.0132691218,  0.1248766556, -0.0426778384,  0.0255711339, -0.9598972201 &
+]
+            layer1_weights(1:7, 22) = [ &
+ 0.0602384396, -0.2947299778, -0.0126794064,  0.2026059031,  0.1878107041,  0.0262008011, -0.4065564275 &
+]
+            layer1_weights(1:7, 23) = [ &
+-0.1034283936,  0.2794179618, -0.0131608462, -0.3475167751, -0.2695133686,  0.0273987427, -0.7564346194 &
+]
+            layer1_weights(1:7, 24) = [ &
+-0.1508749872,  0.2346209139, -0.0128226774, -0.2798886895,  0.3179385960,  0.0285317712, -0.5800973773 &
+]
+            layer1_weights(1:7, 25) = [ &
+-0.0155053642,  0.0690149218, -0.0120219914, -0.2053374648, -0.1028633565,  0.0275687370, -0.7797352672 &
+]
+            layer1_weights(1:7, 26) = [ &
+-0.5897423625,  0.0853770599, -0.0086951796, -0.1436152309, -0.5375032425,  0.0266419500,  0.0681491345 &
+]
+            layer1_weights(1:7, 27) = [ &
+ 0.1065316424,  0.2339343429, -0.0149179231, -0.1015021354,  0.2023541629,  0.0304688048, -0.2464745045 &
+]
+            layer1_weights(1:7, 28) = [ &
+-0.2398880571, -0.0159876086, -0.0126934126, -0.0617030747,  0.2814535201,  0.0299040042, -0.6868491173 &
+]
+            layer1_weights(1:7, 29) = [ &
+-0.0749027878,  0.0772326663, -0.0120517928, -0.1296293586,  0.3110748827,  0.0279442780,  1.0198311806 &
+]
+            layer1_weights(1:7, 30) = [ &
+ 0.0244182665,  0.2583201528, -0.0135567887, -0.3240006864,  0.2074941844,  0.0269142576,  0.5251162052 &
+]
+            layer1_weights(1:7, 31) = [ &
+ 0.1730603874,  0.1242468357, -0.0111395502, -0.1718754619, -0.0882179961,  0.0242567826, -0.7134677768 &
+]
+            layer1_weights(1:7, 32) = [ &
+-0.2522159517,  0.0516630970, -0.0134411342, -0.0845394209, -0.3469645679,  0.0260621216,  0.0180007797 &
+]
 
-            layer1_biases = [-0.1790515780, &
-                              0.0862144083, &
-                              0.1866657734, &
-                             -0.0840795189, &
-                             -0.0383943021, &
-                             -0.3251940906, &
-                             -0.8716804385, &
-                             -0.4523875415, &
-                             -0.0098730773, &
-                             -0.1526496857, &
-                             -0.1317496002, &
-                             -0.6186251044, &
-                             -0.2040056586, &
-                             -0.1666890532, &
-                              0.3109178543, &
-                             -0.1186635494, &
-                             -0.3053946197, &
-                             -0.0530483983, &
-                             -0.2723994255, &
-                             -0.4705496132, &
-                             -0.1994298697, &
-                              0.1051627025, &
-                              0.1332108229, &
-                              0.1865729392, &
-                             -0.0527128950, &
-                             -0.2963756323, &
-                              0.1543212533, &
-                             -0.0628978461, &
-                              0.0395792834, &
-                              0.3478806615, &
-                             -0.1810372621, &
-                             -0.0601556078]
-            layer2_biases = [-0.1069382206, &
-                             -0.1956440359, &
-                              0.3830090761, &
-                             -0.1579304785, &
-                             -0.0000000000, &
-                             -0.5162814260, &
-                             -0.3007943332, &
-                              0.2190732360, &
-                              0.0396700799, &
-                             -0.0053776181, &
-                             -0.2355509102, &
-                             -0.1121159866, &
-                              0.2698037028, &
-                             -0.0768784434, &
-                             -0.2057262808, &
-                             -0.0000000000, &
-                             -0.1153649390, &
-                              0.2509014308, &
-                              0.2935952544, &
-                              0.4201961160, &
-                              0.0332281888, &
-                             -0.3260236382, &
-                              0.0313860737, &
-                             -0.0456074700, &
-                             -0.0858174339, &
-                              0.0147352964, &
-                              0.0624631494, &
-                             -0.2674061060, &
-                              0.4178365469, &
-                             -0.0071377684, &
-                             -0.4315474927, &
-                             -0.2708506584]
-            layer3_biases = [ 0.0231435746, &
-                             -0.0000000000, &
-                             -0.0674977228, &
-                             -0.0410450138, &
-                             -0.1133535206, &
-                             -0.0000000000, &
-                             -0.1900853813, &
-                              0.2297408730, &
-                             -0.0000000000, &
-                             -0.1027324647, &
-                             -0.0197578538, &
-                             -0.0000000000, &
-                             -0.1161197200, &
-                             -0.0000000000, &
-                             -0.0000000000, &
-                             -0.0000000000, &
-                             -0.0413145013, &
-                             -0.0000000000, &
-                             -0.0000000000, &
-                             -0.0529792756, &
-                             -0.0310051553, &
-                             -0.0000000000, &
-                             -0.0000000000, &
-                              0.0137349917, &
-                             -0.0115077011, &
-                             -0.0000000000, &
-                             -0.0000000000, &
-                             -0.0759560987, &
-                             -0.0879023522, &
-                              0.0549950264, &
-                             -0.0000000000, &
-                             -0.0000000000]
-            output_biases = [-0.0000535336, &
-                             -0.0675212592]
+
+            layer2_weights(1:32, 1) = [ &
+-0.1117351800, -0.1284316480,  0.0712887943,  0.0650180802, -0.0407205708, -0.0985638276, -0.0448625311, -0.1503775716,  0.0417856164, -0.0141886268, &
+ 0.0004270415,  0.0276160482,  0.0899491832, -0.0618881173,  0.0609800667, -0.0982567891, -0.0114613343,  0.1095154509,  0.0832865685,  0.0431427509, &
+ 0.1416025758, -0.0891113877,  0.1942207813,  0.0704689398,  0.1792940199,  0.0987745449, -0.1087175831, -0.1902546585,  0.1015192643,  0.2028600723, &
+ 0.1400950253,  0.1158246100 &
+]
+            layer2_weights(1:32, 2) = [ &
+ 0.1087559760,  0.1114676297,  0.0422201380,  0.0740414187, -0.0374903940,  0.0577317998,  0.0546031259, -0.2454139143,  0.0153925112,  0.0087345447, &
+ 0.1394608170, -0.0209554750, -0.1538699567, -0.0852091387,  0.0449135005,  0.1346545368,  0.0347476155, -0.1269536167, -0.0666573644,  0.0308980793, &
+ 0.0305099543, -0.1463699192,  0.1779073328, -0.3162050843,  0.0128948344, -0.2256595939, -0.1389532387, -0.0180610754, -0.4247097671, -0.0973156169, &
+ 0.1589681059,  0.1124830022 &
+]
+            layer2_weights(1:32, 3) = [ &
+-0.0111537240, -0.2733674645, -0.0965457112,  0.1434001923,  0.5163137913,  0.1306590289, -0.0227658432, -0.1213925406,  0.1525447816, -0.0570459031, &
+ 0.1443846673, -0.0734644458, -0.2046943456, -0.1658921391,  0.2205170393,  0.1468111128, -0.0413544923, -0.0441285037,  0.0831972361, -0.0410746783, &
+-0.2074815631,  0.0238972045, -0.1554788500,  0.0782731995, -0.0652012229, -0.0827302709, -0.0208333787, -0.1072675660,  0.1494044214,  0.0546756461, &
+-0.1772469133,  0.0587576516 &
+]
+            layer2_weights(1:32, 4) = [ &
+ 0.2048807889,  0.0404514596, -0.0526577570,  0.0632727072,  0.1723375916, -0.1465683430,  0.1098817438, -0.3369859457, -0.2926872075,  0.0594048612, &
+ 0.1664026678,  0.1716688722, -0.1112595126,  0.0337362774, -0.1592828929, -0.0685294643,  0.0747730285,  0.0924577266,  0.0794590935,  0.0970563740, &
+ 0.0022527983, -0.0635263622,  0.2065043449, -0.0373069085,  0.0638072565, -0.2363027334, -0.1191413328,  0.0175898541,  0.0530489944,  0.0114503615, &
+ 0.0047121621,  0.0984191671 &
+]
+            layer2_weights(1:32, 5) = [ &
+-0.0147717576, -0.0839565843, -0.0058982363,  0.1475898176,  0.0222259052, -0.0664527938, -0.0268836040, -0.1080275401,  0.1416906714,  0.1357313693, &
+ 0.0282877255,  0.0786382705,  0.0005398737,  0.0989426821,  0.0270158276, -0.2548439801, -0.0869375169,  0.0714240298, -0.1243297681, -0.0198424794, &
+-0.1316996217,  0.1173990518, -0.0388542265, -0.1274489015,  0.0898761749, -0.1003599837, -0.1730141044,  0.2389565259, -0.1168871671, -0.1181545183, &
+-0.0589562170,  0.1078410968 &
+]
+            layer2_weights(1:32, 6) = [ &
+-0.1362433583, -0.2992296815, -0.5444366932,  0.2687067389,  0.2434235066,  0.1263457388, -0.0433930717, -0.0303139519,  0.0342861079,  0.0179795995, &
+ 0.3687387705,  0.0180203244,  0.1147258729, -0.0731062219,  0.0431619771,  0.0299243405,  0.0823053420,  0.1220054179, -0.0205143783, -0.0762475580, &
+-0.1502207965,  0.1383559704,  0.1106109992, -0.0199030861, -0.2319512218, -0.0843029171,  0.0555854887,  0.0443723351, -0.0872968584,  0.0374926850, &
+-0.1134411767,  0.2851321399 &
+]
+            layer2_weights(1:32, 7) = [ &
+ 0.0484642684, -0.0711019039,  0.0889504254,  0.0108718593,  0.3201044202,  0.0074054501, -0.2468304634,  0.0484193899,  0.1072454304,  0.0267088618, &
+ 0.2226192504, -0.1554983854,  0.1104267538, -0.0299920384,  0.0921010971, -0.1336269379, -0.1392587274, -0.2332412750,  0.0617728308,  0.0711533055, &
+-0.0102512296,  0.1535290629, -0.1834694594,  0.0850510895,  0.0811012909,  0.0848684311,  0.0182204451, -0.2388228327,  0.2198614031, -0.0436751209, &
+-0.0618283637,  0.2814313769 &
+]
+            layer2_weights(1:32, 8) = [ &
+ 0.0232587345,  0.0967546999, -0.0093786549, -0.0505990051, -0.3041975796,  0.1054461747,  0.2651260495,  0.0334174596,  0.0003326382, -0.0155288782, &
+ 0.1831480712,  0.2494949847,  0.0326571316, -0.0077409036, -0.1795265824,  0.0213896651, -0.0138357803,  0.0207030401, -0.0106458729,  0.2327524722, &
+ 0.2232279330,  0.0119290287,  0.1523824185, -0.0580544733,  0.1777430028, -0.0876470059, -0.0055651292,  0.3630985916, -0.1389927715, -0.2004727274, &
+-0.0505450480, -0.0666115880 &
+]
+            layer2_weights(1:32, 9) = [ &
+ 0.1515708268,  0.0668965727,  0.4656598270, -0.0008035336,  0.3741085827, -0.0957314521, -0.0600504018, -0.1143982038,  0.0984155014,  0.0484569892, &
+ 0.1023560166, -0.1862559170, -0.0215466879,  0.3682745695,  0.1416252106,  0.1180428267,  0.0756881088,  0.5011232495,  0.0364956632,  0.0060383384, &
+-0.0745835155,  0.1304503530, -0.0872945637,  0.0377874337, -0.1058416069,  0.1785964817,  0.0166541040, -0.1022932306,  0.0636747703, -0.1673606038, &
+-0.0656291395,  0.1689677685 &
+]
+            layer2_weights(1:32, 10) = [ &
+ 0.0094230156, -0.2110843509, -0.1847864389,  0.2342812419,  0.1168669984,  0.0376458131, -0.0351461582, -0.1736774892,  0.0739952996, -0.0882004648, &
+ 0.0652807429,  0.3089283705,  0.0672525987,  0.1896152347, -0.0447240695, -0.2704942226, -0.0200308301,  0.5203700662,  0.1113499925,  0.0541342646, &
+ 0.1123014241, -0.0042421315, -0.1296337396, -0.0503332391, -0.0163843073,  0.3141654432,  0.1332670152,  0.0678165257, -0.1380183250, -0.2456852645, &
+-0.0295829941,  0.0435432568 &
+]
+            layer2_weights(1:32, 11) = [ &
+ 0.1386505961, -0.0132822832,  0.0387611650,  0.0760284960, -0.3599948883,  0.1861448586,  0.0036965720,  0.1393228471, -0.1753229648, -0.1002033204, &
+ 0.0283402465,  0.3081445694, -0.0601785146, -0.0307622664, -0.2626568675,  0.0118515333, -0.1934489012, -0.1130287722, -0.0066819894,  0.1894848049, &
+ 0.2033455223,  0.1488698125,  0.0294217728, -0.0141049698,  0.1953921914, -0.0560081601,  0.2251728326,  0.3365182281,  0.0194973852,  0.0966868624, &
+ 0.2476295829, -0.1040486991 &
+]
+            layer2_weights(1:32, 12) = [ &
+-0.0486793183, -0.0272071008,  0.0188603513,  0.1527446806,  0.0463468991,  0.0037684690,  0.0288762450, -0.0087178834,  0.0365484692,  0.0647728145, &
+-0.1056149676, -0.0292951483,  0.1104933843,  0.0212582331, -0.0283181872, -0.0854344293,  0.1536755413, -0.2527971268,  0.3012008369, -0.1049089432, &
+ 0.1901467443,  0.2396816611,  0.0324034430, -0.2142281979, -0.1313681304,  0.0168814994, -0.1553356797, -0.1475482434,  0.1195296869,  0.1042713672, &
+-0.0274712034,  0.0160524417 &
+]
+            layer2_weights(1:32, 13) = [ &
+-0.0507987924, -0.1103038788, -0.2698226571,  0.2064212263, -0.2465220392,  0.1121913046, -0.0840558633,  0.2782513797, -0.1963101476, -0.1475856900, &
+-0.0957479626,  0.0325200185, -0.0034341495,  0.0854385123, -0.1477565765, -0.1745402962, -0.0326230526,  0.0629488081, -0.1662511826, -0.1060456708, &
+ 0.2759069502,  0.0036218963, -0.1112843752,  0.1563934684,  0.3713294864, -0.0954265818, -0.1180848554,  0.0800499469, -0.1941240132,  0.0834308416, &
+ 0.2265571356, -0.0228916463 &
+]
+            layer2_weights(1:32, 14) = [ &
+ 0.0360888653, -0.1306748986,  0.0145548983,  0.0718294904,  0.4100318253, -0.1543059349,  0.0254958421,  0.0349594168, -0.0669922009, -0.0983676761, &
+-0.1489443332, -0.1863534003, -0.1370456517, -0.1829985976,  0.2040059119, -0.0997100994,  0.0661244392,  0.0882589743,  0.1472758353, -0.0116851013, &
+ 0.0156891812,  0.0155292321, -0.0914014280, -0.1025421396, -0.1762911230, -0.0660566241, -0.0440900773, -0.0357290916,  0.2931746244,  0.1893049777, &
+-0.0568426438, -0.1655628532 &
+]
+            layer2_weights(1:32, 15) = [ &
+ 0.0874033049,  0.2245388031, -0.0059109204,  0.0640323758,  0.1203147918, -0.0593400039, -0.2027415186, -0.1858536154,  0.1524013430, -0.0673797876, &
+-0.1725205928, -0.1495137215, -0.0831030086,  0.0951835439,  0.0581886917,  0.0630518422, -0.0304877590, -0.4711973965, -0.0587845705,  0.0359988511, &
+-0.1472660899, -0.3131668270,  0.0814883932,  0.0255693998,  0.0060273870,  0.1298925579, -0.0042434772,  0.1232063100, -0.2914228141,  0.0096134730, &
+ 0.0731327236, -0.1151040941 &
+]
+            layer2_weights(1:32, 16) = [ &
+ 0.0360279046,  0.1389216483, -0.0622558296, -0.0583553948, -0.1388459355, -0.0599073917, -0.1827905178, -0.2391034812,  0.0132533703, -0.1867463142, &
+ 0.1255060434, -0.1464910954,  0.1292139888,  0.1842583865,  0.1491998732, -0.0629910007, -0.0800654739, -0.2674659491, -0.1043231115, -0.0803678632, &
+-0.1227705255,  0.0845109969,  0.2102560401, -0.0276770405,  0.1764066219, -0.1720764786,  0.2146015018,  0.0933286622, -0.5277056694, -0.0152651146, &
+-0.1103773713,  0.0570440032 &
+]
+            layer2_weights(1:32, 17) = [ &
+-0.1562528461,  0.0154247405, -0.0935413092, -0.1333422810, -0.0248630103,  0.1389526874,  0.0140146036,  0.1975896508,  0.2932747602,  0.1880118847, &
+ 0.0411126502,  0.5869876742, -0.2145864666,  0.2221479416, -0.2997410893,  0.1379881203, -0.1556793451, -0.0203764681, -0.2842397690, -0.2070553750, &
+ 0.1384088546,  0.1288644373, -0.1038862318,  0.1443205476,  0.1623934507,  0.0931548998,  0.0661253557, -0.0062769558,  0.0879043937, -0.1968227029, &
+ 0.0010447084,  0.1176814511 &
+]
+            layer2_weights(1:32, 18) = [ &
+-0.0938648880, -0.2158330977, -0.1888880730,  0.1312855482,  0.0850724131,  0.0376499668, -0.1352191716,  0.1195619479, -0.0569405966, -0.0595906749, &
+ 0.1587675363, -0.1342861503, -0.0087150671,  0.0907788575,  0.1451289207,  0.0137380427,  0.1027839854,  0.0988313034, -0.0915051326, -0.0924814418, &
+-0.1326644421, -0.2512767017, -0.0236271657, -0.2697450519,  0.0966684893, -0.2193712145, -0.0405508354, -0.0828407183, -0.4162105918, -0.0270184763, &
+ 0.2189921737,  0.1567862034 &
+]
+            layer2_weights(1:32, 19) = [ &
+-0.0076587503,  0.1981597245,  0.0221865363,  0.0615125112, -0.1771855652, -0.1058283672, -0.2564806342, -0.0428268537, -0.0122130997, -0.1172774583, &
+-0.1291463375,  0.1983964443, -0.0925405920,  0.0478995256,  0.1356377900,  0.0763885453, -0.0178544130, -0.1599561423, -0.0518254600,  0.0072709536, &
+ 0.1191005707, -0.1000869349,  0.0734965578,  0.0593050122,  0.1334671974, -0.0930230543,  0.0111090336, -0.1171966270, -0.1090093702,  0.0610006303, &
+-0.0423424877, -0.0072663692 &
+]
+            layer2_weights(1:32, 20) = [ &
+ 0.2223925143, -0.0235342011,  0.2269043028, -0.1182139516, -0.1878909916, -0.2199525833, -0.0232940484,  0.0038204847,  0.6109856367,  0.2166859061, &
+-0.3512487710, -0.3531768322,  0.0860801488, -0.3746345341,  0.0485468023, -0.2650230229,  0.0467752889, -0.0052382965, -0.0213718005, -0.0887552649, &
+ 0.0764262900, -0.0432697125, -0.1881511062,  0.2015525401, -0.3426586390,  0.4175527096, -0.1675850004, -0.1974740028,  0.0813123584, -0.0539827310, &
+-0.4840763211,  0.4051252306 &
+]
+            layer2_weights(1:32, 21) = [ &
+ 0.0837101266, -0.2597859800, -0.3058682680, -0.1565631181, -0.3832991421, -0.0853885636,  0.0937155560,  0.1213561520, -0.1229425892, -0.0219753794, &
+-0.1660638005,  0.1210847870, -0.0113830995, -0.0498828739,  0.0150979087, -0.2188143730, -0.0007586897, -0.1076134741, -0.0422039479,  0.0490115844, &
+ 0.2870574296,  0.1849404871,  0.0940698981,  0.1250982285,  0.2201022953, -0.3574217856,  0.0067179631,  0.2909514010, -0.2327750027,  0.1311177909, &
+-0.0254414007, -0.1807756573 &
+]
+            layer2_weights(1:32, 22) = [ &
+-0.0528740659, -0.4097513556,  0.1007234454, -0.2635177970, -0.2512937486, -0.0635634586,  0.0135326097,  0.1916654855,  0.2272215486,  0.2308928668, &
+ 0.3242702186,  0.2371425331, -0.0731286481,  0.1089112088, -0.1063089222, -0.0895679891,  0.0621622130,  0.0016447254, -0.0597189255,  0.2451187670, &
+ 0.2505356073,  0.2331745028,  0.2266161442,  0.1250394583,  0.0872073323,  0.1483489424,  0.0561970770,  0.1941868365, -0.0176503249, -0.2312803864, &
+ 0.0380118974,  0.0916465521 &
+]
+            layer2_weights(1:32, 23) = [ &
+ 0.0447576270,  0.2707486451, -0.0020659456, -0.1578038037,  0.0630955771,  0.0564599596,  0.2166607827,  0.0432996564,  0.3611617088,  0.1103595048, &
+ 0.2481515557, -0.0118371295, -0.1631609201,  0.2110397667, -0.0008437973,  0.2032519132,  0.1479897350, -0.1958459616, -0.2020241171,  0.3710643947, &
+-0.0072649815,  0.1337041408, -0.0362067483,  0.0832955688, -0.1208370477,  0.4064412713,  0.0713525563,  0.4333782494, -0.0417580530, -0.2009960860, &
+-0.1395398080,  0.1479331404 &
+]
+            layer2_weights(1:32, 24) = [ &
+ 0.0196047276,  0.3551713526, -0.0045621987, -0.2023647279, -0.1698977649,  0.0477658100,  0.1123785675,  0.1926545650, -0.0192261524, -0.0705829784, &
+ 0.0822550952,  0.0460502878, -0.1989544481, -0.0148886181, -0.0213054400,  0.2990112603, -0.0247277524, -0.1902015209, -0.2104517221,  0.1381342560, &
+-0.0697677806, -0.1733553410,  0.1071649864, -0.0197836049,  0.0112696039, -0.0172497332, -0.0337052457,  0.1200142950,  0.0336732790,  0.0648447126, &
+ 0.0384922512, -0.0690775439 &
+]
+            layer2_weights(1:32, 25) = [ &
+-0.0198256634,  0.0816736296,  0.0746770725,  0.0344028845, -0.1380583793,  0.1234580129, -0.0088214790, -0.2026403844,  0.0697526857,  0.0475908890, &
+-0.2226991057,  0.0647770688,  0.0498173125, -0.0779383481, -0.0910124928,  0.0881176591, -0.1741452515, -0.1980007142, -0.1082431972,  0.1446826756, &
+-0.1341571063, -0.1042875946,  0.1389268190,  0.0894052833,  0.1666749567,  0.0399679616,  0.0268154219,  0.1399769932,  0.1408285201,  0.1547039896, &
+ 0.2881952524,  0.0219045747 &
+]
+            layer2_weights(1:32, 26) = [ &
+ 0.0006589696, -0.0599899851, -0.0397847928, -0.1003396064, -0.0966983140,  0.1292458624, -0.0321000032,  0.1014982462, -0.0432049967, -0.0442888588, &
+-0.0237128008,  0.0549672134, -0.1186247021, -0.0160119012,  0.0082314871, -0.0093262447,  0.1542637944, -0.1808360517,  0.0672471151, -0.0372453332, &
+ 0.1689890325, -0.1173396632,  0.1923367530,  0.0160690527,  0.2269856483, -0.0517285764, -0.1532364637, -0.1919119209, -0.4210059345, -0.0445910878, &
+-0.0182164274,  0.0686198100 &
+]
+            layer2_weights(1:32, 27) = [ &
+-0.0386227667,  0.1322182566,  0.1603831351,  0.1586841494,  0.1546415836, -0.0003545427, -0.1788052619, -0.0593878664,  0.0523622110,  0.0993380845, &
+-0.0680236742,  0.0985150039,  0.1010280699,  0.1844121516,  0.2832057178, -0.0887576565, -0.1170948669,  0.0737209022,  0.0540452376,  0.0804690719, &
+ 0.0032915373, -0.0113654081,  0.0089611523, -0.2105630338, -0.1120382994, -0.0257475134, -0.0479938239, -0.2170946300,  0.0084398035,  0.1262816340, &
+-0.0918265954,  0.1643484235 &
+]
+            layer2_weights(1:32, 28) = [ &
+-0.0026982715,  0.4444990754,  0.0185881797, -0.1847553849, -0.1134349480, -0.1322775334,  0.0576618016,  0.0656048357,  0.0591257140, -0.1055005267, &
+ 0.1585477889,  0.0162898954, -0.0316300169,  0.2668586969,  0.0709085763,  0.2315044403,  0.1286120415,  0.3867953420,  0.0573053174,  0.0640139505, &
+-0.0337080397,  0.1398328245, -0.1183894202, -0.0072709927, -0.3301582932,  0.2308651656,  0.0735827088, -0.1481160223, -0.2184525579, -0.3369811177, &
+ 0.0893971100,  0.1441732794 &
+]
+            layer2_weights(1:32, 29) = [ &
+ 0.1631238908, -0.1522116661, -0.1336139590,  0.0637518689,  0.1099477261, -0.0849541649,  0.0084682917, -0.1289510131,  0.0425885618,  0.1482296735, &
+ 0.0783816054, -0.2223215997,  0.0028599529,  0.1904786229,  0.2155728042, -0.1503246278,  0.0906948447, -0.0666011274, -0.0588258691, -0.1099980250, &
+ 0.1396580040, -0.0074391137,  0.0907027796, -0.1669961363, -0.0846143886,  0.0323888585, -0.1038891077,  0.0883824900, -0.2204702944, -0.1103439778, &
+-0.0298022758, -0.0205195174 &
+]
+            layer2_weights(1:32, 30) = [ &
+-0.1872231811,  0.3861066401, -0.0870928168,  0.1170621887,  0.1980874091,  0.0132153062,  0.0428617410,  0.2508750856,  0.1044341102,  0.0166788418, &
+ 0.1149108857,  0.2837053239, -0.0019895153,  0.2448900938, -0.1455145329, -0.0462355651,  0.0915762261,  0.3205310404, -0.2176602483,  0.1686853766, &
+-0.1176538765, -0.1219451800, -0.0488546304, -0.2114661336, -0.0890905038,  0.1240097582, -0.1174177751, -0.3827871084, -0.1636902988, -0.0568822920, &
+ 0.2331043631,  0.2063395977 &
+]
+            layer2_weights(1:32, 31) = [ &
+ 0.1231235564,  0.0757737756, -0.0603131726,  0.1353610009,  0.0032610018,  0.1038492844,  0.0979486927,  0.0296418015, -0.1252628714,  0.0414641984, &
+-0.0351501778,  0.0926117077, -0.0974576920,  0.2582189441, -0.0840801075,  0.1927076131,  0.0344644189,  0.4109881520,  0.0669185445, -0.0773903877, &
+-0.0707576051, -0.0253773984, -0.2061759084, -0.0421626046, -0.1539051086, -0.0065332823, -0.0338138603, -0.0794374421,  0.2127556652,  0.0834999382, &
+-0.1435322016, -0.0762003213 &
+]
+            layer2_weights(1:32, 32) = [ &
+-0.0121158985, -0.0643767267,  0.0539580658,  0.3580737412, -0.1251299232,  0.1916278750,  0.0928782821, -0.0484566763, -0.2007372230, -0.0863176137, &
+-0.2747007012,  0.0470850728,  0.1219455525,  0.0273590144,  0.3307634592, -0.0219381340,  0.0903386250, -0.1937419027,  0.0504855141,  0.0019050553, &
+-0.2159133554, -0.1560531110, -0.0381359532,  0.0396770015,  0.1295277029, -0.0338578969,  0.0010495326, -0.1863232404,  0.0860861912,  0.3404910564, &
+ 0.1031124443,  0.0514134131 &
+]
+
+
+            layer3_weights(1:32, 1) = [ &
+-0.0579215549,  0.0146420132, -0.1227206737,  0.1941815019, -0.1431942135,  0.0690158382, -0.0501288287,  0.3540378511, -0.0811970681,  0.1318759471, &
+ 0.1652861685, -0.0912750140,  0.1342694312, -0.0215979647, -0.0693446100,  0.1727937907,  0.0060384488, -0.0253281351, -0.0935869962, -0.3168341815, &
+ 0.2593422830,  0.3054114580, -0.1089748964, -0.0865707844,  0.1876394153,  0.0029513901,  0.0751998872, -0.0224187449, -0.0805526078, -0.1916990131, &
+ 0.0568734929,  0.0843900591 &
+]
+            layer3_weights(1:32, 2) = [ &
+ 0.0528422147,  0.0371650644,  0.1065977737, -0.0862513334, -0.1106912419,  0.0795302838, -0.1297461987, -0.0664388835,  0.1703414321,  0.2171066254, &
+-0.5825965405,  0.1038607359, -0.2451455146, -0.3149802685, -0.1513298005,  0.0970829278, -0.1830976456,  0.2079899758, -0.0594708398, -0.2299633324, &
+-0.0766171664,  0.1764775068,  0.0170838945, -0.0441799946, -0.1790540069,  0.0061362968,  0.1421956867,  0.0954979956,  0.1932055652, -0.0845590383, &
+-0.0661394447, -0.1055792496 &
+]
+            layer3_weights(1:32, 3) = [ &
+-0.0748353973, -0.0623695888,  0.0177209303, -0.4756168723, -0.0953950286, -0.2958254814,  0.1694172174,  0.3685793281, -0.0231575146, -0.0442934260, &
+ 0.2831435204, -0.1978860050, -0.0318216011, -0.0837065876,  0.1219574213, -0.1879668236,  0.3297121227, -0.2634077668,  0.1096325815,  0.2959384620, &
+ 0.3373695910,  0.1993748546,  0.2333392054,  0.1289109886, -0.0718220547,  0.1391229779,  0.1090204269, -0.0485328734, -0.1192069575, -0.2161547095, &
+-0.0781872794, -0.4511268437 &
+]
+            layer3_weights(1:32, 4) = [ &
+ 0.1548813432,  0.1019046754,  0.0007566229,  0.0940575600,  0.0507016219,  0.0042793127, -0.1396784633, -0.0803521201, -0.1195327193, -0.2733211517, &
+ 0.1540730894, -0.1521620750,  0.0882193446,  0.0346910618, -0.0381819457, -0.0534550063, -0.1189101338, -0.1452648938,  0.1326465458,  0.1077954322, &
+ 0.1909601390, -0.0901881680, -0.0582182966, -0.2345779687,  0.2553899586, -0.0506603047,  0.2151439190, -0.0468035452, -0.2102185488,  0.1427446157, &
+-0.1518421471,  0.1866040081 &
+]
+            layer3_weights(1:32, 5) = [ &
+ 0.0357055515,  0.0412967727,  0.0098299710, -0.1961978227,  0.1191656366,  0.1018888578,  0.0852370337, -0.0083361277,  0.0268955138,  0.1139931753, &
+ 0.1746631563, -0.1809637249,  0.1492141187, -0.2382625639,  0.1160378829,  0.2091253102, -0.0248442926,  0.0781992972,  0.1201252639, -0.1878382862, &
+ 0.1391318738, -0.0156327728,  0.1672469079,  0.0687578022,  0.1830511391, -0.0739216954, -0.2372042686, -0.0101766102, -0.0732324794, -0.0198305175, &
+-0.2736276388, -0.1063409001 &
+]
+            layer3_weights(1:32, 6) = [ &
+-0.5840328932, -0.1407650858,  0.1010196283, -0.0366366729, -0.0746396333, -0.1543665677, -0.1878494918,  0.0882667676,  0.3744930923,  0.0129988464, &
+-0.1226593032, -0.5929132700, -0.3144700527, -0.1903285086,  0.0467318892, -0.0980741382,  0.4123064578,  0.1789129078, -0.1645881385, -0.4874651134, &
+-0.5180588365,  0.1753406078,  0.2003857493, -0.1697437912, -0.1249329671, -0.2425850034,  0.0686768293,  0.6530852318, -0.0999158397,  0.3676847219, &
+ 0.2967756987, -0.6713649631 &
+]
+            layer3_weights(1:32, 7) = [ &
+ 0.1693132818,  0.0998918489,  0.0261650942,  0.0159089565, -0.1286686063, -0.0168776270,  0.1878797263,  0.0929687545, -0.0971906856, -0.0995690078, &
+ 0.1831919700, -0.0799575523,  0.0399046242, -0.0843523070, -0.1522218436,  0.1132204533, -0.1262251884, -0.0193310194, -0.1620775014, -0.0279542841, &
+-0.0982238278, -0.0732713789, -0.0046263202,  0.0956611708, -0.1318236142,  0.0138078621,  0.0744159073, -0.1167506352, -0.1265238672, -0.0234883390, &
+ 0.1311642379, -0.2147055268 &
+]
+            layer3_weights(1:32, 8) = [ &
+ 0.0283166878, -0.0189006906, -0.1513526589,  0.3425940275, -0.0467619821, -0.0120135024,  0.0595876686,  0.1745779812,  0.0729526356,  0.1545680463, &
+-0.1041631550,  0.1079604328,  0.1433067620, -0.0462499149, -0.0439785644, -0.1937562078,  0.0774670690, -0.0370047316,  0.1143968776, -0.0675703287, &
+-0.0795148313,  0.1184597462,  0.1258366704,  0.0033327825, -0.1446918249,  0.1765272766,  0.0471810810,  0.1455903947,  0.1227383092, -0.1142532378, &
+-0.1214676127,  0.0903564692 &
+]
+            layer3_weights(1:32, 9) = [ &
+ 0.3554486036,  0.0255840234, -0.0924669951,  0.2273630053, -0.0031055119,  0.0175272264, -0.0256707836,  0.2421224564, -0.0965424553,  0.1116201878, &
+ 0.0661755279,  0.2375846356,  0.3334654868,  0.1179557219, -0.0726998821,  0.0367289484,  0.0837255344,  0.0086913956,  0.1505098045,  0.0615351796, &
+ 0.2585644424,  0.0757061616,  0.0197817311, -0.2557562292,  0.0318016633,  0.0708568841, -0.0019626988, -0.2219992578,  0.2385401577,  0.0375331976, &
+-0.1824451983,  0.3536647856 &
+]
+            layer3_weights(1:32, 10) = [ &
+-0.1018628106, -0.1254106760, -0.0832448751, -0.0929308608,  0.1230429485,  0.0966218263, -0.0213692132,  0.1273305118, -0.0607157163, -0.0224588793, &
+ 0.1159745380, -0.1591311395,  0.1417728364, -0.0833326504, -0.0929668918,  0.1202997044,  0.2073263377,  0.3046419322, -0.0991647840, -0.0656748861, &
+-0.2348808795, -0.1730505973, -0.0128230304, -0.2726619840, -0.3946810961, -0.2602348030,  0.0064935638,  0.4436487854, -0.2066838741,  0.4057131410, &
+ 0.2761354446, -0.0728654638 &
+]
+            layer3_weights(1:32, 11) = [ &
+ 0.0762407333,  0.0714877099, -0.0020434360, -0.1051683873,  0.0849952325, -0.0963071734,  0.1909990758,  0.1336777806, -0.1326558143, -0.1165314615, &
+-0.0578716993, -0.0861443728,  0.0654970184, -0.0645986199, -0.0909980834,  0.0042245332,  0.1276087463,  0.0976912603, -0.1066150442,  0.1079638824, &
+-0.0213964041,  0.3229636252, -0.1232611090, -0.1236903965,  0.0076861079,  0.0708390251, -0.0491767935,  0.1242699176, -0.1293225735,  0.1536130905, &
+ 0.0952664092, -0.0598334335 &
+]
+            layer3_weights(1:32, 12) = [ &
+-0.1015968099, -0.3524762094,  0.3212112486, -0.2148547471, -0.1745349020,  0.0551803596, -0.0386515185, -0.5999667645,  0.0589411706, -0.0727319345, &
+ 0.0756680444, -0.1841331422, -0.0264054090, -0.0574358068,  0.0409935750, -0.2841666937, -0.3620820642, -0.1776480228, -0.0157153998, -0.0444329195, &
+-0.1392033994, -0.3591802120, -0.0707058087, -0.1061767712,  0.1578472853, -0.1682910919, -0.1786266565, -0.0165807121, -0.2219766974, -0.0560455360, &
+ 0.1113756895,  0.1825450659 &
+]
+            layer3_weights(1:32, 13) = [ &
+-0.0221086740,  0.0964638740, -0.0151802506,  0.1251362413, -0.0304637980,  0.0501733497, -0.0545752160, -0.0519199334,  0.0256851912, -0.1552140117, &
+-0.1585900038,  0.1353231221,  0.0093861995, -0.3197069168, -0.0020059193,  0.1953721344, -0.0686599165,  0.0077432897,  0.0245553888,  0.0206566341, &
+-0.2106777132, -0.1359497607,  0.0440854728,  0.0349068902, -0.1034260988,  0.0918518007,  0.0156669468, -0.0650387332,  0.0959956571, -0.0230717696, &
+-0.2638083398,  0.2204932868 &
+]
+            layer3_weights(1:32, 14) = [ &
+ 0.0002317293, -0.1350255311,  0.2038469017, -0.0813735127,  0.0573036820,  0.1500471085,  0.1637889594,  0.0471852794,  0.1475129873, -0.0128828548, &
+-0.1562796682,  0.0297840033, -0.0502009243,  0.2071503997,  0.0322792605, -0.0050770962,  0.0231646895, -0.1698585451,  0.1084699705,  0.0584795326, &
+ 0.1017591432,  0.0449578390,  0.0586089678, -0.1238994524,  0.1094441116,  0.0274563897,  0.1212991625, -0.0219321996,  0.0703805611,  0.0515042357, &
+-0.0386166237, -0.0689725801 &
+]
+            layer3_weights(1:32, 15) = [ &
+-0.1210278571, -0.1273546517,  0.0247712191, -0.1041015238, -0.2320012748, -0.0050894078, -0.1171534657,  0.0414292663, -0.0504276603, -0.3466194570, &
+-0.1329242438, -0.1194274500, -0.4217698574, -0.1611052305,  0.0135251824, -0.0026779778,  0.1639521569,  0.0846991986,  0.1017214209,  0.0248721484, &
+-0.3689411879, -0.1479068100,  0.0951395705,  0.2593114078,  0.1333230883, -0.0459903143,  0.0336776786,  0.2049821317, -0.0236291476,  0.2352727056, &
+-0.0883801058,  0.0880319104 &
+]
+            layer3_weights(1:32, 16) = [ &
+ 0.0126918666,  0.1765870899,  0.0415967256, -0.1272851229,  0.1229006052, -0.0711161047, -0.0444249883,  0.0461842604, -0.0055826255,  0.2525626123, &
+-0.1438094079,  0.1145108342,  0.0669430494, -0.1566086262, -0.1266769618, -0.0173225291, -0.3106718659,  0.1538210660, -0.0900151059,  0.1330670714, &
+-0.1087917238, -0.2457851022,  0.0326181911, -0.2260236740,  0.1828166544,  0.1728141159,  0.0119067831,  0.0979860350,  0.2441627234, -0.0004089754, &
+-0.3238975704,  0.0954247266 &
+]
+            layer3_weights(1:32, 17) = [ &
+-0.0146393515,  0.1520088613, -0.1128101572,  0.0726169273,  0.0758016184,  0.1550237834, -0.0920238569,  0.1118253022, -0.0943247825,  0.1361359954, &
+ 0.1339309514,  0.2086990029, -0.0085272258, -0.0114764040, -0.0146314865, -0.1817144752,  0.0250488371,  0.0374531783,  0.1067120284, -0.0247869343, &
+-0.0083885109,  0.1564830542, -0.1408957839, -0.0880772471,  0.1250514686,  0.0157755781, -0.1705760211,  0.1481976211, -0.1335927546, -0.0534937158, &
+-0.0107021993,  0.0395350382 &
+]
+            layer3_weights(1:32, 18) = [ &
+ 0.4715417027,  0.0078077931, -0.0121596800, -0.0715437010,  0.0618454106, -0.2563437819, -0.0341184214,  0.0716688260, -0.6284838915,  0.0004772232, &
+ 0.4119946063,  0.4715798199,  0.4797498584,  0.1478760391, -0.0950274244, -0.0332174115, -0.2586589456,  0.2596899569,  0.4156112969,  0.2663323879, &
+ 0.4558964968, -0.1632396579, -0.5123820305, -0.4650716186, -0.1645764410,  0.4792419374,  0.0014819411, -0.6897434592,  0.1596454680,  0.1920830011, &
+ 0.1671736389,  0.6825674176 &
+]
+            layer3_weights(1:32, 19) = [ &
+-0.0177239981,  0.1301103085, -0.1706322283, -0.1051509678, -0.0269988794,  0.1223160923,  0.0152755762,  0.1410729885, -0.0389489457,  0.0321797878, &
+ 0.0519478917,  0.0041378736,  0.0616131499,  0.0031699678, -0.1880215704, -0.0678303316, -0.1255507618, -0.1360892355, -0.0331695117,  0.0908555835, &
+ 0.1587606221,  0.0166335013,  0.2294459939,  0.1253689528,  0.0522899963,  0.1359067261, -0.1811324507,  0.1454591900, -0.0287763216, -0.0207652636, &
+ 0.0171306562, -0.0560507216 &
+]
+            layer3_weights(1:32, 20) = [ &
+ 0.1067427397,  0.0055715591,  0.0203110930,  0.1136057377, -0.1707335263, -0.0687394366,  0.0646280274,  0.0707590804, -0.1361794323, -0.1935334653, &
+-0.0734651312, -0.1871483177, -0.0932321623, -0.1288724840, -0.0184661038, -0.0218207743,  0.0918535963,  0.0353329815, -0.1138780788,  0.0773640722, &
+ 0.1755694300,  0.1375149488,  0.0186501257,  0.0425823927,  0.0959181935,  0.0730809346,  0.0482222810,  0.0349651240, -0.0248909853,  0.0584679358, &
+-0.0140806893,  0.0376954526 &
+]
+            layer3_weights(1:32, 21) = [ &
+-0.0873894393,  0.1801460832,  0.0291323438,  0.1034776419,  0.1790400296,  0.0572470203, -0.1521420926,  0.0875843987, -0.1004292890,  0.1420483738, &
+ 0.0433131382,  0.1071980894,  0.0735999644,  0.0065720296, -0.1119174659,  0.0100190500,  0.0672717616, -0.2007262856, -0.1101091430, -0.0228134338, &
+ 0.0547850765,  0.1382477283, -0.0117683308,  0.0617522560,  0.0232475400,  0.0738398284,  0.0216345992,  0.0489391945,  0.0127360001, -0.0759771615, &
+-0.0196207464, -0.0845533684 &
+]
+            layer3_weights(1:32, 22) = [ &
+ 0.1221824810, -0.1165501550, -0.1652913243,  0.1209611297,  0.0582423098,  0.1536858380, -0.0615252107,  0.0885357559, -0.0774790794,  0.1440636814, &
+ 0.0755902529, -0.0669533387, -0.0081706606,  0.0187727753,  0.1990179569,  0.0341017134,  0.1477197707, -0.0737976730, -0.0592581034, -0.1203946620, &
+ 0.0164388213,  0.1997904778,  0.0598102473,  0.0521713793, -0.0088387560,  0.0978212133, -0.0330312587, -0.0053311014,  0.0728993043, -0.1388196498, &
+ 0.1241133288, -0.1758080274 &
+]
+            layer3_weights(1:32, 23) = [ &
+-0.0944619253, -0.1207650006,  0.0451606773, -0.1132901981,  0.1421399415,  0.1549096107,  0.1452220380, -0.1783871502, -0.0711477846,  0.0433626585, &
+ 0.1534039080,  0.1861971021, -0.0439320281,  0.2484634668, -0.0160482991,  0.0065068030, -0.1114704683, -0.0072545144,  0.0170264542,  0.1909755617, &
+-0.1202685162,  0.1746907383, -0.1251187772, -0.1540227979, -0.2238946557, -0.1733903736, -0.1627979279,  0.2137109935,  0.0776607171, -0.0685398951, &
+ 0.1565594822, -0.0859981850 &
+]
+            layer3_weights(1:32, 24) = [ &
+ 0.1098107174,  0.2221200764,  0.0643417016,  0.1749002635, -0.0551580004,  0.1884199530,  0.0240839384,  0.1020656377, -0.0132323774, -0.0259170327, &
+ 0.1252982169,  0.0708094016, -0.0619543530,  0.1255990714,  0.0426026657, -0.0791390762,  0.1700637341, -0.0631683543,  0.1061572358, -0.0798238367, &
+ 0.0262517259,  0.0331651568, -0.1028392538,  0.0551097468,  0.0821931362,  0.1376333982,  0.0293142330, -0.0301542785,  0.0646835193,  0.0856347233, &
+-0.0325560942, -0.1689413339 &
+]
+            layer3_weights(1:32, 25) = [ &
+ 0.1040922925, -0.0590739921, -0.0341949873,  0.1438427120, -0.0413468629,  0.0750100613, -0.0315617546, -0.0313463472, -0.1965891719,  0.2274249047, &
+-0.1386675537, -0.1050804481,  0.0972855315,  0.0696362555, -0.0852594376,  0.0048291264,  0.0241039954, -0.1169529557, -0.0759925693,  0.0644102246, &
+-0.1061158776,  0.0368498676, -0.0332288444,  0.0207611024,  0.1593789309,  0.0883935317, -0.1447862834,  0.2099296600,  0.0960214362, -0.1355396956, &
+ 0.0258114822,  0.1171308383 &
+]
+            layer3_weights(1:32, 26) = [ &
+ 0.0280424152, -0.0800451711, -0.0095119663,  0.0636772588, -0.0727679506, -0.1568828523,  0.0380470827, -0.1176546440, -0.0995420218,  0.0299792718, &
+-0.1019566879,  0.0779466406,  0.0978158265,  0.1245714724, -0.1844553500, -0.1428093165, -0.0208188575,  0.0689293966,  0.0078935465, -0.1616631299, &
+ 0.1052151844, -0.2876091301, -0.1090760902, -0.0247923471,  0.0737971738, -0.0198237021,  0.1105288640,  0.1045769081, -0.1045366898, -0.1731378138, &
+ 0.1004312113,  0.0461623445 &
+]
+            layer3_weights(1:32, 27) = [ &
+-0.1244858131,  0.0888704360, -0.1188005134, -0.0969996601,  0.1900027692,  0.1493392140,  0.0561425872,  0.0858236849, -0.1127901152, -0.0390960090, &
+ 0.1273769140,  0.1235412881,  0.1009800509, -0.1287261695,  0.0651836395,  0.1365375221, -0.0204019621,  0.0893339291,  0.1292296350,  0.0528184772, &
+ 0.1673945040, -0.1484292001, -0.1334648430,  0.0975378230, -0.1163342893, -0.1590960771,  0.1241592690, -0.1493355036, -0.0331519134,  0.1102680564, &
+-0.1759792715, -0.0949657187 &
+]
+            layer3_weights(1:32, 28) = [ &
+-0.0887451321,  0.1326809376, -0.1434428245, -0.0075248023, -0.2221797854,  0.2170164585, -0.0130299935,  0.0814231485,  0.1100674644,  0.0904072225, &
+-0.0637267902,  0.0249627195,  0.0739180297,  0.1460629851, -0.1917958558,  0.0639036745,  0.1651969701, -0.1106257588,  0.1294278204, -0.0906689838, &
+ 0.0722899586,  0.2111825198, -0.0591323301,  0.1121760011,  0.0306431167,  0.0877273083,  0.0422809087,  0.0225935262,  0.0650804639, -0.1328833252, &
+-0.1659641713,  0.0333477333 &
+]
+            layer3_weights(1:32, 29) = [ &
+ 0.1787080467, -0.0389054865,  0.0843684599,  0.0107780676,  0.0523483492,  0.0734349787, -0.1225261241, -0.0450470932,  0.0864878297, -0.0157388300, &
+-0.0391194820,  0.0273064096, -0.0066842162, -0.0209620129,  0.0962452739,  0.0774494559, -0.0967279449,  0.1356370896,  0.1444187760,  0.1641688347, &
+ 0.0889828727,  0.0019980173,  0.0313547216, -0.1109580994,  0.1347457170, -0.0398417637, -0.0477392115, -0.0114771863, -0.0179015230,  0.0531405360, &
+ 0.0279500876, -0.0070738550 &
+]
+            layer3_weights(1:32, 30) = [ &
+-0.2531068921,  0.0347269699,  0.8025727272, -0.0605057739, -0.1582327038,  0.2738977373,  0.0569811314, -0.0158150159,  0.2769272327,  0.2476651222, &
+-0.1516073942, -0.4353372455, -0.5626572371,  0.1637736261,  0.5062782764,  0.1418517530,  0.2645407915,  0.0664425939, -0.2630662620,  0.0859691277, &
+-0.2586444914,  0.2176827341,  0.2403833568,  0.2135257870, -0.0649167821, -0.0186776910,  0.1326613724,  0.6567295790, -0.0167276207, -0.5230076313, &
+-0.1715138853, -0.2364667952 &
+]
+            layer3_weights(1:32, 31) = [ &
+-0.1017793790,  0.1540859044,  0.0507122241, -0.0239325557,  0.0713321716,  0.1113477126, -0.0761534497, -0.1524633616, -0.0552492850, -0.0489762798, &
+ 0.0727628171,  0.0938366875, -0.0616408177,  0.1460905075, -0.1724472195,  0.1220450476, -0.1118014604,  0.1216057688,  0.0245410856,  0.1193540916, &
+ 0.0487689041,  0.2582712471,  0.0178080816,  0.0721684918,  0.0752430260, -0.0860984996, -0.1789786667, -0.0801185966,  0.0545787290, -0.0072366316, &
+ 0.0104888482, -0.1179515421 &
+]
+            layer3_weights(1:32, 32) = [ &
+ 0.1438290030, -0.0203114115, -0.1214703172,  0.0250547547,  0.0984010473, -0.0258975755,  0.0541399345,  0.1122708321,  0.0031890546, -0.0299695283, &
+-0.1452441216,  0.2167771608,  0.1911009103,  0.1935942173, -0.2855168879,  0.0927204341,  0.0170626994, -0.1263113469,  0.1854839921,  0.2302021682, &
+ 0.0731906518, -0.0464924760,  0.1925985962,  0.1801403761,  0.0496763587,  0.1724988371, -0.0561274737, -0.0434159264,  0.2668100595, -0.0520284735, &
+-0.0313558094, -0.1734143198 &
+]
+
+
+            output_weights(1:32, 1) = [ &
+-0.0045281155, -0.1597152948, -0.0460099652, -0.0025508932, -0.0884845927,  0.1467855573,  0.0041260803, -0.0007767829, -0.0013523870,  0.0898480713, &
+ 0.0187363792,  0.1123772487, -0.0972590297,  0.0958322510, -0.2207941711, -0.0501207449,  0.0130652906, -0.0037513585, -0.0328474194, -0.0224859752, &
+-0.0109002786, -0.0008366914,  0.0953784436,  0.0164974779, -0.0053109103,  0.0595480762, -0.0760494173,  0.0194612015,  0.0071613491,  0.0803037509, &
+ 0.0091813188, -0.0030480083 &
+]
+            output_weights(1:32, 2) = [ &
+ 0.0699043721,  0.1110669523,  0.0077771377, -0.7096247673, -0.5847215652, -0.0175922737, -0.4389704466,  0.6367042661,  0.4803328514,  0.0010590445, &
+ 0.1675735265,  0.1017942652,  0.0164509080, -0.0644398183,  0.1149947047,  0.0222251955,  0.4795605540,  0.3395291567,  0.3792973459, -1.3242756128, &
+ 0.9959911108,  0.1895827204,  0.4789003432, -0.4278372228, -1.4017713070,  0.0494672619,  0.9160605073, -1.0481033325, -0.8603818417, -0.1939451545, &
+ 0.2836436927,  0.3809155822 &
+]
+
+            layer1_biases(1:32) = [ &
+-0.1078015268, -0.4778465629, -0.3625719845,  0.2830498815, -0.2650564313,  0.1462025642, -0.0878928304,  0.1620022357, -0.2898307145, -0.1016639248, &
+-0.1336399317,  0.1131760925,  0.0956382528, -0.1332168579,  0.0288118664, -0.2227571309,  0.0603070892, -0.2464540452,  0.1211605966, -0.0407834463, &
+ 0.4100317359,  0.0226878710,  0.2545425594,  0.1099948287,  0.2938761413, -0.7570680380, -0.0702513829, -0.1240841895, -0.0290280096,  0.2602085173, &
+ 0.1919144839, -0.0688754916 &
+]
+
+
+            layer2_biases(1:32) = [ &
+ 0.1035388932,  0.0126077514, -0.1149049923, -0.0850647017,  0.1341316700, -0.1803405881, -0.1528557539, -0.0715078935,  0.1383202076, -0.1862773746, &
+-0.0822500437,  0.0358601660,  0.0443651676,  0.1018057540,  0.1474925876,  0.1086824834, -0.0088471612, -0.1511817575, -0.1468213648, -0.1557656378, &
+ 0.1121935546, -0.0639647171, -0.1036411375,  0.0440893136, -0.1745995283,  0.1432687640, -0.1504167616, -0.1009665430, -0.0383438654,  0.0625534430, &
+-0.1543241888, -0.0065564704 &
+]
+
+
+            layer3_biases(1:32) = [ &
+ 0.2134867013, -0.1387482882,  0.0104923481,  0.0283193272,  0.1271818280, -0.3434773684,  0.1059562340, -0.1089424938,  0.2537083030, -0.1689787954, &
+-0.0138794780, -0.0096599171,  0.1191112846,  0.1180385426,  0.0814718604, -0.0500881709, -0.1004332751,  0.4116751552, -0.0541150831,  0.0631533265, &
+-0.0987029225,  0.0250221714,  0.0445029363, -0.1575466394, -0.0599614456, -0.0115099279, -0.0759625137,  0.0365331769, -0.0910752192, -0.2492311895, &
+ 0.1070130393,  0.0035013712 &
+]
+
+
+            output_biases(1:2) = [ &
+ 0.0562199168,  0.0864067078 &
+]
+
+            layernorm1_weights(1:32) = [ &
+ 0.6867561936,  1.2992978096,  1.0896100998,  0.9920492172,  1.4190220833,  0.8208751082,  0.9203736782,  0.9695737958,  1.0919325352,  0.6868705153, &
+ 0.9563002586,  1.1144137383,  0.6575047374,  0.9908282757,  0.9009212852,  1.0026528835,  0.6476902962,  1.1237058640,  0.9499540329,  0.9323387146, &
+ 0.9950718880,  0.8851909041,  0.9872491360,  0.9228182435,  1.0742440224,  1.2906409502,  0.8019291759,  1.0504279137,  1.1114180088,  0.9767540693, &
+ 0.9512097239,  1.0412009954 &
+]
+
+
+            layernorm2_weights(1:32) = [ &
+ 0.9725396037,  0.9880371690,  1.0415186882,  1.2137054205,  0.8970487714,  1.1730277538,  0.8693768382,  1.1055394411,  1.1609352827,  1.2325364351, &
+ 1.0331413746,  1.0007634163,  1.0499200821,  1.0359545946,  1.0244175196,  0.9785073996,  1.2865958214,  1.0019972324,  0.9711133242,  1.6189932823, &
+ 1.1111290455,  1.4783194065,  1.1225532293,  1.1553317308,  1.0084977150,  0.9942134619,  1.0274876356,  1.4569542408,  1.0096617937,  1.0976624489, &
+ 1.0149668455,  1.0597051382 &
+]
+
+
+            layernorm3_weights(1:32) = [ &
+ 0.6837076545,  1.1269047260,  1.6581737995,  0.6668562293,  0.9880831242,  1.0514655113,  0.9080343246,  0.9138463736,  0.3872651756,  1.4437724352, &
+ 0.9670526385,  1.0364234447,  0.9855275154,  0.9305492043,  1.2841271162,  0.9971376657,  0.8264301419,  0.1230122820,  0.9327057004,  0.9664526582, &
+ 0.9185149670,  0.9464305639,  0.9610239863,  0.9519522190,  0.9159896374,  0.9174557328,  0.9440175295,  0.8823719621,  0.9162994623,  1.0798017979, &
+ 0.9709554911,  0.7396094799 &
+]
+
+
+            layernorm1_biases(1:32) = [ &
+-0.0004874937,  0.2288067043,  0.1154019460, -0.0325482599,  0.1023658812, -0.0973362029,  0.0159031320, -0.0743077174, -0.0183275100,  0.1179084852, &
+ 0.0357178189, -0.0017501209, -0.1058127582,  0.0733374208, -0.0460933223,  0.1866461486, -0.1300867200,  0.0192305092, -0.0340914764, -0.0568803363, &
+-0.0426571369, -0.0546364896,  0.0298040565, -0.0441810898,  0.0032886593,  0.2321458161, -0.0360971652,  0.0714306533,  0.0209071673, -0.0621174127, &
+-0.0570343621, -0.0541109256 &
+]
+
+
+            layernorm2_biases(1:32) = [ &
+-0.0386011675, -0.0138252545,  0.0032119595, -0.0173714515, -0.0232404172,  0.0211267117, -0.0565586276, -0.0134062404, -0.1607925594,  0.0471320488, &
+-0.0282425191, -0.0764361247, -0.0568413176,  0.0023340692, -0.0149800917, -0.0061429767,  0.0549574271, -0.0204604324, -0.0722395629,  0.0829253420, &
+ 0.0259284060,  0.1152917668,  0.1239368692, -0.0309634916, -0.1815889031, -0.0229926333, -0.0373356491,  0.1476600170,  0.0057874732, -0.0126441279, &
+-0.0056212284, -0.2556489110 &
+]
+
+
+            layernorm3_biases(1:32) = [ &
+-0.4338902533, -0.0352661721,  0.0276374072, -0.4332666397, -0.0477411598, -0.0145910373, -0.0511473045, -0.0651583746, -0.6512171030, -0.1150789782, &
+-0.0284036174, -0.0714053959, -0.0254117530, -0.0304934122, -0.0480885170, -0.0312893018, -0.1086598858, -0.4111979604, -0.0847888812, -0.0396608971, &
+-0.0046987277, -0.0029997739, -0.0179320239, -0.0689898655, -0.0574269295, -0.0547297820, -0.0417852253, -0.1554607451, -0.0886176601, -0.0275614876, &
+-0.0522853583, -0.3209342659 &
+]
+
+
+            ! Write the model's metadata and pretty print a table of parameter
+            ! ranges and their units to the log.
+            if( myid == 0 ) then
+            write(*, "(A,A,/)" ) "MLP model metadata: ", model_metadata
+
+            write(*, "(/,A,/,/,A,F5.2,A,F5.2,A,/,A,F6.2,A,F6.2,A,/,A,F6.2,A,F6.2,A)" ) &
+                                 "MLP was trained with the following parameter ranges:", &
+                                 "    Log10(Radius):      [ ", RADIUS_LOG_RANGE(1), ",  ", RADIUS_LOG_RANGE(2), "] m", &
+                                 "    Temperature:        [", TEMPERATURE_RANGE(1), ", ", TEMPERATURE_RANGE(2), "] K", &
+                                 "    log10(Salt solute): [", SALT_SOLUTE_LOG_RANGE(1), ", ", SALT_SOLUTE_LOG_RANGE(2), "] kg"
+            write(*, "(A,F6.2,A,F6.2,A,/,A,F6.2,A,F6.2,A,/,A,F4.2,A,F4.2,A,/)" ) &
+                                 "    Air temperatures:   [", AIR_TEMPERATURE_RANGE(1), ", ", AIR_TEMPERATURE_RANGE(2), "] K", &
+                                 "    Relative humidity:  [", RH_RANGE(1) * 100.0, ", ", RH_RANGE(2) * 100.0, "] %", &
+                                 "    Air density:        [  ", RHOA_RANGE(1), ",   ", RHOA_RANGE(2), "] kg/m^3"
+            end if
 
         end subroutine initialize_model
 
@@ -2641,10 +809,16 @@ module droplet_model
             real*4, dimension(NUMBER_INPUTS)               :: normalized_input
             integer                                        :: output_index
 
+            ! Accumulator for intermediate layer's mean and standard deviation to
+            ! implement layer norm.
+            real*4                                         :: layer_sum      = 0.0
+            real*4                                         :: layer_variance = 0.0
+
+
             ! Normalize the non-temporal inputs so they're in the range [-1, 1].
             normalized_input(RADIUS_INDEX)          = (log10( input(RADIUS_INDEX) ) - RADIUS_LOG_MEAN) / RADIUS_LOG_WIDTH
             normalized_input(TEMPERATURE_INDEX)     = (input(TEMPERATURE_INDEX) - TEMPERATURE_MEAN) / TEMPERATURE_WIDTH
-            normalized_input(SALT_MASS_INDEX)       = (log10( input(SALT_MASS_INDEX) ) - SALT_MASS_LOG_MEAN) / SALT_MASS_LOG_WIDTH
+            normalized_input(SALT_SOLUTE_INDEX)     = (log10( input(SALT_SOLUTE_INDEX) ) - SALT_SOLUTE_LOG_MEAN) / SALT_SOLUTE_LOG_WIDTH
             normalized_input(AIR_TEMPERATURE_INDEX) = (input(AIR_TEMPERATURE_INDEX) - AIR_TEMPERATURE_MEAN) / AIR_TEMPERATURE_WIDTH
             normalized_input(RH_INDEX)              = (input(RH_INDEX) - RH_MEAN) / RH_WIDTH
             normalized_input(RHOA_INDEX)            = (input(RHOA_INDEX) - RHOA_MEAN) / RHOA_WIDTH
@@ -2652,22 +826,96 @@ module droplet_model
             ! Our integration time remains as is.
             normalized_input(TFINAL_INDEX)          = input(TFINAL_INDEX)
 
-            ! Compute x_1 = ReLU( W_1*I + b_1 ).
+            ! Compute x_1 = W_1*I + b_1 and accumulate this layer's sum.
+            layer_sum      = real( 0.0, kind=4 )
+            layer_variance = real( 0.0, kind=4 )
+
             do output_index = 1, NUMBER_HIDDEN_LAYER1_NEURONS
                 layer1_intermediate(output_index) = &
-                     max( sum( normalized_input(:) * layer1_weights(:, output_index) ) + layer1_biases(output_index), 0.0 )
+                     sum( normalized_input(:) * layer1_weights(:, output_index) ) + layer1_biases(output_index)
+                layer_sum                         = layer_sum + layer1_intermediate(output_index)
+
             end do
 
-            ! Compute x_2 = ReLU( W_2*x_1 + b_2 ).
+            layer_sum = layer_sum / NUMBER_HIDDEN_LAYER1_NEURONS
+
+            do output_index = 1, NUMBER_HIDDEN_LAYER1_NEURONS
+                layer_variance = layer_variance + (layer1_intermediate(output_index) - layer_sum)**2
+            end do
+            ! NOTE: We add a small epsilon to avoid division by zero.
+            layer_variance = sqrt( layer_variance / NUMBER_HIDDEN_LAYER1_NEURONS ) + 1.0e-6
+
+            ! Compute x_1 = SiLU( x_1 ) and fused layernorm.
+            do output_index = 1, NUMBER_HIDDEN_LAYER1_NEURONS
+                layer1_intermediate(output_index) = &
+                    (layer1_intermediate(output_index) - layer_sum) / layer_variance &
+                      * layernorm1_weights(output_index) + layernorm1_biases(output_index)
+
+                layer1_intermediate(output_index) = &
+                     layer1_intermediate(output_index) / (real( 1.0, kind=4 ) + &
+                                                          exp( real( -1.0, kind=4 ) * layer1_intermediate(output_index) ))
+            end do
+
+            ! Compute x_2 = W_2*x_1 + b_2 and accumulate this layer's sum.
+            layer_sum      = real( 0.0, kind=4 )
+            layer_variance = real( 0.0, kind=4 )
+
             do output_index = 1, NUMBER_HIDDEN_LAYER2_NEURONS
                 layer2_intermediate(output_index) = &
-                     max( sum( layer1_intermediate(:) * layer2_weights(:, output_index) ) + layer2_biases(output_index), 0.0 )
+                     sum( layer1_intermediate(:) * layer2_weights(:, output_index) ) + layer2_biases(output_index)
+
+                layer_sum                         = layer_sum + layer2_intermediate(output_index)
+
             end do
 
-            ! Compute x_3 = ReLU( W_3*x_2 + b_3 ).
+            layer_sum = layer_sum / NUMBER_HIDDEN_LAYER2_NEURONS
+
+            do output_index = 1, NUMBER_HIDDEN_LAYER2_NEURONS
+                layer_variance = layer_variance + (layer2_intermediate(output_index) - layer_sum)**2
+            end do
+            ! NOTE: We add a small epsilon to avoid division by zero.
+            layer_variance = sqrt( layer_variance / NUMBER_HIDDEN_LAYER2_NEURONS ) + 1.0e-6
+
+            ! Compute x_2 = SiLU( x_2 ) and fused layernorm.
+            do output_index = 1, NUMBER_HIDDEN_LAYER2_NEURONS
+                layer2_intermediate(output_index) = &
+                    (layer2_intermediate(output_index) - layer_sum) / layer_variance &
+                      * layernorm2_weights(output_index) + layernorm2_biases(output_index)
+
+                layer2_intermediate(output_index) = &
+                     layer2_intermediate(output_index) / (real( 1.0, kind=4 ) + &
+                                                          exp( real( -1.0, kind=4 ) * layer2_intermediate(output_index) ))
+            end do
+
+            ! Compute x_3 = W_3*x_2 + b_3 and accumulate this layer's sum.
+            layer_sum      = real( 0.0, kind=4 )
+            layer_variance = real( 0.0, kind=4 )
+
             do output_index = 1, NUMBER_HIDDEN_LAYER3_NEURONS
                 layer3_intermediate(output_index) = &
-                     max( sum( layer2_intermediate(:) * layer3_weights(:, output_index) ) + layer3_biases(output_index), 0.0 )
+                     sum( layer2_intermediate(:) * layer3_weights(:, output_index) ) + layer3_biases(output_index)
+
+                layer_sum                         = layer_sum + layer3_intermediate(output_index)
+
+            end do
+
+            layer_sum = layer_sum / NUMBER_HIDDEN_LAYER3_NEURONS
+
+            do output_index = 1, NUMBER_HIDDEN_LAYER3_NEURONS
+                layer_variance = layer_variance + (layer3_intermediate(output_index) - layer_sum)**2
+            end do
+            ! NOTE: We add a small epsilon to avoid division by zero.
+            layer_variance = sqrt( layer_variance / NUMBER_HIDDEN_LAYER3_NEURONS ) + 1.0e-6
+
+            ! Compute x_3 = SiLU( x_3 ) and fused layernorm.
+            do output_index = 1, NUMBER_HIDDEN_LAYER3_NEURONS
+                layer3_intermediate(output_index) = &
+                    (layer3_intermediate(output_index) - layer_sum) / layer_variance &
+                      * layernorm3_weights(output_index) + layernorm3_biases(output_index)
+
+                layer3_intermediate(output_index) = &
+                     layer3_intermediate(output_index) / (real( 1.0, kind=4 ) + &
+                                                          exp( real( -1.0, kind=4 ) * layer3_intermediate(output_index) ))
             end do
 
             ! Compute O = W_4*x_3 + b_4.
@@ -2675,13 +923,15 @@ module droplet_model
                 output(output_index) = sum( layer3_intermediate(:) * output_weights(:, output_index) ) + output_biases(output_index)
             end do
 
-            output(RADIUS_INDEX)      = output(RADIUS_INDEX) + normalized_input(RADIUS_INDEX)
-            output(TEMPERATURE_INDEX) = output(TEMPERATURE_INDEX) + normalized_input(TEMPERATURE_INDEX)
+                ! Add the model's input to its output since it's learned to compute a delta rather
+                ! than the final answer.
+                output(RADIUS_INDEX)      = output(RADIUS_INDEX)*(10.0**(2.0*RADIUS_LOG_MEAN)) + input(RADIUS_INDEX)**2
+                output(TEMPERATURE_INDEX) = output(TEMPERATURE_INDEX) + normalized_input(TEMPERATURE_INDEX)
+            
 
-            ! Scale the outputs to the expected ranges.
-            output(RADIUS_INDEX)      = 10.0**(output(RADIUS_INDEX) * RADIUS_LOG_WIDTH + RADIUS_LOG_MEAN)
-            output(TEMPERATURE_INDEX) = output(TEMPERATURE_INDEX) * TEMPERATURE_WIDTH + TEMPERATURE_MEAN
+                ! Scale the outputs to the expected ranges.
+                output(RADIUS_INDEX)      = sqrt(output(RADIUS_INDEX))
+                output(TEMPERATURE_INDEX) = output(TEMPERATURE_INDEX) * TEMPERATURE_WIDTH + TEMPERATURE_MEAN
 
-        end subroutine estimate
-
+            end subroutine estimate
 end module droplet_model

@@ -9,6 +9,7 @@ import warnings
 import numpy as np
 import torch
 from scipy.integrate import solve_ivp
+from scipy.stats.qmc import Sobol
 
 # Temperature delta, in Kelvin, relative to the surrounding air to sample
 # droplet temperatures from.  This constrains generated droplets to physically
@@ -31,13 +32,13 @@ DROPLET_DELTA_AIR_TEMPERATURE = 3.0
 # NOTE: We force the data type of each array to avoid NumPy's "help" should
 #       someone specify both ranges as integers.
 #
-DROPLET_RADIUS_LOG_RANGE        = np.array( (-8.0, -3.0),   dtype=np.float64 )
-DROPLET_TEMPERATURE_RANGE       = np.array( (273.0, 310.0), dtype=np.float64 )
-DROPLET_SALT_SOLUTE_LOG_RANGE   = np.array( (-22.0, -8.0),  dtype=np.float64 )
-DROPLET_AIR_TEMPERATURE_RANGE   = np.array( (273.0, 310.0), dtype=np.float64 )
-DROPLET_RELATIVE_HUMIDITY_RANGE = np.array( (0.55, 1.1),    dtype=np.float64 )
-DROPLET_RHOA_RANGE              = np.array( (0.8, 1.3),     dtype=np.float64 )
-DROPLET_TIME_LOG_RANGE          = np.array( (-2.0, 1.0),    dtype=np.float64 )
+DROPLET_RADIUS_LOG_RANGE        = np.array( (-7.0, -4.5),     dtype=np.float64 )
+DROPLET_TEMPERATURE_RANGE       = np.array( (284.0, 295.0),   dtype=np.float64 )
+DROPLET_SALT_SOLUTE_LOG_RANGE   = np.array( (-17.89, -17.87), dtype=np.float64 )
+DROPLET_AIR_TEMPERATURE_RANGE   = np.array( (284.0, 295.0),   dtype=np.float64 )
+DROPLET_RELATIVE_HUMIDITY_RANGE = np.array( (0.98, 1.07),     dtype=np.float64 )
+DROPLET_RHOA_RANGE              = np.array( (0.99, 1.01),     dtype=np.float64 )
+DROPLET_TIME_LOG_RANGE          = np.array( (-1.2, -0.85),    dtype=np.float64 )
 
 # Tolerances for BDF solves.  Per solve_ivp() the effective tolerance is:
 #
@@ -152,76 +153,6 @@ def display_parameter_ranges( parameter_ranges, display_type=DisplayType.HUMAN, 
 
     # Display the range.
     print( display_str )
-
-def droplet_equilibrium( droplet_parameters ):
-    """
-    Uses ported BE code to calculate the droplet equilibrium.
-
-    Takes 1 Argument:
-      droplet_parameters - NumPy array of parameters to calculate the equilibria of.
-                           Sized number_droplets x 6.  May either be
-                           1D, for a single droplet, or 2D for multiple droplets.
-                           The parameters are, in order: radius, particle temperature,
-                           solute term (NOT salt mass), air temperature, relative humidity,
-                           and air density.
-
-    Returns 2 Values:
-      equilibria - Numpy array of radius/temperature equilibria. If no equilibrium is found, returns
-                   the inputed radius/temperature. This follows the behavior found in NTLP.
-      flags      - Whether a successful equilibrium was found. Note: if RH > 100%, the equilibrium
-                   only has imaginary roots ==> there will be flags.
-    """
-
-    r           = droplet_parameters[..., 0]
-    Tp          = droplet_parameters[..., 1]
-    solute_term = droplet_parameters[..., 2]
-    Tf          = droplet_parameters[..., 3]
-    RH          = droplet_parameters[..., 4]
-    rhoa        = droplet_parameters[..., 5]
-
-    rhow = np.float64( RHOW )
-    rhos = np.float64( 2000 )
-    Mw   = np.float64( 0.018015 )
-    Ru   = np.float64( 8.3144 )
-    Gam  = np.float64( 7.28e-2 )
-
-    flag  = np.zeros_like( r )
-
-    einf = 610.94*np.exp((17.6257*(Tf-273.15))/(243.04+(Tf-273.15)))  #NTLP
-    qinf = RH/rhoa*(einf*Mw/Ru/Tf)
-    #qinf = RH/rhoa*(einf*Mw/Ru/Tf)
-
-    pi2   = 2.0 * np.pi
-
-    a = -(2*Mw*Gam)/(Ru*rhow*Tf)/np.log((Ru*Tf*rhoa*qinf)/(Mw*einf))
-    # This line was changed from BE to account for using
-    # solute term instead of salt mass. There was no rhow
-    # term present in the original equation, so 1/rhow had
-    # to be added to correct for the rhow coefficient in solute_term.
-    c = (solute_term)/((2.0/3.0)*pi2*rhow)/np.log((Ru*Tf*rhoa*qinf)/(Mw*einf))
-
-    Q = (a**2.0)/9.0
-    R = (2.0*a**3.0+27.0*c)/54.0
-    M = R**2.0-Q**3.0
-    val = (R**2.0)/(Q**3.0)
-
-    guess = Q
-
-    mask = M<0
-
-    theta = np.arccos(R/np.sqrt(Q**3.0))
-    guess[mask] = (-(2*np.sqrt(Q)*np.cos((theta-pi2)/3.0))-a/3.0)[mask]
-
-    guess[guess<0] = (-(2*np.sqrt(Q)*np.cos((theta+pi2)/3.0))-a/3.0)[guess < 0]
-
-    S = -(R/np.abs(R))*(np.abs(R)+np.sqrt(M))**(1.0/3.0)
-    T = Q/S
-    guess[~mask] = (S + T - a/3.0)[~mask]
-
-    flag[guess < 0] = 1
-    guess[guess < 0] = r[guess < 0]
-
-    return guess, flag
 
 def dydt( t, y, parameters ):
     """
@@ -365,111 +296,10 @@ def dydt( t, y, parameters ):
 
     return [dy1dt, dy2dt]
 
-def dydt_mass( t, y, parameters ):
+def generate_random_droplets_sobol( number_droplets, max_salinity=np.inf, normalize_flag=False, sobol_index=0, sobol_seed=0 ):
     """
-    Differential equations governing a water droplet's radius and temperature as
-    a function of time, given the specified physical parameters.
-
-    NOTE: This function does *NOT* handle PyTorch tensors like dydt() does!
-
-    Adapted from code provided by David Richter (droplet_integrator.py) in August 2024.
-    Changes made include:
-
-      - Accepting NumPy arrays for the parameters instead of having hard-coded values.
-
-        NOTE: While it allows for multiple parameters to be specified via additional rows
-              this does not necessarily work with scipy.solve_ivp()!
-
-      - Parameters are promoted to 64-bit floating point values so all internal
-        calculations are performed at maximum precision, resulting in 64-bit outputs.
-        It is the caller's responsibility for casting the results to a different precision.
-
-    Takes 3 arguments:
-
-      t          - Unused argument.  Required for the use of scipy.solve_ivp().
-      y          - NumPy array of droplet radii and temperatures.  May be specified
-                   as either a 1D vector (of length 2), or a 2D array (sized
-                   number_droplets x 2) though must be shape compatible with the
-                   parameters array.
-      parameters - NumPy array of droplet parameters containing salt mass, air temperature,
-                   relative humidity, and rhoa.  May be specified as either a
-                   1D vector (of length 2), or a 2D array (sized number_droplets x 2)
-                   though must be shape compatible with the y array.
-
-    Returns 2 values:
-
-      dradius_dt      - The derivative of the droplet's radius with respect to time, shaped
-                        number_droplets x 1.
-      dtemperature_dt - The derivative of the droplet's temperature with respect to time,
-                        shaped number_droplets x 1.
-
-    """
-
-    #
-    # NOTE: We work in 64-bit precision regardless of the input
-    #       so we get an as accurate as possible answer.
-    #
-
-    m_s  = parameters[0, ...].astype( "float64" )
-    Tf   = parameters[1, ...].astype( "float64" )
-    RH   = parameters[2, ...].astype( "float64" )
-    rhoa = parameters[3, ...].astype( "float64" )
-
-    rhow = np.float64( RHOW )
-    rhos = np.float64( 2000 )
-    #Cpp  = np.float64( 4190 )  #CM1
-    Cpp  = np.float64( 4179 )  #NTLP
-    Mw   = np.float64( 0.018015 )
-    Ru   = np.float64( 8.3144 )
-    Ms   = np.float64( 0.05844 )
-    Gam  = np.float64( 7.28e-2 )
-    #Ion  = np.float64( 2.0 )
-    #Os   = np.float64( 1.093 )
-    kap  = np.float64( 1.2 )
-    Shp  = np.float64( 2 )
-    Sc   = np.float64( 0.615 )
-    Pra  = np.float64( 0.715 )
-    Cpa  = np.float64( 1006.0 )
-    nuf  = np.float64( 1.57e-5 )
-    Lv   = np.float64( (25.0 - 0.02274*26)*10**5 )
-    Nup  = np.float64( 2 )
-
-    #einf = 611.2*np.exp(17.67*(Tf-273.15)/(Tf-29.65))  #CM1, Bolton (1980, MWR)
-    einf = 610.94*np.exp((17.6257*(Tf-273.15))/(243.04+(Tf-273.15)))  #NTLP
-
-    qinf = RH/rhoa*(einf*Mw/Ru/Tf)
-
-    Volp = 4/3*np.pi*y[0]**3
-    rhop = (m_s + Volp*rhow)/Volp
-    taup = rhop*(2*y[0])**2/18/nuf/rhoa
-
-
-    #qstar = einf*Mw/Ru/y[1]/rhoa*np.exp(Lv*Mw/Ru*(1/Tf - 1/y[1]) + 2*Mw*Gam/Ru/rhow/y[0]/y[1] - Ion*Os*m_s*(Mw/Ms)/(Volp*rhow))
-    #exp_stuff = Lv*Mw/Ru*(1/Tf - 1/y[1]) + 2*Mw*Gam/Ru/rhow/y[0]/y[1] - (kap*m_s*rhow/rhos)/(Volp*rhow)
-    #print(f"exp_stuff = {exp_stuff:.17g}")
-    #qstar = einf*Mw/Ru/y[1]/rhoa*np.exp(exp_stuff)
-    term1 = Lv*Mw/Ru*(1/Tf - 1/y[1])
-    term2 = 2*Mw*Gam/Ru/rhow/y[0]/y[1]
-    term3 = (kap*m_s*rhow/rhos)/(Volp*rhow) # !!! Shouldn't this be Mw/Ms not density??
-    exp_stuff = term1 + term2  - term3
-    #if exp_stuff > 10.0:
-    #    print(f"exp_stuff = {exp_stuff:.17g}")
-    #    print(f"term1 = {term1:.17g}")
-    #    print(f"term2 = {term2:.17g}")
-    #    print(f"term3 = {term3:.17g}")
-    #    print(f"Volp = {Volp:.17g}")
-    qstar = einf*Mw/Ru/y[1]/rhoa*np.exp(exp_stuff)
-
-
-    dy1dt = 1/9*Shp/Sc*rhop/rhow*y[0]/taup*(qinf - qstar)
-    dy2dt = -1/3*Nup/Pra*Cpa/Cpp*rhop/rhow/taup*(y[1] - Tf) + 3*Lv/y[0]/Cpp*dy1dt
-
-    return [dy1dt, dy2dt]
-
-def generate_random_droplets( number_droplets, max_salinity=np.inf, normalize_flag=False ):
-    """
-    Generates random droplet parameters.  Takes care to conditionally sample
-    parameters so as to create physically realistic droplets.
+    Generates random droplet parameters with sobol sequences. Takes care to
+    conditionally sample parameters so as to create physically realistic droplets.
 
     Takes 3 arguments:
 
@@ -488,6 +318,8 @@ def generate_random_droplets( number_droplets, max_salinity=np.inf, normalize_fl
                         normalized into the range of [-1, 1].  If omitted,
                         defaults to False and the droplets are in physical
                         units.
+      sobol_index     - Seeks to `sobol_index x number_droplets` when sampling sobol
+                        sequence.
 
     Returns 1 value:
 
@@ -496,15 +328,24 @@ def generate_random_droplets( number_droplets, max_salinity=np.inf, normalize_fl
 
     """
 
-    # Uniformly sample the normalized ranges to start.
-    droplet_parameters = np.reshape( np.random.uniform( -1, 1, number_droplets*6 ),
-                                     (number_droplets, 6) ).astype( "float32" )
+    # Draw a 7-dimensional Sobol sequence: 6 dims for the base parameters and
+    # 1 dim for the conditional temperature delta.  scramble=True randomizes the
+    # sequence so repeated calls produce independent (not identical) coverage.
+    # Sobol discrepancy properties are optimal at power-of-2 sample counts.
+
+    generator = Sobol( d=7, scramble=True, seed=sobol_seed )
+    if sobol_index > 0:
+        generator.fast_forward( sobol_index )
+
+    samples = 2.0 * generator.random( number_droplets ) - 1.0
+
+    droplet_parameters = samples[:, :6].astype( "float32" )
     droplet_parameters = scale_droplet_parameters( droplet_parameters )
 
     # Conditionally sample the droplets' temperatures based on their surrounding
     # air temperatures.
     droplet_parameters[:, 1] = (droplet_parameters[:, 3] +
-                                DROPLET_DELTA_AIR_TEMPERATURE * np.random.uniform( -1, 1, number_droplets ))
+                                DROPLET_DELTA_AIR_TEMPERATURE * samples[:, 6])
 
     # Ensure the salt solute terms respect the maximum salinity requested.  This
     # calculates the maximum admissible salt solute term for the input droplet
@@ -864,6 +705,51 @@ def scale_droplet_parameters( droplet_parameters, parameter_ranges={} ):
 
     return scaled_droplet_parameters
 
+def scale_radius_from_normalized_to_quadratic( normalized_radii, bar_r, sigma_r ):
+    """
+    Scales radii from normalized radii (proportional to log r) to a quadratic (r^2) scale.
+
+    Takes 3 Arguments:
+      normalized_radii - NumPy or PyTorch array of normalized radius data.
+                         Data type determines whether NumPy or Torch functions
+                         are used.
+      bar_r            - The average of the log radius range
+      sigma_r          - The width of the log radius range
+
+    Returns 1 Value:
+      quadratic_radii  - The input radii scaled to a r^2 range.
+    """
+
+    if isinstance( normalized_radii, np.ndarray ):
+        xp = np
+    else:
+        xp = torch
+
+    return 10.0 ** (normalized_radii * sigma_r + 2 * bar_r)
+
+def scale_radius_from_quadratic_to_normalized( normalized_radii, bar_r, sigma_r ):
+    """
+    Scales radii from normalized radii (proportional to log r) to a quadratic (r^2) scale.
+
+    Takes 3 Arguments:
+      quadratic_radii  - NumPy or PyTorch array of quadratic radius data.
+                         Data type determines whether NumPy or Torch functions
+                         are used.
+      bar_r            - The average of the log radius range
+      sigma_r          - The width of the log radius range
+
+    Returns 1 Value:
+      normalized_radii  - The normalized radii
+    """
+
+    if isinstance( normalized_radii, np.ndarray ):
+        xp = np
+    else:
+        xp = torch
+
+    return ( xp.log10( normalized_radii ) - 2.0*bar_r ) / sigma_r
+
+
 def solve_ivp_float32_outputs( dydt, t_span, y0, atol=BDF_TOLERANCE_ABSOLUTE, rtol=BDF_TOLERANCE_RELATIVE, **kwargs ):
     """
     Solves an initial value problem and returns the solutions in 32-bit precision.
@@ -876,7 +762,7 @@ def solve_ivp_float32_outputs( dydt, t_span, y0, atol=BDF_TOLERANCE_ABSOLUTE, rt
           same arguments and returns the same values.  See that function's
           help for a (way more) detailed explanation of each argument and value.
 
-    Takes 6 arguments:
+    Takes 4 arguments:
 
       dydt   - Right-hand side of the system to solve.  The calling signature
                is 'dydt( t, y, parameters )'.
@@ -939,13 +825,13 @@ def solve_ivp_float32_outputs( dydt, t_span, y0, atol=BDF_TOLERANCE_ABSOLUTE, rt
                            "inputs=np.array( [{:.15g}, {:.15g}] ), "
                            "parameters=np.array( [{:.15g}, {:.15g}, {:.15g}, {:.15g}] ), "
                            "time={:15g}, kwargs={}\n{:s}.".format(
-                               float( y0[0] ),
-                               float( y0[1] ),
-                               float( kwargs["args"][0][0] ),
-                               float( kwargs["args"][0][1] ),
-                               float( kwargs["args"][0][2] ),
-                               float( kwargs["args"][0][3] ),
-                               float( t_span[-1] ),
+                               y0[0],
+                               y0[1],
+                               kwargs["args"][0][0],
+                               kwargs["args"][0][1],
+                               kwargs["args"][0][2],
+                               kwargs["args"][0][3],
+                               t_span[-1],
                                kwargs,
                                failure_message ) )
 

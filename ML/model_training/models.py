@@ -1,5 +1,4 @@
 import copy
-import datetime
 import functools
 import pickle
 import sys
@@ -10,25 +9,15 @@ import pandas as pd
 import torch
 import torch.nn as nn
 
-from .data import get_evaluation_column_names, read_training_file
-from .names import generate_name
-from .physics import dydt,\
+from data import read_training_file
+from physics import dydt,\
                      get_parameter_ranges, \
                      normalize_droplet_parameters, \
                      scale_droplet_parameters, \
+                     scale_radius_from_normalized_to_quadratic, \
+                     scale_radius_from_quadratic_to_normalized, \
                      solve_ivp_float32_outputs, \
                      temporary_parameter_ranges
-from .wandb import NoOpWandB, log_wandb_checkpoint, prepare_wandb_run
-
-# See if Weights and Biases is installed.  Load the package if it is.
-try:
-    import wandb
-
-    wandb_available_flag = True
-except ImportError:
-    wandb_available_flag = False
-
-    from .wandb import NoOpWandB
 
 class SimpleNet( nn.Module ):
     """
@@ -42,11 +31,11 @@ class SimpleNet( nn.Module ):
 
         # Generate a random name if we aren't provided with one.
         if model_name is None:
-            model_name = generate_name()
+            model_name = "default"
 
         self._model_name = model_name
         self._activation = torch.relu
-        self._norms      = torch.nn.ModuleList( [] )
+        self._norms      = []
 
         self._layer_sizes    = [32, 32, 32]
         self._number_inputs  = 7
@@ -202,53 +191,128 @@ class ResidualNet( SimpleNet ):
 
         return out
 
-class BiggerResidualNet_4x128( ResidualNet ):
+class QuadraticResidualNet_scaled_layernorm( ResidualNet ):
     """
-    5-layer multi-layer perceptron (MLP) with ReLU activations.  This aims to
+    4-layer multi-layer perceptron (MLP) with Silu activations.  This aims to
     balance parameter count vs computational efficiency so that inferencing with
     it is faster than Gauss-Newton iterative solvers.
 
-    This residual network learns the delta between the input particle size and
-    temperature and the outputs, given the provided background conditions.
-    """
+    This residual network learns the delta between the square of the input particle size
+    and temperature and the outputs, given the provided background conditions.
 
-    def __init__( self, model_name=None ):
+    "Quadratic" refers to the model learning the residual on the radius squared
+    instead of the log radius. This residual keeps a consistent scale across
+    various orders of magnitude.
+
+    NOTE: This calculates a scaled residual of the form:
+
+            residual / 10^(2 * r_bar)
+
+          Since r_bar is typically negative, this is equivalent of learning:
+
+            residual * 10^(2 * |r_bar|)
+
+    """
+    def __init__( self, model_name=None, log_radius_range=None ):
         super().__init__( model_name=model_name )
 
-        self._layer_sizes    = [128, 128, 128, 128]
-        self._number_inputs  = 7
-        self._number_outputs = 2
+        self._activation     = torch.nn.SiLU()
 
-        self._layer_names    = ["fc1",
-                                "fc2",
-                                "fc3",
-                                "fc4",
-                                "fc5"]
+        self._norms          = torch.nn.ModuleList([torch.nn.modules.normalization.LayerNorm( [self._layer_sizes[0]] ),
+                                torch.nn.modules.normalization.LayerNorm( [self._layer_sizes[1]] ),
+                                torch.nn.modules.normalization.LayerNorm( [self._layer_sizes[2]] )])
 
-        #
-        # NOTE: These sizes were chosen without any consideration other than
-        #       creating a small network (wrt parameter count) and should have
-        #       good computational efficiency (wrt memory alignment and cache
-        #       lines).  No effort has been spent to improve upon the initial
-        #       guess.
-        #
-        self.fc1 = nn.Linear( self._number_inputs,  self._layer_sizes[0] )
-        self.fc2 = nn.Linear( self._layer_sizes[0], self._layer_sizes[1] )
-        self.fc3 = nn.Linear( self._layer_sizes[1], self._layer_sizes[2] )
-        self.fc4 = nn.Linear( self._layer_sizes[2], self._layer_sizes[3] )
-        self.fc5 = nn.Linear( self._layer_sizes[3], self._number_outputs )
+        # Calculate the delta and mean of the log-radius parameter range.  Use
+        # the range provided and fall back to the current range if necessary.
+        local_log_radius_range = log_radius_range
+        if log_radius_range is None:
+            local_log_radius_range = get_parameter_ranges()["radius"]
+
+        self.sigma_r = (local_log_radius_range[1] - local_log_radius_range[0])
+        self.bar_r   = (local_log_radius_range[1] + local_log_radius_range[0]) / 2.0
+
+        # Scaling factor to scale model outputs closer to O(1)
+        # Quadratic residuals output on ~O(10^-12)
+        # This scale factor maintains backwards compatibility
+        # With volatile emotion
+        self.radius_scale_factor = 10.0 ** (2*self.bar_r)
+
+    def quadratic_forward( self, x ):
+        """
+        A forward function that outputs the quadratic radius residual instead
+        of normalized droplet parameters. Used for training the network.
+
+        This avoids applying log10 to negative radii, making it more suitable
+        for training networks when early approximations may yield unphysical results.
+        """
+
+        out = self._activation( self._norms[0]( self.fc1( x ) ) )
+        out = self._activation( self._norms[1]( self.fc2( out ) ) )
+        out = self._activation( self._norms[2]( self.fc3( out ) ) )
+        out = self.fc4( out )
+
+        # Only do the residual on temperature
+        out[..., 1] += x[..., 1]
+
+        # Output quadratic residual and normalized temperature
+        return out
 
     def forward( self, x ):
-        # Add the input to the final result to force the model to learn the
-        # delta instead of the approximation itself.
-        out = self._activation( self.fc1( x ) )
-        out = self._activation( self.fc2( out ) )
-        out = self._activation( self.fc3( out ) )
-        out = self._activation( self.fc4( out ) )
-        out = self.fc5( out )
-        out += x[..., 0:2]
+        """
+        A forward function that outputs the new normalized radius and temperature.
 
+        Calls quadratic_forward. Then adds the quadratic radius residual and
+        normalizes the result.
+        """
+        # Get the output in terms of the quadratic residual and normalized temperature
+        out = self.quadratic_forward( x )
+
+        # Scale radius output based on scale_factor
+        out[..., 0] *= self.radius_scale_factor
+
+        # Add the quadratic residual to the quadratic radius input
+        quadratic_input_radii  = scale_radius_from_normalized_to_quadratic( x[..., 0],
+                                                                            self.bar_r,
+                                                                            self.sigma_r )
+        quadratic_output_radii = quadratic_input_radii + out[..., 0]
+
+        # Convert back to normalized parameters
+        out[..., 0] = scale_radius_from_quadratic_to_normalized( quadratic_output_radii, self.bar_r, self.sigma_r )
+
+        # Output normalized radius/temperature
         return out
+
+    def quadratic_forward( self, x ):
+        """
+        A forward function that outputs the quadratic radius residual instead
+        of normalized droplet parameters. Used for training the network.
+
+        This avoids applying log10 to negative radii, making it more suitable
+        for training networks when early approximations may yield unphysical results.
+        """
+
+        out = self._activation( self._norms[0]( self.fc1( x ) ) )
+        out = self._activation( self._norms[1]( self.fc2( out ) ) )
+        out = self._activation( self._norms[2]( self.fc3( out ) ) )
+        out = self.fc4( out )
+
+        # Only do the residual on temperature
+        out[..., 1] += x[..., 1]
+
+        # Output quadratic residual and normalized temperature
+        return out
+
+def weighted_l1_loss( approximations, base_truth, alpha=1.0 ):
+    """
+    Scaled MAE
+
+    The loss on terms in the first output will be scaled by alpha.
+    """
+    differences = torch.abs( approximations - base_truth )
+
+    differences[:, 0] *= alpha
+
+    return torch.mean( differences )
 
 class InvalidCheckpointError( ValueError ):
     """
@@ -301,6 +365,12 @@ def create_new_model( model_class_name, model_name=None, parameter_ranges={} ):
     module_name   = __name__
     module_handle = sys.modules[module_name]
 
+    if model_class_name == "OptimizedModule":
+        model = QuadraticResidualNet_scaled_layernorm( model_name=model_name )
+        model = torch.compile( model )
+
+        return model
+
     # Blow up if this isn't known to the package.
     if model_class_name not in module_handle.__dict__:
         raise ValueError( "Model class '{:s} does not exist in droplet_approximation'!".format(
@@ -316,6 +386,11 @@ def create_new_model( model_class_name, model_name=None, parameter_ranges={} ):
             model_class_name ) )
 
     # Instantiate it with the default arguments.
+    # If it is derived from a quadratic residual net, initialize with log radius range
+    if isinstance( obj, QuadraticResidualNet_scaled_layernorm ):
+        model = obj( model_name=model_name, log_radius_range=parameter_ranges["radius"] )
+        return model
+
     model = obj( model_name=model_name )
 
     return model
@@ -804,7 +879,7 @@ def do_iterative_inference( input_parameters, integration_times, model, device, 
 
     return scale_droplet_parameters( normalized_data[:, :2] )
 
-def generate_fortran_module( output_path, model_name, model, parameter_ranges={}, silu_flag=False, layer_norm_flag=False ):
+def generate_fortran_module( output_path, model_name, model, parameter_ranges={}, silu_flag=False, layer_norm_flag=False, quadratic_flag=False, learnable_layer_norm=False ):
     """
     Creates a Fortran 2003 module that allows use of the supplied model with a
     batch size of 1 during inference.
@@ -828,15 +903,21 @@ def generate_fortran_module( output_path, model_name, model, parameter_ranges={}
                          normalization for each of the model's layers.  When True,
                          each layer's output is normalized before applying it as the
                          next layer's input.  If omitted, defaults to False.
+      quadratic_flag   - Optional flag specifies whether the model's layers output
+                         a scaled quadratic residual instead of the log radius residual.
+                         When True, the final radius output is square rooted to yield a
+                         linear radius term. When False, the output is assumed to be a
+                         normalized radius and is scaled accordingly. If omitted,
+                         defaults to False.
 
     Returns nothing.
 
     """
 
     # Ensure we have a model we know how to serialize.
-    if not isinstance( model, SimpleNet ):
-        raise ValueError( "Provided model is type '{:s}' and not a subclass of SimpleNet!".format(
-            str( type( model ) ) ) )
+    #if not isinstance( model, SimpleNet ):
+    #    raise ValueError( "Provided model is type '{:s}' and not a subclass of SimpleNet!".format(
+    #        str( type( model ) ) ) )
 
     # Keep track of the parameter ranges for this model so we can report them at
     # run-time.
@@ -854,6 +935,15 @@ def generate_fortran_module( output_path, model_name, model, parameter_ranges={}
     for layer_name in model.layer_names():
         expected_weights.append( layer_name + ".weight" )
         expected_biases.append( layer_name + ".bias" )
+    
+    if layer_norm_flag:
+        # Construct an array of the layernorm weights/biases. They can be stored
+        # together because they are the shape shaped tensor (1D)
+        expected_layernorms = []
+        for layer_index in range( len( model.layer_names() ) - 1 ):
+            expected_layernorms.append( "_norms.{:d}.weight".format( layer_index ) )
+        for layer_index in range( len( model.layer_names() ) - 1 ):
+            expected_layernorms.append( "_norms.{:d}.bias".format( layer_index ) )
 
     def _get_layer_sizes_declarations_str( weight_layers, model_state ):
         """
@@ -1041,6 +1131,52 @@ def generate_fortran_module( output_path, model_name, model, parameter_ranges={}
         # Remove the trailing newline from the declarations for aesthetics.
         return declarations_str[:-1]
 
+    def _get_layernorm_weights_biases_array_declarations_str( layernorm_layers ):
+        """
+        Constructs the layernorms' weights array declaration string.  Takes the
+        supplied norm names and creates a complete Fortran fragment for use in
+        the module definition.
+
+        Takes 1 value:
+
+          bias_layers - Sequence of names for each layer's biases.
+
+        Returns 1 value:
+
+          declarations_str - String specifying variable declarations for the
+                             layers' biases.  Define Fortran variables of the
+                             form "layer<N>_biases" for layers 1 to
+                             len( weight_layers ) - 1, and "output_biases" for
+                             the final layer.
+
+        """
+
+        # Definition of the first layer's weights/biases array, along with a comment for
+        # all of the arrays.
+        declarations_str = """
+    ! Biases for each of the layernorms.
+    real*4, dimension(NUMBER_HIDDEN_LAYER1_NEURONS) :: layernorm1_weights, layernorm1_biases
+"""
+
+        # Template for the second through last layer.
+        declaration_template_str = "    real*4, dimension(NUMBER_{layer_dimension_name:s}) :: {layer_name:s}_weights, {layer_name:s}_biases"
+
+        # Walk through all of the layers except the first and last and
+        # instantiate the declaration template for each. We assume these are all
+        # hidden layers since the output layer does not have a layer norm.
+        for layer_number, layer_name in enumerate( layernorm_layers[1:-1], 2 ):
+            layer_dimension_name = "HIDDEN_LAYER{:d}_NEURONS".format( layer_number )
+            layer_name           = "layernorm{:d}".format( layer_number )
+
+            declarations_str += "{:s}\n".format(
+                declaration_template_str.format(
+                    layer_number=layer_number,
+                    layer_dimension_name=layer_dimension_name,
+                    layer_name=layer_name ) )
+
+        # Remove the trailing newline from the declarations for aesthetics.
+        return declarations_str[:-1]
+
     def _write_module_prolog( model_name, model_state, output_fp ):
         """
         Writes the module's prolog to the supplied file handle.
@@ -1058,13 +1194,14 @@ def generate_fortran_module( output_path, model_name, model, parameter_ranges={}
 
         import datetime
 
-        # Confirm we have the weights and biases that we expect.  There may be
-        # other trainable parameters in the model, but these are the only ones
-        # needed for serialization.
-        for expected_parameter in expected_weights + expected_biases:
-            if expected_parameter not in model_state:
-                raise ValueError( "Model provided does not match a 4-layer MLP! (missing '{:s}')".format(
-                    expected_parameter ) )
+        if layer_norm_flag:
+            expected_parameters = set( expected_weights + expected_biases + expected_layernorms )
+        else:
+            expected_parameters = set( expected_weights + expected_biases )
+
+        # Confirm we have the weights and biases that we expect.
+        if expected_parameters != set( model_state.keys() ):
+            raise ValueError( "Model provided does not match a 4-layer MLP!" )
 
         # Ensure that the weights are 2D matrices.
         #
@@ -1083,6 +1220,10 @@ def generate_fortran_module( output_path, model_name, model, parameter_ranges={}
         for bias_name in expected_biases:
             if len( model_state[bias_name].shape ) != 1:
                 raise ValueError( "'{:s}' is not a rank-1 tensor!".format( bias_name ) )
+        if layer_norm_flag:
+            for weight_bias_name in expected_layernorms:
+                if len( model_state[weight_bias_name].shape ) != 1:
+                    raise ValueError( "'{:s}' is not a rank-1 tensor!".format( weight_bias_name ) )
 
         # Get the current date so people have an idea of when/how this module was
         # created.
@@ -1096,10 +1237,12 @@ def generate_fortran_module( output_path, model_name, model, parameter_ranges={}
             current_date_time_str )
 
         # Construct the layer-dependent portions of the prolog.
-        layer_sizes_declarations_str         = _get_layer_sizes_declarations_str( expected_weights, model_state )
-        layer_weights_declarations_str       = _get_weights_array_declarations_str( expected_weights )
-        layer_biases_declarations_str        = _get_biases_array_declarations_str( expected_biases )
-        intermediate_arrays_declarations_str = _get_intermediates_array_declarations_str( expected_weights )
+        layer_sizes_declarations_str             = _get_layer_sizes_declarations_str( expected_weights, model_state )
+        layer_weights_declarations_str           = _get_weights_array_declarations_str( expected_weights )
+        layer_biases_declarations_str            = _get_biases_array_declarations_str( expected_biases )
+        intermediate_arrays_declarations_str     = _get_intermediates_array_declarations_str( expected_weights )
+        layernorm_weights_biases_declaration_str = _get_layernorm_weights_biases_array_declarations_str(
+                                                    expected_biases ) if layer_norm_flag else ""
 
         # Get the number of inputs and outputs for this model.
         number_model_inputs  = model_state[expected_weights[0]].shape[1]
@@ -1244,10 +1387,10 @@ module droplet_model
     ! NOTE: These *must* match the training data!  Do not change these without
     !       retraining the model!
     !
-    real*4, parameter :: RADIUS_LOG_RANGE(2)      = [{radius_start:.1f}, {radius_end:.1f}]
+    real*4, parameter :: RADIUS_LOG_RANGE(2)      = [{radius_start:.3f}, {radius_end:.3f}]
     real*4, parameter :: TEMPERATURE_RANGE(2)     = [{temperature_start:.1f}, {temperature_end:.1f}]
     real*4, parameter :: SALT_SOLUTE_LOG_RANGE(2) = [{salt_solute_start:.2f}, {salt_solute_end:.2f}]
-    real*4, parameter :: AIR_TEMPERATURE_RANGE(2) = [{air_temperature_start:.1f}, {air_temperature_end:.1f}]
+    real*4, parameter :: AIR_TEMPERATURE_RANGE(2) = [{air_temperature_start:.2f}, {air_temperature_end:.2f}]
     real*4, parameter :: RH_RANGE(2)              = [{rh_start:.2f}, {rh_end:.2f}]
     real*4, parameter :: RHOA_RANGE(2)            = [{rhoa_start:.2f}, {rhoa_end:.2f}]
 
@@ -1271,6 +1414,7 @@ module droplet_model
 {layer_weights_declarations:s}
 {layer_biases_declarations:s}
 {intermediate_arrays_declarations:s}
+{norm_weights_biases_declarations:s}
 
     contains
 """.format(
@@ -1281,6 +1425,7 @@ module droplet_model
     layer_weights_declarations=layer_weights_declarations_str,
     layer_biases_declarations=layer_biases_declarations_str,
     intermediate_arrays_declarations=intermediate_arrays_declarations_str,
+    norm_weights_biases_declarations=layernorm_weights_biases_declaration_str,
     model_name=model_name,
     model_metadata=model_metadata,
     creation_date=current_date_time_str,
@@ -1317,7 +1462,7 @@ module droplet_model
 
         """
 
-        def _write_model_parameters( model_state, output_fp, indentation_str, layer_names, biases_flag=False ):
+        def _write_model_parameters( model_state, output_fp, indentation_str, layer_names, biases_flag=False, layernorm_flag=False ):
             """
             Internal routine that writes the weights/biases initialization
             expressions for all of the parameters in the model state to the
@@ -1342,23 +1487,44 @@ module droplet_model
                                 the routine assumes writing 2D weights instead
                                 of 1D biases.
 
+              layernorm_flag  - Optional Boolean flag specifying whether model
+                                layernorm weights/biases are being written.
+                                If omitted, defaults to False and the routine
+                                assumes writing weights and biases for layers.
+
             Returns nothing.
 
             """
 
-            # Correctly name our weights and biases variables.
-            layer_suffix = "biases" if biases_flag else "weights"
+            if layernorm_flag:
+                # Layernorm weights/biases are 1D
+                biases_flag = True
 
-            # We rename each of the weights to Fortran-compatible symbols that
-            # are self-descriptive.
-            original_layer_names = layer_names
+                # We rename each of the weights to Fortran-compatible symbols that
+                # are self-descriptive.
+                original_layer_names = layer_names
 
-            # Create the Fortran variable names used within the module from the
-            # PyTorch parameter names.
-            new_layer_names = []
-            for layer_number in range( 1, len( expected_weights ) ):
-                new_layer_names.append( "layer{:d}_{:s}".format( layer_number, layer_suffix ) )
-            new_layer_names.append( "output_{:s}".format( layer_suffix ) )
+                # Create the Fortran variable names used within the module from the
+                # PyTorch parameter names.
+                new_layer_names = []
+                for layer_number in range( 1, len( expected_weights ) ):
+                    new_layer_names.append( "layernorm{:d}_{:s}".format( layer_number, "weights" ) )
+                for layer_number in range( 1, len( expected_weights ) ):
+                    new_layer_names.append( "layernorm{:d}_{:s}".format( layer_number, "biases" ) )
+            else:
+                # Correctly name our weights and biases variables.
+                layer_suffix = "biases" if biases_flag else "weights"
+
+                # We rename each of the weights to Fortran-compatible symbols that
+                # are self-descriptive.
+                original_layer_names = layer_names
+
+                # Create the Fortran variable names used within the module from the
+                # PyTorch parameter names.
+                new_layer_names = []
+                for layer_number in range( 1, len( expected_weights ) ):
+                    new_layer_names.append( "layer{:d}_{:s}".format( layer_number, layer_suffix ) )
+                new_layer_names.append( "output_{:s}".format( layer_suffix ) )
 
             # Walk through each layer and write out the parameters requested.
             # We take care to translate between the PyTorch-specified names and
@@ -1559,6 +1725,15 @@ end if
                                  expected_biases,
                                  biases_flag=True )
 
+        # Write layernorm weights/biases if they're expected
+        if layer_norm_flag:
+            print( "", file=output_fp )
+            _write_model_parameters( model_state,
+                                     output_fp,
+                                     inner_indentation_str,
+                                     expected_layernorms,
+                                     layernorm_flag=True )
+
         # Report the parameter ranges at run-time so users have an idea of where
         # the model should perform well.
         print( "", file=output_fp )
@@ -1598,10 +1773,12 @@ end if
         #       from the original architecture).
         #
 
-        layer_norm_initialization = ""
-        layer_norm_accumulation   = ""
-        layer_norm_application    = ""
-        layer_norm_comment        = ""
+        layer_norm_initialization      = ""
+        layer_norm_accumulation        = ""
+        layer_norm_calculation         = ""
+        layer_norm_application         = ""
+        layer_norm_comment             = ""
+        layer_norm_application_comment = ""
 
         # Layer norm accumulates each layer's activations and then normalizes
         # them in a separate loop.
@@ -1613,8 +1790,7 @@ end if
             layer_norm_accumulation = """
         layer_sum                         = layer_sum + layer{layer_number:d}_intermediate(output_index)
 """
-            layer_norm_application = """
-    ! Compute x_{layer_number:d} = (x_{layer_number:d} - mean( x_{layer_number:d} )) / std( x_{layer_number:d} ).
+            layer_norm_calculation = """
     layer_sum = layer_sum / NUMBER_HIDDEN_LAYER{layer_number:d}_NEURONS
 
     do output_index = 1, NUMBER_HIDDEN_LAYER{layer_number:d}_NEURONS
@@ -1622,30 +1798,26 @@ end if
     end do
     ! NOTE: We add a small epsilon to avoid division by zero.
     layer_variance = sqrt( layer_variance / NUMBER_HIDDEN_LAYER{layer_number:d}_NEURONS ) + 1.0e-6
-
-    do output_index = 1, NUMBER_HIDDEN_LAYER{layer_number:d}_NEURONS
-        layer{layer_number:d}_intermediate(output_index) = &
-            (layer{layer_number:d}_intermediate(output_index) - layer_sum) / layer_variance
-    end do
 """
-            layer_norm_comment = " and accumulate this layer's sum"
+
+            layer_norm_application = """
+        layer{layer_number:d}_intermediate(output_index) = &
+            (layer{layer_number:d}_intermediate(output_index) - layer_sum) / layer_variance &
+              * layernorm{layer_number:d}_weights(output_index) + layernorm{layer_number:d}_biases(output_index)
+"""
+            layer_norm_comment             = " and accumulate this layer's sum"
+            layer_norm_application_comment = " and fused layernorm"
 
         if not silu_flag:
             # ReLU.
             core_inference_str = """
-    ! Compute x_1 = ReLU( W_1*I + b_1 ){layer_norm_comment:s}.{layer_norm_initialization:s}
-    do output_index = 1, NUMBER_HIDDEN_LAYER1_NEURONS
+    ! Compute x_1 = ReLU( W_1*I + b_1 ){layer_norm_application_comment:s}
+    do output_index = 1, NUMBER_HIDDEN_LAYER1_NEURONS{layer_norm_application:s}
         layer1_intermediate(output_index) = &
              max( sum( normalized_input(:) * layer1_weights(:, output_index) ) + layer1_biases(output_index), 0.0 )
-{layer_norm_accumulation:s}
     end do
-{layer_norm_application:s}
-""".format(
-    layer_norm_initialization=layer_norm_initialization,
-    layer_norm_accumulation=layer_norm_accumulation,
-    layer_norm_application=layer_norm_application,
-    layer_norm_comment=layer_norm_comment
-)
+""".format( layer_norm_application_comment=layer_norm_application_comment,
+            layer_norm_application=layer_norm_application )
 
             #
             # NOTE: This template requires both "layer_number" and
@@ -1656,37 +1828,38 @@ end if
     ! Compute x_{{layer_number:d}} = ReLU( W_{{layer_number:d}}*x_{{previous_layer_number:d}} + b_{{layer_number:d}} ){layer_norm_comment:s}.{layer_norm_initialization:s}
     do output_index = 1, NUMBER_HIDDEN_LAYER{{layer_number:d}}_NEURONS
         layer{{layer_number:d}}_intermediate(output_index) = &
-             max( sum( layer{{previous_layer_number:d}}_intermediate(:) * layer{{layer_number:d}}_weights(:, output_index) ) + layer{{layer_number:d}}_biases(output_index), 0.0 )
-{layer_norm_accumulation:s}
+             max( sum( layer{{previous_layer_number:d}}_intermediate(:) * layer{{layer_number:d}}_weights(:, output_index) ) + layer{{layer_number:d}}_biases(output_index), 0.0 ){layer_norm_accumulation:s}
     end do
-{layer_norm_application:s}
+{layer_norm_calculation:s}
 """.format(
     layer_norm_initialization=layer_norm_initialization,
     layer_norm_accumulation=layer_norm_accumulation,
-    layer_norm_application=layer_norm_application,
+    layer_norm_calculation=layer_norm_calculation,
     layer_norm_comment=layer_norm_comment
 )
+        # TODO FIX THIS!!! RELU
         else:
             # SiLU.
             core_inference_str = """
-    ! Compute x_1 = W_1*I + b_1.{layer_norm_initialization:s}
+    ! Compute x_1 = W_1*I + b_1{layer_norm_comment:s}.{layer_norm_initialization:s}
     do output_index = 1, NUMBER_HIDDEN_LAYER1_NEURONS
         layer1_intermediate(output_index) = &
-             sum( normalized_input(:) * layer1_weights(:, output_index) ) + layer1_biases(output_index)
+             sum( normalized_input(:) * layer1_weights(:, output_index) ) + layer1_biases(output_index){layer_norm_accumulation:s}
     end do
-    ! Compute x_1 = SiLU( x_1 ){layer_norm_comment:s}.
-    do output_index = 1, NUMBER_HIDDEN_LAYER1_NEURONS
+{layer_norm_calculation:s}
+    ! Compute x_1 = SiLU( x_1 ){layer_norm_application_comment:s}.
+    do output_index = 1, NUMBER_HIDDEN_LAYER1_NEURONS{layer_norm_application:s}
         layer1_intermediate(output_index) = &
              layer1_intermediate(output_index) / (real( 1.0, kind=4 ) + &
                                                   exp( real( -1.0, kind=4 ) * layer1_intermediate(output_index) ))
-{layer_norm_accumulation:s}
     end do
-{layer_norm_application:s}
 """.format(
+    layer_norm_comment=layer_norm_comment,
     layer_norm_initialization=layer_norm_initialization,
     layer_norm_accumulation=layer_norm_accumulation,
-    layer_norm_application=layer_norm_application,
-    layer_norm_comment=layer_norm_comment
+    layer_norm_calculation=layer_norm_calculation,
+    layer_norm_application_comment=layer_norm_application_comment,
+    layer_norm_application=layer_norm_application
 )
 
             #
@@ -1695,22 +1868,24 @@ end if
             #       usable!
             #
             intermediate_template_str = """
-    ! Compute x_{{layer_number:d}} = W_{{layer_number:d}}*x_{{previous_layer_number:d}} + b_{{layer_number:d}}.
+    ! Compute x_{{layer_number:d}} = W_{{layer_number:d}}*x_{{previous_layer_number:d}} + b_{{layer_number:d}}{layer_norm_comment:s}.{layer_norm_initialization:s}
     do output_index = 1, NUMBER_HIDDEN_LAYER{{layer_number:d}}_NEURONS
         layer{{layer_number:d}}_intermediate(output_index) = &
              sum( layer{{previous_layer_number:d}}_intermediate(:) * layer{{layer_number:d}}_weights(:, output_index) ) + layer{{layer_number:d}}_biases(output_index)
+{layer_norm_accumulation:s}
     end do
-    ! Compute x_{{layer_number:d}} = SiLU( x_{{layer_number:d}} ){layer_norm_comment:s}.{layer_norm_initialization:s}
-    do output_index = 1, NUMBER_HIDDEN_LAYER{{layer_number:d}}_NEURONS
+{layer_norm_calculation:s}
+    ! Compute x_{{layer_number:d}} = SiLU( x_{{layer_number:d}} ){layer_norm_application_comment:s}.
+    do output_index = 1, NUMBER_HIDDEN_LAYER{{layer_number:d}}_NEURONS{layer_norm_application:s}
         layer{{layer_number:d}}_intermediate(output_index) = &
              layer{{layer_number:d}}_intermediate(output_index) / (real( 1.0, kind=4 ) + &
                                                   exp( real( -1.0, kind=4 ) * layer{{layer_number:d}}_intermediate(output_index) ))
-{layer_norm_accumulation:s}
     end do
-{layer_norm_application:s}
 """.format(
     layer_norm_initialization=layer_norm_initialization,
     layer_norm_accumulation=layer_norm_accumulation,
+    layer_norm_calculation=layer_norm_calculation,
+    layer_norm_application_comment=layer_norm_application_comment,
     layer_norm_application=layer_norm_application,
     layer_norm_comment=layer_norm_comment
 )
@@ -1743,12 +1918,21 @@ end if
         # adherence to coding style.
         core_inference_str = core_inference_str[:-1]
 
-        residual_inference_str = """
-    ! Add the model's input to its output since it's learned to compute a delta rather
-    ! than the final answer.
-    output(RADIUS_INDEX)      = output(RADIUS_INDEX)      + normalized_input(RADIUS_INDEX)
-    output(TEMPERATURE_INDEX) = output(TEMPERATURE_INDEX) + normalized_input(TEMPERATURE_INDEX)
-"""
+        if quadratic_flag:
+            residual_inference_str = """
+        ! Add the model's input to its output since it's learned to compute a delta rather
+        ! than the final answer.
+        output(RADIUS_INDEX)      = output(RADIUS_INDEX)*(10.0**(2.0*RADIUS_LOG_MEAN)) + input(RADIUS_INDEX)**2
+        output(TEMPERATURE_INDEX) = output(TEMPERATURE_INDEX) + normalized_input(TEMPERATURE_INDEX)
+    """
+        else:
+            residual_inference_str = """
+        ! Add the model's input to its output since it's learned to compute a delta rather
+        ! than the final answer.
+        output(RADIUS_INDEX)      = output(RADIUS_INDEX)      + normalized_input(RADIUS_INDEX)
+        output(TEMPERATURE_INDEX) = output(TEMPERATURE_INDEX) + normalized_input(TEMPERATURE_INDEX)
+    """
+
 
         # Only include the residual if the model supports it.
         if not isinstance( model, ResidualNet ):
@@ -1796,17 +1980,29 @@ subroutine estimate( input, output )
     normalized_input(TFINAL_INDEX)          = input(TFINAL_INDEX)
 {core_inference:s}
 {residual_inference:s}
-    ! Scale the outputs to the expected ranges.
-    output(RADIUS_INDEX)      = 10.0**(output(RADIUS_INDEX) * RADIUS_LOG_WIDTH + RADIUS_LOG_MEAN)
-    output(TEMPERATURE_INDEX) = output(TEMPERATURE_INDEX) * TEMPERATURE_WIDTH + TEMPERATURE_MEAN
-
-end subroutine estimate
-
 """.format(
     core_inference=core_inference_str,
     residual_inference=residual_inference_str,
     layer_norm_declarations=layer_norm_declarations_str
 )
+        # Scale the outputs appropriately depending upon whether
+        # the radius output is a quadratic residual or log residual.
+        if quadratic_flag:
+            inference_str += """
+        ! Scale the outputs to the expected ranges.
+        output(RADIUS_INDEX)      = sqrt(output(RADIUS_INDEX))
+        output(TEMPERATURE_INDEX) = output(TEMPERATURE_INDEX) * TEMPERATURE_WIDTH + TEMPERATURE_MEAN
+
+    end subroutine estimate
+"""
+        else:
+            inference_str += """
+        ! Scale the outputs to the expected ranges.
+        output(RADIUS_INDEX)      = 10.0**(output(RADIUS_INDEX) * RADIUS_LOG_WIDTH + RADIUS_LOG_MEAN)
+        output(TEMPERATURE_INDEX) = output(TEMPERATURE_INDEX) * TEMPERATURE_WIDTH + TEMPERATURE_MEAN
+
+    end subroutine estimate
+"""
 
         for inference_line in inference_str.splitlines():
             print( "{:s}{:s}".format(
@@ -1849,83 +2045,6 @@ end subroutine estimate
 
         # Write out the end of the module.
         _write_module_epilog( model_state, output_fp )
-
-def get_cosine_annealing_lr_schedule( optimizer, number_samples, batch_size, number_epochs, initial_learning_rate, warmup_fraction=0.025 ):
-    """
-    Creates a cosine annealing learning rate schedule, optionally preceded by a
-    linear warmup period.  The object returned is suitable to be stepped once
-    per batch seen by the supplied optimizer.
-
-    Takes 6 arguments:
-
-      optimizer             - Optimizer used during training.  Its learning rate will be adjusted
-                              each time lr_scheduler.step() is invoked.
-      number_samples        - Number of samples in one training epoch.
-      batch_size            - Number of samples in one training batch.
-      number_epochs         - Number of training epochs planned.
-      initial_learning_rate - Learning rate to start the warmup at.
-      warmup_fraction       - Fraction of total training samples, across all epochs, to warm up
-                              the learning rate.  If non-zero, optimizer's learning rate will
-                              be linearly ramped up from initial_learning_rate to the rate
-                              it was provided with before entering a cosine annealing schedule.
-                              If specified as zero, then warmup is skipped and the annealing
-                              schedule executes immediately.  If omitted, defaults to a warmup
-                              using 2.5% of the training samples budget.
-
-    Returns 1 value:
-
-      lr_scheduler - torch.optim.lr_scheduler.LRScheduler object that adjusts optimizer's
-                     learning rate everytime lr_scheduler.step() is invoked.  The
-                     scheduler is constructed with the assumption that it is stepped
-                     once per batch.
-
-    """
-
-    # We create a SequentialLR object that contains one or more sub-schedulers.  Track
-    # individual LRScheduler objects and the batches we transition from one to the next.
-    # milestones contains 1 fewer entry than schedulers.
-    schedulers = []
-    milestones = []
-
-    # Calculate the total number of batches across training.
-    #
-    # NOTE: This ignores partial, last batches!  This should match what train_model()
-    #       does, otherwise our schedule will be misaligned!
-    #
-    number_total_batches = (number_samples // batch_size) * number_epochs
-
-    # Create a linear warmup schedule when requested.
-    if warmup_fraction > 0.0:
-        # Get the optimizer's current learning rate as the end of the warmup.
-        warmed_learning_rate = optimizer.param_groups[0]["lr"]
-
-        number_warmup_batches = round( number_total_batches * warmup_fraction )
-
-        # The warmup is specified as a linear schedule starting at initial_learning_rate
-        # and ending at warmed_learning_rate, in number_warmup_batches steps.
-        linear_scheduler = torch.optim.lr_scheduler.LinearLR( optimizer,
-                                                              start_factor=initial_learning_rate / warmed_learning_rate,
-                                                              total_iters=number_warmup_batches )
-
-        schedulers.append( linear_scheduler )
-        milestones.append( number_warmup_batches )
-    else:
-        number_warmup_batches = 0
-
-    # Apply cosine annealing to the remaining batches.
-    number_cosine_batches = number_total_batches - number_warmup_batches
-
-    # Cosine annealing schedulers use the optimizer's current learning rate and ramp
-    # it down over the specified window.
-    cosine_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR( optimizer,
-                                                                   T_max=number_cosine_batches )
-
-    schedulers.append( cosine_scheduler )
-
-    # Build a sequential scheduler out of each of the sub-schedulers.
-    return torch.optim.lr_scheduler.SequentialLR( optimizer,
-                                                  schedulers,
-                                                  milestones )
 
 def load_model_checkpoint( checkpoint_path, model=None, optimizer=None ):
     """
@@ -2033,6 +2152,18 @@ def load_model_checkpoint( checkpoint_path, model=None, optimizer=None ):
                     stub.__module__ = module
 
                     return stub
+                except ModuleNotFoundError:
+                    def stub( *args, **kwargs ):
+                        raise NotImplementedError( "Function '{:s}' from module "
+                                                   "'{:s}' is not available.".format(
+                                                       name,
+                                                       module ) )
+
+                    # "Rename" the stub to match what we were looking for.
+                    stub.__name__   = name
+                    stub.__module__ = module
+
+                    return stub
 
         # Masquerade as Python's pickle module.  This is required to work with
         # Torch's custom pickle code.
@@ -2080,7 +2211,7 @@ def load_model_checkpoint( checkpoint_path, model=None, optimizer=None ):
                        "Make sure to convert salt solute to salt mass before inferencing." )
 
         # The checkpoint is simply the model's weights and biases.
-        model.load_state_dict( checkpoint )
+        model.load_state_dict( checkpoint, strict=False )
 
         return get_parameter_ranges()
 
@@ -2115,7 +2246,7 @@ def load_model_checkpoint( checkpoint_path, model=None, optimizer=None ):
 
         """
 
-        model.load_state_dict( checkpoint["model_weights"] )
+        model.load_state_dict( checkpoint["model_weights"], strict=False )
         if optimizer is not None:
             optimizer.load_state_dict( checkpoint["optimizer_state"] )
 
@@ -2165,7 +2296,7 @@ def load_model_checkpoint( checkpoint_path, model=None, optimizer=None ):
 
         """
 
-        model.load_state_dict( checkpoint["model_weights"] )
+        model.load_state_dict( checkpoint["model_weights"], strict=False )
         if optimizer is not None:
             optimizer.load_state_dict( checkpoint["optimizer_state"] )
 
@@ -2190,16 +2321,6 @@ def load_model_checkpoint( checkpoint_path, model=None, optimizer=None ):
         name, and its weights loaded.  The model and parameter ranges use salt
         solute.
 
-        NOTE: This has a workaround for SimpleNet-derived classes that
-              implemented per-layer normalization using a Python list instead
-              of torch.nn.ModuleList object.  Care is taken to load models
-              without normalization parameters, and then add any normalization
-              parameters to the optimizer afterwards.
-
-              This workaround maintains backwards compatibility for layers
-              that accepted the defaults for any optional parameters (e.g.
-              LayerNorm's Beta parameter).
-
         Takes 3 arguments:
 
           checkpoint_path -
@@ -2235,33 +2356,8 @@ def load_model_checkpoint( checkpoint_path, model=None, optimizer=None ):
                                       model_name=checkpoint["model_name"] )
 
         model.load_state_dict( checkpoint["model_weights"], strict=False )
-
         if optimizer is not None:
-            # Remove reference to the weights it is currently optimizing.
-            optimizer.param_groups.clear()
-            optimizer.state.clear()
-
-            # Work around a mistake in SimpleNet's ._norms implementation.
-            # These were originally implemented as a list of normalization
-            # objects which prevented PyTorch from serializing their weights
-            # during a checkpoint.
-            old_parameters = []
-            new_parameters = []
-
-            for name, parameter in model.named_parameters():
-                if "_norms" in name:
-                    new_parameters.append( parameter )
-                else:
-                    old_parameters.append( parameter )
-
-            # Add the only the old, pre-fixed _norms, weights we just loaded.
-            optimizer.add_param_group( { "params": old_parameters } )
-
-            # Set the state for these old weights.
             optimizer.load_state_dict( checkpoint["optimizer_state"] )
-
-            # Now add the new parameters with their defaults.
-            optimizer.add_param_group( { "params": new_parameters } )
 
         loss_function    = checkpoint["loss_function"]
         training_loss    = checkpoint["training_loss"]
@@ -2269,70 +2365,6 @@ def load_model_checkpoint( checkpoint_path, model=None, optimizer=None ):
         # Sanity check that the parameter ranges are as expected.
         if "salt_solute" not in parameter_ranges:
             raise InvalidCheckpointError( "'{:s}' is not a valid v4 checkpoint.  "
-                                          "Its parameter ranges does not contain 'salt solute'!".format(
-                                              checkpoint_path ) )
-
-        return model, parameter_ranges, loss_function, training_loss
-
-    def _load_model_checkpoint_v5( checkpoint_path, optimizer, checkpoint ):
-        """
-        Loads a version 5 checkpoint.  These contain the model's architecture
-        and name, the droplet parameter ranges the model was trained on, the
-        optimizer's state, the loss function used in training, and the current
-        training loss.  The model is instantiated from its architecture and
-        name, and its weights loaded.  The model and parameter ranges use salt
-        solute.
-
-        Takes 3 arguments:
-
-          checkpoint_path -
-          optimizer       - Optional Torch optimizer whose state will be set to
-                            the checkpoint's contents.  If omitted, the loaded
-                            optimizer state is discarded.
-          checkpoint      - Dictionary containing the following keys:
-                            "architecture", "droplet_parameters", "loss_function",
-                            "model_name", "model_weights", "optimizer_state",
-                            "training_loss".
-
-        Returns 4 values:
-
-          model            - Torch model containing the weights loaded.  Its
-                             type is determined by the contents of
-                             checkpoint_path.
-          parameter_ranges - Dictionary containing the droplet parameter ranges
-                             associated with model.  See get_parameter_range()
-                             for details.
-          loss_function    - Function handle for the loss function associated
-                             with model.
-          training_loss    - Sequence containing model's training loss across
-                             batches.
-
-        """
-
-        parameter_ranges = checkpoint["droplet_parameter_ranges"]
-
-        # Create the model with its parameter ranges in effect to correctly
-        # instantiate those that set internal state based on the current ranges.
-        with temporary_parameter_ranges( parameter_ranges ):
-            model = create_new_model( checkpoint["architecture"],
-                                      model_name=checkpoint["model_name"] )
-
-        model.load_state_dict( checkpoint["model_weights"], strict=False )
-
-        if optimizer is not None:
-            # Remove reference to the weights it is currently optimizing.
-            optimizer.param_groups.clear()
-            optimizer.state.clear()
-
-            # Set the state for the model weights.
-            optimizer.load_state_dict( checkpoint["optimizer_state"] )
-
-        loss_function    = checkpoint["loss_function"]
-        training_loss    = checkpoint["training_loss"]
-
-        # Sanity check that the parameter ranges are as expected.
-        if "salt_solute" not in parameter_ranges:
-            raise InvalidCheckpointError( "'{:s}' is not a valid v5 checkpoint.  "
                                           "Its parameter ranges does not contain 'salt solute'!".format(
                                               checkpoint_path ) )
 
@@ -2423,13 +2455,6 @@ def load_model_checkpoint( checkpoint_path, model=None, optimizer=None ):
          training_loss) = _load_model_checkpoint_v4( checkpoint_path,
                                                      optimizer,
                                                      checkpoint )
-    elif checkpoint_version == 5:
-        (model,
-         parameter_ranges,
-         loss_function,
-         training_loss) = _load_model_checkpoint_v5( checkpoint_path,
-                                                     optimizer,
-                                                     checkpoint )
     else:
         raise UnhandledCheckpointVersionError( "Unknown checkpoint version ({:d}) in '{:s}'!".format(
             checkpoint_version,
@@ -2440,73 +2465,6 @@ def load_model_checkpoint( checkpoint_path, model=None, optimizer=None ):
         return model, parameter_ranges, loss_function, training_loss
     else:
         return parameter_ranges, loss_function, training_loss
-
-def lr_scheduler_to_str( lr_scheduler, total_number_batches=-1 ):
-    """
-    Returns a string representation of the supplied learning rate scheduler object.
-    Intended to provide a consistent representation of Torch's LRScheduler-derived
-    objects suitable for logging.
-
-    NOTE: This does not handle all of the schedulers and raises ValueError when
-          an unknown scheduler is encountered!
-
-    Takes 2 arguments:
-
-      lr_scheduler         - torch.optim.lr_scheduler.LRScheduler object to get
-                             its string representation.
-      total_number_batches - Optional total number of batches lr_scheduler will
-                             be used for.  When specified, the schedule's
-                             representation will training duration as a
-                             percentage of all batches across every epoch.
-                             Otherwise, training durations will be reported as
-                             numbers of batches.
-
-    Returns 1 value:
-
-      lr_scheduler_str - String representation of lr_scheduler.
-
-    """
-
-    if isinstance( lr_scheduler, torch.optim.lr_scheduler.SequentialLR ):
-        # Get the representation for each of the sub-schedulers.
-        sub_scheduler_strings = map( lambda s: lr_scheduler_to_str( s, total_number_batches ),
-                                     lr_scheduler._schedulers )
-
-        return "SequentialLR( [{:s}] )".format(
-            ", ".join( sub_scheduler_strings ) )
-
-    elif isinstance( lr_scheduler, torch.optim.lr_scheduler.LinearLR ):
-        # Get the duration as a percentage or count.
-        if total_number_batches > 0:
-            duration_percentage = lr_scheduler.total_iters / total_number_batches * 100.0
-            duration_string     = "{:.2f}%".format( duration_percentage )
-        else:
-            duration_string = "{:d}".format( lr_scheduler.total_iters )
-
-        # .last_lr refers to the current learning rate, which we assume is the
-        # start of the linear ramp.  .start_factor is (start_lr / warmed_lr).
-        return "LinearLR( lr=[{:.1e}, {:.1e}], duration={:s} )".format(
-            lr_scheduler._last_lr[0],
-            lr_scheduler._last_lr[0] / lr_scheduler.start_factor,
-            duration_string )
-
-    elif isinstance( lr_scheduler, torch.optim.lr_scheduler.CosineAnnealingLR ):
-        # Get the duration as a percentage or count.
-        if total_number_batches > 0:
-            duration_percentage = lr_scheduler.T_max / total_number_batches * 100.0
-            duration_string     = "{:.2f}%".format( duration_percentage )
-        else:
-            duration_string = "{:d}".format( lr_scheduler.T_max )
-
-        return "CosineAnnealingLR( [{:.1e}, {:.1e}], duration={:s} )".format(
-            lr_scheduler.base_lrs[0],
-            lr_scheduler.eta_min,
-            duration_string )
-
-    # Blow up so someone fixes this immediately instead of silently logging an
-    # "Unknown scheduler" string and limiting the ability to trace a model's
-    # provenance.
-    raise ValueError( "Unknown learning rate scheduler ({})!".format( lr_scheduler ) )
 
 def ode_residual( inputs, outputs, model ):
 
@@ -2525,32 +2483,6 @@ def ode_residual( inputs, outputs, model ):
     dTdt *= np.diff( parameter_ranges["temperature"] ).astype( float ) * 0.5
 
     return [drdt, dTdt]
-
-def print_loss( model, epoch_number, optimizer, training_loss, validation_loss ):
-    """
-    Training callback that prints the mean training and validation loss to standard
-    output.
-
-    Takes 5 arguments:
-
-      model           - Torch model object.
-      epoch_number    - Epoch number that just completed.
-      optimizer       - Torch optimizer object.
-      training_loss   - Sequence of training loss values for the last epoch.
-      validation_loss - Scalar validation loss for the last epoch.
-
-    Returns nothing.
-
-    """
-
-    now = datetime.datetime.now()
-
-    print( "[{:s}] Epoch #{:d}: loss: ({:f}, {:f}), LR: {:g}".format(
-        now.strftime( "%Y/%m/%d %H:%M:%S" ),
-        epoch_number,
-        np.mean( training_loss ),
-        validation_loss,
-        optimizer.param_groups[0]["lr"] ) )
 
 def save_model_checkpoint( checkpoint_prefix, checkpoint_number, model, optimizer, loss_function, training_loss, parameter_ranges={} ):
     """
@@ -2587,7 +2519,7 @@ def save_model_checkpoint( checkpoint_prefix, checkpoint_number, model, optimize
     #       cases where we need to write a specific version can be handled
     #       as needed.
     #
-    CHECKPOINT_VERSION = 5
+    CHECKPOINT_VERSION = 4
 
     # Build the checkpoint path.
     if checkpoint_number >= 0:
@@ -2635,7 +2567,7 @@ def save_model_checkpoint( checkpoint_prefix, checkpoint_number, model, optimize
 
     return checkpoint_path
 
-def train_model( model, criterion, optimizer, device, number_epochs, training_file, validation_file=None, checkpoint_prefix=None, epoch_callback=None, lr_scale=0.5, batch_size=1024, project_name=None, pinn_loss_flag=False, lr_scheduler=None ):
+def train_model( model, criterion, optimizer, device, number_epochs, training_file, validation_file=None, checkpoint_prefix=None, epoch_callback=None, callback_interval=1, lr_scale=0.5, batch_size=1024, pinn_loss_flag=False, quadratic_loss_flag=False, lr_scheduler=None ):
     """
     Trains the supplied model for one or more epochs using all of the droplet parameters
     in an on-disk training file.  The parameters are read into memory once and then
@@ -2643,85 +2575,97 @@ def train_model( model, criterion, optimizer, device, number_epochs, training_fi
     are logged when requested.  Model performance may be evaluated when a validation
     file is provided and is done so at the end of each epoch.
 
-    Takes 14 arguments:
+    Takes 12 arguments:
 
-      model             - PyTorch model to optimize.
-      criterion         - PyTorch loss object to use during optimization.
-      optimizer         - PyTorch optimizer associated with model.
-      device            - Device string indicating where the optimization is
-                          being performed.
-      number_epochs     - Number of epochs to train model for.  All training
-                          data in training_file will be seen by the model
-                          this many times.
-      training_file     - Path to the file containing training data created by
-                          create_training_file() OR a tuple containing three NumPy
-                          arrays: input parameters, output parameters, and
-                          integration times (sized N x 6, N x 2, and N x 1,
-                          respectively, where N are the number of training
-                          samples).
-      validation_file   - Optional path to the file containing validation data created by
-                          create_training_file() OR a tuple containing three NumPy
-                          arrays: input parameters, output parameters, and
-                          integration times (sized N x 6, N x 2, and N x 1,
-                          respectively, where N are the number of training
-                          samples).  If omitted, defaults to None and no
-                          validation evaluations are performed
-      checkpoint_prefix - Optional path prefix where model checkpoints should
-                          be stored.  If omitted, defaults to None and
-                          checkpoints are not written.  Otherwise, the epoch
-                          number is appended to construct the path where each
-                          epoch's checkpoint is written.
-      epoch_callback    - Optional function to be called after each training
-                          epoch.  If omitted, defaults to None.  When provided
-                          must take:
+      model               - PyTorch model to optimize.
+      criterion           - PyTorch loss object to use during optimization.
+      optimizer           - PyTorch optimizer associated with model.
+      device              - Device string indicating where the optimization is
+                            being performed.
+      number_epochs       - Number of epochs to train model for.  All training
+                            data in training_file will be seen by the model
+                            this many times.
+      training_file       - Path to the file containing training data created by
+                            create_training_file() OR a tuple containing three NumPy
+                            arrays: input parameters, output parameters, and
+                            integration times (sized N x 6, N x 2, and N x 1,
+                            respectively, where N are the number of training
+                            samples).
+      validation_file     - Optional path to the file containing validation data created by
+                            create_training_file() OR a tuple containing three NumPy
+                            arrays: input parameters, output parameters, and
+                            integration times (sized N x 6, N x 2, and N x 1,
+                            respectively, where N are the number of training
+                            samples).  If omitted, defaults to None and no
+                            validation evaluations are performed
+      checkpoint_prefix   - Optional path prefix where model checkpoints should
+                            be stored.  If omitted, defaults to None and
+                            checkpoints are not written.  Otherwise, the epoch
+                            number is appended to construct the path where each
+                            epoch's checkpoint is written.
 
-                            model:           Torch model object
-                            epoch_number:    Training epoch that just completed
-                            optimizer:       Torch optimizer object
-                            training_loss:   Sequence of training loss for the
-                                             last epoch
-                            validation_loss: Scalar validation loss for the last
-                                             epoch
+                            NOTE: For ease of use, only checkpoints 1/50 callbacks.
+                                  i.e. if callback_interval=10, there will be one
+                                  model saved for every 500 epochs.
+      epoch_callback      - Optional function to be called after each training
+                            epoch.  If omitted, defaults to None.  When provided
+                            must take:
 
-      lr_scale          - Optional floating point value, in the range of (0, 1],
-                          to scale the learning rate at the end of each epoch.
-                          If omitted, defaults to 0.5.
-      batch_size        - Optional batch size used during training.  If omitted,
-                          defaults to 1024 samples.
-      project_name      - Optional Weights and Biases (W&B) project name.  If
-                          omitted, defaults to None and W&B integrations are
-                          skipped.  Otherwise this specifies the project to
-                          log to for the currently logged in entity.
-      pinn_loss_flag    - Optional Boolean specifying whether a physics-based
-                          loss function is supplied or not.  When False the supplied
-                          criterion takes 2 arguments to compute a non-physics-based
-                          loss:
+                              model:           Torch model object
+                              epoch_number:    Training epoch that just completed
+                              optimizer:       Torch optimizer object
+                              training_loss:   Sequence of training loss for the
+                                               last epoch
+                              validation_loss: Scalar validation loss for the last
+                                               epoch
+      callback_interval   - Optional integer to stride how many epochs before calling
+                            each epoch callback, running validation loss, and saving
+                            checkpoints. Useful for many, small epochs.
+      lr_scale            - Optional floating point value, in the range of (0, 1],
+                            to scale the learning rate at the end of each epoch.
+                            If omitted, defaults to 0.5.
+      batch_size          - Optional batch size used during training.  If omitted,
+                            defaults to 1024 samples.
+      pinn_loss_flag      - Optional Boolean specifying whether a physics-based
+                            loss function is supplied or not.  When False the supplied
+                            criterion takes 2 arguments to compute a non-physics-based
+                            loss:
 
-                            normalized_approximations - The normalized model estimates
-                            normalized_outputs        - The normalized truth values
+                              normalized_approximations - The normalized model estimates
+                              normalized_outputs        - The normalized truth values
 
-                          Otherwise criterion takes 4 arguments to compute a
-                          physics-based loss:
+                            Otherwise criterion takes 4 arguments to compute a
+                            physics-based loss:
 
-                            normalized_approximations - The normalized model estimates
-                            normalized_outputs        - The normalized truth values
-                            normalized_inputs         - The normalized model inputs
-                            parameter_ranges          - Parameter ranges suitable to
-                                                        scale the inputs to physical
-                                                        units
+                              normalized_approximations - The normalized model estimates
+                              normalized_outputs        - The normalized truth values
+                              normalized_inputs         - The normalized model inputs
+                              parameter_ranges          - Parameter ranges suitable to
+                                                          scale the inputs to physical
+                                                          units
 
-                          It expected that all loss function arguments are PyTorch
-                          tensors on device.
+                            It expected that all loss function arguments are PyTorch
+                            tensors on device.
 
-                          If omitted, defaults to False and non-physics-based criterion
-                          expected.
+                            If omitted, defaults to False and non-physics-based criterion
+                            expected.
+      quadratic_loss_flag - Optional Boolean specifying whether to train on the quadratic
+                            radius residual instead of normalized log radius. If True, will
+                            scale the radius component of normalized approximations so that
+                            it stores the quadratic radius residual. Then, the model will
+                            be trained on forward_quadratic, a forward function that outputs the
+                            quadratic radius residual instead of the normalized log radius.
 
-      lr_scheduler      - Optional learning rate scheduler object, an instance of
-                          a subclass of torch.optim.lr_scheduler.LRScheduler, to
-                          govern the learning rate.  If omitted, defaults to None
-                          and a multiplicative schedule using lr_scale factor is
-                          used.  Otherwise, it overrides any provided lr_scale
-                          factor.
+                            This circumvents NaNs which result from applying log10 to a potentially
+                            negative output radius, which can occur early in training when
+                            approximations are poor.
+
+                            Also provides input_parameters and parameter_ranges to the loss
+                            function to allow for scaling. This is the same interface as
+                            pinn loss functions.
+
+                            If omitted, defaults to True and normalized-radius loss function
+                            expected.
 
     Returns 2 values:
 
@@ -2819,20 +2763,28 @@ def train_model( model, criterion, optimizer, device, number_epochs, training_fi
         print( "WARNING: No training samples available!  Nothing to do." )
         return [], []
 
-    # Calculate weights for weighted loss while the training data are NumPy
-    # arrays.  We keep these as a host-based Tensor and transfer portions of
-    # it on demand for each batch.
-    weights = np.reciprocal( training_inputs[:, -1] )
-    weights = np.stack( (weights, weights), axis=-1 )
-    weights = torch.from_numpy( weights )
-
     # Get the training inputs/outputs as normalized tensors on the host.  We'll
     # transfer these in batches as needed to minimize the device's memory
     # footprint.
-    training_inputs  = normalize_droplet_parameters( torch.from_numpy( training_inputs ),
+
+    # Convert to tensor
+    training_inputs  = torch.from_numpy( training_inputs )
+    training_outputs = torch.from_numpy( training_outputs )
+
+    # Normalize
+    training_inputs  = normalize_droplet_parameters( training_inputs,
                                                      tensor_parameter_ranges_host )
-    training_outputs = normalize_droplet_parameters( torch.from_numpy( training_outputs ),
+    training_outputs = normalize_droplet_parameters( training_outputs,
                                                      tensor_parameter_ranges_host )
+    # If quadratic residual, scale the training data accordingly
+    if quadratic_loss_flag:
+        bar_r   = torch.mean( tensor_parameter_ranges_host["radius"] )
+        sigma_r = torch.diff( tensor_parameter_ranges_host["radius"] )
+        training_outputs[:, 0] = (scale_radius_from_normalized_to_quadratic( training_outputs[:, 0], bar_r, sigma_r )
+                                - scale_radius_from_normalized_to_quadratic( training_inputs[:, 0], bar_r, sigma_r ))
+        
+        training_outputs[:, 0] /= model.radius_scale_factor
+
 
     # XXX: Hack to disable validation with physics-based loss until its fixed.
     #
@@ -2859,6 +2811,13 @@ def train_model( model, criterion, optimizer, device, number_epochs, training_fi
         validation_outputs = normalize_droplet_parameters( torch.from_numpy( validation_outputs ),
                                                            tensor_parameter_ranges_host )
 
+        # If using quadratic loss, scale the normalized radius into quadratic residual
+        if quadratic_loss_flag:
+            validation_outputs[:, 0] = (scale_radius_from_normalized_to_quadratic( validation_outputs[:, 0], bar_r, sigma_r )
+                                      - scale_radius_from_normalized_to_quadratic( validation_inputs[:, 0], bar_r, sigma_r ))
+            
+            validation_outputs[:, 0] /= model.radius_scale_factor
+
         # Ensure we accumulate gradients for our validation tensors.
         #
         # XXX: This is broken!  See the hack that disables validation when
@@ -2874,17 +2833,11 @@ def train_model( model, criterion, optimizer, device, number_epochs, training_fi
 
     # Compute the number of batches we have.
     #
-    # NOTE: This ignores a partial batch if there are more than one so as to not
+    # NOTE: This ignore a partial batch if there are more than one so as to not
     #       bias statistics, while retaining the short batch if it is the only
     #       one.
     #
     number_batches = max( training_inputs.shape[0] // batch_size, 1 )
-
-    # Construct a multiplicative learning rate scheduler if we were only
-    # provided a scale factor.
-    if lr_scheduler is None:
-        lr_scheduler = torch.optim.lr_scheduler.LambdaLR( optimizer,
-                                                          lr_lambda=lambda batch: lr_scale**(batch // number_batches) )
 
     # Track each mini-batch's training loss for analysis.
     training_loss_history = []
@@ -2892,60 +2845,8 @@ def train_model( model, criterion, optimizer, device, number_epochs, training_fi
     # Track each epoch's validation loss for analysis.
     validation_loss_history = []
 
-    # Figure out how we'll generate our Run object.  We disable Weights and
-    # Biases logging if no project name is specified so we don't attempt to log
-    # even if the package is installed.
-    if wandb_available_flag and project_name is not None:
-        wandb_factory = wandb
-    else:
-        wandb_factory = NoOpWandB()
-
-    # Create a Weights and Biases (W&B) Run object, or a no-op proxy, for this
-    # run.
-    run = prepare_wandb_run( wandb_factory,
-                             project_name,
-                             model,
-                             criterion,
-                             optimizer,
-                             number_epochs,
-                             batch_size,
-                             lr_scheduler_to_str( lr_scheduler,
-                                                  number_epochs * number_batches ),
-                             (training_file,
-                              validation_file),
-                             (training_inputs.shape[0],
-                              number_validation_inputs) )
-
-    # Log checkpoints to W&B if we're creating them.
-    if checkpoint_prefix is not None:
-        # Capture the run's static information so we can log to W&B from within
-        # our callback.
-        #
-        # NOTE: We pull the current parameter ranges since we don't have access
-        #       to them.  This follows suit with the rest of this function.
-        #
-        wandb_save_checkpoint = functools.partial(
-            log_wandb_checkpoint,
-            wandb=wandb_factory,
-            wandb_run=run,
-            checkpointer=save_model_checkpoint,
-            checkpoint_prefix=checkpoint_prefix,
-            loss_function=criterion,
-            parameter_ranges={} )
-
-        # Add this callback.
-        epoch_callbacks.append( wandb_save_checkpoint )
-
-    # Log the initial learning rate for the first epoch/batch.
-    epoch_metrics = {
-        "epoch":           0,
-        "batch":           0,
-        "learning_rate":   optimizer.param_groups[0]["lr"],
-    }
-    run.log( epoch_metrics )
-
+    model.train()
     for epoch_index in range( number_epochs ):
-        model.train()
 
         # Reset our training loss.
         training_loss = []
@@ -2962,15 +2863,18 @@ def train_model( model, criterion, optimizer, device, number_epochs, training_fi
         #
         permuted_batch_indices = np.random.permutation( number_batches )
 
+        # Because of how small our training data is, we more it directly to host
+        training_inputs  = training_inputs.to( device ).requires_grad_( False )
+        training_outputs = training_outputs.to( device ).requires_grad_( False )
+
         for batch_index in range( number_batches ):
             start_index = permuted_batch_indices[batch_index] * batch_size
             end_index   = min( start_index + batch_size,
                                training_inputs.shape[0] )
 
             # Move the next batch of droplets to the device.
-            normalized_inputs  = training_inputs[start_index:end_index, :].to( device )
-            normalized_outputs = training_outputs[start_index:end_index, :].to( device )
-            current_weights    = weights[start_index:end_index].to( device )
+            normalized_inputs  = training_inputs[start_index:end_index, :]
+            normalized_outputs = training_outputs[start_index:end_index, :]
 
             # Accumulate gradients when we're calculating a physics-based loss
             # otherwise autograd does not work.
@@ -2982,12 +2886,13 @@ def train_model( model, criterion, optimizer, device, number_epochs, training_fi
             optimizer.zero_grad()
 
             # Perform the forward pass.
-            normalized_approximations = model( normalized_inputs )
+            if quadratic_loss_flag:
+                normalized_approximations = model.quadratic_forward( normalized_inputs )
+            else:
+                normalized_approximations = model( normalized_inputs )
 
             # Estimate the loss - using weights if needed.
-            if criterion == weighted_mse_loss:
-                loss = weighted_mse_loss( normalized_approximations, normalized_outputs, current_weights )
-            elif pinn_loss_flag:
+            if pinn_loss_flag:
                 loss = criterion( normalized_approximations,
                                   normalized_outputs,
                                   normalized_inputs,
@@ -2998,7 +2903,6 @@ def train_model( model, criterion, optimizer, device, number_epochs, training_fi
             # Backwards pass and optimization.
             loss.backward()
             optimizer.step()
-            lr_scheduler.step()
 
             running_loss += loss.item()
 
@@ -3007,22 +2911,10 @@ def train_model( model, criterion, optimizer, device, number_epochs, training_fi
             # mini batch-worth of training data.
             if batch_index % MINI_BATCH_SIZE == (MINI_BATCH_SIZE - 1):
                 running_loss /= MINI_BATCH_SIZE
-
+    
                 training_loss.append( running_loss )
                 training_loss_history.append( running_loss )
-
-                batch_metrics = {
-                    #
-                    # NOTE: The batch metric jumps up by MINI_BATCH_SIZE each
-                    #       time but is monotonically increasing.
-                    #
-                    "epoch":         epoch_index,
-                    "batch":         epoch_index * number_batches + batch_index,
-                    "learning_rate": optimizer.param_groups[0]["lr"],
-                    "training_loss": running_loss,
-                }
-                run.log( batch_metrics )
-
+    
                 running_loss = 0.0
         else:
             # Handle the case where we don't have enough data to finish a
@@ -3034,9 +2926,21 @@ def train_model( model, criterion, optimizer, device, number_epochs, training_fi
                 training_loss_history.append( running_loss )
 
                 running_loss = 0.0
+            
+        lr_scheduler.step()
+
+        # Stride by the callback interval before calling per epoch callbacks
+        if epoch_index % callback_interval != 0:
+            continue
+
+        # We finished all of the batches.  Adjust the learning rate before we
+        # checkpoint so it can be loaded and training resumed without additional
+        # preparation.
+        #for parameter_group in optimizer.param_groups:
+        #    parameter_group["lr"] *= lr_scale
 
         # Checkpoint if requested.
-        if checkpoint_prefix is not None:
+        if checkpoint_prefix is not None and epoch_index % (50*callback_interval) == 0:
             save_model_checkpoint( checkpoint_prefix,
                                    epoch_index,
                                    model,
@@ -3069,14 +2973,13 @@ def train_model( model, criterion, optimizer, device, number_epochs, training_fi
                     else:
                         end_index = start_index + VALIDATION_BATCH_SIZE
 
-                    validation_approximations = model( validation_inputs[start_index:end_index].to( device ) )
+                    if quadratic_loss_flag:
+                        validation_approximations = model.quadratic_forward( validation_inputs[start_index:end_index].to( device ) )
+                    else:
+                        validation_approximations = model( validation_inputs[start_index:end_index].to( device ) )
 
-                    # Estimate the loss - using weights if needed.
-                    if criterion == weighted_mse_loss:
-                        loss = weighted_mse_loss( validation_approximations,
-                                                  validation_outputs[start_index:end_index].to( device ),
-                                                  current_weights )
-                    elif pinn_loss_flag:
+                    # Estimate the loss
+                    if pinn_loss_flag:
                         loss = criterion( validation_approximations,
                                           validation_outputs[start_index:end_index].to( device ),
                                           validation_inputs[start_index:end_index].to( device ),
@@ -3106,7 +3009,7 @@ def train_model( model, criterion, optimizer, device, number_epochs, training_fi
             "learning_rate":   optimizer.param_groups[0]["lr"],
             "validation_loss": validation_loss,
         }
-        run.log( epoch_metrics )
+        print( epoch_metrics )
 
         # Execute each of the callbacks.
         for epoch_callback in epoch_callbacks:
@@ -3116,25 +3019,13 @@ def train_model( model, criterion, optimizer, device, number_epochs, training_fi
                             training_loss,
                             validation_loss )
 
-    # Mark the training as complete.
-    run.finish()
+    # Run final checkpoint 
+    if checkpoint_prefix is not None:
+        save_model_checkpoint( checkpoint_prefix,
+                               -1,
+                               model,
+                               optimizer,
+                               criterion,
+                               training_loss_history )
 
     return training_loss_history, validation_loss_history
-
-def weighted_mse_loss( inputs, targets, weights ):
-    """
-    Calculates MSE error between inputs and targets with a weight for each difference.
-
-    Takes 3 arguments:
-
-      inputs      - Array of any size.
-      targets     - Array with shape matching inputs.
-      weights     - Array with same shape as inputs and targets with coefficients for
-                    each difference.
-
-    Returns 1 value:
-
-      loss - The weighted MSE error with the same shape as inputs.
-
-    """
-    return (weights * ((inputs - targets)**2)).mean()
