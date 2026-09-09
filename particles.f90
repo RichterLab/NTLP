@@ -46,6 +46,7 @@ module particles
   real :: Rep_avg,part_grav(3)
   real :: radavg,radmin,radmax,radmsqr,tempmin,tempmax,qmin,qmax
   real :: twmass,tpmass,tpvol
+  real :: tmass_coarse,tmass_accum
   real :: vp_init(3),Tp_init,radius_init,radius_std,kappas_init,kappas_std
   real :: pdf_factor,pdf_prob
   integer*8 :: mult_init,mult_factor,mult_a,mult_c
@@ -53,6 +54,14 @@ module particles
   real,parameter :: Cvv=1463.0
   real,parameter :: Cpv = 1952.0
   real,parameter :: Cva = 717.04
+
+  real :: MLP_radmin,MLP_radmax
+  real :: MLP_Tpmin,MLP_Tpmax
+  real :: MLP_Tfmin,MLP_Tfmax
+  real :: MLP_smin,MLP_smax
+  real :: MLP_rhoamin,MLP_rhoamax
+  real :: MLP_RHmin,MLP_RHmax
+  real :: MLP_dtmin,MLP_dtmax
 
   integer, parameter :: histbins = 512
   real :: hist_rad(histbins+2)
@@ -1881,6 +1890,21 @@ CONTAINS
       denum = 0
       actnum = 0
       num_destroy = 0
+
+      MLP_radmin = 1.0e7
+      MLP_radmax = -1.0e7
+      MLP_Tpmin = 1.0e7
+      MLP_Tpmax = -1.0e7
+      MLP_Tfmin = 1.0e7
+      MLP_Tfmax = -1.0e7
+      MLP_smin = 1.0e7
+      MLP_smax = -1.0e7
+      MLP_rhoamin = 1.0e7
+      MLP_rhoamax = -1.0e7
+      MLP_RHmin = 1.0e7
+      MLP_RHmax = -1.0e7
+      MLP_dtmin = 1.0e7
+      MLP_dtmax = -1.0e7
       
   end subroutine particle_init
 
@@ -2823,7 +2847,8 @@ CONTAINS
 
     do i = 1, nbin
 
-      ! Introduce source function from Monahan et al. (1986) B(i) = (0.38 - log10(binsdata(i))) / 0.65
+      ! Introduce source function from Monahan et al. (1986) 
+      B(i) = (0.38 - log10(binsdata(i))) / 0.65
       dFdr_1(i) = 1.373 * (u10 ** 3.41) * (binsdata(i) ** -3)
       dFdr_2(i) = 1 + (0.057 * (binsdata(i) ** 1.05))
       dFdr_3(i) = 10 ** (1.19 * exp(-B(i) ** 2))
@@ -3353,6 +3378,24 @@ CONTAINS
         part%xp(1:3) = part%xp(1:3) + dt*part%vp(1:3)
         part%vp(1:3) = (part%vp(1:3)+taup_i*dt*corrfac*part%uf(1:3)+dt*part_grav(1:3))/(1+dt*corrfac*taup_i)
 
+
+        MLP_radmin = min(MLP_radmin,part%radius)
+        MLP_radmax = max(MLP_radmax,part%radius)
+        MLP_Tpmin = min(MLP_Tpmin,part%Tp)
+        MLP_Tpmax = max(MLP_Tpmax,part%Tp)
+        MLP_Tfmin = min(MLP_Tfmin,part%Tf)
+        MLP_Tfmax = max(MLP_Tfmax,part%Tf)
+        MLP_smin = min(MLP_smin,part%kappa_s*part%m_s*rhow/rhos)
+        MLP_smax = max(MLP_smax,part%kappa_s*part%m_s*rhow/rhos)
+        MLP_rhoamin = min(MLP_rhoamin,rhoa)
+        MLP_rhoamax = max(MLP_rhoamax,rhoa)
+        MLP_RHmin = min(MLP_RHmin,part%qinf/(Mw*mod_magnus(part%Tf)/Ru/part%Tf)*rhoa)
+        MLP_RHmax = max(MLP_RHmax,part%qinf/(Mw*mod_magnus(part%Tf)/Ru/part%Tf)*rhoa)
+        MLP_dtmin = min(MLP_dtmin,dt)
+        MLP_dtmax = max(MLP_dtmax,dt)
+     
+
+
         ! non-dimensionalizes particle radius and temperature before
         ! iteratively solving for next radius and temperature
 
@@ -3639,7 +3682,7 @@ CONTAINS
       integer :: ierr
       real :: rhop,pi,rhoa,func_rho_base,func_p_base,exner
       
-      integer,parameter :: num0_int=22,num0_real=6,num0_max=3,num0_min=3   ! Number of 0-dimensional particle statistics
+      integer,parameter :: num0_int=22,num0_real=8,num0_max=10,num0_min=10   ! Number of 0-dimensional particle statistics
       integer,parameter :: num1 = 32   ! Number of 1-dimensional particle statistics
 
       real :: partcount(maxnz), partcount_accum(maxnz), partcount_coarse(maxnz)
@@ -3650,6 +3693,7 @@ CONTAINS
       real :: myradavg,myradmsqr,myradmax,myradmin,mytempmin,mytempmax,myqmin,myqmax
       real :: myRep_avg,Rep,diff(3),diffnorm,Volp
       real :: mywmass,mypmass,mypvol,Ttmp
+      real :: mymass_coarse,mymass_accum
 
       !!!! 0th order stats
       statsvec0_real = 0.0
@@ -3677,6 +3721,8 @@ CONTAINS
       mywmass = 0.0
       mypmass = 0.0
       mypvol = 0.0
+      mymass_accum = 0.0
+      mymass_coarse = 0.0
 
       part => first_particle
       do while (associated(part))
@@ -3696,6 +3742,8 @@ CONTAINS
            else
              num_accum_a = num_accum_a + 1
            end if
+
+           mymass_accum = mymass_accum + part%m_s
             
          end if
 
@@ -3706,6 +3754,8 @@ CONTAINS
            else
              num_coarse_a = num_coarse_a + 1
            end if
+
+           mymass_coarse = mymass_coarse + part%m_s
 
          end if
 
@@ -3794,6 +3844,8 @@ CONTAINS
       statsvec0_real(4) = mypvol
       statsvec0_real(5) = myradavg
       statsvec0_real(6) = myradmsqr
+      statsvec0_real(7) = mymass_coarse
+      statsvec0_real(8) = mymass_accum
 
       call mpi_allreduce(mpi_in_place,statsvec0_real,num0_real,mpi_real8,mpi_sum,mpi_comm_world,ierr)
 
@@ -3803,6 +3855,8 @@ CONTAINS
       tpvol = statsvec0_real(4)
       radavg = statsvec0_real(5)
       radmsqr = statsvec0_real(6)
+      tmass_coarse = statsvec0_real(7)
+      tmass_accum = statsvec0_real(8)
 
       if (tnumpart.eq.0) then
 
@@ -3822,23 +3876,56 @@ CONTAINS
       statsvec0_max(1) = myradmax
       statsvec0_max(2) = mytempmax
       statsvec0_max(3) = myqmax
+      statsvec0_max(4) = MLP_radmax
+      statsvec0_max(5) = MLP_Tpmax
+      statsvec0_max(6) = MLP_Tfmax
+      statsvec0_max(7) = MLP_smax
+      statsvec0_max(8) = MLP_rhoamax
+      statsvec0_max(9) = MLP_RHmax
+      statsvec0_max(10) = MLP_dtmax
 
       call mpi_allreduce(mpi_in_place,statsvec0_max,num0_max,mpi_real8,mpi_max,mpi_comm_world,ierr)
 
       radmax = statsvec0_max(1)
       tempmax = statsvec0_max(2)
       qmax = statsvec0_max(3)
+      MLP_radmax = statsvec0_max(4)
+      MLP_Tpmax = statsvec0_max(5)
+      MLP_Tfmax = statsvec0_max(6)
+      MLP_smax = statsvec0_max(7)
+      MLP_rhoamax = statsvec0_max(8)
+      MLP_RHmax = statsvec0_max(9)
+      MLP_dtmax = statsvec0_max(10)
  
       !Compute mins
       statsvec0_min(1) = myradmin
       statsvec0_min(2) = mytempmin
       statsvec0_min(3) = myqmin
+      statsvec0_min(4) = MLP_radmin
+      statsvec0_min(5) = MLP_Tpmin
+      statsvec0_min(6) = MLP_Tfmin
+      statsvec0_min(7) = MLP_smin
+      statsvec0_min(8) = MLP_rhoamin
+      statsvec0_min(9) = MLP_RHmin
+      statsvec0_min(10) = MLP_dtmin
 
       call mpi_allreduce(mpi_in_place,statsvec0_min,num0_min,mpi_real8,mpi_min,mpi_comm_world,ierr)
 
       radmin = statsvec0_min(1)
       tempmin = statsvec0_min(2)
       qmin = statsvec0_min(3)
+      MLP_radmin = statsvec0_min(4)
+      MLP_Tpmin = statsvec0_min(5)
+      MLP_Tfmin = statsvec0_min(6)
+      MLP_smin = statsvec0_min(7)
+      MLP_rhoamin = statsvec0_min(8)
+      MLP_RHmin = statsvec0_min(9)
+      MLP_dtmin = statsvec0_min(10)
+
+      if (myid.eq.0) then
+      write(*,'(a10,7e15.6)') 'MLP_MIN:',MLP_radmin,MLP_Tpmin,MLP_Tfmin,MLP_smin,MLP_rhoamin,MLP_RHmin,MLP_dtmin
+      write(*,'(a10,7e15.6)') 'MLP_MAX:',MLP_radmax,MLP_Tpmax,MLP_Tfmax,MLP_smax,MLP_rhoamax,MLP_RHmax,MLP_dtmax
+      end if
 
       !!!! 1st order stats
       statsvec1 = 0.0

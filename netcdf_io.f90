@@ -60,7 +60,7 @@ integer :: reshist_vid, reshist_accum_vid, reshist_coarse_vid
 integer :: actresbins_vid, actreshist_vid, actreshist_accum_vid, actreshist_coarse_vid
 integer :: acttodeathbins_vid, acttodeathhist_vid, acttodeathhist_accum_vid, acttodeathhist_coarse_vid
 integer :: numactbins_vid, numacthist_vid, numacthist_accum_vid, numacthist_coarse_vid
-integer :: twmass_vid,tpmass_vid,tpvol_vid
+integer :: twmass_vid,tpmass_vid,tpvol_vid,tmass_coarse_vid,tmass_accum_vid
 
 !Viz:
 integer :: time_viz_dimid,viz_nx_dimid,viz_ny_dimid,viz_nzu_dimid,viz_nzw_dimid
@@ -229,6 +229,12 @@ subroutine netcdf_init
 
       call netcdf_check( nf90_def_var(ncid, "tpmass", NF90_REAL, dimids,tpmass_vid) )
       call netcdf_check( nf90_put_att(ncid,tpmass_vid,"title","Total particle mass, including water and solute") )
+
+      call netcdf_check( nf90_def_var(ncid, "tmass_accum", NF90_REAL, dimids,tmass_accum_vid) )
+      call netcdf_check( nf90_put_att(ncid,tmass_accum_vid,"title","Total mass of accumulation solute (no water)") )
+
+      call netcdf_check( nf90_def_var(ncid, "tmass_coarse", NF90_REAL, dimids,tmass_coarse_vid) )
+      call netcdf_check( nf90_put_att(ncid,tmass_coarse_vid,"title","Total mass of coarse solute (no water)") )
 
       call netcdf_check( nf90_def_var(ncid, "tpvol", NF90_REAL, dimids,tpvol_vid) )
       call netcdf_check( nf90_put_att(ncid,tpvol_vid,"title","Total particle volume") )
@@ -526,6 +532,8 @@ subroutine netcdf_res
       call netcdf_check( nf90_inq_varid(ncid,"radmsqr",radmsqr_vid) )
       call netcdf_check( nf90_inq_varid(ncid,"twmass",twmass_vid) )
       call netcdf_check( nf90_inq_varid(ncid,"tpmass",tpmass_vid) )
+      call netcdf_check( nf90_inq_varid(ncid,"tmass_accum",tmass_accum_vid) )
+      call netcdf_check( nf90_inq_varid(ncid,"tmass_coarse",tmass_coarse_vid) )
       call netcdf_check( nf90_inq_varid(ncid,"tpvol",tpvol_vid) )
 
 
@@ -665,6 +673,8 @@ subroutine write_his_netcdf
       call netcdf_check( nf90_put_var(ncid, radmsqr_vid, real(radmsqr),start=(/his_counter/)) )
       call netcdf_check( nf90_put_var(ncid, twmass_vid, real(twmass),start=(/his_counter/)) )
       call netcdf_check( nf90_put_var(ncid, tpmass_vid, real(tpmass),start=(/his_counter/)) )
+      call netcdf_check( nf90_put_var(ncid, tmass_accum_vid, real(tmass_accum),start=(/his_counter/)) )
+      call netcdf_check( nf90_put_var(ncid, tmass_coarse_vid, real(tmass_coarse),start=(/his_counter/)) )
       call netcdf_check( nf90_put_var(ncid, tpvol_vid, real(tpvol),start=(/his_counter/)) )
 
       call netcdf_check( nf90_put_var(ncid,uxym_vid,real(uxym(1:nnz)),start=(/1, his_counter/)) )
