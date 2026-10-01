@@ -99,8 +99,8 @@ Change into the pi chamber's test directory and update the job submission
 script:
 
 1. Edit `params.in` and `pi_chamber.run` so `PATH_TO_SCRATCH` is replaced with
-   `/scratch365/<netID>`
-2. Edit `pi_chamber.run` so `PATH_TO_CODE` is replaced with `/users/<netID>`
+   `/groups/drichte2/<netID>`
+2. Edit `pi_chamber.run` so `PATH_TO_CODE` is replaced with `/groups/drichte2/<netID>/NTLP/`
 
 ***NOTE:*** Both the parameters file (params.in) and the job submission script
 (`pi_chamber.run`) are generic templates. These need to be instantiated so they
@@ -125,7 +125,7 @@ the AMD cluster.  You can watch the simulation's execution by examining
 the contents of the log file as it is updated:
 
 ```shell
-$ tail -F /scratch365/${USER}/pi_chamber/pi_chamber.out.0000000
+$ tail -F /groups/drichte2/${USER}/pi_chamber/pi_chamber.out.0000000
  Starting time loop
  it,time =           20  0.623764565020764
  time,tnumpart:  0.623764565020764                0
@@ -163,7 +163,7 @@ sub-problem each processor handles, while the job output files
 the simulation.
 
 Note that the simulation outputs, stored beneath
-`/scratch365/<netID>/pi_chamber/`, are left on disk so they may be inspected and
+`/groups/drichte2/<netID>/pi_chamber/`, are left on disk so they may be inspected and
 visualized.
 
 # Summary
