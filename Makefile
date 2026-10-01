@@ -1,5 +1,8 @@
-FORTRAN=mpiifort
+#FORTRAN=mpiifort
 #FORTRAN=mpif90
+#Legacy Package workaround: Will work until January 2027
+FORTRAN=/afs/crc.nd.edu/x86_64_linux/m/mvapich2/2.3.1/intel/24.2/bin/mpif90
+
 
 # Specify the architecture to optimize for.  Should be one of the following:
 #
