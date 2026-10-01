@@ -3,8 +3,8 @@
 group_storage=/groups/drichte2
 
 #$ -M YOUR_EMAIL@nd.edu
-#$ -m n
-#$ -pe mpi-16 64
+#$ -m beas
+#$ -pe mpi-64 64
 #$ -q *@@richter
 #$ -N test_case_pi_chamber
 #$ -j y
@@ -24,9 +24,15 @@ cp -f $group_storage/test_cases/$case/u.le.cou000 $datadir/u.le.cou000
 
 cd $homedir
 
-module load mvapich2
-module load intel
-module load netcdf
+# Note: these legacy packages will be deprecated by January 2027
+module purge
+module load CRC_default/1.1
+module load mvapich2/2.3.1/intel/24.2
+module load netcdf/4.9.2/intel/24.2
+
+export LEGACY_MPI=/afs/crc.nd.edu/x86_64_linux/m/mvapich2/2.3.1/intel/24.2
+export LD_LIBRARY_PATH="$LEGACY_MPI/lib:$LD_LIBRARY_PATH"
+export MV2_SMP_USE_CMA=0
 
 imachine=0
 echo $imachine > ./mach.file
